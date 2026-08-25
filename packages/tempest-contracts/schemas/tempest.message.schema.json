@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tempestmainframe.local/schemas/tempest.message.schema.json",
+  "title": "Tempest Bridge Message",
+  "type": "object",
+  "required": ["protocolVersion", "id", "kind", "source", "timestamp"],
+  "properties": {
+    "protocolVersion": { "const": "1.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["hello", "welcome", "subscribe", "unsubscribe", "publish", "event", "command", "response", "heartbeat", "error"] },
+    "source": { "type": "string", "minLength": 1 },
+    "target": { "type": "string" },
+    "topic": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string" },
+    "payload": {}
+  },
+  "additionalProperties": false
+}
+

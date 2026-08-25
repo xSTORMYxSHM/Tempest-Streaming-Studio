@@ -1,0 +1,1079 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { WebSocket } from 'ws';
+import type { TempestNormalizedTwitchEvent } from '@tempest/contracts';
+import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
+
+export const chatbotScopes = ['user:read:chat', 'user:write:chat'] as const;
+export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
+export type ChatbotPermission = typeof chatbotPermissions[number];
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'seattle-weather', 'radio-now-playing'] as const;
+export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
+
+export interface ChatbotCommand {
+  id: string;
+  name: string;
+  aliases: string[];
+  enabled: boolean;
+  replyToViewer: boolean;
+  allowSharedChat: boolean;
+  permission: ChatbotPermission;
+  response: string;
+  handler?: ChatbotResponseHandler;
+  workflowId?: string;
+  viewerCooldownMs: number;
+  globalCooldownMs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatbotActivity {
+  id: string;
+  timestamp: string;
+  command?: string;
+  viewerName?: string;
+  sourceChannelLogin?: string;
+  sharedChat?: boolean;
+  state: 'accepted' | 'blocked' | 'ignored' | 'error';
+  message: string;
+}
+
+interface ChatbotConfiguration {
+  schemaVersion: 1;
+  displayName: string;
+  prefix: string;
+  commands: ChatbotCommand[];
+  updatedAt: string;
+}
+
+interface ValidatedIdentity {
+  userId: string;
+  login: string;
+  clientId: string;
+}
+
+interface PendingDeviceAuthorization {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresAt: number;
+  intervalSeconds: number;
+  nextPollAt: number;
+}
+
+export interface ChatbotChannelAuthorization {
+  clientId: string;
+  channelId: string;
+  channelLogin: string;
+}
+
+export interface ChatbotStatus {
+  owner: 'tempest-mainframe-studio';
+  botName: string;
+  configuredName?: string;
+  prefix: string;
+  oauth: {
+    state: 'not-configured' | 'authorization-required' | 'authorization-pending' | 'authorized' | 'refreshing' | 'expired' | 'error';
+    scopes: string[];
+    storage: 'operating-system-credential-vault' | 'unavailable';
+    account?: { userId: string; login: string };
+    tokenExpiresAt?: string;
+  };
+  connections: {
+    eventSub: 'disconnected' | 'connecting' | 'connected' | 'error';
+    chat: 'disconnected' | 'connecting' | 'connected' | 'error';
+  };
+  channel?: { userId: string; login: string };
+  commands: ChatbotCommand[];
+  activity: ChatbotActivity[];
+  messagesReceived: number;
+  commandsTriggered: number;
+  lastMessageAt?: string;
+  lastError?: string;
+}
+
+export interface StormHorizonRadioStatus {
+  id: 'storm-horizon-radio';
+  name: string;
+  provider: 'AzuraCast';
+  state: 'online' | 'offline' | 'unavailable';
+  online: boolean;
+  publicPlayerUrl: string;
+  streamUrl: string;
+  checkedAt: string;
+  nowPlaying?: { artist?: string; title?: string; text?: string; album?: string };
+}
+
+export interface ChatbotDispatch {
+  command: ChatbotCommand;
+  event: TempestNormalizedTwitchEvent;
+  arguments: string[];
+  simulated: boolean;
+}
+
+export interface TwitchChatbotOptions {
+  dataDirectory: string;
+  credentialStore?: TwitchCredentialStore;
+  fetchImplementation?: typeof fetch;
+  onEvent?: (event: TempestNormalizedTwitchEvent) => void | Promise<void>;
+  onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
+  onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
+}
+
+const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+const stormHorizonNowPlayingUrl = 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio';
+const stormHorizonPlayerUrl = 'https://a12.asurahosting.com/public/storm_horizon_radio';
+const stormHorizonStreamUrl = 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3';
+
+function defaultConfiguration(): ChatbotConfiguration {
+  const timestamp = new Date().toISOString();
+  return {
+    schemaVersion: 1,
+    displayName: '',
+    prefix: '!',
+    commands: [{
+      id: 'tempest',
+      name: 'tempest',
+      aliases: ['mainframe'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '{bot} online. Signal routing is standing by, {user}.',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 3_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'commands',
+      name: 'commands',
+      aliases: ['help'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'command-directory',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 5_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'uptime',
+      name: 'uptime',
+      aliases: ['live'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'stream-uptime',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 10_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'title',
+      name: 'title',
+      aliases: [],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'channel-title',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 10_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'game',
+      name: 'game',
+      aliases: ['category'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'channel-game',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 10_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'schedule',
+      name: 'schedule',
+      aliases: ['nextstream'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'stream-schedule',
+      viewerCooldownMs: 30_000,
+      globalCooldownMs: 15_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'lurk',
+      name: 'lurk',
+      aliases: [],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '{user} has entered low-power observation mode. Thanks for lurking!',
+      viewerCooldownMs: 60_000,
+      globalCooldownMs: 3_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'unlurk',
+      name: 'unlurk',
+      aliases: ['back'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '{user} has returned to the mainframe. Welcome back!',
+      viewerCooldownMs: 60_000,
+      globalCooldownMs: 3_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'seattle-weather',
+      name: 'weather',
+      aliases: [],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'seattle-weather',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 10_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'song',
+      name: 'song',
+      aliases: ['nowplaying'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'radio-now-playing',
+      viewerCooldownMs: 15_000,
+      globalCooldownMs: 10_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }],
+    updatedAt: timestamp
+  };
+}
+
+function copyCommand(command: ChatbotCommand): ChatbotCommand {
+  return { ...command, aliases: [...command.aliases] };
+}
+
+function normalizeName(value: unknown, field = 'Command name'): string {
+  const name = String(value || '').trim().replace(/^!+/, '').toLowerCase();
+  if (!commandNamePattern.test(name)) throw new Error(`${field} must contain 1 to 32 lowercase letters, numbers, underscores, or hyphens.`);
+  return name;
+}
+
+function normalizeDuration(value: unknown, field: string): number {
+  const duration = Number(value ?? 0);
+  if (!Number.isFinite(duration) || duration < 0 || duration > 86_400_000) throw new Error(`${field} must be between 0 and 86400000 milliseconds.`);
+  return Math.round(duration);
+}
+
+function normalizeDisplayName(value: unknown): string {
+  const displayName = String(value || '').trim();
+  if (displayName.length > 40) throw new Error('Chatbot display name must be 40 characters or fewer.');
+  if (/[\u0000-\u001f\u007f]/.test(displayName)) throw new Error('Chatbot display name cannot contain control characters.');
+  return displayName;
+}
+
+function validateCommand(input: unknown, existing?: ChatbotCommand): ChatbotCommand {
+  if (!input || typeof input !== 'object') throw new Error('Chatbot command must be an object.');
+  const source = input as Partial<ChatbotCommand>;
+  const name = normalizeName(source.name);
+  const aliases = Array.isArray(source.aliases)
+    ? [...new Set(source.aliases.map((alias) => normalizeName(alias, 'Command alias')).filter((alias) => alias !== name))]
+    : [];
+  if (aliases.length > 12) throw new Error('A command may have at most 12 aliases.');
+  const permission = source.permission || 'everyone';
+  if (!chatbotPermissions.includes(permission as ChatbotPermission)) throw new Error('Command permission is invalid.');
+  const response = String(source.response || '').trim();
+  if (response.length > 500) throw new Error('Chat response must be 500 characters or fewer.');
+  const workflowId = String(source.workflowId || '').trim() || undefined;
+  const rawHandler = (source as { handler?: unknown }).handler;
+  const handler = rawHandler === undefined || rawHandler === '' ? undefined : String(rawHandler);
+  if (handler && !chatbotResponseHandlers.includes(handler as ChatbotResponseHandler)) throw new Error('Chatbot response handler is invalid.');
+  if (workflowId && !/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/i.test(workflowId)) throw new Error('Workflow ID must be a namespaced identifier.');
+  if (!response && !workflowId && !handler) throw new Error('A command needs a chat response, a built-in response, a workflow, or a combination.');
+  const timestamp = new Date().toISOString();
+  return {
+    id: existing?.id || randomUUID(),
+    name,
+    aliases,
+    enabled: source.enabled !== false,
+    replyToViewer: source.replyToViewer === true,
+    allowSharedChat: typeof source.allowSharedChat === 'boolean' ? source.allowSharedChat : permission === 'everyone' && !workflowId,
+    permission: permission as ChatbotPermission,
+    response,
+    handler: handler as ChatbotResponseHandler | undefined,
+    workflowId,
+    viewerCooldownMs: normalizeDuration(source.viewerCooldownMs, 'Viewer cooldown'),
+    globalCooldownMs: normalizeDuration(source.globalCooldownMs, 'Global cooldown'),
+    createdAt: existing?.createdAt || timestamp,
+    updatedAt: timestamp
+  };
+}
+
+function rolesPermit(required: ChatbotPermission, roles: string[]): boolean {
+  if (required === 'everyone') return true;
+  const roleSet = new Set(roles);
+  if (roleSet.has('broadcaster')) return true;
+  if (required === 'broadcaster') return false;
+  if (roleSet.has('moderator')) return true;
+  if (required === 'moderator') return false;
+  return roleSet.has('subscriber');
+}
+
+export class TwitchChatbot {
+  private configuration = defaultConfiguration();
+  private clientId = '';
+  private tokens: TwitchTokenSet | null = null;
+  private identity: ValidatedIdentity | null = null;
+  private channel: ChatbotChannelAuthorization | null = null;
+  private pendingDevice: PendingDeviceAuthorization | null = null;
+  private oauthState: ChatbotStatus['oauth']['state'] = 'not-configured';
+  private eventSubState: ChatbotStatus['connections']['eventSub'] = 'disconnected';
+  private chatState: ChatbotStatus['connections']['chat'] = 'disconnected';
+  private lastError?: string;
+  private socket: WebSocket | null = null;
+  private inheritedSubscriptionSockets = new WeakSet<WebSocket>();
+  private reconnectTimer?: NodeJS.Timeout;
+  private silenceTimer?: NodeJS.Timeout;
+  private stopping = false;
+  private activity: ChatbotActivity[] = [];
+  private messagesReceived = 0;
+  private commandsTriggered = 0;
+  private lastMessageAt?: string;
+  private lastGlobalUse = new Map<string, number>();
+  private lastViewerUse = new Map<string, number>();
+  private seenEventIds = new Map<string, number>();
+  private channelInfoCache?: { fetchedAt: number; title: string; gameName: string };
+  private streamCache?: { fetchedAt: number; startedAt?: string; viewerCount?: number };
+  private scheduleCache?: { fetchedAt: number; title?: string; startTime?: string };
+  private weatherCache?: { fetchedAt: number; temperature: number; temperatureUnit: string; shortForecast: string; windSpeed?: string; windDirection?: string; humidity?: number; precipitation?: number };
+  private radioNowPlayingCache?: { fetchedAt: number; online: boolean; stationName: string; artist?: string; title?: string; text?: string; album?: string };
+  private weatherForecastUrl?: string;
+  private readonly request: typeof fetch;
+
+  constructor(private readonly options: TwitchChatbotOptions) {
+    this.request = options.fetchImplementation || fetch;
+  }
+
+  get configurationPath(): string {
+    return path.join(this.options.dataDirectory, 'chatbot.json');
+  }
+
+  async initialize(clientId = ''): Promise<void> {
+    await mkdir(this.options.dataDirectory, { recursive: true });
+    try {
+      const parsed = JSON.parse(await readFile(this.configurationPath, 'utf8')) as Partial<ChatbotConfiguration>;
+      const displayName = normalizeDisplayName(parsed.displayName);
+      const prefix = typeof parsed.prefix === 'string' && parsed.prefix.length === 1 && !/\s/.test(parsed.prefix) ? parsed.prefix : '!';
+      const commands: ChatbotCommand[] = [];
+      for (const entry of Array.isArray(parsed.commands) ? parsed.commands : []) {
+        try { commands.push(validateCommand(entry, entry)); } catch { /* discard invalid persisted command */ }
+      }
+      let installedDefaults = false;
+      for (const defaultCommand of defaultConfiguration().commands) {
+        const defaultNames = [defaultCommand.name, ...defaultCommand.aliases];
+        const alreadyInstalled = commands.some((command) => [command.name, ...command.aliases].some((name) => defaultNames.includes(name)));
+        if (!alreadyInstalled) {
+          commands.push(copyCommand(defaultCommand));
+          installedDefaults = true;
+        }
+      }
+      this.configuration = { schemaVersion: 1, displayName, prefix, commands, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      if (installedDefaults) await this.persist();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
+      await this.persist();
+    }
+    await this.setClientId(clientId);
+  }
+
+  async setClientId(clientId: string): Promise<void> {
+    const changed = this.clientId !== clientId;
+    this.clientId = clientId;
+    if (changed) await this.stopConnection();
+    if (!clientId) {
+      this.oauthState = 'not-configured';
+      return;
+    }
+    if (!this.options.credentialStore?.available) {
+      this.oauthState = 'authorization-required';
+      return;
+    }
+    if (!this.tokens) this.tokens = await this.options.credentialStore.load();
+    if (!this.tokens) {
+      this.oauthState = 'authorization-required';
+      return;
+    }
+    await this.validateAuthorization().catch((error) => {
+      this.lastError = (error as Error).message;
+      this.oauthState = 'error';
+    });
+  }
+
+  status(): ChatbotStatus {
+    const configuredName = this.configuration.displayName || undefined;
+    return {
+      owner: 'tempest-mainframe-studio',
+      botName: configuredName || this.identity?.login || 'Chat Bot',
+      configuredName,
+      prefix: this.configuration.prefix,
+      oauth: {
+        state: this.oauthState,
+        scopes: this.tokens?.scopes || [...chatbotScopes],
+        storage: this.options.credentialStore?.available ? 'operating-system-credential-vault' : 'unavailable',
+        account: this.identity ? { userId: this.identity.userId, login: this.identity.login } : undefined,
+        tokenExpiresAt: this.tokens?.expiresAt
+      },
+      connections: { eventSub: this.eventSubState, chat: this.chatState },
+      channel: this.channel ? { userId: this.channel.channelId, login: this.channel.channelLogin } : undefined,
+      commands: this.configuration.commands.map(copyCommand),
+      activity: this.activity.map((entry) => ({ ...entry })),
+      messagesReceived: this.messagesReceived,
+      commandsTriggered: this.commandsTriggered,
+      lastMessageAt: this.lastMessageAt,
+      lastError: this.lastError
+    };
+  }
+
+  async configure(input: unknown): Promise<ChatbotStatus> {
+    if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
+    const source = input as { prefix?: unknown; displayName?: unknown };
+    const prefix = String(source.prefix ?? this.configuration.prefix);
+    if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
+    this.configuration.prefix = prefix;
+    if (Object.prototype.hasOwnProperty.call(source, 'displayName')) this.configuration.displayName = normalizeDisplayName(source.displayName);
+    await this.persist();
+    return this.status();
+  }
+
+  async upsertCommand(input: unknown): Promise<ChatbotCommand> {
+    const source = input as Partial<ChatbotCommand>;
+    const existing = source.id ? this.configuration.commands.find((command) => command.id === source.id) : undefined;
+    const command = validateCommand(input, existing);
+    const conflict = this.configuration.commands.find((entry) => entry.id !== command.id && [entry.name, ...entry.aliases].some((name) => name === command.name || command.aliases.includes(name)));
+    if (conflict) throw new Error(`Command name or alias conflicts with !${conflict.name}.`);
+    this.configuration.commands = [command, ...this.configuration.commands.filter((entry) => entry.id !== command.id)];
+    await this.persist();
+    return copyCommand(command);
+  }
+
+  async removeCommand(id: string): Promise<boolean> {
+    const before = this.configuration.commands.length;
+    this.configuration.commands = this.configuration.commands.filter((command) => command.id !== id);
+    if (this.configuration.commands.length === before) return false;
+    await this.persist();
+    return true;
+  }
+
+  async startDeviceAuthorization(): Promise<{ userCode: string; verificationUri: string; expiresAt: string; intervalSeconds: number }> {
+    if (!this.clientId) throw new Error('Configure the Twitch Gateway client ID first.');
+    if (!this.options.credentialStore?.available) throw new Error('Secure operating-system credential storage is unavailable.');
+    const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' ') });
+    const response = await this.request('https://id.twitch.tv/oauth2/device', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const result = await response.json() as { device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string };
+    if (!response.ok || !result.device_code || !result.user_code || !result.verification_uri) throw new Error(describeTwitchOAuthError(result.message, `Chatbot authorization failed with ${response.status}.`));
+    const intervalSeconds = Math.max(1, Number(result.interval) || 5);
+    this.pendingDevice = { deviceCode: result.device_code, userCode: result.user_code, verificationUri: result.verification_uri, expiresAt: Date.now() + Math.max(60, Number(result.expires_in) || 1800) * 1000, intervalSeconds, nextPollAt: 0 };
+    this.oauthState = 'authorization-pending';
+    this.lastError = undefined;
+    return { userCode: result.user_code, verificationUri: result.verification_uri, expiresAt: new Date(this.pendingDevice.expiresAt).toISOString(), intervalSeconds };
+  }
+
+  async pollDeviceAuthorization(): Promise<{ pending: boolean; status: ChatbotStatus; retryAfterSeconds?: number }> {
+    const store = this.options.credentialStore;
+    if (!store?.available) throw new Error('Secure operating-system credential storage is unavailable.');
+    const pending = this.pendingDevice;
+    if (!pending) throw new Error('No chatbot authorization is pending.');
+    if (Date.now() >= pending.expiresAt) {
+      this.pendingDevice = null;
+      this.oauthState = 'expired';
+      return { pending: false, status: this.status() };
+    }
+    if (Date.now() < pending.nextPollAt) return { pending: true, status: this.status(), retryAfterSeconds: Math.ceil((pending.nextPollAt - Date.now()) / 1000) };
+    pending.nextPollAt = Date.now() + pending.intervalSeconds * 1000;
+    const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' '), device_code: pending.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
+    const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    if (!response.ok) {
+      if (result.message === 'authorization_pending') return { pending: true, status: this.status(), retryAfterSeconds: pending.intervalSeconds };
+      this.lastError = describeTwitchOAuthError(result.message, `Chatbot token exchange failed with ${response.status}.`);
+      this.oauthState = 'error';
+      throw new Error(this.lastError);
+    }
+    if (!result.access_token || !result.refresh_token) throw new Error('Twitch did not return chatbot access and refresh tokens.');
+    this.tokens = { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + Math.max(1, Number(result.expires_in) || 14400) * 1000).toISOString(), scopes: Array.isArray(result.scope) ? result.scope : [...chatbotScopes] };
+    await store.save(this.tokens);
+    this.pendingDevice = null;
+    await this.validateAuthorization();
+    await this.ensureConnection();
+    return { pending: false, status: this.status() };
+  }
+
+  async validateAuthorization(): Promise<ChatbotStatus> {
+    if (!this.tokens) {
+      this.oauthState = this.clientId ? 'authorization-required' : 'not-configured';
+      return this.status();
+    }
+    let response = await this.request('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${this.tokens.accessToken}` } });
+    if (response.status === 401 && this.tokens.refreshToken) {
+      await this.refreshAuthorization();
+      response = await this.request('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${this.tokens.accessToken}` } });
+    }
+    const result = await response.json() as { client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string };
+    if (!response.ok || !result.client_id || !result.login || !result.user_id) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token validation failed with ${response.status}.`));
+    if (result.client_id !== this.clientId) throw new Error('Stored chatbot token belongs to a different Twitch client ID. Reconnect the bot account.');
+    const scopes = Array.isArray(result.scopes) ? result.scopes : this.tokens.scopes;
+    const missing = chatbotScopes.filter((scope) => !scopes.includes(scope));
+    if (missing.length) throw new Error(`Reconnect the bot account to grant: ${missing.join(', ')}.`);
+    this.identity = { clientId: result.client_id, login: result.login, userId: result.user_id };
+    this.tokens.scopes = scopes;
+    if (Number(result.expires_in) > 0) this.tokens.expiresAt = new Date(Date.now() + Number(result.expires_in) * 1000).toISOString();
+    await this.options.credentialStore?.save(this.tokens);
+    this.oauthState = 'authorized';
+    this.lastError = undefined;
+    return this.status();
+  }
+
+  async disconnect(): Promise<ChatbotStatus> {
+    await this.stopConnection();
+    if (this.tokens && this.clientId) {
+      const body = new URLSearchParams({ client_id: this.clientId, token: this.tokens.accessToken });
+      await this.request('https://id.twitch.tv/oauth2/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }).catch(() => undefined);
+    }
+    this.tokens = null;
+    this.identity = null;
+    this.pendingDevice = null;
+    this.lastError = undefined;
+    await this.options.credentialStore?.clear();
+    this.oauthState = this.clientId ? 'authorization-required' : 'not-configured';
+    return this.status();
+  }
+
+  async connectChannel(channel: ChatbotChannelAuthorization | null): Promise<void> {
+    const changed = this.channel?.channelId !== channel?.channelId || this.channel?.clientId !== channel?.clientId;
+    this.channel = channel;
+    if (changed) await this.stopConnection();
+    await this.ensureConnection();
+  }
+
+  async processChatEvent(event: TempestNormalizedTwitchEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
+    if (!simulated) {
+      const cutoff = Date.now() - 10 * 60 * 1000;
+      for (const [id, seenAt] of this.seenEventIds) if (seenAt < cutoff) this.seenEventIds.delete(id);
+      if (this.seenEventIds.has(event.id)) {
+        this.record({ state: 'ignored', message: `Duplicate chat event ${event.id} ignored.` });
+        return { matched: false, accepted: false, reason: 'Duplicate EventSub delivery.' };
+      }
+      this.seenEventIds.set(event.id, Date.now());
+    }
+    this.messagesReceived += simulated ? 0 : 1;
+    if (!simulated) this.lastMessageAt = new Date().toISOString();
+    if (!simulated) await this.options.onEvent?.(event);
+    if (event.topic !== 'viewer.chat.message') return { matched: false, accepted: false };
+    if (event.viewer?.id && event.viewer.id === this.identity?.userId) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
+    const text = String(event.payload.text || '').trim();
+    if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
+    const [rawName, ...args] = text.slice(this.configuration.prefix.length).trim().split(/\s+/);
+    const name = String(rawName || '').toLowerCase();
+    const command = this.configuration.commands.find((entry) => entry.enabled && (entry.name === name || entry.aliases.includes(name)));
+    if (!command) return { matched: false, accepted: false };
+    const viewerName = event.viewer?.displayName || event.viewer?.login || 'viewer';
+    const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
+    const sourceChannelLogin = String(event.payload.sourceChannelLogin || '').trim();
+    const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
+    const activityContext = sharedChat ? { sharedChat: true, sourceChannelLogin: sourceChannelLogin || sourceChannelId || 'shared-chat-participant' } : {};
+    if (sharedChat && !command.allowSharedChat) {
+      return this.block(command, viewerName, `Unavailable from Shared Chat${sourceChannelLogin ? ` channel @${sourceChannelLogin}` : ''}.`, activityContext);
+    }
+    const roles = event.viewer?.roles || [];
+    if (!rolesPermit(command.permission, roles)) return this.block(command, viewerName, `Requires ${command.permission} permission in @${event.channel.login || 'the home channel'}.`, activityContext);
+    const now = Date.now();
+    if (!bypassCooldown) {
+      const globalRemaining = (this.lastGlobalUse.get(command.id) || 0) + command.globalCooldownMs - now;
+      if (globalRemaining > 0) return this.block(command, viewerName, `Global cooldown: ${Math.ceil(globalRemaining / 1000)}s remaining.`, activityContext);
+      const viewerKey = `${command.id}:${event.viewer?.id || viewerName.toLowerCase()}`;
+      const viewerRemaining = (this.lastViewerUse.get(viewerKey) || 0) + command.viewerCooldownMs - now;
+      if (viewerRemaining > 0) return this.block(command, viewerName, `Viewer cooldown: ${Math.ceil(viewerRemaining / 1000)}s remaining.`, activityContext);
+      this.lastViewerUse.set(viewerKey, now);
+    }
+    if (!simulated) this.lastGlobalUse.set(command.id, now);
+    const responseTemplate = await this.resolveCommandResponse(command, event);
+    const response = responseTemplate
+      .replaceAll('{user}', viewerName)
+      .replaceAll('{bot}', this.status().botName)
+      .replaceAll('{command}', `${this.configuration.prefix}${command.name}`)
+      .replaceAll('{args}', args.join(' '));
+    try {
+      await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
+      if (response && !simulated) await this.sendMessage(response, command.replyToViewer ? String(event.payload.messageId || '') : undefined);
+      this.commandsTriggered += simulated ? 0 : 1;
+      this.record({ command: command.name, viewerName, ...activityContext, state: 'accepted', message: simulated ? `Simulated !${command.name}.` : `Accepted !${command.name} from ${viewerName}.` });
+      return { matched: true, accepted: true, command: copyCommand(command), response };
+    } catch (error) {
+      const message = (error as Error).message;
+      this.record({ command: command.name, viewerName, ...activityContext, state: 'error', message });
+      return { matched: true, accepted: false, command: copyCommand(command), reason: message };
+    }
+  }
+
+  async testCommand(input: unknown): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
+    const source = input && typeof input === 'object' ? input as { message?: unknown; viewerName?: unknown; roles?: unknown; sharedChat?: unknown; sourceChannelLogin?: unknown } : {};
+    const viewerName = String(source.viewerName || 'StudioTester').trim() || 'StudioTester';
+    const roles = Array.isArray(source.roles) ? source.roles.filter((role): role is string => typeof role === 'string') : ['broadcaster'];
+    const sharedChat = source.sharedChat === true;
+    const sourceChannelLogin = String(source.sourceChannelLogin || 'collaborator').trim() || 'collaborator';
+    return this.processChatEvent({
+      schemaVersion: 1,
+      id: `chatbot-test-${randomUUID()}`,
+      topic: 'viewer.chat.message',
+      occurredAt: new Date().toISOString(),
+      source: 'twitch',
+      channel: { id: this.channel?.channelId || 'studio-test', login: this.channel?.channelLogin || 'studio-test' },
+      viewer: { id: 'studio-chatbot-tester', login: viewerName.toLowerCase(), displayName: viewerName, roles },
+      payload: {
+        messageId: `test-${randomUUID()}`,
+        text: String(source.message || ''),
+        ...(sharedChat ? { sharedChat: true, sourceChannelId: 'studio-shared-chat-test', sourceChannelLogin } : {})
+      }
+    }, true, true);
+  }
+
+  async radioStatus(): Promise<StormHorizonRadioStatus> {
+    const checkedAt = new Date().toISOString();
+    try {
+      const radio = await this.loadRadioNowPlaying();
+      return {
+        id: 'storm-horizon-radio',
+        name: radio.stationName,
+        provider: 'AzuraCast',
+        state: radio.online ? 'online' : 'offline',
+        online: radio.online,
+        publicPlayerUrl: stormHorizonPlayerUrl,
+        streamUrl: stormHorizonStreamUrl,
+        checkedAt,
+        nowPlaying: { artist: radio.artist, title: radio.title, text: radio.text, album: radio.album }
+      };
+    } catch {
+      return {
+        id: 'storm-horizon-radio',
+        name: 'Storm Horizon Radio',
+        provider: 'AzuraCast',
+        state: 'unavailable',
+        online: false,
+        publicPlayerUrl: stormHorizonPlayerUrl,
+        streamUrl: stormHorizonStreamUrl,
+        checkedAt
+      };
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.stopConnection();
+  }
+
+  private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin'> = {}) {
+    this.record({ command: command.name, viewerName, ...activityContext, state: 'blocked', message: `${viewerName}: ${reason}` });
+    return { matched: true, accepted: false, command: copyCommand(command), reason };
+  }
+
+  private record(input: Omit<ChatbotActivity, 'id' | 'timestamp'>): void {
+    this.activity.unshift({ id: randomUUID(), timestamp: new Date().toISOString(), ...input });
+    this.activity = this.activity.slice(0, 100);
+  }
+
+  private async sendMessage(message: string, replyParentMessageId?: string): Promise<void> {
+    if (!this.tokens || !this.identity || !this.channel) throw new Error('Chatbot output is not connected.');
+    const response = await this.request('https://api.twitch.tv/helix/chat/messages', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ broadcaster_id: this.channel.channelId, sender_id: this.identity.userId, message: message.slice(0, 500), ...(replyParentMessageId ? { reply_parent_message_id: replyParentMessageId } : {}) })
+    });
+    const result = await response.json().catch(() => ({})) as { message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> };
+    if (!response.ok || result.data?.[0]?.is_sent === false) throw new Error(result.data?.[0]?.drop_reason?.message || result.message || `Twitch chat send failed with ${response.status}.`);
+  }
+
+  private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedTwitchEvent): Promise<string> {
+    switch (command.handler) {
+      case 'command-directory': return this.commandDirectoryResponse(event);
+      case 'stream-uptime': return this.streamUptimeResponse();
+      case 'channel-title': return this.channelTitleResponse();
+      case 'channel-game': return this.channelGameResponse();
+      case 'stream-schedule': return this.streamScheduleResponse();
+      case 'seattle-weather': return this.seattleWeatherResponse();
+      case 'radio-now-playing': return this.radioNowPlayingResponse();
+      default: return command.response;
+    }
+  }
+
+  private commandDirectoryResponse(event: TempestNormalizedTwitchEvent): string {
+    const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
+    const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
+    const roles = event.viewer?.roles || [];
+    const names = this.configuration.commands
+      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles))
+      .map((command) => `${this.configuration.prefix}${command.name}`);
+    return `Available commands: ${names.join(' · ')}`.slice(0, 500);
+  }
+
+  private async streamUptimeResponse(): Promise<string> {
+    try {
+      const stream = await this.loadStreamStatus();
+      if (!stream.startedAt) return `@${this.channel?.channelLogin || 'This channel'} is currently offline.`;
+      const elapsedMs = Math.max(0, Date.now() - Date.parse(stream.startedAt));
+      const hours = Math.floor(elapsedMs / 3_600_000);
+      const minutes = Math.floor((elapsedMs % 3_600_000) / 60_000);
+      const duration = hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+      return `Stream uptime: ${duration}${Number.isInteger(stream.viewerCount) ? ` · ${stream.viewerCount?.toLocaleString()} viewers` : ''}.`;
+    } catch {
+      return 'Stream uptime is temporarily unavailable. Try again shortly.';
+    }
+  }
+
+  private async channelTitleResponse(): Promise<string> {
+    try {
+      const info = await this.loadChannelInfo();
+      return info.title ? `Current title: ${info.title}`.slice(0, 500) : 'The channel does not currently have a stream title.';
+    } catch {
+      return 'The current stream title is temporarily unavailable. Try again shortly.';
+    }
+  }
+
+  private async channelGameResponse(): Promise<string> {
+    try {
+      const info = await this.loadChannelInfo();
+      return info.gameName ? `Current category: ${info.gameName}`.slice(0, 500) : 'No Twitch category is currently selected.';
+    } catch {
+      return 'The current Twitch category is temporarily unavailable. Try again shortly.';
+    }
+  }
+
+  private async streamScheduleResponse(): Promise<string> {
+    try {
+      const schedule = await this.loadStreamSchedule();
+      if (!schedule.startTime) return 'No upcoming stream is listed on the Twitch schedule.';
+      const time = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+      }).format(new Date(schedule.startTime));
+      return `Next stream: ${time}${schedule.title ? ` · ${schedule.title}` : ''}`.slice(0, 500);
+    } catch {
+      return 'The Twitch stream schedule is temporarily unavailable. Try again shortly.';
+    }
+  }
+
+  private twitchHeaders(): Record<string, string> {
+    if (!this.tokens) throw new Error('The bot account is not authorized.');
+    return { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId };
+  }
+
+  private async loadStreamStatus(): Promise<NonNullable<TwitchChatbot['streamCache']>> {
+    if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
+    if (!this.channel) throw new Error('The home channel is not connected.');
+    const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
+    const result = await response.json().catch(() => ({})) as { data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string };
+    if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
+    const stream = result.data?.[0];
+    this.streamCache = { fetchedAt: Date.now(), startedAt: stream?.started_at, viewerCount: stream?.viewer_count };
+    return this.streamCache;
+  }
+
+  private async loadChannelInfo(): Promise<NonNullable<TwitchChatbot['channelInfoCache']>> {
+    if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
+    if (!this.channel) throw new Error('The home channel is not connected.');
+    const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
+    const result = await response.json().catch(() => ({})) as { data?: Array<{ title?: string; game_name?: string }>; message?: string };
+    if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
+    const channel = result.data?.[0];
+    this.channelInfoCache = { fetchedAt: Date.now(), title: String(channel?.title || ''), gameName: String(channel?.game_name || '') };
+    return this.channelInfoCache;
+  }
+
+  private async loadStreamSchedule(): Promise<NonNullable<TwitchChatbot['scheduleCache']>> {
+    if (this.scheduleCache && Date.now() - this.scheduleCache.fetchedAt < 5 * 60_000) return this.scheduleCache;
+    if (!this.channel) throw new Error('The home channel is not connected.');
+    const response = await this.request(`https://api.twitch.tv/helix/schedule?broadcaster_id=${encodeURIComponent(this.channel.channelId)}&first=1`, { headers: this.twitchHeaders() });
+    if (response.status === 404) {
+      this.scheduleCache = { fetchedAt: Date.now() };
+      return this.scheduleCache;
+    }
+    const result = await response.json().catch(() => ({})) as { data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string };
+    if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
+    const segment = result.data?.segments?.[0];
+    this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
+    return this.scheduleCache;
+  }
+
+  private async radioNowPlayingResponse(): Promise<string> {
+    try {
+      const nowPlaying = await this.loadRadioNowPlaying();
+      if (!nowPlaying.online) return `Storm Horizon Radio is currently offline. Listen page: ${stormHorizonPlayerUrl}`;
+      const track = nowPlaying.artist && nowPlaying.title
+        ? `${nowPlaying.artist} — ${nowPlaying.title}`
+        : nowPlaying.title || nowPlaying.text;
+      if (!track) return `${nowPlaying.stationName} is online, but the current song metadata is unavailable.`;
+      return `Now playing on ${nowPlaying.stationName}: ${track}${nowPlaying.album ? ` · Album: ${nowPlaying.album}` : ''} · Listen: ${stormHorizonPlayerUrl}`.slice(0, 500);
+    } catch {
+      return `Storm Horizon Radio's now-playing signal is temporarily unavailable. Listen live: ${stormHorizonPlayerUrl}`;
+    }
+  }
+
+  private async loadRadioNowPlaying(): Promise<NonNullable<TwitchChatbot['radioNowPlayingCache']>> {
+    if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
+    const response = await this.request(stormHorizonNowPlayingUrl, {
+      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/0.11.6' },
+      signal: AbortSignal.timeout(5_000)
+    });
+    const result = await response.json().catch(() => ({})) as {
+      is_online?: boolean;
+      station?: { name?: string };
+      now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
+    };
+    if (!response.ok) throw new Error(`Storm Horizon Radio now-playing request failed with ${response.status}.`);
+    const song = result.now_playing?.song;
+    const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
+    this.radioNowPlayingCache = {
+      fetchedAt: Date.now(),
+      online: result.is_online === true,
+      stationName: value(result.station?.name) || 'Storm Horizon Radio',
+      artist: value(song?.artist),
+      title: value(song?.title),
+      text: value(song?.text),
+      album: value(song?.album)
+    };
+    return this.radioNowPlayingCache;
+  }
+
+  private async seattleWeatherResponse(): Promise<string> {
+    const seattleTime = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    }).format(new Date());
+    try {
+      const weather = await this.loadSeattleWeather();
+      const segments = [
+        `Seattle signal: ${seattleTime}`,
+        `${Math.round(weather.temperature)}°${weather.temperatureUnit}`,
+        weather.shortForecast
+      ];
+      if (Number.isFinite(weather.humidity)) segments.push(`Humidity ${Math.round(weather.humidity as number)}%`);
+      if (Number.isFinite(weather.precipitation)) segments.push(`Rain ${Math.round(weather.precipitation as number)}%`);
+      if (weather.windSpeed) segments.push(`Wind ${weather.windDirection ? `${weather.windDirection} ` : ''}${weather.windSpeed}`);
+      return segments.join(' · ').slice(0, 500);
+    } catch {
+      return `Seattle signal: ${seattleTime} · Weather satellite temporarily unavailable. Try !weather again shortly.`;
+    }
+  }
+
+  private async loadSeattleWeather(): Promise<NonNullable<TwitchChatbot['weatherCache']>> {
+    const now = Date.now();
+    if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
+    try {
+      const headers = { 'User-Agent': 'TempestStreamingStudio/0.11.6', Accept: 'application/geo+json' };
+      if (!this.weatherForecastUrl) {
+        const pointResponse = await this.request('https://api.weather.gov/points/47.6062,-122.3321', { headers });
+        const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
+        if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
+        this.weatherForecastUrl = point.properties.forecastHourly;
+      }
+      const forecastResponse = await this.request(this.weatherForecastUrl, { headers });
+      const forecast = await forecastResponse.json() as {
+        properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
+        title?: string;
+      };
+      const period = forecast.properties?.periods?.[0];
+      if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
+      this.weatherCache = {
+        fetchedAt: now,
+        temperature: Number(period.temperature),
+        temperatureUnit: period.temperatureUnit,
+        shortForecast: period.shortForecast,
+        windSpeed: period.windSpeed,
+        windDirection: period.windDirection,
+        humidity: Number.isFinite(period.relativeHumidity?.value) ? Number(period.relativeHumidity?.value) : undefined,
+        precipitation: Number.isFinite(period.probabilityOfPrecipitation?.value) ? Number(period.probabilityOfPrecipitation?.value) : undefined
+      };
+      return this.weatherCache;
+    } catch (error) {
+      if (this.weatherCache && now - this.weatherCache.fetchedAt < 60 * 60 * 1000) return this.weatherCache;
+      throw error;
+    }
+  }
+
+  private async ensureConnection(): Promise<void> {
+    if (!this.channel || !this.tokens || !this.identity || this.oauthState !== 'authorized' || this.socket) return;
+    this.stopping = false;
+    this.setConnectionState('connecting', 'connecting');
+    this.openSocket('wss://eventsub.wss.twitch.tv/ws');
+  }
+
+  private openSocket(url: string, inheritsSubscriptions = false): void {
+    const socket = new WebSocket(url);
+    if (inheritsSubscriptions) this.inheritedSubscriptionSockets.add(socket);
+    this.socket = socket;
+    socket.on('message', (data) => {
+      void this.handleSocketMessage(socket, data.toString()).catch((error) => {
+        if (this.socket !== socket) return;
+        this.lastError = (error as Error).message;
+        this.setConnectionState('error', 'error');
+        socket.close(1011, 'EventSub message handling failed');
+      });
+    });
+    socket.on('error', (error) => {
+      if (this.socket !== socket) return;
+      this.lastError = `EventSub connection error: ${error.message}`;
+      this.setConnectionState('error', 'error');
+    });
+    socket.on('close', () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      this.clearSilenceTimer();
+      if (this.stopping) return;
+      this.setConnectionState('disconnected', 'disconnected');
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = setTimeout(() => { void this.ensureConnection(); }, 5_000);
+    });
+  }
+
+  private async handleSocketMessage(socket: WebSocket, raw: string): Promise<void> {
+    if (this.socket !== socket) return;
+    const message = JSON.parse(raw) as {
+      metadata?: { message_id?: string; message_type?: string; message_timestamp?: string; subscription_type?: string };
+      payload?: { session?: { id?: string; keepalive_timeout_seconds?: number; reconnect_url?: string }; event?: Record<string, unknown> };
+    };
+    const type = message.metadata?.message_type;
+    this.resetSilenceTimer(Number(message.payload?.session?.keepalive_timeout_seconds) || 30);
+    if (type === 'session_welcome') {
+      const sessionId = message.payload?.session?.id;
+      if (!sessionId) throw new Error('EventSub Welcome message did not include a session ID.');
+      if (!this.inheritedSubscriptionSockets.has(socket)) await this.subscribeToChat(sessionId);
+      this.setConnectionState('connected', 'connected');
+      this.lastError = undefined;
+      return;
+    }
+    if (type === 'session_reconnect' && message.payload?.session?.reconnect_url) {
+      const oldSocket = this.socket;
+      this.socket = null;
+      this.openSocket(message.payload.session.reconnect_url, true);
+      oldSocket?.close(1000, 'Twitch requested reconnect');
+      return;
+    }
+    if (type === 'revocation') {
+      this.lastError = 'Twitch revoked the Chat EventSub subscription. Reconnect the bot account.';
+      this.setConnectionState('error', 'error');
+      return;
+    }
+    if (type !== 'notification' || message.metadata?.subscription_type !== 'channel.chat.message' || !message.payload?.event) return;
+    const event = message.payload.event;
+    const chatterId = String(event.chatter_user_id || '');
+    const badges = Array.isArray(event.badges) ? event.badges as Array<{ set_id?: string }> : [];
+    const roles = [
+      ...(chatterId === String(event.broadcaster_user_id || '') ? ['broadcaster'] : []),
+      ...(badges.some((badge) => badge.set_id === 'moderator') ? ['moderator'] : []),
+      ...(badges.some((badge) => badge.set_id === 'subscriber') ? ['subscriber'] : []),
+      ...(badges.some((badge) => badge.set_id === 'vip') ? ['vip'] : [])
+    ];
+    await this.processChatEvent({
+      schemaVersion: 1,
+      id: String(event.source_message_id || event.message_id || message.metadata?.message_id || randomUUID()),
+      topic: 'viewer.chat.message',
+      occurredAt: String(message.metadata?.message_timestamp || new Date().toISOString()),
+      source: 'twitch',
+      channel: { id: String(event.broadcaster_user_id || this.channel?.channelId || ''), login: String(event.broadcaster_user_login || this.channel?.channelLogin || ''), displayName: String(event.broadcaster_user_name || '') },
+      viewer: { id: chatterId, login: String(event.chatter_user_login || ''), displayName: String(event.chatter_user_name || ''), roles },
+      payload: {
+        messageId: String(event.message_id || ''),
+        text: String((event.message as { text?: unknown } | undefined)?.text || ''),
+        ...(event.source_broadcaster_user_id ? {
+          sharedChat: true,
+          sourceChannelId: String(event.source_broadcaster_user_id),
+          sourceChannelLogin: String(event.source_broadcaster_user_login || ''),
+          sourceChannelDisplayName: String(event.source_broadcaster_user_name || ''),
+          sourceMessageId: String(event.source_message_id || '')
+        } : {}),
+        ...(typeof event.is_source_only === 'boolean' ? { sourceOnly: event.is_source_only } : {})
+      }
+    });
+  }
+
+  private async subscribeToChat(sessionId: string): Promise<void> {
+    if (!this.tokens || !this.identity || !this.channel) throw new Error('Chatbot authorization is incomplete.');
+    const response = await this.request('https://api.twitch.tv/helix/eventsub/subscriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: this.channel.channelId, user_id: this.identity.userId }, transport: { method: 'websocket', session_id: sessionId } })
+    });
+    const result = await response.json().catch(() => ({})) as { message?: string; error?: string };
+    if (response.status !== 202) throw new Error(result.message || result.error || `Chat EventSub subscription failed with ${response.status}.`);
+  }
+
+  private resetSilenceTimer(seconds: number): void {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      this.lastError = 'EventSub keepalive timed out; reconnecting.';
+      this.socket?.terminate();
+    }, (Math.max(10, seconds) + 5) * 1000);
+  }
+
+  private clearSilenceTimer(): void {
+    clearTimeout(this.silenceTimer);
+    this.silenceTimer = undefined;
+  }
+
+  private async stopConnection(): Promise<void> {
+    this.stopping = true;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+    this.clearSilenceTimer();
+    const socket = this.socket;
+    this.socket = null;
+    if (socket && socket.readyState !== WebSocket.CLOSED) socket.close(1000, 'Studio stopped Chatbot');
+    this.setConnectionState('disconnected', 'disconnected');
+  }
+
+  private setConnectionState(eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']): void {
+    this.eventSubState = eventSub;
+    this.chatState = chat;
+    this.options.onConnectionState?.(eventSub, chat);
+  }
+
+  private async refreshAuthorization(): Promise<void> {
+    if (!this.tokens?.refreshToken) throw new Error('Chatbot refresh token is unavailable.');
+    this.oauthState = 'refreshing';
+    const body = new URLSearchParams({ client_id: this.clientId, grant_type: 'refresh_token', refresh_token: this.tokens.refreshToken });
+    const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token refresh failed with ${response.status}.`));
+    this.tokens = { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + Math.max(1, Number(result.expires_in) || 14400) * 1000).toISOString(), scopes: Array.isArray(result.scope) ? result.scope : this.tokens.scopes };
+    await this.options.credentialStore?.save(this.tokens);
+  }
+
+  private async persist(): Promise<void> {
+    this.configuration.updatedAt = new Date().toISOString();
+    await writeFile(this.configurationPath, `${JSON.stringify(this.configuration, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  }
+}

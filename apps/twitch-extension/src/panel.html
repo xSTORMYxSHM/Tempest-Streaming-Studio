@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Tempest Streaming Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <script src="viewer.js" defer></script>
+  </head>
+  <body class="viewer-body panel-body">
+    <main class="mainframe-shell">
+      <header class="mainframe-header">
+        <div class="brand"><img id="panelLogo" src="assets/storm-horizon-sh.png" alt="" /><div><span>STORM HORIZON MEDIA</span><strong id="panelBrandName">TEMPEST STREAMING STUDIO</strong></div></div>
+        <div id="panelStatus" class="system-state"><i id="stateLight"></i><span id="stateLabel">CONNECTING</span></div>
+      </header>
+
+      <section class="signal-intro">
+        <div><p id="panelEyebrow">VIEWER CONTROL NODE</p><h1 id="panelTitle">Signal deck</h1></div>
+        <span id="alertCount">14 ONLINE</span>
+      </section>
+
+      <div id="panelSearch" class="signal-tools">
+        <label class="search-box"><span aria-hidden="true">⌕</span><input id="alertSearch" type="search" placeholder="Search signals" autocomplete="off" maxlength="60" /></label>
+      </div>
+
+      <nav id="panelFilters" class="signal-filters" aria-label="Signal categories">
+        <button type="button" data-signal-filter="all" aria-pressed="true">ALL</button>
+        <button type="button" data-signal-filter="events" aria-pressed="false">EVENTS</button>
+        <button type="button" data-signal-filter="performances" aria-pressed="false">PERFORMANCES</button>
+      </nav>
+
+      <section class="signal-catalog" aria-live="polite">
+        <div id="featuredRegion" class="catalog-section">
+          <div class="section-heading"><span>FEATURED EVENT</span><i>STREAM EFFECT</i></div>
+          <div id="featuredGrid"></div>
+        </div>
+        <div id="performanceRegion" class="catalog-section performance-section">
+          <div class="section-heading"><span>PERFORMANCES</span><i>AVATAR CUES</i></div>
+          <div id="alertGrid" class="alert-grid"></div>
+        </div>
+        <p id="emptyState" class="empty-state" hidden>No signals match that search.</p>
+      </section>
+
+      <footer class="mainframe-footer">
+        <span id="viewerState">Establishing viewer link…</span>
+        <button id="collapseButton" type="button" aria-expanded="true">MINIMIZE</button>
+      </footer>
+      <div id="toast" role="status" aria-live="polite"></div>
+    </main>
+  </body>
+</html>

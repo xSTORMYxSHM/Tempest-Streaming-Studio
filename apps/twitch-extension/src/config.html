@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configure Tempest Streaming Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <script src="config.js" defer></script>
+  </head>
+  <body class="config-body">
+    <main class="config-shell">
+      <header class="config-header"><div class="brand"><img src="assets/storm-horizon-sh.png" alt="" /><div><span>STORM HORIZON MEDIA</span><strong>TEMPEST STREAMING STUDIO</strong></div></div><span id="configIdentity">LOCAL TEST</span></header>
+      <section class="config-panel">
+        <p class="eyebrow">EXTENSION RELAY</p>
+        <h1>Viewer interaction routing</h1>
+        <p>Local builds can demonstrate alerts in mock mode. Hosted builds lock this page to the deployed Tempest Extension Backend Service.</p>
+        <label>Extension Backend Service URL<input id="ebsBaseUrl" type="url" placeholder="https://extensions.example.com" autocomplete="off" /></label>
+        <label class="toggle-row"><span><strong>Local mock mode</strong><small>Accept signals inside the component without contacting an EBS.</small></span><input id="mockMode" type="checkbox" checked /></label>
+        <div class="config-actions"><button id="saveConfiguration" type="button">SAVE CONFIGURATION</button><span id="saveState">Not saved</span></div>
+      </section>
+      <section class="config-panel">
+        <p class="eyebrow">PANEL APPEARANCE</p><h1>Channel theme</h1><p>These settings apply only to this broadcaster's installation of the universal Tempest Extension.</p>
+        <div class="config-design-grid"><label>Preset<select id="configPanelPreset"><option value="tempest">Tempest</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="soft">Soft</option></select></label><label>Channel / brand name<input id="configPanelBrandName" maxlength="36" /></label><label>Small heading<input id="configPanelEyebrow" maxlength="48" /></label><label>Panel title<input id="configPanelTitle" maxlength="48" /></label></div>
+        <div class="config-color-grid"><label>Accent<input id="configPanelAccent" type="color" /></label><label>Background<input id="configPanelBackground" type="color" /></label><label>Cards<input id="configPanelSurface" type="color" /></label><label>Text<input id="configPanelText" type="color" /></label><label>Muted<input id="configPanelMuted" type="color" /></label></div>
+        <div class="config-design-grid"><label>Typography<select id="configPanelFont"><option value="inter">Inter</option><option value="system">System</option><option value="condensed">Condensed</option><option value="serif">Serif</option></select></label><label>Card layout<select id="configPanelLayout"><option value="grid">Two-column grid</option><option value="list">Single-column list</option></select></label><label>Density<select id="configPanelDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Corner radius<input id="configPanelRadius" type="number" min="0" max="24" /></label></div>
+        <div class="config-theme-toggles"><label><input id="configPanelShowLogo" type="checkbox" /> Logo</label><label><input id="configPanelShowStatus" type="checkbox" /> Status</label><label><input id="configPanelShowSearch" type="checkbox" /> Search</label><label><input id="configPanelShowFilters" type="checkbox" /> Filters</label><label><input id="configPanelShowPattern" type="checkbox" /> Pattern</label><label><input id="configPanelUppercase" type="checkbox" /> Uppercase cards</label></div>
+        <div class="config-actions"><button id="savePanelAppearance" type="button">SAVE PANEL APPEARANCE</button><span id="panelAppearanceState">Not saved</span></div>
+      </section>
+      <section class="config-boundary"><strong>Security boundary</strong><p>The Extension Client ID is public. Never place the Extension shared secret in these files or in Tempest Streaming Studio; it belongs only in the hosted EBS secret store.</p></section>
+    </main>
+  </body>
+</html>

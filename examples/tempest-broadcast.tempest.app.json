@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tempestmainframe.tempest-broadcast",
+  "name": "Tempest Broadcast",
+  "version": "0.15.0",
+  "apiVersion": "1.0",
+  "description": "Tempest's OBS-based broadcast, overlay, routing, and automation application.",
+  "state": "installed",
+  "capabilities": {
+    "provides": [
+      "broadcast.audio.play",
+      "broadcast.reaction.clear",
+      "broadcast.reaction.trigger",
+      "broadcast.visual.hide",
+      "broadcast.visual.show",
+      "broadcast.status"
+    ],
+    "consumes": [
+      "performance.cues",
+      "scene.visual",
+      "tempest.profile"
+    ]
+  },
+  "assetTypes": {
+    "reads": [
+      "tempest.audio",
+      "tempest.overlay",
+      "tempest.profile",
+      "tempest.scene",
+      "tempest.visual"
+    ],
+    "writes": [
+      "tempest.profile"
+    ]
+  },
+  "launch": {
+    "executable": "../../../Tempest Broadcast System/source/build_x64/rundir/RelWithDebInfo/bin/64bit/tempest-broadcast-system.exe",
+    "workingDirectory": "../../../Tempest Broadcast System/source/build_x64/rundir/RelWithDebInfo/bin/64bit"
+  },
+  "health": {
+    "mode": "process"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@tempest/twitch-extension",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Viewer-facing Twitch Video Component, Panel, and Mobile interface for Tempest Streaming Studio interactions.",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "start": "node server.mjs",
+    "test": "node --check src/viewer.js && node --check src/config.js && node --test test/*.test.mjs"
+  }
+}

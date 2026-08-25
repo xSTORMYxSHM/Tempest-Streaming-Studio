@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tempestmainframe.local/schemas/tempest.asset.schema.json",
+  "title": "Tempest Asset Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "id", "type", "name", "version", "producer", "uri"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$" },
+    "type": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+(?:\\.\\d+)?(?:[-+][0-9A-Za-z.-]+)?$" },
+    "producer": { "type": "string", "minLength": 1 },
+    "uri": { "type": "string", "minLength": 1 },
+    "checksum": { "type": "string" },
+    "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 80 } },
+    "dependencies": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "preview": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": true
+}
+

@@ -1,0 +1,21 @@
+{
+  "name": "@tempest/studio-desktop",
+  "version": "0.11.6",
+  "private": true,
+  "description": "Desktop streaming control plane for Tempest Streaming Studio.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node tools/copy-static.mjs",
+    "start": "electron .",
+    "test": "node --check dist/renderer/app.js && node --test test/*.test.cjs"
+  },
+  "dependencies": {
+    "@tempest/bridge": "workspace:*",
+    "@tempest/contracts": "workspace:*",
+    "@tempest/twitch-ebs": "workspace:*",
+    "@tempest/warudo-adapter": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6"
+  }
+}

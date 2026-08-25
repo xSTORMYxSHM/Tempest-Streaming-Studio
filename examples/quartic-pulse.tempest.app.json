@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tempestmainframe.quartic-pulse",
+  "name": "Quartic Pulse",
+  "version": "0.40.1",
+  "apiVersion": "1.0",
+  "description": "Music playback, deterministic song analysis, live performance, visual control, and video export.",
+  "state": "installed",
+  "capabilities": {
+    "provides": [
+      "audio.features",
+      "performance.cues",
+      "performance.show",
+      "transport.clock",
+      "transport.control",
+      "visual.preset.activate",
+      "visual.state"
+    ],
+    "consumes": [
+      "broadcast.status",
+      "scene.parameters",
+      "tempest.profile"
+    ]
+  },
+  "assetTypes": {
+    "reads": [
+      "tempest.audio",
+      "tempest.performance",
+      "tempest.profile",
+      "tempest.scene",
+      "tempest.visual"
+    ],
+    "writes": [
+      "tempest.performance",
+      "tempest.profile",
+      "tempest.video"
+    ]
+  },
+  "launch": {
+    "executable": "../../../Quartic Pulse/Development Build/release/win-unpacked/Quartic Pulse.exe",
+    "workingDirectory": "../../../Quartic Pulse/Development Build/release/win-unpacked"
+  },
+  "health": {
+    "mode": "process"
+  },
+  "icon": "../../../Quartic Pulse/Development Build/assets/icon.png"
+}

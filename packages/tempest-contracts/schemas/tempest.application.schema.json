@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tempestmainframe.local/schemas/tempest.application.schema.json",
+  "title": "Tempest Application Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "id", "name", "version", "apiVersion", "state", "capabilities", "assetTypes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+(?:\\.\\d+)?(?:[-+][0-9A-Za-z.-]+)?$" },
+    "apiVersion": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+    "description": { "type": "string", "maxLength": 1000 },
+    "state": { "enum": ["development", "installed", "disabled"] },
+    "capabilities": { "$ref": "#/$defs/capabilitySet" },
+    "assetTypes": {
+      "type": "object",
+      "required": ["reads", "writes"],
+      "properties": {
+        "reads": { "$ref": "#/$defs/stringSet" },
+        "writes": { "$ref": "#/$defs/stringSet" }
+      },
+      "additionalProperties": false
+    },
+    "launch": {
+      "type": "object",
+      "required": ["executable"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "workingDirectory": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["none", "process", "http"] },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "icon": { "type": "string" }
+  },
+  "$defs": {
+    "stringSet": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+    "capabilitySet": {
+      "type": "object",
+      "required": ["provides", "consumes"],
+      "properties": {
+        "provides": { "$ref": "#/$defs/stringSet" },
+        "consumes": { "$ref": "#/$defs/stringSet" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
+

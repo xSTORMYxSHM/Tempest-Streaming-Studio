@@ -1,0 +1,11 @@
+.git
+.tempest
+.tempest-extension
+node_modules
+**/node_modules
+**/dist
+*.zip
+*.log
+.env
+.env.*
+!.env.example

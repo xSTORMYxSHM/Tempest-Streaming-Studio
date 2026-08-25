@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tempestmainframe.warudo",
+  "name": "Warudo Adapter",
+  "version": "0.1.0-dev.1",
+  "apiVersion": "1.0",
+  "description": "Tempest adapter for avatar expressions and other Warudo actions.",
+  "state": "development",
+  "capabilities": {
+    "provides": [
+      "avatar.expression.apply",
+      "avatar.performance.apply",
+      "avatar.reaction.apply"
+    ],
+    "consumes": [
+      "tempest.profile"
+    ]
+  },
+  "assetTypes": {
+    "reads": [
+      "tempest.profile"
+    ],
+    "writes": []
+  },
+  "health": {
+    "mode": "none"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tempestmainframe.local/schemas/tempest.twitch-event.schema.json",
+  "title": "Tempest Normalized Twitch Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "topic", "occurredAt", "source", "channel", "payload"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "topic": {
+      "enum": [
+        "viewer.interaction.requested",
+        "viewer.chat.message",
+        "viewer.reward.redeemed",
+        "viewer.followed",
+        "viewer.subscription.started",
+        "viewer.cheer.received",
+        "viewer.raid.received",
+        "channel.stream.online",
+        "channel.stream.offline",
+        "channel.moderation.action",
+        "channel.poll.updated",
+        "channel.prediction.updated",
+        "channel.hype-train.updated"
+      ]
+    },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "source": { "const": "twitch" },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "login": { "type": "string" },
+        "displayName": { "type": "string" }
+      }
+    },
+    "viewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "login": { "type": "string" },
+        "displayName": { "type": "string" },
+        "roles": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "payload": { "type": "object" }
+  }
+}

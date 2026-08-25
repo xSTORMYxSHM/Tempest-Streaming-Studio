@@ -1,0 +1,25 @@
+{
+  "name": "tempest-mainframe-studio",
+  "version": "0.11.6",
+  "private": true,
+  "description": "Viewer-event orchestration, streaming connections, safety, software, and asset control for Tempest Streaming Studio.",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "pnpm -r --sort build",
+    "start": "pnpm --filter @tempest/studio-desktop start",
+    "dev": "pnpm build && pnpm start",
+    "bridge": "pnpm --filter @tempest/bridge start",
+    "extension:build": "pnpm --filter @tempest/twitch-extension build",
+    "extension:start": "pnpm --filter @tempest/twitch-extension start",
+    "ebs:build": "pnpm --filter @tempest/twitch-ebs build",
+    "ebs:start": "pnpm --filter @tempest/twitch-ebs start",
+    "warudo:start": "pnpm --filter @tempest/warudo-adapter start",
+    "local:twitch": "node tools/local-twitch-test.mjs",
+    "test": "pnpm -r --sort test",
+    "check": "pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

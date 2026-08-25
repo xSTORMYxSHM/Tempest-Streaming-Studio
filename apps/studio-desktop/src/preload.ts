@@ -1,0 +1,35 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('tempestStudio', {
+  copyText: (value: string) => ipcRenderer.invoke('studio:copy-text', value),
+  getBridgeConfig: () => ipcRenderer.invoke('studio:get-bridge-config'),
+  getWarudoStatus: () => ipcRenderer.invoke('studio:get-warudo-status'),
+  getLocalExtensionStatus: () => ipcRenderer.invoke('studio:get-local-extension-status'),
+  getTwitchPanelDesign: () => ipcRenderer.invoke('studio:get-twitch-panel-design'),
+  saveTwitchPanelDesign: (design: unknown) => ipcRenderer.invoke('studio:save-twitch-panel-design', design),
+  startLocalExtension: (settings: { channelId: string; extensionSecret?: string }) => ipcRenderer.invoke('studio:start-local-extension', settings),
+  stopLocalExtension: () => ipcRenderer.invoke('studio:stop-local-extension'),
+  forgetLocalExtensionSecret: () => ipcRenderer.invoke('studio:forget-local-extension-secret'),
+  prepareLocalExtensionCertificate: () => ipcRenderer.invoke('studio:prepare-local-extension-certificate'),
+  openLocalExtensionPanel: () => ipcRenderer.invoke('studio:open-local-extension-panel'),
+  bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
+  selectApplicationManifest: () => ipcRenderer.invoke('studio:select-application-manifest'),
+  selectAsset: () => ipcRenderer.invoke('studio:select-asset'),
+  selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
+  selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
+  getGiphyStatus: () => ipcRenderer.invoke('studio:get-giphy-status'),
+  saveGiphyApiKey: (apiKey: string) => ipcRenderer.invoke('studio:save-giphy-api-key', apiKey),
+  searchGiphy: (query: string) => ipcRenderer.invoke('studio:search-giphy', query),
+  importGiphyVisual: (input: { id: string; mediaUrl: string }) => ipcRenderer.invoke('studio:import-giphy-visual', input),
+  onSoundAlertPlayback: (listener: (command: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: unknown) => listener(command);
+    ipcRenderer.on('studio:sound-alert-playback', handler);
+    return () => ipcRenderer.removeListener('studio:sound-alert-playback', handler);
+  },
+  launchApplication: (manifest: unknown) => ipcRenderer.invoke('studio:launch-application', manifest),
+  revealPath: (targetPath: string) => ipcRenderer.invoke('studio:reveal-path', targetPath),
+  openExternal: (targetUrl: string) => ipcRenderer.invoke('studio:open-external', targetUrl),
+  openIsolatedTwitchAuthorization: (targetUrl: string) => ipcRenderer.invoke('studio:open-isolated-twitch-authorization', targetUrl),
+  closeIsolatedTwitchAuthorization: () => ipcRenderer.invoke('studio:close-isolated-twitch-authorization'),
+  platform: process.platform
+});

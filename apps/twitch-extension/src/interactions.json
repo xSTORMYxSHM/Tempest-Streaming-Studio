@@ -1,0 +1,10 @@
+[
+  {
+    "id": "tempest.blackhole",
+    "name": "Black Hole",
+    "durationMs": 15000,
+    "cooldownMs": 300000,
+    "accent": "#9b6dff",
+    "glyph": "BH"
+  }
+]

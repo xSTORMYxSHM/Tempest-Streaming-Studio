@@ -1,0 +1,13 @@
+{
+  "name": "@tempest/contracts",
+  "version": "0.11.6",
+  "private": true,
+  "description": "Versioned Tempest Streaming Studio API and asset contracts.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "schemas"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.cjs"
+  }
+}

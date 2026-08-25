@@ -1,0 +1,23 @@
+{
+  "name": "@tempest/bridge",
+  "version": "0.11.6",
+  "private": true,
+  "description": "Local application, asset, command, and event bridge for Tempest Streaming Studio.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "tempest-bridge": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "test": "node --test test/*.test.cjs"
+  },
+  "dependencies": {
+    "@tempest/contracts": "workspace:*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}
