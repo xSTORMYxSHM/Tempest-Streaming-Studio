@@ -1,6 +1,6 @@
 {
   "name": "tempest-mainframe-studio",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "description": "Viewer-event orchestration, streaming connections, safety, software, and asset control for Tempest Streaming Studio.",
   "packageManager": "pnpm@11.19.0",

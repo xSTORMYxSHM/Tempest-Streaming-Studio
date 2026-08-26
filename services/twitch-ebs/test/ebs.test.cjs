@@ -5,7 +5,7 @@ const { mkdtemp } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const WebSocket = require('ws');
-const { startTwitchEbs } = require('../dist');
+const { MemoryTwitchEbsInstallationStore, startTwitchEbs } = require('../dist');
 const { startTempestBridge } = require('@tempest/bridge');
 
 function base64url(value) {
@@ -150,4 +150,65 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   }).then((bridgeResponse) => bridgeResponse.json());
   assert.equal(twitchStatus.acceptedEvents, 1);
   assert.equal(twitchStatus.connections.extensionRelay, 'connected');
+});
+
+test('pairs public Studio installations with Twitch identity and publishes a channel-scoped catalog', async (context) => {
+  const secret = randomBytes(32);
+  const runtime = await startTwitchEbs({
+    host: '127.0.0.1',
+    port: 0,
+    twitchExtensionSecrets: [secret.toString('base64')],
+    installationStore: new MemoryTwitchEbsInstallationStore(),
+    allowedTwitchClientIds: ['publicclient123'],
+    validateTwitchOAuthToken: async (token) => {
+      assert.equal(token, 'broadcaster-oauth-token');
+      return { clientId: 'publicclient123', userId: '123456', login: 'creator', scopes: [], expiresIn: 3600 };
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+
+  const pairing = await fetch(`${runtime.baseUrl}/v1/installations/pair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': 'broadcaster-oauth-token' },
+    body: JSON.stringify({ product: 'Tempest Streaming Studio' })
+  });
+  assert.equal(pairing.status, 201);
+  const installation = await pairing.json();
+  assert.equal(installation.channel.login, 'creator');
+  assert.ok(installation.relayToken.length >= 32);
+
+  const studio = await connectStudio(runtime, installation.relayToken);
+  context.after(() => studio.close());
+  studio.send(JSON.stringify({
+    protocolVersion: 1,
+    type: 'catalog.sync',
+    catalog: {
+      schemaVersion: 1,
+      items: [{ id: 'sound-alert.creator-dance', name: 'Creator Dance', durationMs: 12000, cooldownMs: 60000, accent: '#54F2EB', glyph: 'CD', kind: 'sound-alert' }]
+    }
+  }));
+
+  const deadline = Date.now() + 2000;
+  let catalog;
+  while (Date.now() < deadline) {
+    const response = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } });
+    catalog = await response.json();
+    if (catalog.items?.length) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(catalog.items[0].id, 'sound-alert.creator-dance');
+  assert.equal(catalog.studioConnected, true);
+
+  const unknownAlert = await postAlert(runtime, jwt(secret), randomUUID(), 'sound-alert.not-published');
+  assert.equal(unknownAlert.status, 404);
+  assert.equal((await postAlert(runtime, jwt(secret, { channel_id: '999999' }))).status, 403);
+
+  const status = await fetch(`${runtime.baseUrl}/v1/installations/current`, { headers: { Authorization: `Bearer ${installation.relayToken}` } });
+  assert.equal(status.status, 200);
+  assert.equal((await status.json()).channel.id, '123456');
+
+  const revoked = await fetch(`${runtime.baseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${installation.relayToken}` } });
+  assert.equal(revoked.status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } })).status, 403);
 });

@@ -40,14 +40,14 @@ Commit only placeholder values in `.env.example` files. Production secrets belon
 
 ## Hosted EBS
 
-The public EBS is deployed from this repository as a separate service. Its build context is the repository root because it depends on workspace packages. The existing `services/twitch-ebs/Dockerfile` builds the EBS and shared contracts without packaging the desktop application.
+The public EBS is deployed from this repository as a separate service. Its build context is the repository root because it depends on workspace packages. The root `Dockerfile` is detected automatically by Railway; `services/twitch-ebs/Dockerfile` remains available for hosts that accept an explicit Dockerfile path. Both build the EBS and shared contracts without starting the desktop application.
 
 For the public multi-channel release, provision:
 
-- one always-on EBS service;
+- one always-on EBS service and one PostgreSQL service;
 - one PostgreSQL database;
 - one stable HTTPS/WSS hostname;
 - encrypted environment variables for Twitch and Tempest service secrets;
 - health checks, logs, backups, and secret rotation.
 
-The Twitch Extension files remain hosted by Twitch. The Extension calls the EBS through its allowlisted HTTPS origin, while each local Studio opens an outbound WSS connection to the same origin.
+The Twitch Extension files remain hosted by Twitch. The Extension calls the EBS through its allowlisted HTTPS origin, while each local Studio pairs with broadcaster OAuth, stores its issued credential with operating-system encryption, and opens an outbound WSS connection to the same origin. PostgreSQL stores channel installations, relay-token hashes, and viewer-safe signal catalogs; OAuth tokens and local media never enter the database.

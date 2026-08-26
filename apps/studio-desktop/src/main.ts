@@ -19,6 +19,13 @@ import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign 
 import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
 import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
 import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migrations';
+import {
+  HostedExtensionCredentials,
+  HostedExtensionStatus,
+  hostedExtensionRelayOptions,
+  validateHostedEbsUrl,
+  validateHostedExtensionCredentials
+} from './hosted-extension';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -32,6 +39,8 @@ let bridge: TempestBridgeRuntime | null = null;
 let warudoAdapter: WarudoAdapterRuntime | null = null;
 let localExtension: LocalExtensionRuntime | null = null;
 let localExtensionLastError: string | undefined;
+let hostedExtensionLastError: string | undefined;
+let broadcasterCredentialStore: TwitchCredentialStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
@@ -102,6 +111,48 @@ function createTwitchCredentialStore(dataDirectory: string, fileName = 'twitch-c
 
 function localExtensionCredentialPath(): string {
   return path.join(app.getPath('userData'), 'local-extension-credentials.bin');
+}
+
+function hostedExtensionCredentialPath(): string {
+  return path.join(app.getPath('userData'), 'hosted-extension-credentials.bin');
+}
+
+async function loadHostedExtensionCredentials(): Promise<HostedExtensionCredentials | null> {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return validateHostedExtensionCredentials(JSON.parse(safeStorage.decryptString(await readFile(hostedExtensionCredentialPath()))));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error(`Could not read encrypted Hosted Extension settings: ${(error as Error).message}`);
+  }
+}
+
+async function saveHostedExtensionCredentials(credentials: HostedExtensionCredentials): Promise<void> {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows credential encryption is unavailable.');
+  const validated = validateHostedExtensionCredentials(credentials);
+  await mkdir(path.dirname(hostedExtensionCredentialPath()), { recursive: true });
+  await writeFile(hostedExtensionCredentialPath(), safeStorage.encryptString(JSON.stringify(validated)), { mode: 0o600 });
+}
+
+async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
+  const credentials = await loadHostedExtensionCredentials().catch(() => null);
+  return {
+    paired: Boolean(credentials),
+    ...(credentials ? {
+      ebsBaseUrl: credentials.ebsBaseUrl,
+      installationId: credentials.installationId,
+      channel: { id: credentials.channelId, login: credentials.channelLogin },
+      pairedAt: credentials.pairedAt
+    } : {}),
+    credentialStorage: safeStorage.isEncryptionAvailable() ? 'windows-encrypted' : 'unavailable',
+    lastError: hostedExtensionLastError
+  };
+}
+
+async function restoreHostedExtensionRelay(): Promise<void> {
+  if (!bridge || localExtension) return;
+  const credentials = await loadHostedExtensionCredentials();
+  await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials) : undefined);
 }
 
 function giphyCredentialPath(): string {
@@ -184,6 +235,7 @@ async function stopLocalExtension(): Promise<void> {
   const runtime = localExtension;
   localExtension = null;
   if (runtime) await runtime.close();
+  await restoreHostedExtensionRelay().catch((error) => { hostedExtensionLastError = (error as Error).message; });
 }
 
 function createWindow(): BrowserWindow {
@@ -349,6 +401,62 @@ function registerDesktopHandlers(): void {
   }));
 
   ipcMain.handle('studio:get-local-extension-status', () => getLocalExtensionStatus());
+  ipcMain.handle('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
+  ipcMain.handle('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    if (!broadcasterCredentialStore?.available) throw new Error('Windows credential encryption is unavailable.');
+    const validation = await fetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
+    if (!validation.ok) {
+      const result = await validation.json().catch(() => ({})) as { error?: string };
+      throw new Error(result.error || 'Validate the broadcaster authorization before pairing the hosted Extension.');
+    }
+    const tokens = await broadcasterCredentialStore.load();
+    if (!tokens?.accessToken) throw new Error('Authorize your broadcaster account in Twitch Gateway before pairing the hosted Extension.');
+    const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl);
+    hostedExtensionLastError = undefined;
+    try {
+      const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': tokens.accessToken },
+        body: JSON.stringify({ product: productName, productVersion: TEMPEST_STUDIO_VERSION })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } };
+      if (!response.ok) throw new Error(result.error || `Hosted Extension pairing failed with ${response.status}.`);
+      const credentials = validateHostedExtensionCredentials({
+        schemaVersion: 1,
+        ebsBaseUrl,
+        installationId: result.installationId,
+        channelId: result.channel?.id,
+        channelLogin: result.channel?.login,
+        relayToken: result.relayToken,
+        pairedAt: result.pairedAt || new Date().toISOString()
+      });
+      await stopLocalExtension();
+      await saveHostedExtensionCredentials(credentials);
+      await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials));
+      return getHostedExtensionStatus();
+    } catch (error) {
+      hostedExtensionLastError = (error as Error).message;
+      throw error;
+    }
+  });
+  ipcMain.handle('studio:revoke-hosted-extension', async () => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const credentials = await loadHostedExtensionCredentials();
+    if (!credentials) return getHostedExtensionStatus();
+    hostedExtensionLastError = undefined;
+    try {
+      const response = await fetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok && response.status !== 401 && response.status !== 404) throw new Error(result.error || `Hosted Extension revocation failed with ${response.status}.`);
+      await bridge.configureExtensionRelay(undefined);
+      await unlink(hostedExtensionCredentialPath()).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+      return getHostedExtensionStatus();
+    } catch (error) {
+      hostedExtensionLastError = (error as Error).message;
+      throw error;
+    }
+  });
   ipcMain.handle('studio:get-twitch-panel-design', () => loadTwitchPanelDesign());
   ipcMain.handle('studio:save-twitch-panel-design', (_event, input: unknown) => saveTwitchPanelDesign(input));
 
@@ -718,17 +826,19 @@ app.whenReady().then(async () => {
   const userDataDirectory = app.getPath('userData');
   dataMigrationStatus = await runStudioDataMigrations({ userDataDirectory, productVersion: TEMPEST_STUDIO_VERSION });
   const bridgeDataDirectory = path.join(userDataDirectory, 'bridge');
+  broadcasterCredentialStore = createTwitchCredentialStore(bridgeDataDirectory);
   bridge = await startTempestBridge({
     host: '127.0.0.1',
     port: bridgePort,
     dataDirectory: bridgeDataDirectory,
-    twitchCredentialStore: createTwitchCredentialStore(bridgeDataDirectory),
+    twitchCredentialStore: broadcasterCredentialStore,
     chatbotCredentialStore: createTwitchCredentialStore(bridgeDataDirectory, 'chatbot-credentials.bin'),
     extensionRelay: extensionRelayOptionsFromEnvironment(),
     soundAlertPlayback(command: TempestSoundAlertPlaybackCommand) {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('studio:sound-alert-playback', command);
     }
   });
+  await restoreHostedExtensionRelay().catch((error) => { hostedExtensionLastError = (error as Error).message; });
   warudoAdapter = startWarudoAdapter({
     bridgeUrl: `${bridge.baseUrl.replace('http', 'ws')}/v1/socket`,
     bridgeToken: bridge.token,

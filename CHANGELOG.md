@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.21.0 — Public Extension installations
+
+- Replaced the single global channel allowlist and relay token with PostgreSQL-backed public installations.
+- Added Twitch OAuth ownership validation, per-installation relay credentials, hash-only server storage, encrypted Windows client storage, revocation, and automatic reconnect.
+- Added a Hosted Extension pairing panel directly inside Twitch Gateway so streamers do not need PowerShell or manually copied relay secrets.
+- Routed Twitch-signed viewer requests by their channel installation while preserving origin checks, anonymous-viewer policy, rate limits, replay dedupe, Studio cooldowns, and emergency restore.
+- Added channel-scoped signal catalog publication containing only IDs, display labels, timing, and colors; local media and machine paths remain outside the EBS.
+- Added Railway PostgreSQL deployment settings and retained an isolated legacy mode for localhost Extension testing.
+
 ## 0.20.0 — Public release foundation
 
 - Renamed the desktop product surface to Tempest Streaming Studio while preserving stable Tempest protocol identifiers.

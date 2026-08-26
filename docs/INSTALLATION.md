@@ -1,8 +1,8 @@
-# Installing Tempest Streaming Studio 0.20.0
+# Installing Tempest Streaming Studio 0.21.0
 
 ## Windows installation
 
-1. Download `Tempest-Streaming-Studio-Setup-0.20.0-x64.exe` from the official release.
+1. Download `Tempest-Streaming-Studio-Setup-0.21.0-x64.exe` from the official release.
 2. Run the per-user installer and choose an installation directory if desired.
 3. Open Tempest Streaming Studio and complete **Guided Setup**.
 4. In OBS or compatible broadcast software, add these transparent Browser Sources using the base-canvas dimensions shown by Guided Setup:

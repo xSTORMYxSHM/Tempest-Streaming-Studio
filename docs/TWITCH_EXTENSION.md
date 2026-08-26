@@ -68,11 +68,11 @@ Production mode requires an HTTPS Extension Backend Service URL. The Video Compo
 
 The hosted EBS now:
 
-1. Verify the Twitch JWT signature with the Extension shared secret.
-2. Validate expiry, `channel_id`, role, and opaque viewer identity.
+1. Verifies the Twitch JWT signature, expiry, `channel_id`, role, and opaque viewer identity.
+2. Resolves the signed channel to a broadcaster-paired PostgreSQL installation.
 3. Applies per-viewer and per-channel request limits and makes repeated request identifiers idempotent.
-4. Forward accepted signals over an authenticated outbound connection maintained by Studio.
-5. Never expose the local Tempest Bridge or its installation token to the Extension front end.
+4. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection.
+5. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
 
 The public Extension Client ID belongs in front-end/EBS configuration. The shared secret belongs only in the EBS secret store. See [TWITCH_EBS.md](TWITCH_EBS.md) for deployment and Studio connection instructions.
 

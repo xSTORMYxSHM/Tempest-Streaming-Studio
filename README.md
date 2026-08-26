@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current release candidate: **0.20.0**
+Current release candidate: **0.21.0**
 
 Tempest Streaming Studio is the interaction and orchestration hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed workflows across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Studio also manages application registrations and shared assets, while creative rendering and live production stay inside focused applications.
 
@@ -47,7 +47,7 @@ Studio starts an embedded authenticated Bridge on `127.0.0.1:4765`. The Bridge i
 
 Use the workflow simulator in **Interaction Workflows** to exercise a configured sequence without requiring every destination application. The simulator uses the same workflow engine as live interactions; delivery to absent applications is reported as simulated. Reversible actions receive leases and are explicitly released when those leases expire. Emergency Restore releases active actions immediately and disarms further viewer interactions until the operator re-arms them.
 
-Studio is the sole owner of interaction-facing Twitch integration for the suite. It validates, deduplicates, logs, publishes, and routes canonical Twitch events at `/v1/integrations/twitch/events`; the desktop exposes authorization, connection state, the free Sound Alert catalog, and the topic directory. The hosted Extension Backend Service verifies Twitch JWTs and forwards allowlisted interactions over a channel-bound connection opened outbound by Studio. Broadcast retains OBS/Twitch stream-service authentication and Stream Information because those belong to output operation. Bits do not trigger bundled workflows.
+Studio is the sole owner of interaction-facing Twitch integration for the suite. It validates, deduplicates, logs, publishes, and routes canonical Twitch events at `/v1/integrations/twitch/events`; the desktop exposes authorization, connection state, the free Sound Alert catalog, and the topic directory. The hosted Extension Backend Service verifies Twitch JWTs, resolves PostgreSQL-backed broadcaster installations, and forwards catalog-approved interactions over a per-installation connection opened outbound by Studio. Broadcast retains OBS/Twitch stream-service authentication and Stream Information because those belong to output operation. Bits do not trigger bundled workflows.
 
 The Chatbot stores its secondary account's OAuth tokens separately from the broadcaster, receives `channel.chat.message` through EventSub WebSocket, and manages commands, aliases, permissions, replies, cooldowns, workflow links, simulation, and activity. Device authorization runs in an isolated temporary Twitch session and its cookies are erased when authorization completes or the window closes.
 

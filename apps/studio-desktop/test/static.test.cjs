@@ -168,7 +168,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Start Local Panel/);
   assert.match(html, /type="password"/);
   assert.match(html, /Windows encryption/);
-  assert.match(html, /BUILD 0\.20\.0/);
+  assert.match(html, /BUILD 0\.21\.0/);
   assert.match(html, /id="settingsSection"/);
   assert.match(html, /Redacted diagnostics/);
   assert.match(html, /What leaves this computer/);

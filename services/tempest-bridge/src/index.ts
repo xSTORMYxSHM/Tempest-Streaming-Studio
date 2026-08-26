@@ -1000,6 +1000,15 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     const nextRelay = new TempestExtensionRelayClient({
       ...relayOptions,
       logger,
+      catalog: () => soundAlerts.list().filter((alert) => alert.enabled).map((alert) => ({
+        id: alert.id,
+        name: alert.name,
+        durationMs: alert.durationMs,
+        cooldownMs: Math.max(alert.viewerCooldownMs, alert.globalCooldownMs, alert.durationMs),
+        accent: alert.accent || '#54F2EB',
+        glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
+        kind: 'sound-alert' as const
+      })),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

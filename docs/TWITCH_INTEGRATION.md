@@ -1,5 +1,11 @@
 # Twitch Interaction Integration
 
+## 0.21.0 Public Extension installations
+
+The hosted EBS supports public multi-channel installations backed by PostgreSQL. A streamer authorizes Twitch in Studio and pairs the Railway HTTPS domain from Twitch Gateway. The EBS validates that OAuth token with Twitch, derives the broadcaster channel, issues a unique relay credential, stores only its SHA-256 hash, and never retains the OAuth token. Studio encrypts the issued credential with Windows credential protection and reconnects outbound over WSS.
+
+Each connected Studio publishes a bounded viewer-safe catalog containing signal IDs, labels, durations, cooldown display values, colors, and glyphs. Local media, machine paths, application credentials, and high-bandwidth output remain on the broadcaster's computer. Twitch viewer JWTs select the installation by their signed `channel_id`; rate limiting, dedupe, Studio cooldowns, adapter leases, and Emergency Restore remain in force.
+
 ## 0.11.6 Authorization completion handoff
 
 When the Chatbot Device Code poll reports success, expiry, or another terminal result, Studio automatically closes every outstanding isolated Twitch authorization window. Closing the window triggers the same temporary-session cookie and storage cleanup as the normal window close button. Disconnecting the Chatbot also closes any pending isolated authorization window.

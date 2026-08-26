@@ -1,6 +1,6 @@
 {
   "name": "@tempest/twitch-ebs",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "description": "Hosted Twitch Extension Backend Service and secure relay for Tempest Streaming Studio.",
   "main": "dist/index.js",
@@ -15,10 +15,12 @@
   },
   "dependencies": {
     "@tempest/contracts": "workspace:*",
+    "pg": "^8.23.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
     "@tempest/bridge": "workspace:*",
+    "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1"
   }
 }

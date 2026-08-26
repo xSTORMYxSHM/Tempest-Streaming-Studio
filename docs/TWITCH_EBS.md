@@ -1,6 +1,6 @@
 # Twitch Extension Backend Service
 
-`services/twitch-ebs` is the public trust boundary between Twitch viewers and Tempest Streaming Studio. It verifies Twitch's HS256 Extension JWT with the base64-decoded Extension secret, restricts requests to explicitly configured channel IDs, rejects anonymous viewers by default, rate-limits requests, deduplicates request IDs, and forwards normalized events only while Studio has an authenticated outbound connection.
+`services/twitch-ebs` is the public trust boundary between Twitch viewers and Tempest Streaming Studio. It verifies Twitch's HS256 Extension JWT with the base64-decoded Extension secret, resolves the JWT channel to a PostgreSQL-backed Studio installation, rejects anonymous viewers by default, rate-limits requests, deduplicates request IDs, and forwards normalized events only while that installation has an authenticated outbound connection.
 
 The Extension shared secret and relay token never enter the Extension ZIP. The local Bridge remains bound to `127.0.0.1` and is never exposed through a tunnel or port forward.
 
@@ -9,42 +9,36 @@ The Extension shared secret and relay token never enter the Extension ZIP. The l
 Create or collect these values before deployment:
 
 - `TWITCH_EXTENSION_SECRETS` — comma-separated active base64 secrets from the Extension's **Secret Keys** settings. A comma-separated list permits safe secret rotation.
-- `TEMPEST_EBS_RELAY_TOKEN` — a new random value of at least 32 characters, shared only by the EBS and Studio.
-- `TEMPEST_EBS_CHANNEL_IDS` — comma-separated numeric Twitch channel IDs allowed to use this installation.
-- `TEMPEST_EBS_ALLOWED_ACTIONS` — optional comma-separated generic workflow actions such as `tempest.blackhole`. Sound Alert catalog IDs are handled by their dedicated route and do not belong here.
+- `DATABASE_URL` — PostgreSQL connection URL used for channel installations, hashed relay credentials, and public-safe signal catalogs.
+- `TEMPEST_EBS_TWITCH_CLIENT_IDS` — comma-separated public Twitch application client IDs accepted when Studio proves broadcaster ownership during pairing.
 - `TEMPEST_EBS_ALLOWED_ORIGINS` — optional exact origins in addition to Twitch's `https://<extension-id>.ext-twitch.tv` origins. Add `https://localhost:8080` only when testing the production path locally.
 
-Generate a relay token in PowerShell:
-
-```powershell
-[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
-```
+Relay credentials are generated per Studio installation by the EBS, stored only as SHA-256 hashes in PostgreSQL, returned once over HTTPS, and encrypted by Studio with Windows credential protection. Public users never create or copy relay tokens.
 
 ## Deploy the EBS
 
-Deploy the repository's root `Dockerfile`, use `services/twitch-ebs/Dockerfile` as an explicit custom Dockerfile, or run the compiled Node service behind an HTTPS reverse proxy. The hosting platform must support WebSocket upgrades on `/v1/studio` and should keep one service instance active for this single-channel deployment.
+Deploy the repository's root `Dockerfile`, use `services/twitch-ebs/Dockerfile` as an explicit custom Dockerfile, or run the compiled Node service behind an HTTPS reverse proxy. The hosting platform must support WebSocket upgrades on `/v1/studio`. Keep one live EBS replica during the initial public deployment because connected Studio sockets are process-local; PostgreSQL safely persists installation state across deployments.
 
 Configure these secret/environment values on the host:
 
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
-TEMPEST_EBS_RELAY_TOKEN=<random relay token>
-TEMPEST_EBS_CHANNEL_IDS=<numeric channel ID>
-TEMPEST_EBS_ALLOWED_ACTIONS=tempest.blackhole
-PORT=8080
+DATABASE_URL=<PostgreSQL connection URL>
+TEMPEST_EBS_TWITCH_CLIENT_IDS=<Studio Twitch application client ID>
 ```
 
 ### Railway
 
 The repository's root `Dockerfile` is the Railway entry point and starts only the Twitch EBS. Connect Railway to the GitHub repository with the repository root as its source directory. Do not set a custom build or start command.
 
+Add a PostgreSQL service to the same Railway project first. Railway normally names it `Postgres`; use a reference variable so the password remains managed by Railway rather than copied into Git or Studio.
+
 In the service's **Variables** tab, add:
 
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
-TEMPEST_EBS_RELAY_TOKEN=<random relay token of at least 32 characters>
-TEMPEST_EBS_CHANNEL_IDS=<numeric Twitch channel ID>
-TEMPEST_EBS_ALLOWED_ACTIONS=tempest.blackhole
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+TEMPEST_EBS_TWITCH_CLIENT_IDS=<Studio Twitch application client ID>
 ```
 
 Do not add `PORT`, TLS certificate, or TLS password variables on Railway. Railway supplies the port and terminates public HTTPS. Twitch Extension origins matching `https://<extension-id>.ext-twitch.tv` are accepted automatically, so `TEMPEST_EBS_ALLOWED_ORIGINS` is not needed for the hosted Extension.
@@ -52,7 +46,7 @@ Do not add `PORT`, TLS certificate, or TLS password variables on Railway. Railwa
 In **Settings**:
 
 1. Set the healthcheck path to `/health`.
-2. Keep one replica for the single-channel in-memory relay.
+2. Keep one replica for the initial WebSocket relay deployment. PostgreSQL persists installations; a future shared live-connection layer can enable horizontal replicas safely.
 3. Generate a public Railway domain.
 4. Prefer a US West region for a Seattle-based Studio connection when that region is available.
 
@@ -63,23 +57,19 @@ The public endpoints are:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Service and connected-channel readiness |
+| `POST` | `/v1/installations/pair` | Validate Studio's Twitch OAuth identity and issue one per-installation relay credential |
+| `GET` / `DELETE` | `/v1/installations/current` | Inspect or revoke the authenticated Studio installation |
 | `GET` | `/v1/extension/status` | JWT-authenticated Studio connection state |
+| `GET` | `/v1/extension/catalog` | Channel-scoped, viewer-safe signal catalog published by Studio |
 | `POST` | `/v1/extension/alerts/{alertId}/trigger` | Trigger a Studio catalog Sound Alert |
-| `POST` | `/v1/extension/interactions/{action}/trigger` | Trigger an explicitly allowlisted generic workflow action |
+| `POST` | `/v1/extension/interactions/{action}/trigger` | Trigger a generic action published in that installation's viewer-safe catalog |
 | WebSocket | `/v1/studio` | Authenticated outbound Studio relay |
 
 Confirm `https://<your-ebs-host>/health` returns `status: "online"`. Add `https://<your-ebs-host>` to the Twitch version's **Allowlist for URL Fetching Domains**.
 
 ## Connect Studio
 
-Set the relay URL, the same relay token, and the numeric channel ID before starting Studio:
-
-```powershell
-$env:TEMPEST_EXTENSION_RELAY_URL='wss://extensions.example.com/v1/studio'
-$env:TEMPEST_EXTENSION_RELAY_TOKEN='<same random relay token>'
-$env:TEMPEST_EXTENSION_CHANNEL_ID='<numeric channel ID>'
-pnpm dev
-```
+Authorize the broadcaster in Studio's **Twitch Gateway**, enter the Railway HTTPS domain under **Public Extension Service**, and select **Pair Hosted Extension**. Studio sends the existing Twitch user access token directly to the EBS for validation, receives a unique relay credential, and stores it with Windows encryption. The EBS does not store the Twitch OAuth token.
 
 Studio's Twitch page reports **EXTENSION RELAY: CONNECTED** when the EBS accepts the connection. The relay reconnects with bounded exponential backoff if the network or EBS restarts.
 
@@ -99,7 +89,7 @@ Upload the ZIP on Twitch's **Files** tab and move the version to Hosted Test. Th
 
 1. Twitch supplies a refreshed viewer JWT to the Video Component.
 2. The component sends the JWT, selected alert ID, and a UUID request ID to the EBS.
-3. The EBS verifies the JWT and channel, checks anonymity policy, replay state, action allowlists, and request rates, then sends a canonical event to Studio.
+3. The EBS verifies the JWT and channel, resolves the active PostgreSQL installation, checks anonymity policy, replay state, the channel-published catalog, and request rates, then sends a canonical event to that Studio.
 4. Studio validates and deduplicates the event again, resolves the Sound Alert catalog, applies safety/concurrency/cooldowns, and creates a workflow run.
 5. Warudo receives `avatar.performance.apply`; Tempest Broadcast receives `broadcast.reaction.trigger`. Both receive lease-based release commands when the performance ends.
 

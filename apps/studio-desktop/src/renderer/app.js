@@ -44,6 +44,7 @@
     chatbot: null,
     radio: null,
     localExtension: null,
+    hostedExtension: null,
     panelDesign: null,
     warudo: null,
     appInfo: null,
@@ -730,6 +731,7 @@
     const directory = $('#twitchTopicDirectory');
     directory.classList.toggle('empty-state', !topics.length);
     directory.innerHTML = topics.length ? topics.map((topic) => `<code>${escapeHtml(topic)}</code>`).join('') : 'No topics advertised.';
+    renderHostedExtension();
     renderLocalExtension();
   }
 
@@ -806,6 +808,27 @@
     const activityList = $('#chatbotActivity');
     activityList.classList.toggle('empty-state', !activity.length);
     activityList.innerHTML = activity.length ? activity.slice(0, 10).map((entry) => `<div class="compact-row event-${escapeHtml(entry.state === 'accepted' ? 'success' : entry.state === 'error' ? 'error' : 'warning')}"><div><strong>${escapeHtml(entry.message)}</strong><small>${new Date(entry.timestamp).toLocaleTimeString()}${entry.command ? ` · ${escapeHtml(chatbot.prefix || '!')}${escapeHtml(entry.command)}` : ''}${entry.sharedChat ? ` · via @${escapeHtml(entry.sourceChannelLogin || 'shared-chat-participant')}` : ''}</small></div><i class="event-dot"></i></div>`).join('') : 'No chatbot activity recorded.';
+  }
+
+  function renderHostedExtension() {
+    const hosted = state.hostedExtension || {};
+    const paired = Boolean(hosted.paired);
+    const authorized = state.twitch?.oauth?.state === 'authorized';
+    const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
+    const urlInput = $('#hostedExtensionUrl');
+    if (document.activeElement !== urlInput && paired && hosted.ebsBaseUrl) urlInput.value = hosted.ebsBaseUrl;
+    $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
+    $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
+    $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
+    $('#hostedExtensionChannelState').textContent = hosted.channel?.login ? `@${hosted.channel.login}` : hosted.channel?.id || '—';
+    $('#hostedExtensionRelayState').textContent = relayState;
+    $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired;
+    $('#revokeHostedExtension').disabled = !paired;
+    $('#hostedExtensionUrl').disabled = paired;
+    $('#hostedExtensionMessage').textContent = hosted.lastError || (paired
+      ? relayState === 'CONNECTED' ? 'This channel is paired. Studio publishes its enabled signal catalog to the public Twitch panel automatically.' : 'The installation is paired. Studio will keep retrying the hosted relay connection.'
+      : !authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
+        : 'Enter the Railway HTTPS domain and pair once. Studio stores the per-installation relay credential with Windows encryption.');
   }
 
   function renderLocalExtension() {
@@ -1105,6 +1128,33 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function pairHostedExtension() {
+    try {
+      const ebsBaseUrl = $('#hostedExtensionUrl').value.trim();
+      state.hostedExtension = await window.tempestStudio.pairHostedExtension({ ebsBaseUrl });
+      await refresh({ quiet: true });
+      toast(`Hosted Extension paired with @${state.hostedExtension.channel?.login || 'your channel'}.`);
+    } catch (error) {
+      state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
+      renderHostedExtension();
+      toast(error.message, true);
+    }
+  }
+
+  async function revokeHostedExtension() {
+    if (!confirm('Revoke this Studio installation? The public Twitch panel will stop routing signals until it is paired again.')) return;
+    try {
+      state.hostedExtension = await window.tempestStudio.revokeHostedExtension();
+      $('#hostedExtensionUrl').value = '';
+      await refresh({ quiet: true });
+      toast('Hosted Extension installation revoked.');
+    } catch (error) {
+      state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
+      renderHostedExtension();
+      toast(error.message, true);
+    }
+  }
+
   async function startLocalExtension() {
     try {
       const accountChannelId = state.twitch?.oauth?.account?.userId || '';
@@ -1284,7 +1334,7 @@
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, warudo, localExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, warudo, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
       state.runs = runs.runs || [];
@@ -1295,6 +1345,7 @@
       state.chatOverlay = chatOverlay;
       state.warudo = warudo;
       state.localExtension = localExtension;
+      state.hostedExtension = hostedExtension;
       state.alertHistory = alertHistory;
       state.alertDiagnostics = alertDiagnostics;
       renderBridgeStatus(true);
@@ -1307,6 +1358,7 @@
       renderChatOverlay();
       renderWarudo();
       renderLocalExtension();
+      renderHostedExtension();
       renderChatbot();
       renderApi();
     } catch (error) {
@@ -1317,8 +1369,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -2788,6 +2840,8 @@
     $('#chatbotPrefix').addEventListener('change', saveChatbotPrefix);
     $('#testChatbotCommand').addEventListener('click', testChatbotCommand);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
+    $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
+    $('#revokeHostedExtension').addEventListener('click', revokeHostedExtension);
     $('#stopLocalExtension').addEventListener('click', stopLocalExtension);
     $('#openLocalExtensionPanel').addEventListener('click', () => window.tempestStudio.openLocalExtensionPanel().catch((error) => toast(error.message, true)));
     $('#prepareLocalExtensionCertificate').addEventListener('click', prepareLocalExtensionCertificate);

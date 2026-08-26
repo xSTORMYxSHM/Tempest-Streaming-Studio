@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { AddressInfo } from 'node:net';
@@ -6,16 +6,44 @@ import { URL } from 'node:url';
 import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchExtensionJwt } from './jwt';
+import {
+  MemoryTwitchEbsInstallationStore,
+  PublicExtensionCatalog,
+  PublicExtensionCatalogItem,
+  TwitchEbsInstallation,
+  TwitchEbsInstallationStore
+} from './installation-store';
 
 export { decodeTwitchSecrets, verifyTwitchExtensionJwt } from './jwt';
+export {
+  MemoryTwitchEbsInstallationStore,
+  PostgresTwitchEbsInstallationStore
+} from './installation-store';
+export type {
+  PublicExtensionCatalog,
+  PublicExtensionCatalogItem,
+  TwitchEbsInstallation,
+  TwitchEbsInstallationStore
+} from './installation-store';
+
+export interface TwitchOAuthIdentity {
+  clientId: string;
+  userId: string;
+  login: string;
+  scopes: string[];
+  expiresIn: number;
+}
 
 export interface StartTwitchEbsOptions {
   host?: string;
   port?: number;
   twitchExtensionSecrets: string[];
-  relayToken: string;
-  allowedChannelIds: string[];
+  relayToken?: string;
+  allowedChannelIds?: string[];
   allowedActions?: string[];
+  installationStore?: TwitchEbsInstallationStore;
+  allowedTwitchClientIds?: string[];
+  validateTwitchOAuthToken?: (accessToken: string) => Promise<TwitchOAuthIdentity>;
   allowedOrigins?: string[];
   allowAnonymous?: boolean;
   viewerRequestsPerMinute?: number;
@@ -78,11 +106,10 @@ const maximumBodyBytes = 16 * 1024;
 const requestIdPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const actionPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const soundAlertPattern = /^sound-alert\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const glyphPattern = /^[A-Z0-9]{1,4}$/;
 
-function safeEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+function relayTokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function bearerToken(request: IncomingMessage): string {
@@ -93,6 +120,53 @@ function bearerToken(request: IncomingMessage): string {
 function extensionToken(request: IncomingMessage): string {
   const direct = String(request.headers['x-extension-jwt'] || '').trim();
   return direct || bearerToken(request);
+}
+
+function twitchOAuthToken(request: IncomingMessage): string {
+  return String(request.headers['x-twitch-oauth'] || '').trim() || bearerToken(request);
+}
+
+async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAuthIdentity> {
+  if (!accessToken || accessToken.length > 2048 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Twitch OAuth token is required.');
+  const response = await fetch('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${accessToken}` } });
+  const body = await response.json().catch(() => ({})) as { client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown };
+  if (!response.ok || typeof body.client_id !== 'string' || typeof body.user_id !== 'string' || typeof body.login !== 'string') {
+    throw new HttpError(401, typeof body.message === 'string' ? body.message : 'Twitch OAuth validation failed.');
+  }
+  if (!/^\d{1,30}$/.test(body.user_id) || !/^[a-z0-9_]{1,80}$/i.test(body.login)) throw new HttpError(401, 'Twitch OAuth identity is invalid.');
+  return {
+    clientId: body.client_id,
+    userId: body.user_id,
+    login: body.login,
+    scopes: Array.isArray(body.scopes) ? body.scopes.filter((scope): scope is string => typeof scope === 'string') : [],
+    expiresIn: Math.max(0, Number(body.expires_in) || 0)
+  };
+}
+
+function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
+  const source = value as { items?: unknown };
+  if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
+  const seen = new Set<string>();
+  const items: PublicExtensionCatalogItem[] = source.items.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog item ${index + 1} is invalid.`);
+    const item = entry as Record<string, unknown>;
+    const id = String(item.id || '').trim();
+    const name = String(item.name || '').trim();
+    const kind = item.kind === 'interaction' ? 'interaction' : item.kind === 'sound-alert' ? 'sound-alert' : '';
+    const durationMs = Number(item.durationMs);
+    const cooldownMs = item.cooldownMs === undefined ? undefined : Number(item.cooldownMs);
+    const accent = String(item.accent || '').toUpperCase();
+    const glyph = String(item.glyph || '').toUpperCase();
+    if (!actionPattern.test(id) || seen.has(id)) throw new Error(`Catalog item ${index + 1} has an invalid or duplicate ID.`);
+    if (!name || name.length > 80 || /[\r\n\0]/.test(name)) throw new Error(`Catalog item ${index + 1} has an invalid name.`);
+    if (!kind || !Number.isInteger(durationMs) || durationMs < 1_000 || durationMs > 300_000) throw new Error(`Catalog item ${index + 1} has invalid timing or kind.`);
+    if (cooldownMs !== undefined && (!Number.isInteger(cooldownMs) || cooldownMs < 0 || cooldownMs > 86_400_000)) throw new Error(`Catalog item ${index + 1} has an invalid cooldown.`);
+    if (!/^#[0-9A-F]{6}$/.test(accent) || !glyphPattern.test(glyph)) throw new Error(`Catalog item ${index + 1} has invalid display data.`);
+    seen.add(id);
+    return { id, name, kind, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), accent, glyph };
+  });
+  return { schemaVersion: 1, updatedAt: new Date().toISOString(), items };
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -166,11 +240,15 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const requestedPort = options.port ?? 8080;
   const logger = options.logger || console;
   const secrets = decodeTwitchSecrets(options.twitchExtensionSecrets);
-  const relayToken = options.relayToken.trim();
-  if (relayToken.length < 32) throw new Error('TEMPEST_EBS_RELAY_TOKEN must contain at least 32 characters.');
-  const allowedChannelIds = new Set(options.allowedChannelIds.map((value) => value.trim()).filter((value) => /^\d{1,30}$/.test(value)));
-  if (!allowedChannelIds.size) throw new Error('At least one numeric Twitch channel ID must be allowlisted.');
+  const installationStore = options.installationStore || new MemoryTwitchEbsInstallationStore();
+  await installationStore.initialize();
+  const legacyRelayToken = String(options.relayToken || '').trim();
+  const allowedChannelIds = new Set((options.allowedChannelIds || []).map((value) => value.trim()).filter((value) => /^\d{1,30}$/.test(value)));
+  if ((legacyRelayToken && legacyRelayToken.length < 32) || (!legacyRelayToken && allowedChannelIds.size)) throw new Error('Legacy relay token and channel IDs must be configured together, and the token must contain at least 32 characters.');
+  for (const channelId of allowedChannelIds) await installationStore.install(channelId, `channel-${channelId}`, relayTokenHash(legacyRelayToken));
   const allowedActions = new Set((options.allowedActions || []).map((value) => value.trim()).filter((value) => actionPattern.test(value)));
+  const allowedTwitchClientIds = new Set((options.allowedTwitchClientIds || []).map((value) => value.trim()).filter((value) => /^[a-z0-9]{8,80}$/i.test(value)));
+  const oauthValidator = options.validateTwitchOAuthToken || validateTwitchOAuthToken;
   const allowedOrigins = new Set((options.allowedOrigins || []).map((value) => value.trim().replace(/\/$/, '')).filter(Boolean));
   const viewerLimit = Math.max(1, options.viewerRequestsPerMinute || 20);
   const channelLimit = Math.max(viewerLimit, options.channelRequestsPerMinute || 240);
@@ -180,7 +258,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const pending = new Map<string, PendingRelay>();
   const results = new Map<string, CachedResult>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  const socketChannels = new WeakMap<WebSocket, string>();
+  const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
   const expireResults = (now = Date.now()): void => {
     for (const [key, value] of results) if (now - value.storedAt > 10 * 60_000) results.delete(key);
@@ -215,16 +293,17 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     });
   };
 
-  const authenticateViewer = (request: IncomingMessage): TwitchExtensionClaims => {
+  const authenticateViewer = async (request: IncomingMessage): Promise<{ claims: TwitchExtensionClaims; installation: TwitchEbsInstallation }> => {
     let claims: TwitchExtensionClaims;
     try {
       claims = verifyTwitchExtensionJwt(extensionToken(request), secrets);
     } catch (error) {
       throw new HttpError(401, (error as Error).message);
     }
-    if (!allowedChannelIds.has(claims.channel_id)) throw new HttpError(403, 'This Twitch channel is not authorized for Tempest Streaming Studio.');
+    const installation = await installationStore.findActiveByChannelId(claims.channel_id);
+    if (!installation) throw new HttpError(403, 'This Twitch channel has not paired Tempest Streaming Studio.');
     if (!options.allowAnonymous && claims.opaque_user_id.startsWith('A')) throw new HttpError(403, 'Anonymous Twitch viewers cannot trigger interactions.');
-    return claims;
+    return { claims, installation };
   };
 
   const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
@@ -255,32 +334,68 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'OPTIONS') {
         response.statusCode = 204;
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
-        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
         response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, Authorization');
         response.setHeader('Access-Control-Max-Age', '600');
         response.setHeader('Vary', 'Origin');
         return response.end();
       }
       if (request.method === 'GET' && requestUrl.pathname === '/health') {
-        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', studioConnections: studioSockets.size }, origin);
+        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', installations: await installationStore.countActive(), studioConnections: studioSockets.size }, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/installations/pair') {
+        const remoteAddress = request.socket.remoteAddress || 'unknown';
+        const retryAfterMs = limiter.consume(`pair:${remoteAddress}`, 10);
+        if (retryAfterMs) throw new HttpError(429, 'Too many pairing attempts. Please wait and try again.', { retryAfterMs });
+        const identity = await oauthValidator(twitchOAuthToken(request));
+        if (allowedTwitchClientIds.size && !allowedTwitchClientIds.has(identity.clientId)) throw new HttpError(403, 'This Twitch authorization was not issued to Tempest Streaming Studio.');
+        const relayToken = randomBytes(32).toString('base64url');
+        const installation = await installationStore.install(identity.userId, identity.login, relayTokenHash(relayToken));
+        studioSockets.get(installation.channelId)?.close(4001, 'Installation paired again');
+        return sendJson(response, 201, {
+          schemaVersion: 1,
+          installationId: installation.id,
+          channel: { id: installation.channelId, login: installation.channelLogin },
+          relayToken,
+          relayPath: '/v1/studio',
+          pairedAt: installation.updatedAt
+        }, origin);
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/installations/current') {
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
+        return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, channel: { id: installation.channelId, login: installation.channelLogin }, updatedAt: installation.updatedAt }, origin);
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/installations/current') {
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
+        await installationStore.revoke(installation.id);
+        studioSockets.get(installation.channelId)?.close(4003, 'Installation revoked');
+        return sendJson(response, 200, { revoked: true }, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/status') {
-        const claims = authenticateViewer(request);
+        const { claims } = await authenticateViewer(request);
         return sendJson(response, 200, { studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/catalog') {
+        const { claims, installation } = await authenticateViewer(request);
+        return sendJson(response, 200, { ...installation.catalog, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
       }
       const alertMatch = requestUrl.pathname.match(/^\/v1\/extension\/alerts\/([^/]+)\/trigger$/);
       if (request.method === 'POST' && alertMatch) {
-        const claims = authenticateViewer(request);
+        const { claims, installation } = await authenticateViewer(request);
         const alertId = decodeURIComponent(alertMatch[1]);
         if (!soundAlertPattern.test(alertId)) throw new HttpError(404, 'Sound Alert was not recognized.');
+        if (!installation.catalog.items.some((item) => item.kind === 'sound-alert' && item.id === alertId) && !allowedChannelIds.has(claims.channel_id)) throw new HttpError(404, 'Sound Alert is not published by this Studio installation.');
         const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, alertId, { alertId }));
         return sendJson(response, result.status, result.body, origin);
       }
       const interactionMatch = requestUrl.pathname.match(/^\/v1\/extension\/interactions\/([^/]+)\/trigger$/);
       if (request.method === 'POST' && interactionMatch) {
-        const claims = authenticateViewer(request);
+        const { claims, installation } = await authenticateViewer(request);
         const action = decodeURIComponent(interactionMatch[1]);
-        if (!allowedActions.has(action)) throw new HttpError(403, 'This interaction is not allowlisted by the EBS.');
+        const catalogAllowed = installation.catalog.items.some((item) => item.kind === 'interaction' && item.id === action);
+        if (!catalogAllowed && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
         const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, action));
         return sendJson(response, result.status, result.body, origin);
       }
@@ -296,28 +411,39 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     : createServer(requestHandler);
 
   server.on('upgrade', (request, socket, head) => {
-    const requestUrl = new URL(request.url || '/', `${options.tls ? 'https' : 'http'}://${request.headers.host || 'localhost'}`);
-    const channelId = String(request.headers['x-tempest-channel-id'] || '');
-    if (requestUrl.pathname !== '/v1/studio' || !safeEqual(bearerToken(request), relayToken) || !allowedChannelIds.has(channelId)) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-      return socket.destroy();
-    }
-    webSockets.handleUpgrade(request, socket, head, (webSocket) => {
-      socketChannels.set(webSocket, channelId);
-      webSockets.emit('connection', webSocket, request);
-    });
+    void (async () => {
+      try {
+        const requestUrl = new URL(request.url || '/', `${options.tls ? 'https' : 'http'}://${request.headers.host || 'localhost'}`);
+        const channelId = String(request.headers['x-tempest-channel-id'] || '');
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (requestUrl.pathname !== '/v1/studio' || !installation || (channelId && channelId !== installation.channelId)) throw new Error('Unauthorized');
+        webSockets.handleUpgrade(request, socket, head, (webSocket) => {
+          socketInstallations.set(webSocket, installation);
+          webSockets.emit('connection', webSocket, request);
+        });
+      } catch {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+      }
+    })();
   });
 
   webSockets.on('connection', (socket) => {
-    const channelId = socketChannels.get(socket) as string;
+    const installation = socketInstallations.get(socket) as TwitchEbsInstallation;
+    const channelId = installation.channelId;
     const existing = studioSockets.get(channelId);
     if (existing && existing !== socket) existing.close(4001, 'Replaced by a newer Studio connection');
     studioSockets.set(channelId, socket);
     socket.send(JSON.stringify({ protocolVersion: 1, type: 'welcome', channelId, connectionId: randomUUID() }));
-    socket.on('message', (raw) => {
+    socket.on('message', (raw) => void (async () => {
       try {
-        const message = JSON.parse(raw.toString()) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; status?: unknown; body?: unknown };
+        const message = JSON.parse(raw.toString()) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; status?: unknown; body?: unknown; catalog?: unknown };
         if (message.type === 'heartbeat') return socket.send(JSON.stringify({ protocolVersion: 1, type: 'heartbeat' }));
+        if (message.protocolVersion === 1 && message.type === 'catalog.sync') {
+          const catalog = validatePublicCatalog(message.catalog);
+          await installationStore.updateCatalog(installation.id, catalog);
+          return socket.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.ack', updatedAt: catalog.updatedAt, itemCount: catalog.items.length }));
+        }
         if (message.protocolVersion !== 1 || message.type !== 'result' || typeof message.requestId !== 'string') throw new Error('Studio sent an invalid relay message.');
         const key = `${channelId}:${message.requestId}`;
         const item = pending.get(key);
@@ -330,7 +456,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       } catch (error) {
         logger.warn(error);
       }
-    });
+    })());
     socket.on('close', () => {
       if (studioSockets.get(channelId) === socket) {
         studioSockets.delete(channelId);
@@ -361,6 +487,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       for (const socket of studioSockets.values()) socket.close(1001, 'EBS shutting down');
       await new Promise<void>((resolve) => webSockets.close(() => resolve()));
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await installationStore.close();
     }
   };
   logger.info(`Tempest Twitch EBS listening on ${runtime.baseUrl}`);

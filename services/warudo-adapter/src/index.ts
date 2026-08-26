@@ -119,7 +119,7 @@ export function startWarudoAdapter(options: StartWarudoAdapterOptions): WarudoAd
       socket.send(JSON.stringify(createBridgeMessage({
         kind: 'hello',
         source: applicationId,
-        payload: { applicationId, version: '0.20.0', protocolVersion: TEMPEST_PROTOCOL_VERSION, capabilities }
+        payload: { applicationId, version: '0.21.0', protocolVersion: TEMPEST_PROTOCOL_VERSION, capabilities }
       })));
       logger.info('Warudo adapter connected to Tempest Bridge.');
     });

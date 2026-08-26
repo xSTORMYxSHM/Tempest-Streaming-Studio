@@ -24,6 +24,15 @@ export interface ExtensionRelayStatus {
 
 export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   handler(event: TempestNormalizedTwitchEvent): Promise<ExtensionRelayResult>;
+  catalog?(): Array<{
+    id: string;
+    name: string;
+    durationMs: number;
+    cooldownMs?: number;
+    accent: string;
+    glyph: string;
+    kind: 'sound-alert' | 'interaction';
+  }>;
   onStatus?(status: ExtensionRelayStatus): void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -50,6 +59,8 @@ export class TempestExtensionRelayClient {
   private socket: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private catalogTimer: NodeJS.Timeout | null = null;
+  private lastCatalogPayload = '';
   private reconnectAttempt = 0;
   private stopped = true;
   private currentStatus: ExtensionRelayStatus = { state: 'disconnected' };
@@ -80,8 +91,10 @@ export class TempestExtensionRelayClient {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.catalogTimer) clearInterval(this.catalogTimer);
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
+    this.catalogTimer = null;
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState < WebSocket.CLOSING) {
@@ -118,6 +131,10 @@ export class TempestExtensionRelayClient {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ protocolVersion: 1, type: 'heartbeat' }));
       }, 25_000);
       this.heartbeatTimer.unref();
+      this.sendCatalog(socket, true);
+      if (this.catalogTimer) clearInterval(this.catalogTimer);
+      this.catalogTimer = setInterval(() => this.sendCatalog(socket), 30_000);
+      this.catalogTimer.unref();
     });
 
     socket.on('message', (raw) => void this.handleMessage(socket, raw.toString()));
@@ -129,18 +146,33 @@ export class TempestExtensionRelayClient {
       if (this.socket !== socket) return;
       this.socket = null;
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+      if (this.catalogTimer) clearInterval(this.catalogTimer);
       this.heartbeatTimer = null;
+      this.catalogTimer = null;
       if (this.stopped) return this.update({ state: 'disconnected' });
       this.update({ state: 'disconnected' });
       this.scheduleReconnect();
     });
   }
 
+  private sendCatalog(socket: WebSocket, force = false): void {
+    if (!this.options.catalog || socket.readyState !== WebSocket.OPEN) return;
+    try {
+      const catalog = { schemaVersion: 1, items: this.options.catalog() };
+      const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
+      if (!force && payload === this.lastCatalogPayload) return;
+      this.lastCatalogPayload = payload;
+      socket.send(payload);
+    } catch (error) {
+      this.logger.warn(error);
+    }
+  }
+
   private async handleMessage(socket: WebSocket, raw: string): Promise<void> {
     let requestId = '';
     try {
       const message = JSON.parse(raw) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; event?: unknown };
-      if (message.type === 'welcome' || message.type === 'heartbeat') return;
+      if (message.type === 'welcome' || message.type === 'heartbeat' || message.type === 'catalog.ack') return;
       if (message.protocolVersion !== 1 || message.type !== 'interaction' || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
       requestId = message.requestId;
       const validation = validateNormalizedTwitchEvent(message.event);

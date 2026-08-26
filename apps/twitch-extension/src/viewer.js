@@ -118,6 +118,21 @@
     $('#stateLight').classList.toggle('online', online);
   }
 
+  async function refreshHostedCatalog() {
+    const configuration = state.configuration;
+    if (configuration.mockMode || !configuration.ebsBaseUrl || !state.auth?.token) return;
+    const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/catalog`, {
+      headers: { 'X-Extension-JWT': state.auth.token },
+      cache: 'no-store'
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Signal catalog unavailable (${response.status}).`);
+    if (!Array.isArray(body.items)) throw new Error('The hosted signal catalog is invalid.');
+    state.alerts = body.items;
+    setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
+    render();
+  }
+
   let toastTimer;
   function toast(message, error = false) {
     const element = $('#toast');
@@ -183,6 +198,7 @@
       state.auth = authorization;
       setConnection('TWITCH AUTHORIZED', true);
       $('#viewerState').textContent = authorization.userId?.startsWith('A') ? 'Anonymous viewer link' : 'Viewer link established';
+      void refreshHostedCatalog().catch((error) => { setConnection('PAIRING REQUIRED', false); toast(error.message, true); });
     });
     window.Twitch.ext.onError(() => setConnection('LINK ERROR', false));
     window.Twitch.ext.configuration?.onChanged(() => {
@@ -235,11 +251,15 @@
     state.configuration = configuration;
     applyPanelDesign(configuration.panelDesign);
     if (!response.ok || !interactionsResponse.ok) throw new Error('The signal catalog could not be loaded.');
-    state.alerts = [
+    const bundledAlerts = [
       ...(await interactionsResponse.json()).map((entry) => ({ ...entry, kind: 'interaction' })),
       ...(await response.json()).map((entry) => ({ ...entry, kind: 'sound-alert' }))
     ];
+    state.alerts = configuration.mockMode ? bundledAlerts : [];
     render();
+    await refreshHostedCatalog().catch((error) => {
+      if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }
+    });
   }
 
   initialize().catch((error) => { setConnection('SYSTEM ERROR', false); toast(error.message, true); });

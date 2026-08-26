@@ -43,7 +43,7 @@
       <main>
         <header class="topbar">
           <div><p id="sectionKicker">START HERE</p><h1 id="sectionTitle">Studio Home</h1></div>
-          <div class="topbar-actions"><span class="protocol-badge">BUILD 0.20.0</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
+          <div class="topbar-actions"><span class="protocol-badge">BUILD 0.21.0</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
         </header>
 
         <section id="overviewSection" class="page active">
@@ -211,6 +211,20 @@
                 <span>REQUESTED SCOPES</span><div id="twitchScopeList" class="scope-list"></div>
                 <div id="twitchDeviceAuthorization" class="device-authorization hidden"><span>ACTIVATION CODE</span><strong id="twitchDeviceCode">—</strong><p>Enter this code on Twitch. Studio checks authorization without receiving your password.</p><button id="openTwitchAuthorization" class="primary-button">Open Twitch Activation</button></div>
                 <p id="twitchSetupMessage">Save a public Twitch application client ID to begin.</p>
+              </div>
+            </div>
+          </article>
+          <article class="panel twitch-local-panel">
+            <div class="panel-header"><div><span>PUBLIC EXTENSION SERVICE</span><h3>Pair this Studio installation</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT PAIRED</span></div>
+            <div class="local-extension-grid">
+              <div class="twitch-form-stack">
+                <label>Hosted EBS URL<input id="hostedExtensionUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://your-service.up.railway.app" /><small>Enter the public Railway domain. Studio uses your existing broadcaster authorization to prove channel ownership.</small></label>
+                <div class="twitch-setup-actions"><button id="pairHostedExtension" class="primary-button">Pair Hosted Extension</button><button id="revokeHostedExtension" class="secondary-button danger-outline">Revoke Installation</button></div>
+              </div>
+              <div class="twitch-auth-summary">
+                <span>PER-INSTALLATION TRUST</span>
+                <div class="local-extension-status"><div><small>CREDENTIAL</small><strong id="hostedExtensionCredentialState">NOT ISSUED</strong></div><div><small>CHANNEL</small><strong id="hostedExtensionChannelState">—</strong></div><div><small>RELAY</small><strong id="hostedExtensionRelayState">—</strong></div></div>
+                <p id="hostedExtensionMessage">Authorize Twitch, then pair this Studio with the public Extension service. The issued relay credential is stored with Windows encryption.</p>
               </div>
             </div>
           </article>
@@ -399,7 +413,7 @@
             <article class="panel"><div class="panel-header"><div><span>INSTALLATION</span><h3>Release information</h3></div></div><dl class="about-details"><div><dt>Version</dt><dd id="aboutVersion">—</dd></div><div><dt>Data schema</dt><dd id="aboutDataVersion">—</dd></div><div><dt>Runtime</dt><dd id="aboutRuntime">—</dd></div><div><dt>Build type</dt><dd id="aboutBuildType">—</dd></div></dl><div class="settings-actions"><button id="openStudioDataDirectory" class="secondary-button">Open Data Folder</button><button data-export-studio-backup="true" class="secondary-button">Create Backup</button></div></article>
             <article class="panel"><div class="panel-header"><div><span>SUPPORT</span><h3>Redacted diagnostics</h3></div></div><p>Export health, source, alert, runtime, and version information. Credentials, account identities, viewer details, and local file paths are removed.</p><button id="exportStudioDiagnostics" class="primary-button">Export Diagnostics</button></article>
             <article class="panel settings-privacy"><div class="panel-header"><div><span>PRIVACY BOUNDARY</span><h3>What leaves this computer</h3></div></div><ul><li>Twitch authorization and API requests only after you connect Twitch.</li><li>GIPHY searches only after you save a GIPHY API key and run a search.</li><li>NWS weather and AzuraCast now-playing requests only after those optional providers are configured.</li><li>Alert media, browser sources, backups, histories, and control traffic remain local unless you export a file yourself.</li></ul></article>
-            <article class="panel settings-privacy"><div class="panel-header"><div><span>RELEASE CHANNEL</span><h3>Manual updates</h3></div></div><p>0.20.0 uses manual, versioned Windows releases. Create a backup before installing a newer build; the installer preserves Studio data and migrations run automatically on first launch.</p><p>Tempest branding and publisher attribution remain part of the public product. Streamer identities, station details, locations, alert media, and companion tools are your own configuration.</p></article>
+            <article class="panel settings-privacy"><div class="panel-header"><div><span>RELEASE CHANNEL</span><h3>Manual updates</h3></div></div><p>0.21.0 uses manual, versioned Windows releases. Create a backup before installing a newer build; the installer preserves Studio data and migrations run automatically on first launch.</p><p>Tempest branding and publisher attribution remain part of the public product. Streamer identities, station details, locations, alert media, and companion tools are your own configuration.</p></article>
           </div>
         </section>
       </main>

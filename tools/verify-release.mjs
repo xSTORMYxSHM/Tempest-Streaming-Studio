@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedVersion = '0.20.0';
+const expectedVersion = '0.21.0';
 const packageFiles = [
   'package.json', 'apps/studio-desktop/package.json', 'apps/twitch-extension/package.json',
   'services/tempest-bridge/package.json', 'services/twitch-ebs/package.json',
