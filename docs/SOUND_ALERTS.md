@@ -19,25 +19,18 @@ The production request path is:
 
 The EBS and outbound relay are implemented in `services/twitch-ebs` and `services/tempest-bridge/src/extension-relay.ts`. Deployment requires the Twitch Extension shared secret, an allowlisted channel ID, a relay token, and a public HTTPS/WebSocket host; see `TWITCH_EBS.md`.
 
-## Blueprint-compatible catalog
+## Public-safe starter catalog
 
 | Alert ID | Warudo performance | Duration |
 | --- | --- | ---: |
-| `sound-alert.loli-god-requiem` | Loli Requiem Dance | 13s |
-| `sound-alert.vitas` | Cowboy | 17s |
-| `sound-alert.love-shot` | Heart | 12s |
-| `sound-alert.internet-yamero` | Internet Yamero | 22s |
-| `sound-alert.ankha-zone-remix` | Egyptian | 19s |
-| `sound-alert.neko-dance` | Kitty Cat | 10s |
-| `sound-alert.rick-roll` | Rickroll | 9s |
-| `sound-alert.toca-toca` | Toca Toca | 14s |
-| `sound-alert.crab-rave` | Crab Rave plus light restore | 58s |
-| `sound-alert.sigma-boy` | Snake Hip Hop | 12s |
-| `sound-alert.fishie` | Koi Dance | 8s |
-| `sound-alert.whistle` | Whistle Main | 21s |
-| `sound-alert.uwu-chief` | Cheerleader | 21s |
+| `sound-alert.hype-pulse` | Hype Pulse | 8s |
+| `sound-alert.dance-break` | Dance Break | 15s |
+| `sound-alert.celebration` | Celebration | 10s |
+| `sound-alert.dramatic-entrance` | Dramatic Entrance | 12s |
+| `sound-alert.victory-pose` | Victory Pose | 9s |
+| `sound-alert.chaos-mode` | Chaos Mode | 20s |
 
-All catalog entries are permanently marked `free: true`. The **Interaction Alerts** page owns the 13 dance and performance routines. Its cards mirror Twitch Alerts and open the same full designer for style, text, motion, media, timing, and exact X/Y placement and scale on the 3440 × 1440 Browser Source canvas. Each card also contains enablement, local audio and visual media, cooldowns, playback volume, visual duration, optional OBS overrides, Broadcast HUD effect (`pulse`, `glow`, `glitch`, `spectrum`, or `surge`), target circuit, strength, accent, and coordinated tests. Selecting **Use Warudo** reveals the cue and performance duration; clearing it removes the avatar action from that alert's workflow. Its GIPHY library downloads selected GIFs locally and assigns them to an interaction. Visual media supports PNG, JPG, GIF, WebP, AVIF, MP4, and WebM. Audio supports MP3, WAV, OGG, M4A, AAC, and FLAC. These assignments remain local: the loopback Browser Source fetches them from Studio rather than transferring file paths through the JSON Bridge.
+All starter entries are permanently marked `free: true` and intentionally contain no copyrighted media or creator-specific avatar cue. Existing installations retain their current catalogs during upgrade. The **Interaction Alerts** page owns the starter routines and any alerts the streamer creates. Its cards mirror Twitch Alerts and open the same full designer for style, text, motion, media, timing, and exact X/Y placement and scale on the active Browser Source canvas. Each card also contains enablement, local audio and visual media, cooldowns, playback volume, visual duration, optional broadcast overrides, HUD effect (`pulse`, `glow`, `glitch`, `spectrum`, or `surge`), target circuit, strength, accent, and coordinated tests. Selecting **Use Warudo** reveals the cue and performance duration; clearing it removes the avatar action from that alert's workflow. Its GIPHY library downloads selected GIFs locally and assigns them to an interaction. Visual media supports PNG, JPG, GIF, WebP, AVIF, MP4, and WebM. Audio supports MP3, WAV, OGG, M4A, AAC, and FLAC. These assignments remain local: the loopback Browser Source fetches them from Studio rather than transferring file paths through the JSON Bridge.
 
 The **Twitch Alerts** page owns follows, subscriptions, gift subscriptions, cheers/Bits, raids, and channel-point rewards. Every Twitch card keeps its sound, visual, duration, volume, accent, enablement, and preview controls together. **Customize Design** opens the full alert designer with:
 
@@ -60,7 +53,7 @@ Studio serves two independent transparent alert canvases:
 - **Interaction Alerts:** `http://127.0.0.1:4765/visual-alerts/interactions`
 - **Twitch Alerts:** `http://127.0.0.1:4765/visual-alerts/twitch`
 
-Add both as **3440 by 1440** Browser Sources to match the 43:18 base canvas and enable **Control audio via OBS** on each. OBS scales them with the scene to the 2580 by 1080 output. Keep both on the live mix. Keep the Twitch Alert source on the recording/VOD track, but remove the Interaction Alert source from the track used for YouTube uploads when viewer-selected music may receive a copyright claim. The original `/visual-alerts` address remains a compatibility alias for the Interaction Alert source.
+Add both Browser Sources using the **base canvas dimensions shown by Guided Setup** and enable **Control audio via OBS** on each. Studio defaults to 1920 by 1080, can follow a connected broadcaster's canvas automatically, and also supports QHD, ultrawide, and custom profiles. The broadcaster handles final output scaling. Keep both sources on the live mix. Keep the Twitch Alert source on the recording/VOD track, but remove the Interaction Alert source from the track used for YouTube uploads when viewer-selected music may receive a copyright claim. The original `/visual-alerts` address remains a compatibility alias for the Interaction Alert source.
 
 Each URL is stable across its alert catalog, so Broadcast does not need one source per GIF, video, or audio file. The two sources have independent event connections, active cards, audio players, timers, and connection counts; a Twitch Alert cannot replace or stop an Interaction Alert, and vice versa.
 
@@ -70,7 +63,7 @@ Live Twitch Alerts and Interaction Alerts enter one bounded first-in, first-out 
 
 The Twitch Alerts and Interaction Alerts pages show the current item and waiting count. **Clear Waiting** removes the backlog without interrupting the alert already playing. **Emergency Restore** clears the active item and the complete backlog while also releasing workflows, stopping local fallback audio, and clearing both Browser Sources. Operator design previews remain immediate and outside the live queue so configuring an alert does not wait behind a long viewer interaction.
 
-Each Twitch Alert has its own 3440 by 1440, 43:18 placement canvas in the designer. Drag the alert to any X/Y position in the Browser Source, drag its lower-right handle to scale the complete alert from 25% to 200%, or enter exact percentage coordinates. Anchor presets remain available for quick placement, while pixel nudges and card width provide fine control. Because placement is stored as percentages, it remains aligned when OBS scales the 3440 by 1440 base canvas to the 2580 by 1080 output.
+Each Twitch Alert uses the active base-canvas profile in the designer. Drag the alert to any X/Y position in the Browser Source, drag its lower-right handle to scale the complete alert from 25% to 200%, or enter exact percentage coordinates. Anchor presets remain available for quick placement, while pixel nudges and card width provide fine control. Because placement is stored as percentages, it remains aligned when the broadcaster scales the base canvas to the output resolution.
 
 Each Browser Source opens its own local server-sent event connection to Studio. An accepted alert replaces only the current card in its matching source and plays its assigned image/GIF/video and audio at the saved volume. Interaction Alerts also include the viewer name and keep independent visual and performance durations. Studio reports each source's connection count and can preview or clear both outputs. Emergency Restore stops both Browser Source audio players and clears both cards immediately. When no Interaction Alert source is connected, Studio plays a local fallback copy for Interaction Alerts. These unauthenticated media routes accept loopback requests only and do not expose the authenticated Studio control API.
 
@@ -85,18 +78,18 @@ The Extension-facing selection is an alert ID. Studio expands it into the intern
 ```json
 {
   "action": "tempest.sound-alert.performance",
-  "alertId": "sound-alert.whistle",
-  "cue": "sound-alert.whistle",
-  "name": "Whistle",
-  "durationMs": 21000,
+  "alertId": "sound-alert.hype-pulse",
+  "cue": "sound-alert.hype-pulse",
+  "name": "Hype Pulse",
+  "durationMs": 8000,
   "visualDurationMs": 6000,
   "eventType": "sound-alert",
   "circuit": "frame",
   "effect": "spectrum",
   "strength": 1.1,
   "accent": "#7CF0B2",
-  "broadcastAudioSource": "Whistle Song",
-  "broadcastVisualSource": "Whistle GIF",
+  "broadcastAudioSource": "Interaction Audio",
+  "broadcastVisualSource": "Interaction Visual",
   "dedupeId": "upstream-event-id"
 }
 ```

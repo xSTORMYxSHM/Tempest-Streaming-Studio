@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const certificatePath = path.join(workspace, '.tempest-extension', 'localhost.pfx');
 const ebsUrl = 'https://localhost:8090';
-const channelId = String(process.env.TEMPEST_TWITCH_CHANNEL_ID || '546679431').trim();
+const channelId = String(process.env.TEMPEST_TWITCH_CHANNEL_ID || '').trim();
 const extensionSecret = String(process.env.TWITCH_EXTENSION_SECRET || process.env.TWITCH_EXTENSION_SECRETS || '').trim();
 const npmExecPath = process.env.npm_execpath;
 

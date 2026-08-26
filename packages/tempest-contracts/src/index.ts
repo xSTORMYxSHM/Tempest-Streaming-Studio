@@ -1,5 +1,5 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '0.11.6';
+export const TEMPEST_STUDIO_VERSION = '0.20.0';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 
@@ -202,8 +202,39 @@ export interface TempestTwitchVisualAlertDefinition {
   visualUri?: string;
   accent: string;
   design: TempestTwitchAlertDesign;
+  alertVariants?: TempestTwitchAlertVariant[];
+  selectedVariantId?: string;
+  selectedVariantName?: string;
   updatedAt?: string;
   custom?: boolean;
+}
+
+export interface TempestTwitchAlertVariantCondition {
+  minimumBits?: number;
+  maximumBits?: number;
+  minimumViewers?: number;
+  maximumViewers?: number;
+  minimumMonths?: number;
+  maximumMonths?: number;
+  subscriptionTier?: 'prime' | '1000' | '2000' | '3000';
+  rewardId?: string;
+  minimumRewardCost?: number;
+  maximumRewardCost?: number;
+}
+
+export interface TempestTwitchAlertVariant {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  condition: TempestTwitchAlertVariantCondition;
+  durationMs: number;
+  audioUri?: string;
+  volume: number;
+  visualUri?: string;
+  accent: string;
+  design: TempestTwitchAlertDesign;
 }
 
 export interface TempestTwitchAlertDesign {
@@ -226,10 +257,15 @@ export interface TempestTwitchAlertDesign {
   showViewerMessage: boolean;
   fontFamily: 'Inter' | 'Segoe UI' | 'Consolas' | 'Arial' | 'Georgia' | 'Impact' | 'Trebuchet MS' | 'Times New Roman';
   fontSize: number;
+  eyebrowFontSize: number;
+  detailFontSize: number;
+  messageFontSize: number;
   fontWeight: number;
   textAlign: 'left' | 'center' | 'right';
   textColor: string;
   secondaryTextColor: string;
+  eyebrowTextColor: string;
+  messageTextColor: string;
   textShadow: number;
   letterSpacing: number;
   textOffsetX: number;
@@ -244,6 +280,10 @@ export interface TempestTwitchAlertDesign {
   detailPositionY: number;
   messagePositionX: number;
   messagePositionY: number;
+  eyebrowMaxWidth: number;
+  headlineMaxWidth: number;
+  detailMaxWidth: number;
+  messageMaxWidth: number;
   cardWidth: number;
   backgroundColor: string;
   backgroundOpacity: number;
@@ -254,6 +294,10 @@ export interface TempestTwitchAlertDesign {
   mediaWidth: number;
   mediaHeight: number;
   mediaFit: 'contain' | 'cover' | 'fill';
+  mediaScale: number;
+  mediaPositionX: number;
+  mediaPositionY: number;
+  mediaOpacity: number;
   mediaBorderRadius: number;
   mediaDelayMs: number;
   textDelayMs: number;

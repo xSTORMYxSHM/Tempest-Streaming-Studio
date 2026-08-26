@@ -8,7 +8,7 @@ import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenS
 export const chatbotScopes = ['user:read:chat', 'user:write:chat'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
-export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'seattle-weather', 'radio-now-playing'] as const;
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing'] as const;
 export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
 
 export interface ChatbotCommand {
@@ -39,11 +39,29 @@ export interface ChatbotActivity {
   message: string;
 }
 
+export interface ChatbotWeatherProvider {
+  provider: 'nws';
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  timeZone: string;
+}
+
+export interface ChatbotNowPlayingProvider {
+  provider: 'azuracast';
+  stationName: string;
+  apiUrl: string;
+  publicPlayerUrl: string;
+  streamUrl?: string;
+}
+
 interface ChatbotConfiguration {
-  schemaVersion: 1;
+  schemaVersion: 2;
   displayName: string;
   prefix: string;
   commands: ChatbotCommand[];
+  weatherProvider?: ChatbotWeatherProvider;
+  nowPlayingProvider?: ChatbotNowPlayingProvider;
   updatedAt: string;
 }
 
@@ -91,10 +109,15 @@ export interface ChatbotStatus {
   commandsTriggered: number;
   lastMessageAt?: string;
   lastError?: string;
+  providers: {
+    weather?: ChatbotWeatherProvider;
+    nowPlaying?: ChatbotNowPlayingProvider;
+    availableHandlers: ChatbotResponseHandler[];
+  };
 }
 
-export interface StormHorizonRadioStatus {
-  id: 'storm-horizon-radio';
+export interface NowPlayingProviderStatus {
+  id: 'now-playing-provider';
   name: string;
   provider: 'AzuraCast';
   state: 'online' | 'offline' | 'unavailable';
@@ -122,25 +145,24 @@ export interface TwitchChatbotOptions {
 }
 
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
-const stormHorizonNowPlayingUrl = 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio';
-const stormHorizonPlayerUrl = 'https://a12.asurahosting.com/public/storm_horizon_radio';
-const stormHorizonStreamUrl = 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3';
+const legacyStormHorizonProvider: ChatbotNowPlayingProvider = { provider: 'azuracast', stationName: 'Storm Horizon Radio', apiUrl: 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio', publicPlayerUrl: 'https://a12.asurahosting.com/public/storm_horizon_radio', streamUrl: 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3' };
+const legacySeattleProvider: ChatbotWeatherProvider = { provider: 'nws', locationName: 'Seattle', latitude: 47.6062, longitude: -122.3321, timeZone: 'America/Los_Angeles' };
 
 function defaultConfiguration(): ChatbotConfiguration {
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     displayName: '',
     prefix: '!',
     commands: [{
-      id: 'tempest',
-      name: 'tempest',
-      aliases: ['mainframe'],
+      id: 'studio',
+      name: 'studio',
+      aliases: ['tempest'],
       enabled: true,
       replyToViewer: false,
       allowSharedChat: true,
       permission: 'everyone',
-      response: '{bot} online. Signal routing is standing by, {user}.',
+      response: 'Studio chatbot online, {user}.',
       viewerCooldownMs: 15_000,
       globalCooldownMs: 3_000,
       createdAt: timestamp,
@@ -236,42 +258,46 @@ function defaultConfiguration(): ChatbotConfiguration {
       replyToViewer: false,
       allowSharedChat: true,
       permission: 'everyone',
-      response: '{user} has returned to the mainframe. Welcome back!',
+      response: '{user} is back. Welcome to the stream!',
       viewerCooldownMs: 60_000,
       globalCooldownMs: 3_000,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    }, {
-      id: 'seattle-weather',
-      name: 'weather',
-      aliases: [],
-      enabled: true,
-      replyToViewer: false,
-      allowSharedChat: true,
-      permission: 'everyone',
-      response: '',
-      handler: 'seattle-weather',
-      viewerCooldownMs: 15_000,
-      globalCooldownMs: 10_000,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    }, {
-      id: 'song',
-      name: 'song',
-      aliases: ['nowplaying'],
-      enabled: true,
-      replyToViewer: false,
-      allowSharedChat: true,
-      permission: 'everyone',
-      response: '',
-      handler: 'radio-now-playing',
-      viewerCooldownMs: 15_000,
-      globalCooldownMs: 10_000,
       createdAt: timestamp,
       updatedAt: timestamp
     }],
     updatedAt: timestamp
   };
+}
+
+function httpsUrl(value: unknown, field: string, optional = false): string | undefined {
+  const text = String(value || '').trim();
+  if (!text && optional) return undefined;
+  let url: URL;
+  try { url = new URL(text); } catch { throw new Error(`${field} must be a valid HTTPS URL.`); }
+  if (url.protocol !== 'https:' || url.username || url.password || text.length > 500) throw new Error(`${field} must be a public HTTPS URL without embedded credentials.`);
+  return url.href;
+}
+
+function validateWeatherProvider(value: unknown): ChatbotWeatherProvider | undefined {
+  if (value === undefined || value === null || value === false) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Weather provider settings are invalid.');
+  const source = value as Record<string, unknown>;
+  const locationName = String(source.locationName || '').trim();
+  const latitude = Number(source.latitude);
+  const longitude = Number(source.longitude);
+  const timeZone = String(source.timeZone || '').trim();
+  if (!locationName || locationName.length > 80) throw new Error('Weather location name must contain 1 to 80 characters.');
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new Error('Weather coordinates are invalid.');
+  try { new Intl.DateTimeFormat('en-US', { timeZone }).format(); } catch { throw new Error('Weather time zone must be a valid IANA time zone such as America/Los_Angeles.'); }
+  return { provider: 'nws', locationName, latitude, longitude, timeZone };
+}
+
+function validateNowPlayingProvider(value: unknown): ChatbotNowPlayingProvider | undefined {
+  if (value === undefined || value === null || value === false) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Now Playing provider settings are invalid.');
+  const source = value as Record<string, unknown>;
+  const stationName = String(source.stationName || '').trim();
+  if (!stationName || stationName.length > 100) throw new Error('Station name must contain 1 to 100 characters.');
+  return { provider: 'azuracast', stationName, apiUrl: httpsUrl(source.apiUrl, 'AzuraCast Now Playing API URL')!, publicPlayerUrl: httpsUrl(source.publicPlayerUrl, 'Station public player URL')!, streamUrl: httpsUrl(source.streamUrl, 'Station stream URL', true) };
 }
 
 function copyCommand(command: ChatbotCommand): ChatbotCommand {
@@ -386,12 +412,15 @@ export class TwitchChatbot {
   async initialize(clientId = ''): Promise<void> {
     await mkdir(this.options.dataDirectory, { recursive: true });
     try {
-      const parsed = JSON.parse(await readFile(this.configurationPath, 'utf8')) as Partial<ChatbotConfiguration>;
+      const parsed = JSON.parse(await readFile(this.configurationPath, 'utf8')) as Partial<ChatbotConfiguration> & { schemaVersion?: number };
       const displayName = normalizeDisplayName(parsed.displayName);
       const prefix = typeof parsed.prefix === 'string' && parsed.prefix.length === 1 && !/\s/.test(parsed.prefix) ? parsed.prefix : '!';
       const commands: ChatbotCommand[] = [];
       for (const entry of Array.isArray(parsed.commands) ? parsed.commands : []) {
-        try { commands.push(validateCommand(entry, entry)); } catch { /* discard invalid persisted command */ }
+        try {
+          const command = validateCommand(entry, entry);
+          commands.push(command.handler === 'seattle-weather' ? { ...command, handler: 'local-weather' } : command);
+        } catch { /* discard invalid persisted command */ }
       }
       let installedDefaults = false;
       for (const defaultCommand of defaultConfiguration().commands) {
@@ -402,8 +431,11 @@ export class TwitchChatbot {
           installedDefaults = true;
         }
       }
-      this.configuration = { schemaVersion: 1, displayName, prefix, commands, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
-      if (installedDefaults) await this.persist();
+      const legacyConfiguration = parsed.schemaVersion !== 2;
+      const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
+      const nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? legacyStormHorizonProvider : undefined));
+      this.configuration = { schemaVersion: 2, displayName, prefix, commands, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      if (installedDefaults || legacyConfiguration) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
       await this.persist();
@@ -455,17 +487,31 @@ export class TwitchChatbot {
       messagesReceived: this.messagesReceived,
       commandsTriggered: this.commandsTriggered,
       lastMessageAt: this.lastMessageAt,
-      lastError: this.lastError
+      lastError: this.lastError,
+      providers: {
+        weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
+        nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
+        availableHandlers: chatbotResponseHandlers.filter((handler) => handler !== 'seattle-weather' && (handler !== 'local-weather' || this.configuration.weatherProvider) && (handler !== 'radio-now-playing' || this.configuration.nowPlayingProvider))
+      }
     };
   }
 
   async configure(input: unknown): Promise<ChatbotStatus> {
     if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
-    const source = input as { prefix?: unknown; displayName?: unknown };
+    const source = input as { prefix?: unknown; displayName?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
     const prefix = String(source.prefix ?? this.configuration.prefix);
     if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
     this.configuration.prefix = prefix;
     if (Object.prototype.hasOwnProperty.call(source, 'displayName')) this.configuration.displayName = normalizeDisplayName(source.displayName);
+    if (Object.prototype.hasOwnProperty.call(source, 'weatherProvider')) {
+      this.configuration.weatherProvider = validateWeatherProvider(source.weatherProvider);
+      this.weatherCache = undefined;
+      this.weatherForecastUrl = undefined;
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'nowPlayingProvider')) {
+      this.configuration.nowPlayingProvider = validateNowPlayingProvider(source.nowPlayingProvider);
+      this.radioNowPlayingCache = undefined;
+    }
     await this.persist();
     return this.status();
   }
@@ -662,30 +708,32 @@ export class TwitchChatbot {
     }, true, true);
   }
 
-  async radioStatus(): Promise<StormHorizonRadioStatus> {
+  async radioStatus(): Promise<NowPlayingProviderStatus | null> {
+    const provider = this.configuration.nowPlayingProvider;
+    if (!provider) return null;
     const checkedAt = new Date().toISOString();
     try {
       const radio = await this.loadRadioNowPlaying();
       return {
-        id: 'storm-horizon-radio',
+        id: 'now-playing-provider',
         name: radio.stationName,
         provider: 'AzuraCast',
         state: radio.online ? 'online' : 'offline',
         online: radio.online,
-        publicPlayerUrl: stormHorizonPlayerUrl,
-        streamUrl: stormHorizonStreamUrl,
+        publicPlayerUrl: provider.publicPlayerUrl,
+        streamUrl: provider.streamUrl || '',
         checkedAt,
         nowPlaying: { artist: radio.artist, title: radio.title, text: radio.text, album: radio.album }
       };
     } catch {
       return {
-        id: 'storm-horizon-radio',
-        name: 'Storm Horizon Radio',
+        id: 'now-playing-provider',
+        name: provider.stationName,
         provider: 'AzuraCast',
         state: 'unavailable',
         online: false,
-        publicPlayerUrl: stormHorizonPlayerUrl,
-        streamUrl: stormHorizonStreamUrl,
+        publicPlayerUrl: provider.publicPlayerUrl,
+        streamUrl: provider.streamUrl || '',
         checkedAt
       };
     }
@@ -723,7 +771,8 @@ export class TwitchChatbot {
       case 'channel-title': return this.channelTitleResponse();
       case 'channel-game': return this.channelGameResponse();
       case 'stream-schedule': return this.streamScheduleResponse();
-      case 'seattle-weather': return this.seattleWeatherResponse();
+      case 'local-weather':
+      case 'seattle-weather': return this.localWeatherResponse();
       case 'radio-now-playing': return this.radioNowPlayingResponse();
       default: return command.response;
     }
@@ -776,7 +825,7 @@ export class TwitchChatbot {
       const schedule = await this.loadStreamSchedule();
       if (!schedule.startTime) return 'No upcoming stream is listed on the Twitch schedule.';
       const time = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Los_Angeles', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+        timeZone: this.configuration.weatherProvider?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
       }).format(new Date(schedule.startTime));
       return `Next stream: ${time}${schedule.title ? ` · ${schedule.title}` : ''}`.slice(0, 500);
     } catch {
@@ -827,23 +876,27 @@ export class TwitchChatbot {
   }
 
   private async radioNowPlayingResponse(): Promise<string> {
+    const provider = this.configuration.nowPlayingProvider;
+    if (!provider) return 'Now Playing is not configured in Studio.';
     try {
       const nowPlaying = await this.loadRadioNowPlaying();
-      if (!nowPlaying.online) return `Storm Horizon Radio is currently offline. Listen page: ${stormHorizonPlayerUrl}`;
+      if (!nowPlaying.online) return `${nowPlaying.stationName} is currently offline. Listen page: ${provider.publicPlayerUrl}`;
       const track = nowPlaying.artist && nowPlaying.title
         ? `${nowPlaying.artist} — ${nowPlaying.title}`
         : nowPlaying.title || nowPlaying.text;
       if (!track) return `${nowPlaying.stationName} is online, but the current song metadata is unavailable.`;
-      return `Now playing on ${nowPlaying.stationName}: ${track}${nowPlaying.album ? ` · Album: ${nowPlaying.album}` : ''} · Listen: ${stormHorizonPlayerUrl}`.slice(0, 500);
+      return `Now playing on ${nowPlaying.stationName}: ${track}${nowPlaying.album ? ` · Album: ${nowPlaying.album}` : ''} · Listen: ${provider.publicPlayerUrl}`.slice(0, 500);
     } catch {
-      return `Storm Horizon Radio's now-playing signal is temporarily unavailable. Listen live: ${stormHorizonPlayerUrl}`;
+      return `${provider.stationName}'s now-playing signal is temporarily unavailable. Listen live: ${provider.publicPlayerUrl}`;
     }
   }
 
   private async loadRadioNowPlaying(): Promise<NonNullable<TwitchChatbot['radioNowPlayingCache']>> {
+    const provider = this.configuration.nowPlayingProvider;
+    if (!provider) throw new Error('Now Playing is not configured.');
     if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
-    const response = await this.request(stormHorizonNowPlayingUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/0.11.6' },
+    const response = await this.request(provider.apiUrl, {
+      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/0.20.0' },
       signal: AbortSignal.timeout(5_000)
     });
     const result = await response.json().catch(() => ({})) as {
@@ -851,13 +904,13 @@ export class TwitchChatbot {
       station?: { name?: string };
       now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
     };
-    if (!response.ok) throw new Error(`Storm Horizon Radio now-playing request failed with ${response.status}.`);
+    if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
     const song = result.now_playing?.song;
     const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
     this.radioNowPlayingCache = {
       fetchedAt: Date.now(),
       online: result.is_online === true,
-      stationName: value(result.station?.name) || 'Storm Horizon Radio',
+      stationName: value(result.station?.name) || provider.stationName,
       artist: value(song?.artist),
       title: value(song?.title),
       text: value(song?.text),
@@ -866,17 +919,19 @@ export class TwitchChatbot {
     return this.radioNowPlayingCache;
   }
 
-  private async seattleWeatherResponse(): Promise<string> {
-    const seattleTime = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Los_Angeles',
+  private async localWeatherResponse(): Promise<string> {
+    const provider = this.configuration.weatherProvider;
+    if (!provider) return 'Local weather is not configured in Studio.';
+    const localTime = new Intl.DateTimeFormat('en-US', {
+      timeZone: provider.timeZone,
       hour: 'numeric',
       minute: '2-digit',
       timeZoneName: 'short'
     }).format(new Date());
     try {
-      const weather = await this.loadSeattleWeather();
+      const weather = await this.loadLocalWeather();
       const segments = [
-        `Seattle signal: ${seattleTime}`,
+        `${provider.locationName}: ${localTime}`,
         `${Math.round(weather.temperature)}°${weather.temperatureUnit}`,
         weather.shortForecast
       ];
@@ -885,17 +940,19 @@ export class TwitchChatbot {
       if (weather.windSpeed) segments.push(`Wind ${weather.windDirection ? `${weather.windDirection} ` : ''}${weather.windSpeed}`);
       return segments.join(' · ').slice(0, 500);
     } catch {
-      return `Seattle signal: ${seattleTime} · Weather satellite temporarily unavailable. Try !weather again shortly.`;
+      return `${provider.locationName}: ${localTime} · Weather is temporarily unavailable. Try again shortly.`;
     }
   }
 
-  private async loadSeattleWeather(): Promise<NonNullable<TwitchChatbot['weatherCache']>> {
+  private async loadLocalWeather(): Promise<NonNullable<TwitchChatbot['weatherCache']>> {
+    const provider = this.configuration.weatherProvider;
+    if (!provider) throw new Error('Local weather is not configured.');
     const now = Date.now();
     if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
     try {
-      const headers = { 'User-Agent': 'TempestStreamingStudio/0.11.6', Accept: 'application/geo+json' };
+      const headers = { 'User-Agent': 'TempestStreamingStudio/0.20.0', Accept: 'application/geo+json' };
       if (!this.weatherForecastUrl) {
-        const pointResponse = await this.request('https://api.weather.gov/points/47.6062,-122.3321', { headers });
+        const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
         const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
         if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
         this.weatherForecastUrl = point.properties.forecastHourly;

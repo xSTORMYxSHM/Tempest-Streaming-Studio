@@ -1,6 +1,6 @@
 {
   "name": "@tempest/contracts",
-  "version": "0.11.6",
+  "version": "0.20.0",
   "private": true,
   "description": "Versioned Tempest Streaming Studio API and asset contracts.",
   "main": "dist/index.js",

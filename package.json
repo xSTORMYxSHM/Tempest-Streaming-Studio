@@ -1,6 +1,6 @@
 {
   "name": "tempest-mainframe-studio",
-  "version": "0.11.6",
+  "version": "0.20.0",
   "private": true,
   "description": "Viewer-event orchestration, streaming connections, safety, software, and asset control for Tempest Streaming Studio.",
   "packageManager": "pnpm@11.19.0",
@@ -16,7 +16,9 @@
     "warudo:start": "pnpm --filter @tempest/warudo-adapter start",
     "local:twitch": "node tools/local-twitch-test.mjs",
     "test": "pnpm -r --sort test",
-    "check": "pnpm build && pnpm test"
+    "check": "pnpm build && pnpm test",
+    "package:win": "pnpm build && pnpm --filter @tempest/studio-desktop package:win && node tools/verify-release.mjs",
+    "package:dir": "pnpm build && pnpm --filter @tempest/studio-desktop package:dir"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

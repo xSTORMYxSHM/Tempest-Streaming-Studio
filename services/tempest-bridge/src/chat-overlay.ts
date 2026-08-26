@@ -103,7 +103,7 @@ export class TempestChatOverlay {
   }
 
   preview(): TempestChatOverlayMessage {
-    return this.push({ schemaVersion: 1, id: globalThis.crypto.randomUUID(), topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'studio-preview' }, viewer: { id: 'studio-operator', displayName: 'Storm Horizon Viewer', roles: ['subscriber'] }, payload: { messageId: globalThis.crypto.randomUUID(), text: 'The Tempest chat overlay is online and ready for Broadcast.' } }) as TempestChatOverlayMessage;
+    return this.push({ schemaVersion: 1, id: globalThis.crypto.randomUUID(), topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'studio-preview' }, viewer: { id: 'studio-operator', displayName: 'Sample Viewer', roles: ['subscriber'] }, payload: { messageId: globalThis.crypto.randomUUID(), text: 'The Studio chat overlay is online and ready for your broadcast.' } }) as TempestChatOverlayMessage;
   }
 
   async update(patch: unknown): Promise<TempestChatOverlaySettings> {

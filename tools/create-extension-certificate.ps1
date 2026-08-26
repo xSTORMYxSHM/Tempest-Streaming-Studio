@@ -1,10 +1,11 @@
 param(
+  [string]$OutputDirectory,
   [switch]$Trust
 )
 
 $ErrorActionPreference = 'Stop'
 $workspaceDirectory = Split-Path -Parent $PSScriptRoot
-$certificateDirectory = Join-Path $workspaceDirectory '.tempest-extension'
+$certificateDirectory = if ($OutputDirectory) { [System.IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $workspaceDirectory '.tempest-extension' }
 $pfxPath = Join-Path $certificateDirectory 'localhost.pfx'
 $cerPath = Join-Path $certificateDirectory 'localhost.cer'
 $password = ConvertTo-SecureString -String 'tempest-local-dev' -AsPlainText -Force

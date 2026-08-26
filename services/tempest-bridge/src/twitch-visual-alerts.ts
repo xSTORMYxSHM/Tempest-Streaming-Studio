@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizedTwitchEventTopics, TempestNormalizedTwitchEvent, TempestTwitchAlertDesign, TempestTwitchVisualAlertDefinition } from '@tempest/contracts';
+import { normalizedTwitchEventTopics, TempestNormalizedTwitchEvent, TempestTwitchAlertDesign, TempestTwitchAlertVariant, TempestTwitchAlertVariantCondition, TempestTwitchVisualAlertDefinition } from '@tempest/contracts';
 
 interface TwitchVisualAlertDocument {
   schemaVersion: 1;
@@ -13,9 +13,9 @@ export function defaultTwitchAlertDesign(): TempestTwitchAlertDesign {
   return {
     preset: 'tempest', layout: 'media-left', position: 'bottom-center', positionOffsetX: 0, positionOffsetY: 0, customPositionX: 50, customPositionY: 82, scale: 1, entranceAnimation: 'slide-up', exitAnimation: 'fade', textAnimation: 'glow',
     headlineTemplate: '{event}', detailTemplate: 'Triggered by {viewer}', showEyebrow: true, showHeadline: true, showDetail: true, showViewerMessage: true,
-    fontFamily: 'Inter', fontSize: 42, fontWeight: 800, textAlign: 'left', textColor: '#F5FBFF', secondaryTextColor: '#A9BDC7', textShadow: 0.35, letterSpacing: 0,
-    textOffsetX: 0, textOffsetY: 0, textPositionX: 50, textPositionY: 72, eyebrowPositionX: 50, eyebrowPositionY: 52, headlinePositionX: 50, headlinePositionY: 63, detailPositionX: 50, detailPositionY: 74, messagePositionX: 50, messagePositionY: 84, cardWidth: 900, backgroundColor: '#050C13', backgroundOpacity: 0.94, borderWidth: 1, borderRadius: 24, padding: 22, cardShadow: 0.55,
-    mediaWidth: 320, mediaHeight: 210, mediaFit: 'contain', mediaBorderRadius: 16, mediaDelayMs: 0, textDelayMs: 0, textDurationMs: 0, soundDelayMs: 0,
+    fontFamily: 'Inter', fontSize: 42, eyebrowFontSize: 13, detailFontSize: 21, messageFontSize: 16, fontWeight: 800, textAlign: 'left', textColor: '#F5FBFF', secondaryTextColor: '#A9BDC7', eyebrowTextColor: '#54F2EB', messageTextColor: '#F5FBFF', textShadow: 0.35, letterSpacing: 0,
+    textOffsetX: 0, textOffsetY: 0, textPositionX: 50, textPositionY: 72, eyebrowPositionX: 50, eyebrowPositionY: 52, headlinePositionX: 50, headlinePositionY: 63, detailPositionX: 50, detailPositionY: 74, messagePositionX: 50, messagePositionY: 84, eyebrowMaxWidth: 1000, headlineMaxWidth: 1800, detailMaxWidth: 1600, messageMaxWidth: 1600, cardWidth: 900, backgroundColor: '#050C13', backgroundOpacity: 0.94, borderWidth: 1, borderRadius: 24, padding: 22, cardShadow: 0.55,
+    mediaWidth: 320, mediaHeight: 210, mediaFit: 'contain', mediaScale: 1, mediaPositionX: 50, mediaPositionY: 50, mediaOpacity: 1, mediaBorderRadius: 16, mediaDelayMs: 0, textDelayMs: 0, textDurationMs: 0, soundDelayMs: 0,
     ttsEnabled: false, ttsTemplate: '{viewer}: {event}', ttsVolume: 0.8, ttsRate: 1, ttsPitch: 1, customHtml: '', customCss: '', customJavaScript: ''
   };
 }
@@ -82,10 +82,15 @@ export function validateTwitchAlertDesign(value: unknown): TempestTwitchAlertDes
     showViewerMessage: input.showViewerMessage === undefined ? base.showViewerMessage : Boolean(input.showViewerMessage),
     fontFamily: choice(input.fontFamily, base.fontFamily, ['Inter', 'Segoe UI', 'Consolas', 'Arial', 'Georgia', 'Impact', 'Trebuchet MS', 'Times New Roman'], 'design.fontFamily'),
     fontSize: numberRange(input.fontSize, base.fontSize, 16, 120, 'design.fontSize', true),
+    eyebrowFontSize: numberRange(input.eyebrowFontSize, base.eyebrowFontSize, 8, 72, 'design.eyebrowFontSize', true),
+    detailFontSize: numberRange(input.detailFontSize, base.detailFontSize, 10, 100, 'design.detailFontSize', true),
+    messageFontSize: numberRange(input.messageFontSize, base.messageFontSize, 10, 100, 'design.messageFontSize', true),
     fontWeight: numberRange(input.fontWeight, base.fontWeight, 100, 900, 'design.fontWeight', true),
     textAlign: choice(input.textAlign, base.textAlign, ['left', 'center', 'right'], 'design.textAlign'),
     textColor: designColor(input.textColor, base.textColor, 'design.textColor'),
     secondaryTextColor: designColor(input.secondaryTextColor, base.secondaryTextColor, 'design.secondaryTextColor'),
+    eyebrowTextColor: designColor(input.eyebrowTextColor, base.eyebrowTextColor, 'design.eyebrowTextColor'),
+    messageTextColor: designColor(input.messageTextColor, base.messageTextColor, 'design.messageTextColor'),
     textShadow: numberRange(input.textShadow, base.textShadow, 0, 1, 'design.textShadow'),
     letterSpacing: numberRange(input.letterSpacing, base.letterSpacing, -5, 30, 'design.letterSpacing'),
     textOffsetX: numberRange(input.textOffsetX, base.textOffsetX, -1500, 1500, 'design.textOffsetX', true),
@@ -100,6 +105,10 @@ export function validateTwitchAlertDesign(value: unknown): TempestTwitchAlertDes
     detailPositionY: numberRange(input.detailPositionY, input.textPositionY === undefined ? base.detailPositionY : Math.min(100, Number(input.textPositionY) + 11), 0, 100, 'design.detailPositionY'),
     messagePositionX: numberRange(input.messagePositionX, input.textPositionX === undefined ? base.messagePositionX : Number(input.textPositionX), 0, 100, 'design.messagePositionX'),
     messagePositionY: numberRange(input.messagePositionY, input.textPositionY === undefined ? base.messagePositionY : Math.min(100, Number(input.textPositionY) + 21), 0, 100, 'design.messagePositionY'),
+    eyebrowMaxWidth: numberRange(input.eyebrowMaxWidth, base.eyebrowMaxWidth, 100, 2400, 'design.eyebrowMaxWidth', true),
+    headlineMaxWidth: numberRange(input.headlineMaxWidth, base.headlineMaxWidth, 100, 2400, 'design.headlineMaxWidth', true),
+    detailMaxWidth: numberRange(input.detailMaxWidth, base.detailMaxWidth, 100, 2400, 'design.detailMaxWidth', true),
+    messageMaxWidth: numberRange(input.messageMaxWidth, base.messageMaxWidth, 100, 2400, 'design.messageMaxWidth', true),
     cardWidth: numberRange(input.cardWidth, base.cardWidth, 280, 2600, 'design.cardWidth', true),
     backgroundColor: designColor(input.backgroundColor, base.backgroundColor, 'design.backgroundColor'),
     backgroundOpacity: numberRange(input.backgroundOpacity, base.backgroundOpacity, 0, 1, 'design.backgroundOpacity'),
@@ -110,6 +119,10 @@ export function validateTwitchAlertDesign(value: unknown): TempestTwitchAlertDes
     mediaWidth: numberRange(input.mediaWidth, base.mediaWidth, 40, 2400, 'design.mediaWidth', true),
     mediaHeight: numberRange(input.mediaHeight, base.mediaHeight, 40, 1440, 'design.mediaHeight', true),
     mediaFit: choice(input.mediaFit, base.mediaFit, ['contain', 'cover', 'fill'], 'design.mediaFit'),
+    mediaScale: numberRange(input.mediaScale, base.mediaScale, 0.25, 4, 'design.mediaScale'),
+    mediaPositionX: numberRange(input.mediaPositionX, base.mediaPositionX, 0, 100, 'design.mediaPositionX'),
+    mediaPositionY: numberRange(input.mediaPositionY, base.mediaPositionY, 0, 100, 'design.mediaPositionY'),
+    mediaOpacity: numberRange(input.mediaOpacity, base.mediaOpacity, 0, 1, 'design.mediaOpacity'),
     mediaBorderRadius: numberRange(input.mediaBorderRadius, base.mediaBorderRadius, 0, 100, 'design.mediaBorderRadius', true),
     mediaDelayMs: numberRange(input.mediaDelayMs, base.mediaDelayMs, 0, 60000, 'design.mediaDelayMs', true),
     textDelayMs: numberRange(input.textDelayMs, base.textDelayMs, 0, 60000, 'design.textDelayMs', true),
@@ -146,6 +159,109 @@ function validateAudioUri(value: unknown): string | undefined {
   return url.href;
 }
 
+function optionalWholeNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0 || number > 1000000000) throw new Error(`${field} must be a whole number between 0 and 1000000000.`);
+  return number;
+}
+
+function validateVariantCondition(value: unknown): TempestTwitchAlertVariantCondition {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Variant condition must be an object.');
+  const input = value as Record<string, unknown>;
+  const allowed = new Set(['minimumBits', 'maximumBits', 'minimumViewers', 'maximumViewers', 'minimumMonths', 'maximumMonths', 'subscriptionTier', 'rewardId', 'minimumRewardCost', 'maximumRewardCost']);
+  for (const key of Object.keys(input)) if (!allowed.has(key)) throw new Error(`${key} is not a supported variant condition.`);
+  const condition: TempestTwitchAlertVariantCondition = {
+    ...(optionalWholeNumber(input.minimumBits, 'condition.minimumBits') === undefined ? {} : { minimumBits: optionalWholeNumber(input.minimumBits, 'condition.minimumBits') }),
+    ...(optionalWholeNumber(input.maximumBits, 'condition.maximumBits') === undefined ? {} : { maximumBits: optionalWholeNumber(input.maximumBits, 'condition.maximumBits') }),
+    ...(optionalWholeNumber(input.minimumViewers, 'condition.minimumViewers') === undefined ? {} : { minimumViewers: optionalWholeNumber(input.minimumViewers, 'condition.minimumViewers') }),
+    ...(optionalWholeNumber(input.maximumViewers, 'condition.maximumViewers') === undefined ? {} : { maximumViewers: optionalWholeNumber(input.maximumViewers, 'condition.maximumViewers') }),
+    ...(optionalWholeNumber(input.minimumMonths, 'condition.minimumMonths') === undefined ? {} : { minimumMonths: optionalWholeNumber(input.minimumMonths, 'condition.minimumMonths') }),
+    ...(optionalWholeNumber(input.maximumMonths, 'condition.maximumMonths') === undefined ? {} : { maximumMonths: optionalWholeNumber(input.maximumMonths, 'condition.maximumMonths') }),
+    ...(optionalWholeNumber(input.minimumRewardCost, 'condition.minimumRewardCost') === undefined ? {} : { minimumRewardCost: optionalWholeNumber(input.minimumRewardCost, 'condition.minimumRewardCost') }),
+    ...(optionalWholeNumber(input.maximumRewardCost, 'condition.maximumRewardCost') === undefined ? {} : { maximumRewardCost: optionalWholeNumber(input.maximumRewardCost, 'condition.maximumRewardCost') })
+  };
+  if (input.subscriptionTier !== undefined) {
+    if (typeof input.subscriptionTier !== 'string' || !['prime', '1000', '2000', '3000'].includes(input.subscriptionTier.toLowerCase())) throw new Error('condition.subscriptionTier must be Prime, Tier 1, Tier 2, or Tier 3.');
+    condition.subscriptionTier = input.subscriptionTier.toLowerCase() as TempestTwitchAlertVariantCondition['subscriptionTier'];
+  }
+  if (input.rewardId !== undefined) {
+    if (typeof input.rewardId !== 'string' || !input.rewardId.trim() || input.rewardId.length > 160) throw new Error('condition.rewardId must contain 1 to 160 characters.');
+    condition.rewardId = input.rewardId.trim();
+  }
+  if (!Object.keys(condition).length) throw new Error('A variant needs at least one matching condition.');
+  for (const [minimum, maximum] of [['minimumBits', 'maximumBits'], ['minimumViewers', 'maximumViewers'], ['minimumMonths', 'maximumMonths'], ['minimumRewardCost', 'maximumRewardCost']] as const) {
+    if (condition[minimum] !== undefined && condition[maximum] !== undefined && condition[minimum]! > condition[maximum]!) throw new Error(`${minimum} cannot be greater than ${maximum}.`);
+  }
+  return condition;
+}
+
+function validateAlertVariant(value: unknown, index: number): TempestTwitchAlertVariant {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`alertVariants[${index}] must be an object.`);
+  const input = value as Record<string, unknown>;
+  const id = typeof input.id === 'string' ? input.id.trim().toLowerCase() : '';
+  if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(id)) throw new Error(`alertVariants[${index}].id must use letters, numbers, dots, dashes, or underscores.`);
+  if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80) throw new Error(`alertVariants[${index}].name is required and may contain at most 80 characters.`);
+  const durationMs = numberRange(input.durationMs, 6000, 1000, 60000, `alertVariants[${index}].durationMs`, true);
+  const volume = numberRange(input.volume, 0.8, 0, 1, `alertVariants[${index}].volume`);
+  const accent = designColor(input.accent, '#54F2EB', `alertVariants[${index}].accent`);
+  return {
+    schemaVersion: 1,
+    id,
+    name: input.name.trim(),
+    enabled: input.enabled === undefined ? true : Boolean(input.enabled),
+    priority: numberRange(input.priority, 0, -1000, 1000, `alertVariants[${index}].priority`, true),
+    condition: validateVariantCondition(input.condition),
+    durationMs,
+    audioUri: validateAudioUri(input.audioUri),
+    volume,
+    visualUri: validateVisualUri(input.visualUri),
+    accent,
+    design: validateTwitchAlertDesign(input.design)
+  };
+}
+
+function validateAlertVariants(value: unknown): TempestTwitchAlertVariant[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 40) throw new Error('alertVariants must be an array containing at most 40 variants.');
+  const variants = value.map(validateAlertVariant);
+  if (new Set(variants.map((variant) => variant.id)).size !== variants.length) throw new Error('Variant identifiers must be unique within an alert.');
+  return variants;
+}
+
+function conditionMatches(condition: TempestTwitchAlertVariantCondition, event: TempestNormalizedTwitchEvent): boolean {
+  const bits = Number(event.payload.bits);
+  const viewers = Number(event.payload.viewers);
+  const months = Number(event.payload.cumulativeMonths);
+  const rewardCost = Number(event.payload.rewardCost);
+  if (condition.minimumBits !== undefined && (!Number.isFinite(bits) || bits < condition.minimumBits)) return false;
+  if (condition.maximumBits !== undefined && (!Number.isFinite(bits) || bits > condition.maximumBits)) return false;
+  if (condition.minimumViewers !== undefined && (!Number.isFinite(viewers) || viewers < condition.minimumViewers)) return false;
+  if (condition.maximumViewers !== undefined && (!Number.isFinite(viewers) || viewers > condition.maximumViewers)) return false;
+  if (condition.minimumMonths !== undefined && (!Number.isFinite(months) || months < condition.minimumMonths)) return false;
+  if (condition.maximumMonths !== undefined && (!Number.isFinite(months) || months > condition.maximumMonths)) return false;
+  if (condition.minimumRewardCost !== undefined && (!Number.isFinite(rewardCost) || rewardCost < condition.minimumRewardCost)) return false;
+  if (condition.maximumRewardCost !== undefined && (!Number.isFinite(rewardCost) || rewardCost > condition.maximumRewardCost)) return false;
+  if (condition.subscriptionTier !== undefined && String(event.payload.tier || '').toLowerCase() !== condition.subscriptionTier) return false;
+  if (condition.rewardId !== undefined && String(event.payload.rewardId || '') !== condition.rewardId) return false;
+  return true;
+}
+
+function applyVariant(alert: TempestTwitchVisualAlertDefinition, variant: TempestTwitchAlertVariant): TempestTwitchVisualAlertDefinition {
+  return {
+    ...alert,
+    name: variant.name,
+    durationMs: variant.durationMs,
+    audioUri: variant.audioUri,
+    volume: variant.volume,
+    visualUri: variant.visualUri,
+    accent: variant.accent,
+    design: variant.design,
+    selectedVariantId: variant.id,
+    selectedVariantName: variant.name
+  };
+}
+
 function validate(input: TempestTwitchVisualAlertDefinition): TempestTwitchVisualAlertDefinition {
   if (input.schemaVersion !== 1) throw new Error('Twitch Alert schemaVersion must be 1.');
   if (typeof input.id !== 'string' || !idPattern.test(input.id)) throw new Error('Twitch Alert id must be a namespaced identifier.');
@@ -158,7 +274,7 @@ function validate(input: TempestTwitchVisualAlertDefinition): TempestTwitchVisua
   if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('volume must be between 0 and 1.');
   if (typeof input.enabled !== 'boolean') throw new Error('enabled must be boolean.');
   if (!/^#[0-9a-f]{6}$/i.test(input.accent)) throw new Error('accent must be a six-digit hex color.');
-  return { ...input, name: input.name.trim(), durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design) };
+  return { ...input, name: input.name.trim(), durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design), alertVariants: validateAlertVariants(input.alertVariants) };
 }
 
 function eventSignature(alert: Pick<TempestTwitchVisualAlertDefinition, 'topic' | 'variant'>): string {
@@ -202,7 +318,17 @@ export class TempestTwitchVisualAlertCatalog {
   findForEvent(event: TempestNormalizedTwitchEvent): TempestTwitchVisualAlertDefinition | undefined {
     const isGift = event.topic === 'viewer.subscription.started' && event.payload.isGift === true;
     const alert = this.alerts.find((entry) => entry.topic === event.topic && (entry.topic !== 'viewer.subscription.started' || entry.variant === (isGift ? 'gift' : 'standard')));
-    return alert ? copy(alert) : undefined;
+    if (!alert) return undefined;
+    const match = (alert.alertVariants || []).map((variant, index) => ({ variant, index })).filter(({ variant }) => variant.enabled && conditionMatches(variant.condition, event)).sort((left, right) => right.variant.priority - left.variant.priority || left.index - right.index)[0]?.variant;
+    return copy(match ? applyVariant(alert, match) : alert);
+  }
+
+  resolveVariant(id: string, variantId?: string): TempestTwitchVisualAlertDefinition | undefined {
+    const alert = this.alerts.find((entry) => entry.id === id);
+    if (!alert) return undefined;
+    if (!variantId) return copy(alert);
+    const variant = alert.alertVariants?.find((entry) => entry.id === variantId);
+    return variant ? copy(applyVariant(alert, variant)) : undefined;
   }
 
   async update(id: string, patch: unknown): Promise<TempestTwitchVisualAlertDefinition> {
@@ -210,7 +336,7 @@ export class TempestTwitchVisualAlertCatalog {
     if (index < 0) throw new Error(`Twitch Visual Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Twitch Visual Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design']);
+    const allowed = new Set(['enabled', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design', 'alertVariants']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Twitch Visual Alert catalog.`);
     const updated = validate({
       ...this.alerts[index],
@@ -221,6 +347,7 @@ export class TempestTwitchVisualAlertCatalog {
       ...(Object.hasOwn(source, 'visualUri') ? { visualUri: validateVisualUri(source.visualUri) } : {}),
       ...(source.accent === undefined ? {} : { accent: String(source.accent) }),
       ...(source.design === undefined ? {} : { design: validateTwitchAlertDesign(source.design) }),
+      ...(source.alertVariants === undefined ? {} : { alertVariants: validateAlertVariants(source.alertVariants) }),
       updatedAt: new Date().toISOString()
     });
     this.alerts[index] = updated;
@@ -244,9 +371,12 @@ export class TempestTwitchVisualAlertCatalog {
       name: source.name as string,
       enabled: source.enabled === undefined ? true : Boolean(source.enabled),
       durationMs: source.durationMs === undefined ? 6000 : Number(source.durationMs),
+      audioUri: validateAudioUri(source.audioUri),
       volume: source.volume === undefined ? 0.8 : Number(source.volume),
+      visualUri: validateVisualUri(source.visualUri),
       accent: source.accent === undefined ? '#54F2EB' : String(source.accent),
       design: validateTwitchAlertDesign(source.design),
+      alertVariants: validateAlertVariants(source.alertVariants),
       custom: true,
       updatedAt: new Date().toISOString()
     });

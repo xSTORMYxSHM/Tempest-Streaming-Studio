@@ -2,7 +2,7 @@
 
 Tempest Streaming Studio can replace a hosted chat widget with a loopback-only Browser Source. Add `http://127.0.0.1:4765/chat-overlay` to OBS or compatible broadcast software using the configured base-canvas size, and keep that source in every scene where chat should appear.
 
-The overlay consumes Studio's normalized `viewer.chat.message` events. Live messages arrive through the TempestMainframe Chatbot's Twitch EventSub connection, so the Chatbot page must show EventSub and Chat as connected. Messages are inserted with DOM text nodes rather than interpreted as HTML, and the rendering endpoint cannot access Studio's authenticated control API.
+The overlay consumes Studio's normalized `viewer.chat.message` events. Live messages arrive through the configured secondary Chatbot account's Twitch EventSub connection, so the Chatbot page must show EventSub and Chat as connected. Messages are inserted with DOM text nodes rather than interpreted as HTML, and the rendering endpoint cannot access Studio's authenticated control API.
 
 The Chat Overlay tab controls:
 

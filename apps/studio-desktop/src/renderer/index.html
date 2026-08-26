@@ -30,6 +30,8 @@
           <p class="nav-group">LIBRARY</p>
           <button class="nav-button" data-section="software"><span>11</span>Software</button>
           <button class="nav-button" data-section="assets"><span>12</span>Assets</button>
+          <p class="nav-group">STUDIO</p>
+          <button class="nav-button" data-section="settings"><span>13</span>Settings + About</button>
         </nav>
         <div class="safety-control">
           <span>INTERACTION SAFETY</span><strong id="railSafetyState">CHECKING</strong>
@@ -41,7 +43,7 @@
       <main>
         <header class="topbar">
           <div><p id="sectionKicker">START HERE</p><h1 id="sectionTitle">Studio Home</h1></div>
-          <div class="topbar-actions"><span class="protocol-badge">BUILD 0.11.6</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
+          <div class="topbar-actions"><span class="protocol-badge">BUILD 0.20.0</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
         </header>
 
         <section id="overviewSection" class="page active">
@@ -59,15 +61,16 @@
             <div class="home-setup-progress" aria-hidden="true"><i id="homeSetupProgressBar"></i></div>
             <button id="reviewOnboardingWizard" class="secondary-button">Review Setup</button>
           </article>
+          <article id="studioDataPanel" class="studio-data-panel"><div><span>BACKUP + MIGRATION · <b id="studioDataVersion">CHECKING DATA</b></span><strong>Keep your Studio portable</strong><small>Back up alerts, variants, commands, workflows, panel styling, setup preferences, and alert media. Encrypted account credentials are deliberately excluded.</small></div><div class="studio-data-actions"><button data-export-studio-backup="true" class="secondary-button">Create Backup</button><button data-restore-studio-backup="true" class="secondary-button">Restore Backup</button></div></article>
           <div class="home-menu-heading"><div><p class="eyebrow">MAIN MENU</p><h3>What would you like to work on?</h3></div><p>Choose a task to jump directly into its workspace.</p></div>
           <div class="home-menu-grid">
-            <button class="home-menu-card" data-go="api"><b>SETUP 01</b><strong>Connections</strong><span>Connect Broadcast, Warudo, and the rest of your streaming suite.</span><i>OPEN CONNECTIONS →</i></button>
+            <button class="home-menu-card" data-go="api"><b>SETUP 01</b><strong>Connections</strong><span>Connect optional avatar, broadcast, visual, and performance tools.</span><i>OPEN CONNECTIONS →</i></button>
             <button class="home-menu-card" data-go="twitch"><b>SETUP 02</b><strong>Twitch</strong><span>Authorize your channel, EventSub intake, rewards, and stream information.</span><i>OPEN TWITCH →</i></button>
             <button class="home-menu-card" data-go="extensiondesigner"><b>SETUP 03</b><strong>Panel Designer</strong><span>Style the universal Twitch panel to match your channel and interactions.</span><i>DESIGN PANEL →</i></button>
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional Warudo reactions.</span><i>BUILD INTERACTIONS →</i></button>
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat Overlay</strong><span>Put your local Twitch chat overlay on the stream canvas.</span><i>DESIGN CHAT →</i></button>
-            <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio workflows.</span><i>MANAGE CHATBOT →</i></button>
+            <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio automations.</span><i>MANAGE CHATBOT →</i></button>
             <button class="home-menu-card" data-go="workflows"><b>AUTOMATE 02</b><strong>Workflows</strong><span>Inspect coordinated actions, cooldowns, leases, and restoration.</span><i>VIEW WORKFLOWS →</i></button>
           </div>
           <div class="home-runtime-heading"><div><p class="eyebrow">RUNTIME SNAPSHOT</p><h3>Studio right now</h3></div><button data-go="events" class="text-button">Open Event Log</button></div>
@@ -92,10 +95,16 @@
           <div class="page-toolbar"><div><p class="eyebrow">NORMALIZED EVENT STREAM</p><h2>Event Log</h2><p>Trace every trigger, delivery decision, temporary override, release, failure, and safety action.</p></div><span id="eventCountBadge" class="status-badge">0 EVENTS</span></div>
           <div class="filter-bar event-filters"><input id="eventSearch" type="search" placeholder="Search workflows, targets, messages, or event types" /><select id="eventLevelFilter"><option value="">All levels</option><option value="success">Success</option><option value="info">Information</option><option value="warning">Warning</option><option value="error">Errors</option></select></div>
           <div id="eventTimeline" class="event-timeline empty-state">No runtime events recorded.</div>
+          <div class="visual-section-heading alert-history-heading"><div><span>DURABLE PLAYBACK LEDGER</span><h3>Alert History &amp; Diagnostics</h3><p>See exactly what played, how long it waited, which variant matched, where its audio was routed, and whether assigned media is still available.</p></div><button data-clear-alert-history="true" class="danger-outline">Clear History</button></div>
+          <div class="metric-grid alert-history-metrics"><article><span>LAST 24 HOURS</span><strong id="alertHistory24h">0</strong><small>Alerts started</small></article><article><span>FAILED</span><strong id="alertHistoryFailures">0</strong><small>Playback startup failures</small></article><article><span>AVERAGE WAIT</span><strong id="alertHistoryWait">0 ms</strong><small>Time spent in queue</small></article><article><span>ASSET ISSUES</span><strong id="alertDiagnosticIssueCount">0</strong><small>Assigned files unavailable</small></article></div>
+          <div id="alertSourceDiagnostic" class="sound-alert-note"><strong>Browser Sources:</strong> Checking Twitch and Interaction Alert connections…</div>
+          <div class="filter-bar alert-history-filters"><input id="alertHistorySearch" type="search" placeholder="Search alert, viewer, variant, or source" /><select id="alertHistoryKind"><option value="">All alert types</option><option value="twitch">Twitch Alerts</option><option value="interaction">Interaction Alerts</option></select><select id="alertHistoryState"><option value="">All playback states</option><option value="completed">Completed</option><option value="playing">Playing</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></div>
+          <div id="alertDiagnosticIssues" class="alert-diagnostic-issues empty-state">No assigned-media problems detected.</div>
+          <div id="alertHistoryList" class="alert-history-list empty-state">No alert playback has been recorded yet.</div>
         </section>
 
         <section id="soundalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">PERFORMANCE + DANCE CATALOG</p><h2>Interaction Alerts</h2><p>Design viewer-triggered sound and visual alerts, place them anywhere on the stream canvas, and optionally connect them to Warudo performances.</p></div><div class="page-toolbar-actions"><span class="status-badge">ALWAYS FREE</span><button id="newInteractionAlertButton" class="primary-button">New Interaction Alert</button></div></div>
+          <div class="page-toolbar"><div><p class="eyebrow">PERFORMANCE + DANCE CATALOG</p><h2>Interaction Alerts</h2><p>Design viewer-triggered sound and visual alerts, place them anywhere on the stream canvas, and optionally connect them to Warudo performances.</p></div><div class="page-toolbar-actions"><span class="status-badge">ALWAYS FREE</span><button data-import-alert-pack="interaction" class="secondary-button">Import Alert Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction Alert</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>
@@ -104,8 +113,9 @@
           </div>
           <div id="interactionAlertQueueStatus" class="sound-alert-note"><strong>Alert Queue:</strong> Loading shared playback order…</div>
           <div id="interactionAlertOverlayStatus" class="sound-alert-note"><strong>Interaction Alert source:</strong> Loading the local Browser Source address…</div>
-          <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Add this as its own 3440 × 1440 Browser Source with <strong>Control audio via OBS</strong>. Keep it on the live audio track, but remove it from the recording/VOD track used for YouTube when interaction music may be claimed.</div>
+          <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Add this as its own Browser Source using the active base-canvas dimensions shown in Guided Setup, with <strong>Control audio via OBS</strong>. Keep it on the live audio track, but remove it from the recording/VOD track used for YouTube when interaction music may be claimed.</div>
           <div class="sound-alert-note"><strong>Interaction route:</strong> Every request resolves the saved audio, visual, and canvas design. Warudo performance routing appears only on alerts where you enable it.</div>
+          <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export any complete alert—including its sound, GIF/video, canvas design, and custom code—as one shareable file. Imported media is verified and copied into Studio-managed storage.</div>
           <div id="soundAlertBroadcastInventory" class="sound-alert-note"><strong>Broadcast executor:</strong> Waiting for its live OBS source inventory.</div>
           <div id="soundAlertGrid" class="sound-alert-grid interaction-alert-grid empty-state">Loading the Interaction Alert catalog…</div>
           <div class="visual-section-heading"><div><span>VISUAL LIBRARY</span><h3>Find a GIF for an interaction</h3><p>Search GIPHY or assign a local image, GIF, or video directly from the interaction card.</p></div><span id="visualProviderBadge" class="provider-badge">LOCAL FILES READY · GIPHY KEY REQUIRED</span></div>
@@ -141,7 +151,7 @@
         </section>
 
         <section id="visualalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">TWITCH CHANNEL EVENTS</p><h2>Twitch Alerts</h2><p>Design the complete sound-and-visual response for follows, subscriptions, gift subs, Bits, raids, and channel-point rewards.</p></div><div class="page-toolbar-actions"><span id="visualAlertStateBadge" class="status-badge">CHECKING</span><button id="newTwitchAlertButton" class="primary-button">New Twitch Alert</button></div></div>
+          <div class="page-toolbar"><div><p class="eyebrow">TWITCH CHANNEL EVENTS</p><h2>Twitch Alerts</h2><p>Design the complete sound-and-visual response for follows, subscriptions, gift subs, Bits, raids, and channel-point rewards.</p></div><div class="page-toolbar-actions"><span id="visualAlertStateBadge" class="status-badge">CHECKING</span><button data-import-alert-pack="twitch" class="secondary-button">Import Alert Pack</button><button id="newTwitchAlertButton" class="primary-button">New Twitch Alert</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>ALERT TYPES</span><strong id="twitchAlertCount">0</strong><small>Normalized Twitch event presets</small></article>
             <article><span>ENABLED</span><strong id="twitchAlertEnabledCount">0</strong><small>Ready for channel events</small></article>
@@ -150,12 +160,13 @@
           </div>
           <div id="twitchAlertQueueStatus" class="sound-alert-note"><strong>Alert Queue:</strong> Loading shared playback order…</div>
           <div id="visualAlertOverlayStatus" class="sound-alert-note"><strong>Twitch Alert source:</strong> Loading the local Browser Source address…</div>
-          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add this as a separate 3440 × 1440 Browser Source and enable <strong>Control audio via OBS</strong>. Keep this source on both the live and recording/VOD tracks so follows, subscriptions, Bits, raids, and reward alerts remain in uploaded videos.</div>
+          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add this as a separate Browser Source using the active base-canvas dimensions shown in Guided Setup and enable <strong>Control audio via OBS</strong>. Keep this source on both the live and recording/VOD tracks so follows, subscriptions, Bits, raids, and reward alerts remain in uploaded videos.</div>
+          <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export a base Twitch alert together with every variant, rule, sound, visual, and custom design. Packs never contain Twitch authorization or the original computer's file paths.</div>
           <div id="twitchVisualAlertGrid" class="sound-alert-grid twitch-alert-grid empty-state">Loading Twitch Alert presets…</div>
         </section>
 
         <section id="chatoverlaySection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat Overlay</h2><p>Render normalized Twitch chat locally in Tempest Broadcast without a Botrix browser source.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat Overlay</h2><p>Render normalized Twitch chat locally in OBS or another browser-source-capable broadcaster.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
           <div class="metric-grid">
             <article><span>BROWSER SOURCES</span><strong id="chatOverlayClientCount">0</strong><small>Connected Broadcast canvases</small></article>
             <article><span>VISIBLE MESSAGES</span><strong id="chatOverlayMessageCount">0</strong><small>Current overlay buffer</small></article>
@@ -163,7 +174,7 @@
             <article><span>TWITCH CHAT</span><strong id="chatOverlayTwitchState">OFFLINE</strong><small>Chatbot EventSub intake</small></article>
           </div>
           <div id="chatOverlayBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local chat overlay address…</div>
-          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add the URL above as a transparent 3440 × 1440 Browser Source to match your 43:18 base canvas. Remove or hide the Botrix chat source after this local source is confirmed.</div>
+          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add the URL above as a transparent Browser Source matching the active base-canvas dimensions shown in Guided Setup. Remove or hide the Botrix chat source after this local source is confirmed.</div>
           <article class="panel chat-overlay-settings-panel">
             <div class="panel-header"><div><span>OVERLAY DESIGN</span><h3>Message stack</h3></div><span class="state-chip installed">LOCAL HTML</span></div>
             <div class="chat-overlay-settings">
@@ -180,7 +191,7 @@
         </section>
 
         <section id="twitchSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED INTERACTIONS</p><h2>Twitch Gateway</h2><p>One viewer-interaction boundary for the entire suite. Studio normalizes platform events; Warudo and Broadcast receive Tempest capabilities instead of raw interaction payloads.</p></div><span id="twitchOwnerBadge" class="status-badge">STUDIO OWNED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED INTERACTIONS</p><h2>Twitch Gateway</h2><p>One viewer-interaction boundary for your streaming setup. Studio normalizes platform events before optional avatar, broadcast, and automation integrations receive them.</p></div><span id="twitchOwnerBadge" class="status-badge">STUDIO OWNED</span></div>
           <div class="metric-grid twitch-metrics">
             <article><span>OAUTH LIFECYCLE</span><strong id="twitchOauthState">—</strong><small>Tokens stay in the OS credential vault</small></article>
             <article><span>EVENTSUB</span><strong id="twitchEventSubState">—</strong><small>Events and channel points</small></article>
@@ -249,7 +260,7 @@
                   <section class="preview-intro"><div><small id="panelPreviewEyebrow">VIEWER CONTROL NODE</small><h3 id="panelPreviewTitle">Signal deck</h3></div><b>6 AVAILABLE</b></section>
                   <div id="panelPreviewSearch" class="preview-search">⌕ <span>Search signals</span></div>
                   <nav id="panelPreviewFilters"><b>ALL</b><span>EVENTS</span><span>PERFORMANCES</span></nav>
-                  <main><small>FEATURED EVENT</small><div class="preview-featured"><i>BH</i><div><strong>Black Hole</strong><span>READY · 15s EFFECT</span></div><b>›</b></div><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Whistle</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Hydraulic Press</strong><span>READY TO PLAY · 12s</span></div></div></main>
+                  <main><small>FEATURED INTERACTION</small><div class="preview-featured"><i>FX</i><div><strong>Scene Shift</strong><span>READY · 15s EFFECT</span></div><b>›</b></div><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Celebration</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Spotlight</strong><span>READY TO PLAY · 12s</span></div></div></main>
                   <footer>Viewer link established</footer>
                 </div>
               </div>
@@ -259,7 +270,7 @@
         </section>
 
         <section id="chatbotSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">STUDIO CHAT AUTOMATION</p><h2>Chatbot</h2><p>Manage Twitch commands, permissions, cooldowns, replies, and Tempest workflow triggers from one control surface.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO CHAT AUTOMATION</p><h2>Chatbot</h2><p>Manage Twitch commands, permissions, cooldowns, replies, and Studio automation triggers from one control surface.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
           <div class="metric-grid chatbot-metrics">
             <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
             <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
@@ -281,6 +292,14 @@
             </div>
           </article>
 
+          <form id="chatbotProvidersForm" class="panel chatbot-provider-panel">
+            <div class="panel-header"><div><span>OPTIONAL RESPONSE PROVIDERS</span><h3>Local weather + now playing</h3><p>These stay hidden from command choices until configured. No API key is required for NWS or public AzuraCast metadata.</p></div><button class="primary-button" type="submit">Save Providers</button></div>
+            <div class="chatbot-provider-grid">
+              <fieldset><legend><label class="toggle-label"><input id="weatherProviderEnabled" type="checkbox" /> Local weather (United States)</label></legend><label>Location name<input id="weatherLocationName" maxlength="80" placeholder="Portland" /></label><div class="form-row"><label>Latitude<input id="weatherLatitude" type="number" min="-90" max="90" step="0.0001" placeholder="45.5152" /></label><label>Longitude<input id="weatherLongitude" type="number" min="-180" max="180" step="0.0001" placeholder="-122.6784" /></label></div><label>IANA time zone<input id="weatherTimeZone" maxlength="80" placeholder="America/Los_Angeles" /></label><small>Uses the U.S. National Weather Service. Enter coordinates within NWS coverage.</small></fieldset>
+              <fieldset><legend><label class="toggle-label"><input id="nowPlayingProviderEnabled" type="checkbox" /> AzuraCast now playing</label></legend><label>Station name<input id="nowPlayingStationName" maxlength="100" placeholder="My Radio Station" /></label><label>Now Playing API URL<input id="nowPlayingApiUrl" type="url" maxlength="500" placeholder="https://radio.example/api/nowplaying/station" /></label><label>Public player URL<input id="nowPlayingPublicUrl" type="url" maxlength="500" placeholder="https://radio.example/public/station" /></label><label>Direct stream URL <span>OPTIONAL</span><input id="nowPlayingStreamUrl" type="url" maxlength="500" placeholder="https://radio.example/listen/station/radio.mp3" /></label></fieldset>
+            </div>
+          </form>
+
           <div class="chatbot-workspace">
             <article class="panel chatbot-editor-panel">
               <div class="panel-header"><div><span>COMMAND EDITOR</span><h3 id="chatbotEditorTitle">Create a command</h3></div><button id="resetChatbotCommand" class="text-button">New command</button></div>
@@ -288,12 +307,12 @@
                 <input id="chatbotCommandId" type="hidden" />
                 <div class="form-row"><label>Command name<div class="prefixed-input"><span id="chatbotPrefixLabel">!</span><input id="chatbotCommandName" required maxlength="32" placeholder="blackhole" /></div></label><label>Permission<select id="chatbotCommandPermission"><option value="everyone">Everyone</option><option value="subscriber">Subscribers</option><option value="moderator">Moderators</option><option value="broadcaster">Broadcaster only</option></select></label></div>
                 <label>Aliases<input id="chatbotCommandAliases" maxlength="240" placeholder="bh, gravity" /><small>Comma-separated; the command prefix is added automatically.</small></label>
-                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option><option value="seattle-weather">Seattle time and weather — National Weather Service</option><option value="radio-now-playing">Storm Horizon Radio — now playing</option></select></label>
+                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option></select></label>
                 <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, and {args}. Built-in response sources may leave this blank.</small></label>
-                <label>Tempest workflow<select id="chatbotCommandWorkflow"><option value="">No workflow — chat response only</option></select></label>
+                <label>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
                 <div class="form-row"><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
                 <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Shared Chat</label></div>
-                <small>Shared Chat commands can be invoked by viewers arriving through a collaborator's channel. Their Tempest permissions are still evaluated in your home channel.</small>
+                <small>Shared Chat commands can be invoked by viewers arriving through a collaborator's channel. Command permissions are still evaluated in your home channel.</small>
                 <div class="dialog-actions"><button id="deleteChatbotCommand" type="button" class="secondary-button danger-outline" disabled>Delete</button><button type="submit" class="primary-button">Save Command</button></div>
               </form>
             </article>
@@ -305,13 +324,13 @@
           </div>
 
           <div class="overview-grid chatbot-lower-grid">
-            <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Shared Chat collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!tempest" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
+            <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Shared Chat collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
             <article class="panel"><div class="panel-header"><div><span>CHATBOT ACTIVITY</span><h3>Recent command decisions</h3></div></div><div id="chatbotActivity" class="compact-list empty-state">No chatbot activity recorded.</div></article>
           </div>
         </section>
 
         <section id="apiSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">TEMPEST BRIDGE</p><h2>Connections</h2><p>Monitor application capabilities and the authenticated local command and event plane. Missing applications can be simulated during workflow development.</p></div><span id="apiOnlineBadge" class="status-badge">CONNECTING</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">LOCAL CONTROL PLANE</p><h2>Connections</h2><p>Monitor compatible applications and the authenticated local command and event service. Optional integrations can remain disconnected.</p></div><span id="apiOnlineBadge" class="status-badge">CONNECTING</span></div>
           <div class="api-grid">
             <article class="panel api-summary"><span>HTTP ENDPOINT</span><code id="httpEndpoint">http://127.0.0.1:4765</code><span>WEBSOCKET ENDPOINT</span><code id="socketEndpoint">ws://127.0.0.1:4765/v1/socket</code><span>AUTHENTICATION</span><strong>Per-installation bearer token</strong><p>Commands and state use the authenticated control plane. Video and continuous audio remain on Spout, NDI, shared textures, or purpose-built media transports.</p></article>
             <article class="panel"><div class="panel-header"><div><span>CONNECTED CLIENTS</span><h3>Live applications</h3></div><strong id="apiConnectionCount">0</strong></div><div id="connectionList" class="compact-list empty-state">No applications are connected to the Bridge.</div></article>
@@ -323,7 +342,7 @@
           </div>
 
           <div class="connection-path" aria-label="Studio to Warudo connection path">
-            <div class="connection-node"><i id="warudoStudioLight"></i><span>1</span><strong>Studio</strong><small>Tempest Bridge</small></div>
+            <div class="connection-node"><i id="warudoStudioLight"></i><span>1</span><strong>Studio</strong><small>Local control service</small></div>
             <b aria-hidden="true">→</b>
             <div class="connection-node"><i id="warudoAdapterLight"></i><span>2</span><strong>Warudo Adapter</strong><small id="warudoAdapterState">Checking</small></div>
             <b aria-hidden="true">→</b>
@@ -364,14 +383,24 @@
         </section>
 
         <section id="softwareSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">APPLICATIONS + LINKED SERVICES</p><h2>Software Management</h2><p>Register Tempest applications, inspect compatibility, launch installed software, and monitor lightweight external services used by the suite.</p></div><button id="registerApplicationButton" class="primary-button">Register Application</button></div>
+          <div class="page-toolbar"><div><p class="eyebrow">APPLICATIONS + LINKED SERVICES</p><h2>Software Management</h2><p>Register compatible applications, inspect capabilities, launch installed software, and monitor optional services used by your stream.</p></div><button id="registerApplicationButton" class="primary-button">Register Application</button></div>
           <div id="applicationGrid" class="card-grid empty-state">No applications registered.</div>
         </section>
 
         <section id="assetsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">CENTRAL ASSET REGISTRY</p><h2>Asset Control</h2><p>Index files in place and make Data Horizon visuals, broadcast overlays, profiles, and performance packages discoverable across the suite.</p></div><button id="addAssetButton" class="primary-button">Add Asset</button></div>
+          <div class="page-toolbar"><div><p class="eyebrow">CENTRAL ASSET REGISTRY</p><h2>Asset Control</h2><p>Index visuals, overlays, profiles, audio, and performance packages in place so compatible tools can discover them.</p></div><button id="addAssetButton" class="primary-button">Add Asset</button></div>
           <div class="filter-bar"><input id="assetSearch" type="search" placeholder="Search names, types, producers, or tags" /><select id="assetTypeFilter"><option value="">All asset types</option></select></div>
           <div id="assetGrid" class="card-grid empty-state">No assets indexed.</div>
+        </section>
+
+        <section id="settingsSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">SETTINGS + ABOUT</p><h2>Tempest Streaming Studio</h2><p>Review local data, privacy boundaries, release information, and support diagnostics.</p></div><span id="aboutBuildBadge" class="status-badge">BUILD</span></div>
+          <div class="settings-about-grid">
+            <article class="panel"><div class="panel-header"><div><span>INSTALLATION</span><h3>Release information</h3></div></div><dl class="about-details"><div><dt>Version</dt><dd id="aboutVersion">—</dd></div><div><dt>Data schema</dt><dd id="aboutDataVersion">—</dd></div><div><dt>Runtime</dt><dd id="aboutRuntime">—</dd></div><div><dt>Build type</dt><dd id="aboutBuildType">—</dd></div></dl><div class="settings-actions"><button id="openStudioDataDirectory" class="secondary-button">Open Data Folder</button><button data-export-studio-backup="true" class="secondary-button">Create Backup</button></div></article>
+            <article class="panel"><div class="panel-header"><div><span>SUPPORT</span><h3>Redacted diagnostics</h3></div></div><p>Export health, source, alert, runtime, and version information. Credentials, account identities, viewer details, and local file paths are removed.</p><button id="exportStudioDiagnostics" class="primary-button">Export Diagnostics</button></article>
+            <article class="panel settings-privacy"><div class="panel-header"><div><span>PRIVACY BOUNDARY</span><h3>What leaves this computer</h3></div></div><ul><li>Twitch authorization and API requests only after you connect Twitch.</li><li>GIPHY searches only after you save a GIPHY API key and run a search.</li><li>NWS weather and AzuraCast now-playing requests only after those optional providers are configured.</li><li>Alert media, browser sources, backups, histories, and control traffic remain local unless you export a file yourself.</li></ul></article>
+            <article class="panel settings-privacy"><div class="panel-header"><div><span>RELEASE CHANNEL</span><h3>Manual updates</h3></div></div><p>0.20.0 uses manual, versioned Windows releases. Create a backup before installing a newer build; the installer preserves Studio data and migrations run automatically on first launch.</p><p>Tempest branding and publisher attribution remain part of the public product. Streamer identities, station details, locations, alert media, and companion tools are your own configuration.</p></article>
+          </div>
         </section>
       </main>
     </div>
@@ -397,7 +426,7 @@
         <input id="assetId" type="hidden" /><input id="assetUri" type="hidden" /><input id="assetChecksum" type="hidden" />
         <label>Name<input id="assetName" required maxlength="120" /></label>
         <div class="form-row"><label>Asset type<select id="assetType" required><option value="tempest.scene">Tempest Scene</option><option value="tempest.visual">Visualizer</option><option value="tempest.overlay">Stream Overlay</option><option value="tempest.effect">Effect</option><option value="tempest.profile">Profile</option><option value="tempest.performance">Performance</option><option value="tempest.output-preset">Output Preset</option><option value="tempest.media">Media</option></select></label><label>Version<input id="assetVersion" required value="1.0.0" pattern="[0-9]+\.[0-9]+\.[0-9]+.*" /></label></div>
-        <label>Producer<select id="assetProducer" required></select></label><label>Tags<input id="assetTags" placeholder="audio-reactive, broadcast, mainframe" /></label>
+        <label>Producer<select id="assetProducer" required></select></label><label>Tags<input id="assetTags" placeholder="audio-reactive, overlay, performance" /></label>
         <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Register Asset</button></div>
       </form>
     </dialog>
@@ -430,15 +459,30 @@
         <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Create Twitch Alert</button></div>
       </form>
     </dialog>
+    <dialog id="twitchVariantDialog" class="twitch-variant-dialog">
+      <form id="twitchVariantForm">
+        <input id="twitchVariantAlertId" type="hidden" />
+        <input id="newVariantEditId" type="hidden" />
+        <div class="dialog-header"><div><span>ALERT VARIANTS</span><h2 id="twitchVariantTitle">Event-specific versions</h2><p id="twitchVariantHelp">The first enabled matching rule plays. Higher priority rules are checked first; the base alert remains the fallback.</p></div><button type="button" data-close-dialog aria-label="Close">×</button></div>
+        <section class="variant-create-panel">
+          <div class="variant-create-heading"><div><span>NEW RULE</span><h3>Create a variant</h3></div><small>Starts as a complete copy of the base alert.</small></div>
+          <div class="variant-create-grid"><label>Variant name<input id="newVariantName" required maxlength="80" placeholder="Mega Cheer" /></label><label>Match when<select id="newVariantConditionType"></select></label><label id="newVariantMinimumLabel">Minimum<input id="newVariantMinimum" type="number" min="0" max="1000000000" value="1000" /></label><label id="newVariantMaximumLabel">Maximum (optional)<input id="newVariantMaximum" type="number" min="0" max="1000000000" placeholder="No maximum" /></label><label id="newVariantExactLabel" hidden>Exact value<input id="newVariantExact" maxlength="160" /></label><label>Priority<input id="newVariantPriority" type="number" min="-1000" max="1000" value="0" /><small>Higher numbers win when multiple rules match.</small></label></div>
+          <div class="variant-create-actions"><button id="cancelVariantEdit" type="button" class="secondary-button" hidden>Cancel Edit</button><button id="saveVariantRule" type="submit" class="primary-button">Create Variant</button></div>
+        </section>
+        <div id="twitchVariantList" class="twitch-variant-list empty-state">No variants yet. The base alert handles every event.</div>
+        <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Done</button></div>
+      </form>
+    </dialog>
     <dialog id="twitchDesignDialog" class="alert-design-dialog">
       <form id="twitchDesignForm">
         <input id="twitchDesignAlertId" type="hidden" />
+        <input id="twitchDesignVariantId" type="hidden" />
         <input id="alertDesignKind" type="hidden" value="twitch" />
         <div class="dialog-header design-dialog-header"><div><span id="alertDesignKicker">TWITCH ALERT DESIGNER</span><h2 id="twitchDesignTitle">Customize Alert</h2><p id="alertDesignHelp">Use template variables to make the same design respond to the live event.</p></div><button type="button" data-close-dialog aria-label="Close">×</button></div>
         <div class="template-variable-strip"><span>VARIABLES</span><code>{viewer}</code><code>{name}</code><code>{event}</code><code>{amount}</code><code>{message}</code><code>{reward}</code><code>{tier}</code><code>{months}</code><code>{topic}</code></div>
         <div class="design-editor-grid">
           <section class="design-placement-panel" aria-labelledby="twitchPlacementHeading">
-            <div class="design-placement-heading"><div><span>3440 × 1440 · 43:18 BROWSER SOURCE</span><h3 id="twitchPlacementHeading">Place, size, and preview the alert</h3><p>Drag the alert or any highlighted text layer. Drag the lower-right handle to resize. The canvas matches your OBS source.</p></div><div class="design-placement-tools"><button id="undoAlertDesign" type="button" class="secondary-button" disabled>Undo</button><button id="redoAlertDesign" type="button" class="secondary-button" disabled>Redo</button><button id="previewAlertDesignHere" type="button" class="secondary-button">Play Here</button><button id="stopAlertDesignPreview" type="button" class="secondary-button">Stop</button><output id="twitchPlacementReadout">X 50% · Y 82% · Size 100%</output></div></div>
+            <div class="design-placement-heading"><div><span id="alertDesignerCanvasProfile">1920 × 1080 · 16:9 BROWSER SOURCE</span><h3 id="twitchPlacementHeading">Place and resize the alert</h3><p>Drag the alert or any highlighted text layer. Drag the lower-right handle to resize, then preview it here. The canvas follows your active Broadcast profile.</p></div><div class="design-placement-tools"><button id="undoAlertDesign" type="button" class="secondary-button" disabled>Undo</button><button id="redoAlertDesign" type="button" class="secondary-button" disabled>Redo</button><button id="previewAlertDesignHere" type="button" class="secondary-button">Play Here</button><button id="stopAlertDesignPreview" type="button" class="secondary-button">Stop</button><output id="twitchPlacementReadout">X 50% · Y 82% · Size 100%</output></div></div>
             <div id="twitchPlacementCanvas" class="design-placement-canvas">
               <div class="design-safe-area" aria-hidden="true"></div>
               <div id="twitchPlacementMock" class="design-placement-mock" role="img" aria-label="Draggable alert placement preview" tabindex="0"><div id="twitchPlacementMockMedia" class="design-placement-mock-media"><span>ASSIGNED GIF / VIDEO</span></div><div class="design-placement-mock-copy"><span id="twitchPlacementMockEyebrow" data-design-layer="eyebrow" tabindex="0">TWITCH ALERT</span><strong id="twitchPlacementMockTitle" data-design-layer="headline" tabindex="0">New Follower</strong><small id="twitchPlacementMockDetail" data-design-layer="detail" tabindex="0">Triggered by Studio Operator</small><em id="twitchPlacementMockMessage" data-design-layer="message" tabindex="0">Viewer message</em></div><i id="twitchPlacementResizeHandle" aria-hidden="true"></i></div>
@@ -448,6 +492,7 @@
               <label>Canvas Y (%)<input id="twitchDesignCustomY" type="number" min="0" max="100" step="0.1" /></label>
               <label>Overall alert size <span id="twitchDesignScaleValue">100%</span><input id="twitchDesignScale" type="range" min="25" max="200" step="1" /></label>
             </div>
+            <div class="design-preview-data"><span>PREVIEW DATA</span><label>Viewer<input id="alertDesignPreviewViewer" value="Studio Operator" maxlength="40" /></label><label>Amount<input id="alertDesignPreviewAmount" value="100" maxlength="20" /></label><label>Message<input id="alertDesignPreviewMessage" value="This is a sample viewer message" maxlength="120" /></label></div>
           </section>
           <details open><summary>Layout &amp; motion</summary><div class="design-fields">
             <div class="form-row design-two"><label>Style preset<select id="twitchDesignPreset"><option value="tempest">Tempest HUD</option><option value="minimal">Minimal</option><option value="compact">Compact</option><option value="glass">Glass</option><option value="neon">Neon</option><option value="cinematic">Cinematic</option></select></label><label>Disposition<select id="twitchDesignLayout"><option value="media-left">Image left / text right</option><option value="media-right">Text left / image right</option><option value="media-top">Image above text</option><option value="media-overlay">Text layered over media</option><option value="text-only">Text only</option><option value="media-only">Media only</option></select></label></div>
@@ -460,12 +505,12 @@
             <label>Headline template<input id="twitchDesignHeadline" maxlength="240" /></label><label>Detail template<input id="twitchDesignDetail" maxlength="320" /></label>
             <div class="design-layer-list"><div><label class="check-label"><input id="twitchDesignShowEyebrow" type="checkbox" /> Eyebrow</label><label>X (%)<input id="twitchDesignEyebrowX" type="number" min="0" max="100" step="0.1" /></label><label>Y (%)<input id="twitchDesignEyebrowY" type="number" min="0" max="100" step="0.1" /></label></div><div><label class="check-label"><input id="twitchDesignShowHeadline" type="checkbox" /> Headline</label><label>X (%)<input id="twitchDesignHeadlineX" type="number" min="0" max="100" step="0.1" /></label><label>Y (%)<input id="twitchDesignHeadlineY" type="number" min="0" max="100" step="0.1" /></label></div><div><label class="check-label"><input id="twitchDesignShowDetail" type="checkbox" /> Detail</label><label>X (%)<input id="twitchDesignDetailX" type="number" min="0" max="100" step="0.1" /></label><label>Y (%)<input id="twitchDesignDetailY" type="number" min="0" max="100" step="0.1" /></label></div><div><label class="check-label"><input id="twitchDesignShowMessage" type="checkbox" /> Viewer message</label><label>X (%)<input id="twitchDesignMessageX" type="number" min="0" max="100" step="0.1" /></label><label>Y (%)<input id="twitchDesignMessageY" type="number" min="0" max="100" step="0.1" /></label></div></div>
             <div class="form-row design-two"><label>Typography<select id="twitchDesignFont"><option>Inter</option><option>Segoe UI</option><option>Consolas</option><option>Arial</option><option>Georgia</option><option>Impact</option><option>Trebuchet MS</option><option>Times New Roman</option></select></label><label>Text alignment<select id="twitchDesignTextAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label></div>
-            <div class="form-row design-two"><label>Headline size (px)<input id="twitchDesignFontSize" type="number" min="16" max="120" /></label><label>Font weight<input id="twitchDesignFontWeight" type="number" min="100" max="900" step="100" /></label></div>
-            <div class="form-row design-two"><label>Headline color<input id="twitchDesignTextColor" type="color" /></label><label>Detail color<input id="twitchDesignSecondaryColor" type="color" /></label></div>
+            <input id="twitchDesignFontSize" type="hidden" /><input id="twitchDesignTextColor" type="hidden" /><input id="twitchDesignSecondaryColor" type="hidden" /><label>Font weight<input id="twitchDesignFontWeight" type="number" min="100" max="900" step="100" /></label>
             <div class="form-row design-two"><label>Text shadow (%)<input id="twitchDesignTextShadow" type="number" min="0" max="100" /></label><label>Letter spacing (px)<input id="twitchDesignLetterSpacing" type="number" min="-5" max="30" step="0.5" /></label></div>
             <input id="twitchDesignTextPositionX" type="hidden" /><input id="twitchDesignTextPositionY" type="hidden" />
             <div class="form-row design-two"><label>Horizontal text fine-tune (px)<input id="twitchDesignTextX" type="number" min="-1500" max="1500" /></label><label>Vertical text fine-tune (px)<input id="twitchDesignTextY" type="number" min="-1000" max="1000" /></label></div>
           </div></details>
+          <details><summary>Individual text layer styling</summary><div class="design-fields"><p>These settings apply to each draggable text layer. Width controls where long text wraps on the canvas.</p><div class="design-layer-style-list"><div><strong>Eyebrow</strong><label>Size<input id="twitchDesignEyebrowFontSize" type="number" min="8" max="72" /></label><label>Color<input id="twitchDesignEyebrowColor" type="color" /></label><label>Max width<input id="twitchDesignEyebrowMaxWidth" type="number" min="100" max="2400" /></label></div><div><strong>Headline</strong><label>Size<input id="twitchDesignHeadlineFontSize" type="number" min="16" max="120" /></label><label>Color<input id="twitchDesignHeadlineColor" type="color" /></label><label>Max width<input id="twitchDesignHeadlineMaxWidth" type="number" min="100" max="2400" /></label></div><div><strong>Detail</strong><label>Size<input id="twitchDesignDetailFontSize" type="number" min="10" max="100" /></label><label>Color<input id="twitchDesignDetailColor" type="color" /></label><label>Max width<input id="twitchDesignDetailMaxWidth" type="number" min="100" max="2400" /></label></div><div><strong>Message</strong><label>Size<input id="twitchDesignMessageFontSize" type="number" min="10" max="100" /></label><label>Color<input id="twitchDesignMessageColor" type="color" /></label><label>Max width<input id="twitchDesignMessageMaxWidth" type="number" min="100" max="2400" /></label></div></div></div></details>
           <details><summary>Card &amp; frame</summary><div class="design-fields">
             <div class="form-row design-two"><label>Card width (px)<input id="twitchDesignCardWidth" type="number" min="280" max="2600" /></label><label>Padding (px)<input id="twitchDesignPadding" type="number" min="0" max="100" /></label></div>
             <div class="form-row design-two"><label>Background color<input id="twitchDesignBackgroundColor" type="color" /></label><label>Background opacity (%)<input id="twitchDesignBackgroundOpacity" type="number" min="0" max="100" /></label></div>
@@ -476,6 +521,7 @@
             <p>For GIF-first alerts, choose “Text layered over media,” size the media here, then position the viewer text in Message &amp; typography.</p>
             <div class="form-row design-two"><label>Media width (px)<input id="twitchDesignMediaWidth" type="number" min="40" max="2400" /></label><label>Media height (px)<input id="twitchDesignMediaHeight" type="number" min="40" max="1440" /></label></div>
             <div class="form-row design-two"><label>Media fit<select id="twitchDesignMediaFit"><option value="contain">Contain</option><option value="cover">Cover</option><option value="fill">Stretch to fill</option></select></label><label>Media corner radius<input id="twitchDesignMediaRadius" type="number" min="0" max="100" /></label></div>
+            <div class="form-row design-two"><label>Media zoom (%)<input id="twitchDesignMediaScale" type="number" min="25" max="400" /></label><label>Media opacity (%)<input id="twitchDesignMediaOpacity" type="number" min="0" max="100" /></label></div><div class="form-row design-two"><label>Focal point X (%)<input id="twitchDesignMediaPositionX" type="number" min="0" max="100" step="0.1" /></label><label>Focal point Y (%)<input id="twitchDesignMediaPositionY" type="number" min="0" max="100" step="0.1" /></label></div>
             <label>Media appearance delay (ms)<input id="twitchDesignMediaDelay" type="number" min="0" max="60000" step="100" /></label>
           </div></details>
           <details><summary>Timing, sound &amp; TTS</summary><div class="design-fields">
@@ -487,9 +533,10 @@
           </div></details>
           <details class="design-custom-code"><summary>Advanced HTML, CSS &amp; JavaScript</summary><div class="design-fields"><p>Custom code runs only inside the local alert Browser Source. The page exposes <code>data</code>, <code>variables</code>, and <code>elements</code> to JavaScript; Twitch credentials are never exposed.</p><div class="design-code-tabs" role="tablist" aria-label="Custom alert code"><button type="button" class="active" data-design-code-tab="html">HTML</button><button type="button" data-design-code-tab="css">CSS</button><button type="button" data-design-code-tab="javascript">JavaScript</button><button id="validateAlertDesignCode" type="button">Validate Code</button></div><div data-design-code-panel="html"><textarea id="twitchDesignCustomHtml" rows="12" maxlength="24000" spellcheck="false" placeholder="<!-- Added inside #customHtml for this alert -->"></textarea></div><div data-design-code-panel="css" hidden><textarea id="twitchDesignCustomCss" rows="12" maxlength="24000" spellcheck="false" placeholder="/* Example: .name { text-transform: uppercase; } */"></textarea></div><div data-design-code-panel="javascript" hidden><textarea id="twitchDesignCustomJavaScript" rows="12" maxlength="24000" spellcheck="false" placeholder="// Runs when this alert is shown. Use data, variables, and elements."></textarea></div><output id="alertDesignCodeStatus" class="design-code-status">Code has not been validated yet.</output><small>Stable hooks: #alert, #media, #copy, #eyebrow, #name, #detail, #message, and #customHtml. Custom JavaScript is advanced local code; only import designs you trust.</small></div></details>
         </div>
-        <div class="dialog-actions design-dialog-actions"><button id="importAlertDesign" type="button" class="secondary-button">Import Template</button><button id="exportAlertDesign" type="button" class="secondary-button">Export Template</button><button id="resetTwitchDesign" type="button" class="secondary-button">Reset</button><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="secondary-button">Save</button><button id="savePreviewTwitchDesign" type="button" class="primary-button">Save &amp; Preview</button></div>
+        <div class="dialog-actions design-dialog-actions"><button id="importAlertDesign" type="button" class="secondary-button">Import Template</button><button id="exportAlertDesign" type="button" class="secondary-button">Export Template</button><button id="duplicateAlertDesign" type="button" class="secondary-button">Duplicate To…</button><button id="resetTwitchDesign" type="button" class="secondary-button">Reset</button><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="secondary-button">Save</button><button id="savePreviewTwitchDesign" type="button" class="primary-button">Save &amp; Preview</button></div>
       </form>
     </dialog>
+    <dialog id="duplicateAlertDesignDialog"><form id="duplicateAlertDesignForm"><div class="dialog-header"><div><span>COPY DESIGN</span><h2>Duplicate this design</h2><p>Copy the current layout and styling to another Twitch or Interaction Alert. Its assigned sound and visual stay unchanged.</p></div><button type="button" data-close-dialog aria-label="Close">×</button></div><label>Destination alert<select id="duplicateAlertDesignTarget" required></select></label><div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Copy Design</button></div></form></dialog>
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
   </body>

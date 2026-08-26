@@ -1,0 +1,38 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { mkdtemp, mkdir, readFile, writeFile } = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { fileURLToPath, pathToFileURL } = require('node:url');
+const { buildTempestStudioBackup, restoreTempestStudioBackup } = require('../dist/studio-backups');
+
+test('backs up portable settings and media while excluding credentials and machine paths', async () => {
+  const source = await mkdtemp(path.join(os.tmpdir(), 'tempest-backup-source-'));
+  const target = await mkdtemp(path.join(os.tmpdir(), 'tempest-backup-target-'));
+  await mkdir(path.join(source, 'bridge'), { recursive: true });
+  const audioPath = path.join(source, 'private-music.mp3');
+  await writeFile(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0xaa]));
+  await writeFile(path.join(source, 'bridge', 'sound-alerts.json'), JSON.stringify({ schemaVersion: 1, alerts: [{ id: 'sound-alert.test', audioUri: pathToFileURL(audioPath).href }] }));
+  await writeFile(path.join(source, 'bridge', 'registry.json'), JSON.stringify({ schemaVersion: 1, applications: [{ id: 'app.test', launch: { executable: 'C:\\Private\\app.exe' } }], assets: [{ uri: 'file:///C:/Private/scene.json' }], workflows: [{ id: 'workflow.test' }] }));
+  await writeFile(path.join(source, 'bridge', 'twitch-credentials.bin'), 'DO-NOT-BACK-UP-TWITCH-TOKEN');
+  const backup = await buildTempestStudioBackup({ userDataDirectory: source, productVersion: '0.20.0-test', rendererSettings: { completed: true, canvasProfile: { mode: 'standard' } } });
+  assert.equal(backup.assets.length, 1);
+  assert.equal(backup.documents.registry.applications[0].launch, undefined);
+  assert.deepEqual(backup.documents.registry.assets, []);
+  const serialized = JSON.stringify(backup);
+  assert.doesNotMatch(serialized, /DO-NOT-BACK-UP/);
+  assert.doesNotMatch(serialized, /private-music/i);
+  assert.doesNotMatch(serialized, /C:\\\\Private/);
+  await mkdir(path.join(target, 'bridge'), { recursive: true });
+  await writeFile(path.join(target, 'bridge', 'sound-alerts.json'), JSON.stringify({ old: true }));
+  let committed = false;
+  const restored = await restoreTempestStudioBackup(backup, target, async () => { committed = true; });
+  assert.equal(committed, true);
+  assert.equal(restored.assetCount, 1);
+  assert.equal(restored.rendererSettings.completed, true);
+  const restoredAlerts = JSON.parse(await readFile(path.join(target, 'bridge', 'sound-alerts.json'), 'utf8'));
+  const restoredAudioPath = fileURLToPath(restoredAlerts.alerts[0].audioUri);
+  assert.match(restoredAudioPath, /visual-alerts[\\/]restored/);
+  assert.deepEqual(await readFile(restoredAudioPath), Buffer.from([0x49, 0x44, 0x33, 0x04, 0xaa]));
+  assert.equal(JSON.parse(await readFile(path.join(restored.snapshotDirectory, 'interactionAlerts.json'), 'utf8')).old, true);
+});

@@ -20,6 +20,18 @@ function memoryCredentialStore(initial = null) {
   };
 }
 
+test('starts with public-safe commands and no personal response providers', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-public-defaults-'));
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await chatbot.initialize('client123');
+  const status = chatbot.status();
+  assert.equal(status.providers.weather, undefined);
+  assert.equal(status.providers.nowPlaying, undefined);
+  assert.ok(status.commands.some((command) => command.name === 'studio' && command.aliases.includes('tempest')));
+  assert.equal(status.commands.some((command) => command.handler === 'local-weather' || command.handler === 'seattle-weather' || command.handler === 'radio-now-playing'), false);
+  assert.equal(await chatbot.radioStatus(), null);
+});
+
 test('persists commands and simulates permissions, replies, and workflow dispatch', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-commands-'));
   const dispatches = [];
@@ -109,7 +121,7 @@ test('authorizes any secondary Twitch identity and derives or customizes its bot
   assert.equal(credentials.current().refreshToken, 'bot-refresh');
 });
 
-test('serves cached Seattle weather from the National Weather Service without an API key', async () => {
+test('serves optional local weather from the National Weather Service without an API key', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-weather-'));
   const requests = [];
   const responses = [
@@ -125,9 +137,11 @@ test('serves cached Seattle weather from the National Weather Service without an
     }
   });
   await chatbot.initialize('client123');
+  await chatbot.configure({ weatherProvider: { provider: 'nws', locationName: 'Portland', latitude: 45.5152, longitude: -122.6784, timeZone: 'America/Los_Angeles' } });
+  await chatbot.upsertCommand({ name: 'weather', enabled: true, permission: 'everyone', response: '', handler: 'local-weather', viewerCooldownMs: 15_000, globalCooldownMs: 10_000 });
   const first = await chatbot.testCommand({ message: '!weather', viewerName: 'Storm', roles: [] });
   assert.equal(first.accepted, true);
-  assert.match(first.response, /Seattle signal:/);
+  assert.match(first.response, /Portland:/);
   assert.match(first.response, /58°F · Light Rain · Humidity 81% · Rain 70% · Wind SW 7 mph/);
   assert.equal(requests.length, 2);
   assert.match(String(requests[0].headers['User-Agent']), /TempestStreamingStudio/);
@@ -137,7 +151,7 @@ test('serves cached Seattle weather from the National Weather Service without an
   assert.equal(requests.length, 2);
 });
 
-test('serves cached Storm Horizon Radio metadata with an outage-safe fallback', async () => {
+test('serves a configurable AzuraCast station with an outage-safe fallback', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-radio-'));
   const requests = [];
   const chatbot = new TwitchChatbot({
@@ -147,27 +161,30 @@ test('serves cached Storm Horizon Radio metadata with an outage-safe fallback', 
       requests.push({ url: String(url), headers: options?.headers });
       return jsonResponse({
         is_online: true,
-        station: { name: 'Storm Horizon Radio' },
+        station: { name: 'Example Radio' },
         now_playing: { song: { artist: 'Aster Null', title: 'Error Stars', album: 'The Coordinates Are Laughing', text: 'Aster Null - Error Stars' } }
       });
     }
   });
   await chatbot.initialize('client123');
+  const provider = { provider: 'azuracast', stationName: 'Example Radio', apiUrl: 'https://radio.example/api/nowplaying/station', publicPlayerUrl: 'https://radio.example/public/station', streamUrl: 'https://radio.example/listen/station/radio.mp3' };
+  await chatbot.configure({ nowPlayingProvider: provider });
+  await chatbot.upsertCommand({ name: 'song', aliases: ['nowplaying'], enabled: true, permission: 'everyone', response: '', handler: 'radio-now-playing', viewerCooldownMs: 15_000, globalCooldownMs: 10_000 });
 
-  const first = await chatbot.testCommand({ message: '!song', viewerName: 'Storm', roles: [] });
+  const first = await chatbot.testCommand({ message: '!song', viewerName: 'SampleViewer', roles: [] });
   assert.equal(first.accepted, true);
-  assert.equal(first.response, 'Now playing on Storm Horizon Radio: Aster Null — Error Stars · Album: The Coordinates Are Laughing · Listen: https://a12.asurahosting.com/public/storm_horizon_radio');
+  assert.equal(first.response, 'Now playing on Example Radio: Aster Null — Error Stars · Album: The Coordinates Are Laughing · Listen: https://radio.example/public/station');
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio');
+  assert.equal(requests[0].url, 'https://radio.example/api/nowplaying/station');
   assert.match(String(requests[0].headers['User-Agent']), /TempestStreamingStudio/);
 
-  const second = await chatbot.testCommand({ message: '!nowplaying', viewerName: 'Storm', roles: [] });
+  const second = await chatbot.testCommand({ message: '!nowplaying', viewerName: 'SampleViewer', roles: [] });
   assert.equal(second.accepted, true);
   assert.equal(second.response, first.response);
   assert.equal(requests.length, 1);
   const status = await chatbot.radioStatus();
   assert.equal(status.state, 'online');
-  assert.equal(status.name, 'Storm Horizon Radio');
+  assert.equal(status.name, 'Example Radio');
   assert.equal(status.nowPlaying.title, 'Error Stars');
   assert.equal(requests.length, 1);
 
@@ -177,10 +194,12 @@ test('serves cached Storm Horizon Radio metadata with an outage-safe fallback', 
     fetchImplementation: async () => jsonResponse({}, 503)
   });
   await failingChatbot.initialize('client123');
+  await failingChatbot.configure({ nowPlayingProvider: provider });
+  await failingChatbot.upsertCommand({ name: 'song', aliases: ['nowplaying'], enabled: true, permission: 'everyone', response: '', handler: 'radio-now-playing', viewerCooldownMs: 15_000, globalCooldownMs: 10_000 });
   const unavailable = await failingChatbot.testCommand({ message: '!song', viewerName: 'Storm', roles: [] });
   assert.equal(unavailable.accepted, true);
   assert.match(unavailable.response, /now-playing signal is temporarily unavailable/);
-  assert.match(unavailable.response, /storm_horizon_radio/);
+  assert.match(unavailable.response, /radio\.example/);
   assert.equal((await failingChatbot.radioStatus()).state, 'unavailable');
 });
 
@@ -207,10 +226,10 @@ test('installs a command directory and serves cached Twitch channel information 
 
   const directory = await chatbot.testCommand({ message: '!commands', viewerName: 'Viewer', roles: [] });
   assert.equal(directory.accepted, true);
-  assert.match(directory.response, /!tempest/);
+  assert.match(directory.response, /!studio/);
   assert.match(directory.response, /!uptime/);
   assert.match(directory.response, /!schedule/);
-  assert.match(directory.response, /!song/);
+  assert.doesNotMatch(directory.response, /!song/);
 
   const uptime = await chatbot.testCommand({ message: '!uptime', viewerName: 'Viewer', roles: [] });
   assert.match(uptime.response, /Stream uptime: 2h 14m · 42 viewers/);

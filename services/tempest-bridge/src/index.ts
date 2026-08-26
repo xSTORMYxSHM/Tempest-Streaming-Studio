@@ -25,8 +25,10 @@ import { TwitchIntegrationGateway, type TwitchCredentialStore } from './twitch-i
 import { TempestSoundAlertCatalog } from './sound-alerts';
 import { TempestVisualAlertOverlay } from './visual-alerts';
 import { TempestTwitchVisualAlertCatalog } from './twitch-visual-alerts';
+export { TempestTwitchVisualAlertCatalog, validateTwitchAlertDesign } from './twitch-visual-alerts';
 import { TempestChatOverlay } from './chat-overlay';
-import { TempestAlertQueue } from './alert-queue';
+import { TempestAlertQueue, TempestAlertQueueItem } from './alert-queue';
+import { TempestAlertHistory } from './alert-history';
 import {
   ExtensionRelayOptions,
   ExtensionRelayStatus,
@@ -184,6 +186,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const twitchAlertOverlay = new TempestVisualAlertOverlay();
   const twitchVisualAlerts = new TempestTwitchVisualAlertCatalog(options.dataDirectory);
   await twitchVisualAlerts.initialize();
+  const alertHistory = new TempestAlertHistory(options.dataDirectory);
+  await alertHistory.initialize();
   const chatOverlay = new TempestChatOverlay(options.dataDirectory);
   await chatOverlay.initialize();
   let alertQueue: TempestAlertQueue | undefined;
@@ -215,6 +219,42 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       interaction,
       twitch,
       ...(alertQueue ? { queue: alertQueue.status() } : {})
+    };
+  };
+
+  const alertDiagnostics = async () => {
+    const interactionAlerts = soundAlerts.list();
+    const twitchAlerts = twitchVisualAlerts.list();
+    const assets: Array<{ kind: 'interaction' | 'twitch'; alertId: string; alertName: string; variantId?: string; role: 'audio' | 'visual'; uri: string }> = [];
+    for (const alert of interactionAlerts) {
+      if (alert.audioUri) assets.push({ kind: 'interaction', alertId: alert.id, alertName: alert.name, role: 'audio', uri: alert.audioUri });
+      if (alert.visualUri) assets.push({ kind: 'interaction', alertId: alert.id, alertName: alert.name, role: 'visual', uri: alert.visualUri });
+    }
+    for (const alert of twitchAlerts) {
+      if (alert.audioUri) assets.push({ kind: 'twitch', alertId: alert.id, alertName: alert.name, role: 'audio', uri: alert.audioUri });
+      if (alert.visualUri) assets.push({ kind: 'twitch', alertId: alert.id, alertName: alert.name, role: 'visual', uri: alert.visualUri });
+      for (const variant of alert.alertVariants || []) {
+        if (variant.audioUri) assets.push({ kind: 'twitch', alertId: alert.id, alertName: alert.name, variantId: variant.id, role: 'audio', uri: variant.audioUri });
+        if (variant.visualUri) assets.push({ kind: 'twitch', alertId: alert.id, alertName: alert.name, variantId: variant.id, role: 'visual', uri: variant.visualUri });
+      }
+    }
+    const issues: Array<{ severity: 'error'; kind: 'interaction' | 'twitch'; alertId: string; alertName: string; variantId?: string; role: 'audio' | 'visual'; message: string }> = [];
+    await Promise.all(assets.map(async (asset) => {
+      try {
+        const details = await stat(fileURLToPath(asset.uri));
+        if (!details.isFile()) throw new Error('not a file');
+      } catch {
+        issues.push({ severity: 'error', kind: asset.kind, alertId: asset.alertId, alertName: asset.alertName, ...(asset.variantId ? { variantId: asset.variantId } : {}), role: asset.role, message: `${asset.role === 'audio' ? 'Sound' : 'Visual'} file is unavailable.` });
+      }
+    }));
+    const output = visualAlertOutputStatus();
+    return {
+      generatedAt: new Date().toISOString(),
+      history: alertHistory.summary(),
+      configured: { interactionAlerts: interactionAlerts.length, twitchAlerts: twitchAlerts.length, variants: twitchAlerts.reduce((sum, alert) => sum + (alert.alertVariants?.length || 0), 0), assignedAssets: assets.length, unavailableAssets: issues.length },
+      sources: { interactionClients: output.interaction.connectedClients, twitchClients: output.twitch.connectedClients },
+      queue: alertQueue?.status(),
+      issues
     };
   };
 
@@ -260,8 +300,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     transitionGapMs: 500,
     onChange(status) { broadcastSystemEvent('alert-queue.updated', status); },
     onError(item, error) {
+      alertHistory.failed(item, error);
       workflowEngine!.recordExternalEvent('alert-queue.item.failed', 'error', `${item.name} could not start from the Alert Queue: ${error.message}`, { queueItem: item });
-    }
+    },
+    onStarted(item) { alertHistory.started(item); },
+    onCompleted(item) { alertHistory.completed(item); },
+    onCleared(items) { alertHistory.cancelled(items); }
   });
 
   const triggerTwitchAlertReaction = async (
@@ -301,6 +345,16 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       name: alert.name,
       source,
       durationMs: alert.durationMs,
+      diagnostics: {
+        viewerName: event.topic === 'viewer.raid.received' ? String(event.payload.fromBroadcasterName || 'A raider') : event.viewer?.displayName || event.viewer?.login,
+        variantId: alert.selectedVariantId,
+        variantName: alert.selectedVariantName,
+        audioAssigned: Boolean(alert.audioUri),
+        visualAssigned: Boolean(alert.visualUri),
+        audioRoute: alert.audioUri ? 'browser-source' : 'none',
+        browserClients: twitchAlertOverlay.status('').connectedClients,
+        preview: source === 'studio.simulator'
+      },
       execute: async () => {
         const reactionRun = await triggerTwitchAlertReaction(alert, event, source);
         const activeAlert = twitchAlertOverlay.showTwitch(alert, event);
@@ -359,6 +413,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       name: prepared.alert.name,
       source: request.source,
       durationMs: Math.max(prepared.alert.durationMs, prepared.alert.visualDurationMs),
+      diagnostics: {
+        viewerName: request.viewerName,
+        audioAssigned: Boolean(prepared.alert.audioUri),
+        visualAssigned: Boolean(prepared.alert.visualUri),
+        audioRoute: !prepared.alert.audioUri ? 'none' : prepared.alert.broadcastAudioSource ? 'broadcast-source' : visualAlerts.status('').connectedClients ? 'browser-source' : options.soundAlertPlayback ? 'studio-local' : 'none',
+        browserClients: visualAlerts.status('').connectedClients,
+        preview: request.source === 'studio.operator'
+      },
       onAccepted: () => soundAlerts.commit(prepared),
       execute: async () => {
         const run = await workflowEngine!.trigger(soundAlertPerformanceWorkflow.id, {
@@ -453,7 +515,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && visualMediaMatch) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Visual Alerts overlay is available only on this computer.' });
         const mediaId = decodeURIComponent(visualMediaMatch[1]);
-        const alert = soundAlerts.find(mediaId) || twitchVisualAlerts.find(mediaId);
+        const selectedVariantId = requestUrl.searchParams.get('variant') || undefined;
+        const alert = soundAlerts.find(mediaId) || twitchVisualAlerts.resolveVariant(mediaId, selectedVariantId);
         if (!alert?.visualUri) return sendJson(response, 404, { error: 'No local visual is assigned to this alert.' });
         const filePath = fileURLToPath(alert.visualUri);
         const details = await stat(filePath);
@@ -472,7 +535,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && alertAudioMatch) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Visual Alerts audio is available only on this computer.' });
         const audioId = decodeURIComponent(alertAudioMatch[1]);
-        const alert = soundAlerts.find(audioId) || twitchVisualAlerts.find(audioId);
+        const selectedVariantId = requestUrl.searchParams.get('variant') || undefined;
+        const alert = soundAlerts.find(audioId) || twitchVisualAlerts.resolveVariant(audioId, selectedVariantId);
         if (!alert?.audioUri) return sendJson(response, 404, { error: 'No local audio is assigned to this alert.' });
         const filePath = fileURLToPath(alert.audioUri);
         const details = await stat(filePath);
@@ -575,8 +639,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       const twitchVisualPreviewMatch = requestUrl.pathname.match(/^\/v1\/visual-alerts\/twitch\/([^/]+)\/preview$/);
       if (request.method === 'POST' && twitchVisualPreviewMatch) {
-        const alert = twitchVisualAlerts.find(decodeURIComponent(twitchVisualPreviewMatch[1]));
-        if (!alert) return sendJson(response, 404, { error: 'The Twitch Visual Alert was not found.' });
+        const alertId = decodeURIComponent(twitchVisualPreviewMatch[1]);
+        const body = await readJson(request) as { variantId?: unknown };
+        const variantId = typeof body.variantId === 'string' ? body.variantId : undefined;
+        const baseAlert = twitchVisualAlerts.find(alertId);
+        const alert = twitchVisualAlerts.resolveVariant(alertId, variantId);
+        if (!baseAlert || !alert) return sendJson(response, 404, { error: variantId ? 'The Twitch Alert variant was not found.' : 'The Twitch Visual Alert was not found.' });
+        const selectedCondition = variantId ? baseAlert.alertVariants?.find((entry) => entry.id === variantId)?.condition : undefined;
         const previewEvent: TempestNormalizedTwitchEvent = {
           schemaVersion: 1,
           id: globalThis.crypto.randomUUID(),
@@ -585,14 +654,18 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           source: 'twitch',
           channel: { id: 'studio-preview', displayName: 'Studio Preview' },
           viewer: { id: 'studio-operator', displayName: 'Studio Operator' },
-          payload: alert.topic === 'viewer.cheer.received' ? { bits: 100 }
-            : alert.topic === 'viewer.raid.received' ? { fromBroadcasterId: 'studio-preview', fromBroadcasterName: 'Storm Horizon', viewers: 42 }
-              : alert.topic === 'viewer.reward.redeemed' ? { rewardTitle: 'Channel Point Reward' }
-                : alert.topic === 'viewer.subscription.started' ? { isGift: alert.variant === 'gift', tier: '1000' }
+          payload: alert.topic === 'viewer.cheer.received' ? { bits: selectedCondition?.minimumBits ?? selectedCondition?.maximumBits ?? 100 }
+            : alert.topic === 'viewer.raid.received' ? { fromBroadcasterId: 'studio-preview', fromBroadcasterName: 'Incoming Channel', viewers: selectedCondition?.minimumViewers ?? selectedCondition?.maximumViewers ?? 42 }
+              : alert.topic === 'viewer.reward.redeemed' ? { rewardTitle: 'Channel Point Reward', rewardId: selectedCondition?.rewardId || 'studio-preview-reward', rewardCost: selectedCondition?.minimumRewardCost ?? selectedCondition?.maximumRewardCost ?? 1000 }
+                : alert.topic === 'viewer.subscription.started' ? { isGift: alert.variant === 'gift', tier: selectedCondition?.subscriptionTier || '1000', cumulativeMonths: selectedCondition?.minimumMonths ?? selectedCondition?.maximumMonths ?? 3 }
                   : {}
         };
         const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent);
         const reactionRun = await triggerTwitchAlertReaction(alert, previewEvent, 'studio.simulator');
+        const previewTime = new Date().toISOString();
+        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri ? 'browser-source' : 'none', browserClients: twitchAlertOverlay.status('').connectedClients, preview: true } };
+        alertHistory.started(previewItem);
+        alertHistory.completed(previewItem);
         return sendJson(response, 202, { activeAlert, reactionRun, preview: true });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/visual-alerts/clear') {
@@ -607,6 +680,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const body = await readJson(request) as { viewerName?: unknown };
         const viewerName = typeof body.viewerName === 'string' ? body.viewerName.slice(0, 80) : 'Studio Operator';
         const activeAlert = visualAlerts.show(alert, viewerName, globalThis.crypto.randomUUID());
+        const previewTime = new Date().toISOString();
+        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'interaction', alertId: alert.id, name: alert.name, source: 'studio.visual-preview', durationMs: alert.visualDurationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: 'none', browserClients: visualAlerts.status('').connectedClients, preview: true } };
+        alertHistory.started(previewItem);
+        alertHistory.completed(previewItem);
         return sendJson(response, 202, { activeAlert, preview: true });
       }
       const soundAlertTriggerMatch = requestUrl.pathname.match(/^\/v1\/sound-alerts\/([^/]+)\/trigger$/);
@@ -685,6 +762,15 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/v1/events') {
         return sendJson(response, 200, { events: workflowEngine.listEvents(Number(requestUrl.searchParams.get('limit')) || 100) });
       }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/alert-history') {
+        return sendJson(response, 200, { summary: alertHistory.summary(), records: alertHistory.list(Number(requestUrl.searchParams.get('limit')) || 200) });
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/alert-history') {
+        return sendJson(response, 200, { removed: alertHistory.clear() });
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/alert-diagnostics') {
+        return sendJson(response, 200, await alertDiagnostics());
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/safety') {
         return sendJson(response, 200, workflowEngine.safetyState());
       }
@@ -706,7 +792,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/twitch') {
         return sendJson(response, 200, twitchGateway.status());
       }
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/storm-horizon-radio') {
+      if (request.method === 'GET' && ['/v1/integrations/now-playing', '/v1/integrations/storm-horizon-radio'].includes(requestUrl.pathname)) {
         return sendJson(response, 200, await chatbot.radioStatus());
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/twitch/configuration') {
@@ -946,6 +1032,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       await extensionRelay?.close();
       await chatbot.close();
       alertQueue?.close();
+      await alertHistory.flush();
       visualAlerts.close();
       twitchAlertOverlay.close();
       chatOverlay.close();

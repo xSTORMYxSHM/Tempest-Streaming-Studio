@@ -1,13 +1,16 @@
 {
   "name": "@tempest/studio-desktop",
-  "version": "0.11.6",
+  "version": "0.20.0",
+  "author": "Storm Horizon Media",
   "private": true,
   "description": "Desktop streaming control plane for Tempest Streaming Studio.",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/copy-static.mjs",
     "start": "electron .",
-    "test": "node --check dist/renderer/app.js && node --test test/*.test.cjs"
+    "test": "node --check dist/renderer/app.js && node --test test/*.test.cjs",
+    "package:dir": "electron-builder --win dir --x64 --publish never",
+    "package:win": "electron-builder --win nsis zip --x64 --publish never"
   },
   "dependencies": {
     "@tempest/bridge": "workspace:*",
@@ -16,6 +19,60 @@
     "@tempest/warudo-adapter": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^37.2.6"
+    "electron": "^37.2.6",
+    "electron-builder": "26.15.7"
+  },
+  "build": {
+    "appId": "com.stormhorizon.tempest.streamingstudio",
+    "productName": "Tempest Streaming Studio",
+    "copyright": "Copyright © 2026 Storm Horizon Media",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "../../release",
+      "buildResources": "src/renderer/assets"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../twitch-extension/dist",
+        "to": "twitch-extension",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../../tools/create-extension-certificate.ps1",
+        "to": "tools/create-extension-certificate.ps1"
+      }
+    ],
+    "extraFiles": [
+      { "from": "../../LICENSE", "to": "LICENSE" },
+      { "from": "../../TRADEMARKS.md", "to": "TRADEMARKS.md" },
+      { "from": "../../docs/INSTALLATION.md", "to": "docs/INSTALLATION.md" },
+      { "from": "../../docs/PRIVACY.md", "to": "docs/PRIVACY.md" },
+      { "from": "../../docs/THIRD_PARTY_NOTICES.md", "to": "docs/THIRD_PARTY_NOTICES.md" }
+    ],
+    "win": {
+      "icon": "src/renderer/assets/app-icon.ico",
+      "executableName": "Tempest Streaming Studio",
+      "target": ["nsis", "zip"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tempest Streaming Studio",
+      "license": "../../LICENSE",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Tempest-Streaming-Studio-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Tempest-Streaming-Studio-Portable-${version}-${arch}.${ext}"
+    },
+    "artifactName": "Tempest-Streaming-Studio-${version}-${arch}.${ext}"
   }
 }

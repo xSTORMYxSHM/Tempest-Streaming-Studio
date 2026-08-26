@@ -27,19 +27,12 @@ const broadcastEffects = ['pulse', 'glow', 'glitch', 'spectrum', 'surge'] as con
 const broadcastCircuits = ['all', 'core', 'frame', 'chat', 'plates', 'alerts'] as const;
 
 const catalogSeed: Array<Pick<TempestSoundAlertDefinition, 'id' | 'name' | 'cue' | 'durationMs' | 'legacyReceiver' | 'accent'>> = [
-  { id: 'sound-alert.loli-god-requiem', name: 'Loli God Requiem', cue: 'sound-alert.loli-god-requiem', durationMs: 13000, legacyReceiver: 'Loli', accent: '#f5a6d5' },
-  { id: 'sound-alert.vitas', name: 'Vitas', cue: 'sound-alert.vitas', durationMs: 17000, legacyReceiver: 'Vitas', accent: '#86d7ff' },
-  { id: 'sound-alert.love-shot', name: 'Love Shot', cue: 'sound-alert.love-shot', durationMs: 12000, legacyReceiver: 'Love Shot', accent: '#ff6f91' },
-  { id: 'sound-alert.internet-yamero', name: 'Internet Yamero', cue: 'sound-alert.internet-yamero', durationMs: 22000, legacyReceiver: 'Yamero', accent: '#ff7edb' },
-  { id: 'sound-alert.ankha-zone-remix', name: 'Ankha Zone Remix', cue: 'sound-alert.ankha-zone-remix', durationMs: 19000, legacyReceiver: 'Ankha', accent: '#e8c56b' },
-  { id: 'sound-alert.neko-dance', name: 'Neko Dance', cue: 'sound-alert.neko-dance', durationMs: 10000, legacyReceiver: 'Neko', accent: '#d8a6ff' },
-  { id: 'sound-alert.rick-roll', name: 'Rick Roll', cue: 'sound-alert.rick-roll', durationMs: 9000, legacyReceiver: 'Ricky', accent: '#ff955c' },
-  { id: 'sound-alert.toca-toca', name: 'Toca Toca', cue: 'sound-alert.toca-toca', durationMs: 14000, legacyReceiver: 'Toca', accent: '#ffd55f' },
-  { id: 'sound-alert.crab-rave', name: 'Crab Rave', cue: 'sound-alert.crab-rave', durationMs: 58000, legacyReceiver: 'Crab', accent: '#ed674f' },
-  { id: 'sound-alert.sigma-boy', name: 'Sigma Boy', cue: 'sound-alert.sigma-boy', durationMs: 12000, legacyReceiver: 'Sigma', accent: '#9ab4ff' },
-  { id: 'sound-alert.fishie', name: 'Fishie', cue: 'sound-alert.fishie', durationMs: 8000, legacyReceiver: 'Fishie', accent: '#66e4df' },
-  { id: 'sound-alert.whistle', name: 'Whistle', cue: 'sound-alert.whistle', durationMs: 21000, legacyReceiver: 'Whistle', accent: '#7cf0b2' },
-  { id: 'sound-alert.uwu-chief', name: 'UwU Chief', cue: 'sound-alert.uwu-chief', durationMs: 21000, legacyReceiver: 'UwU Chief', accent: '#fe98c8' }
+  { id: 'sound-alert.hype-pulse', name: 'Hype Pulse', cue: 'sound-alert.hype-pulse', durationMs: 8000, accent: '#54f2eb' },
+  { id: 'sound-alert.dance-break', name: 'Dance Break', cue: 'sound-alert.dance-break', durationMs: 15000, accent: '#f5a6d5' },
+  { id: 'sound-alert.celebration', name: 'Celebration', cue: 'sound-alert.celebration', durationMs: 10000, accent: '#ffd55f' },
+  { id: 'sound-alert.dramatic-entrance', name: 'Dramatic Entrance', cue: 'sound-alert.dramatic-entrance', durationMs: 12000, accent: '#86d7ff' },
+  { id: 'sound-alert.victory-pose', name: 'Victory Pose', cue: 'sound-alert.victory-pose', durationMs: 9000, accent: '#7cf0b2' },
+  { id: 'sound-alert.chaos-mode', name: 'Chaos Mode', cue: 'sound-alert.chaos-mode', durationMs: 20000, accent: '#ff7edb' }
 ];
 const bundledIds = new Set(catalogSeed.map((alert) => alert.id));
 
@@ -59,10 +52,10 @@ function defaultInteractionAlertDesign(): TempestTwitchAlertDesign {
 export const bundledSoundAlerts: TempestSoundAlertDefinition[] = catalogSeed.map((alert) => ({
   schemaVersion: 1,
   ...alert,
-  description: `Free viewer performance mapped from the current Warudo Sound Alert Dancing blueprint.`,
+  description: `Starter viewer interaction. Add local media, then optionally connect an avatar or broadcast reaction.`,
   enabled: true,
   free: true,
-  warudoEnabled: true,
+  warudoEnabled: false,
   viewerCooldownMs: 60000,
   globalCooldownMs: alert.durationMs,
   volume: 0.8,
@@ -154,20 +147,22 @@ export class TempestSoundAlertCatalog {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    const storedById = new Map((stored?.alerts || []).map((entry) => [entry.id, entry]));
-    this.alerts = bundledSoundAlerts.map((seed) => {
-      const saved = storedById.get(seed.id);
-      if (!saved) return copy(seed);
-      try {
-        return this.validate({ ...seed, ...saved, id: seed.id, cue: seed.cue, free: true, custom: false });
-      } catch {
-        return copy(seed);
+    if (!stored) {
+      this.alerts = bundledSoundAlerts.map(copy);
+    } else {
+      const seedsById = new Map(bundledSoundAlerts.map((entry) => [entry.id, entry]));
+      this.alerts = [];
+      for (const saved of stored.alerts || []) {
+        const seed = seedsById.get(saved.id);
+        try {
+          this.alerts.push(this.validate(seed
+            ? { ...seed, ...saved, id: seed.id, cue: seed.cue, free: true, custom: false }
+            : { ...saved, custom: true }));
+        } catch {
+          if (seed) this.alerts.push(copy(seed));
+          /* Ignore invalid custom entries while preserving valid existing profiles. */
+        }
       }
-    });
-    for (const saved of stored?.alerts || []) {
-      if (bundledIds.has(saved.id)) continue;
-      try { this.alerts.push(this.validate({ ...saved, custom: true })); }
-      catch { /* Ignore invalid custom entries while preserving the bundled catalog. */ }
     }
     await this.persist();
   }
@@ -236,7 +231,11 @@ export class TempestSoundAlertCatalog {
       viewerCooldownMs: source.viewerCooldownMs === undefined ? 60000 : source.viewerCooldownMs,
       globalCooldownMs: source.globalCooldownMs === undefined ? durationMs : source.globalCooldownMs,
       volume: source.volume === undefined ? 0.8 : source.volume,
+      audioUri: source.audioUri,
+      visualUri: source.visualUri,
       visualDurationMs: source.visualDurationMs === undefined ? 6000 : source.visualDurationMs,
+      broadcastAudioSource: source.broadcastAudioSource,
+      broadcastVisualSource: source.broadcastVisualSource,
       broadcastEffect: source.broadcastEffect === undefined ? 'spectrum' : source.broadcastEffect,
       broadcastCircuit: source.broadcastCircuit === undefined ? 'all' : source.broadcastCircuit,
       broadcastEffectStrength: source.broadcastEffectStrength === undefined ? 1 : source.broadcastEffectStrength,

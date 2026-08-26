@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.20.0 — Public release foundation
+
+- Renamed the desktop product surface to Tempest Streaming Studio while preserving stable Tempest protocol identifiers.
+- Split Twitch Alerts and Interaction Alerts into dedicated Browser Sources with independent OBS/VOD audio routing.
+- Added FIFO alert queuing, queue clearing, durable playback history, failure/cancellation states, source-client health, and missing-media diagnostics.
+- Added complete Twitch and Interaction Alert design controls for canvas position, scale, media/text layers, animation, timing, TTS, and isolated HTML/CSS/JavaScript.
+- Added conditional Twitch Alert variants for Bits, raids, subscription tier/tenure, and channel-point reward rules.
+- Added portable Alert Packs with embedded content-addressed media, SHA-256 verification, deduplication, and custom-code trust warnings.
+- Added complete Studio backup/restore with portable alert media, credential/path exclusions, rollback snapshots, schema migrations, and downgrade protection.
+- Added adaptive 1920 × 1080 first-run defaults with automatic compatible-broadcaster canvas discovery and manual HD/QHD/ultrawide/custom profiles.
+- Added configurable secondary Twitch bot identity, optional NWS local-weather settings, and optional AzuraCast Now Playing settings. Clean installs contain no personal station, location, bot-login, or ultrawide assumptions.
+- Added Twitch Panel Designer, local chat overlay, GIPHY search/import, local Extension controls, and copy-to-clipboard affordances.
+- Added Settings + About, privacy boundaries, local data access, and redacted diagnostics export.
+- Added Windows NSIS and ZIP packaging with bundled Extension assets, writable per-user certificate storage, and upgrade-preserved Studio data.
+- Disabled creator-specific Black Hole automation and Warudo reactions on clean installs while preserving upgraded configurations and stable internal IDs.
+- Replaced the creator dance catalog and Extension buttons on clean installs with six generic, media-free starter interactions; existing alert catalogs remain intact during upgrade.
+- Added consistent keyboard focus indicators and reduced-motion handling for the Studio shell.
+
 ## 0.11.6 — Authorization completion handoff
 
 - Automatically closed isolated Twitch sign-in windows when Chatbot authorization completes.

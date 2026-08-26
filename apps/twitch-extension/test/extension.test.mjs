@@ -23,18 +23,17 @@ test('ships the exact Twitch local-test entry paths', async () => {
   assert.doesNotMatch(viewer + panel + configuration, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });
 
-test('includes all blueprint-compatible alert IDs and durations', async () => {
+test('includes the public-safe starter alert IDs and durations', async () => {
   const alerts = JSON.parse(await readFile(path.join(appDirectory, 'dist', 'alerts.json'), 'utf8'));
-  assert.equal(alerts.length, 13);
-  assert.equal(alerts.find((alert) => alert.id === 'sound-alert.fishie').durationMs, 8000);
-  assert.equal(alerts.find((alert) => alert.id === 'sound-alert.crab-rave').durationMs, 58000);
+  assert.equal(alerts.length, 6);
+  assert.equal(alerts.find((alert) => alert.id === 'sound-alert.hype-pulse').durationMs, 8000);
+  assert.equal(alerts.find((alert) => alert.id === 'sound-alert.chaos-mode').durationMs, 20000);
   assert.equal(new Set(alerts.map((alert) => alert.id)).size, alerts.length);
 });
 
 test('ships allowlisted generic interactions separately from Sound Alerts', async () => {
   const interactions = JSON.parse(await readFile(path.join(appDirectory, 'dist', 'interactions.json'), 'utf8'));
-  assert.deepEqual(interactions.map((entry) => entry.id), ['tempest.blackhole']);
-  assert.equal(interactions[0].cooldownMs, 300000);
+  assert.deepEqual(interactions, []);
 });
 
 test('never embeds the Extension secret or the localhost Bridge endpoint', async () => {

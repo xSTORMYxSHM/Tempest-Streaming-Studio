@@ -1,15 +1,8 @@
 [
-  { "id": "sound-alert.loli-god-requiem", "name": "Loli God Requiem", "durationMs": 13000, "accent": "#f5a6d5", "glyph": "LR" },
-  { "id": "sound-alert.vitas", "name": "Vitas", "durationMs": 17000, "accent": "#86d7ff", "glyph": "VI" },
-  { "id": "sound-alert.love-shot", "name": "Love Shot", "durationMs": 12000, "accent": "#ff6f91", "glyph": "LS" },
-  { "id": "sound-alert.internet-yamero", "name": "Internet Yamero", "durationMs": 22000, "accent": "#ff7edb", "glyph": "IY" },
-  { "id": "sound-alert.ankha-zone-remix", "name": "Ankha Zone Remix", "durationMs": 19000, "accent": "#e8c56b", "glyph": "AZ" },
-  { "id": "sound-alert.neko-dance", "name": "Neko Dance", "durationMs": 10000, "accent": "#d8a6ff", "glyph": "ND" },
-  { "id": "sound-alert.rick-roll", "name": "Rick Roll", "durationMs": 9000, "accent": "#ff955c", "glyph": "RR" },
-  { "id": "sound-alert.toca-toca", "name": "Toca Toca", "durationMs": 14000, "accent": "#ffd55f", "glyph": "TT" },
-  { "id": "sound-alert.crab-rave", "name": "Crab Rave", "durationMs": 58000, "accent": "#ed674f", "glyph": "CR" },
-  { "id": "sound-alert.sigma-boy", "name": "Sigma Boy", "durationMs": 12000, "accent": "#9ab4ff", "glyph": "SB" },
-  { "id": "sound-alert.fishie", "name": "Fishie", "durationMs": 8000, "accent": "#66e4df", "glyph": "FI" },
-  { "id": "sound-alert.whistle", "name": "Whistle", "durationMs": 21000, "accent": "#7cf0b2", "glyph": "WH" },
-  { "id": "sound-alert.uwu-chief", "name": "UwU Chief", "durationMs": 21000, "accent": "#fe98c8", "glyph": "UC" }
+  { "id": "sound-alert.hype-pulse", "name": "Hype Pulse", "durationMs": 8000, "accent": "#54f2eb", "glyph": "HP" },
+  { "id": "sound-alert.dance-break", "name": "Dance Break", "durationMs": 15000, "accent": "#f5a6d5", "glyph": "DB" },
+  { "id": "sound-alert.celebration", "name": "Celebration", "durationMs": 10000, "accent": "#ffd55f", "glyph": "CE" },
+  { "id": "sound-alert.dramatic-entrance", "name": "Dramatic Entrance", "durationMs": 12000, "accent": "#86d7ff", "glyph": "DE" },
+  { "id": "sound-alert.victory-pose", "name": "Victory Pose", "durationMs": 9000, "accent": "#7cf0b2", "glyph": "VP" },
+  { "id": "sound-alert.chaos-mode", "name": "Chaos Mode", "durationMs": 20000, "accent": "#ff7edb", "glyph": "CM" }
 ]

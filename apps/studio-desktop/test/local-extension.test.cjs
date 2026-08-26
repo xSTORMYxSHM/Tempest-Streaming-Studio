@@ -8,9 +8,9 @@ const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
-  assert.deepEqual(validateLocalExtensionSettings({ channelId: '546679431', extensionSecret }), { channelId: '546679431', extensionSecret });
+  assert.deepEqual(validateLocalExtensionSettings({ channelId: '123456789', extensionSecret }), { channelId: '123456789', extensionSecret });
   assert.throws(() => validateLocalExtensionSettings({ channelId: 'channel-name', extensionSecret }), /numeric ID/);
-  assert.throws(() => validateLocalExtensionSettings({ channelId: '546679431', extensionSecret: 'not a secret!' }), /base64/);
+  assert.throws(() => validateLocalExtensionSettings({ channelId: '123456789', extensionSecret: 'not a secret!' }), /base64/);
 });
 
 test('keeps the local Extension on loopback HTTPS ports', () => {
@@ -19,8 +19,8 @@ test('keeps the local Extension on loopback HTTPS ports', () => {
 });
 
 test('validates channel-specific Twitch Panel appearance without executable code', () => {
-  const design = validateTwitchPanelDesign({ brandName: 'Storm Horizon', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false });
-  assert.equal(design.brandName, 'Storm Horizon');
+  const design = validateTwitchPanelDesign({ brandName: 'Creator Studio', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false });
+  assert.equal(design.brandName, 'Creator Studio');
   assert.equal(design.preset, 'neon');
   assert.equal(design.accent, '#A66BFF');
   assert.equal(design.cornerRadius, 24);

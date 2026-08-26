@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet } from '@tempest/bridge';
-import { TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
+import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
+import { validateTwitchAlertDesign } from '@tempest/bridge';
 import { startWarudoAdapter, WarudoAdapterRuntime } from '@tempest/warudo-adapter';
 import {
   LocalExtensionRuntime,
@@ -15,6 +16,9 @@ import {
   validateLocalExtensionSettings
 } from './local-extension';
 import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign } from './panel-design';
+import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
+import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
+import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migrations';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -29,13 +33,22 @@ let warudoAdapter: WarudoAdapterRuntime | null = null;
 let localExtension: LocalExtensionRuntime | null = null;
 let localExtensionLastError: string | undefined;
 let mainWindow: BrowserWindow | null = null;
+let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
 
 const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
-const extensionAssetRoot = path.join(workspaceRoot, 'apps', 'twitch-extension', 'dist');
-const extensionCertificatePath = path.join(workspaceRoot, '.tempest-extension', 'localhost.pfx');
-const extensionCertificateScript = path.join(workspaceRoot, 'tools', 'create-extension-certificate.ps1');
+const supportRoot = app.isPackaged ? process.resourcesPath : workspaceRoot;
+const extensionAssetRoot = app.isPackaged ? path.join(supportRoot, 'twitch-extension') : path.join(workspaceRoot, 'apps', 'twitch-extension', 'dist');
+const extensionCertificateScript = path.join(supportRoot, 'tools', 'create-extension-certificate.ps1');
 const extensionCertificatePassword = 'tempest-local-dev';
+
+function extensionCertificateDirectory(): string {
+  return path.join(app.getPath('userData'), 'local-extension');
+}
+
+function extensionCertificatePath(): string {
+  return path.join(extensionCertificateDirectory(), 'localhost.pfx');
+}
 
 interface StoredLocalExtensionSettings {
   schemaVersion: 1;
@@ -155,7 +168,7 @@ async function saveLocalExtensionSettings(settings: StoredLocalExtensionSettings
 async function getLocalExtensionStatus(): Promise<LocalExtensionStatus> {
   const [stored, certificate] = await Promise.all([
     loadLocalExtensionSettings().catch(() => null),
-    stat(extensionCertificatePath).catch(() => null)
+    stat(extensionCertificatePath()).catch(() => null)
   ]);
   return {
     running: Boolean(localExtension),
@@ -275,7 +288,39 @@ function registerDesktopHandlers(): void {
 
   ipcMain.handle('studio:get-bridge-config', () => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
-    return { baseUrl: bridge.baseUrl, protocolVersion: '1.0' };
+    return { baseUrl: bridge.baseUrl, protocolVersion: '1.0', dataMigration: dataMigrationStatus };
+  });
+
+  ipcMain.handle('studio:get-app-info', () => ({ productName, version: TEMPEST_STUDIO_VERSION, dataDirectory: app.getPath('userData'), dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }));
+
+  ipcMain.handle('studio:open-data-directory', async () => {
+    await mkdir(app.getPath('userData'), { recursive: true });
+    const error = await shell.openPath(app.getPath('userData'));
+    if (error) throw new Error(error);
+    return true;
+  });
+
+  ipcMain.handle('studio:export-diagnostics', async () => {
+    if (!bridge) throw new Error('Local control service is not running.');
+    const bridgeGet = async (requestPath: string): Promise<unknown> => {
+      const response = await fetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
+      return response.ok ? response.json() : { status: response.status };
+    };
+    const [health, alerts, sources] = await Promise.all([bridgeGet('/health'), bridgeGet('/v1/alert-diagnostics'), bridgeGet('/v1/visual-alerts')]);
+    const sanitize = (value: unknown, key = ''): unknown => {
+      if (/token|secret|credential|api.?key|viewer|channelid|login/i.test(key)) return '[redacted]';
+      if (typeof value === 'string' && value.startsWith('file:')) {
+        try { return `file:///[local]/${path.basename(new URL(value).pathname)}`; } catch { return '[local file]'; }
+      }
+      if (Array.isArray(value)) return value.map((entry) => sanitize(entry));
+      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([entryKey, entry]) => [entryKey, sanitize(entry, entryKey)]));
+      return value;
+    };
+    const report = sanitize({ schemaVersion: 1, type: 'tempest.studio-diagnostics', generatedAt: new Date().toISOString(), product: { name: productName, version: TEMPEST_STUDIO_VERSION, dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }, health, alertDiagnostics: alerts, browserSources: sources, warudo: warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }, localExtension: { running: Boolean(localExtension), certificateAvailable: Boolean((await getLocalExtensionStatus()).certificateAvailable) } });
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, { title: 'Export Redacted Studio Diagnostics', defaultPath: `tempest-studio-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON diagnostics', extensions: ['json'] }] });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath };
   });
 
   ipcMain.handle('studio:bridge-request', async (_event, request: { path?: string; method?: string; body?: unknown }) => {
@@ -320,7 +365,7 @@ function registerDesktopHandlers(): void {
       localExtension = await startLocalExtension({
         ...settings,
         assetRoot: extensionAssetRoot,
-        pfxPath: extensionCertificatePath,
+        pfxPath: extensionCertificatePath(),
         pfxPassphrase: extensionCertificatePassword,
         getPanelDesign: () => loadTwitchPanelDesign(),
         configureRelay: (options) => bridge!.configureExtensionRelay(options)
@@ -348,8 +393,8 @@ function registerDesktopHandlers(): void {
   });
 
   ipcMain.handle('studio:prepare-local-extension-certificate', async () => {
-    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-Trust'], {
-      cwd: workspaceRoot,
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), '-Trust'], {
+      cwd: supportRoot,
       windowsHide: true,
       stdio: 'ignore',
       shell: false
@@ -451,6 +496,134 @@ function registerDesktopHandlers(): void {
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
   });
 
+  ipcMain.handle('studio:validate-alert-code', (_event, input: { html?: unknown; css?: unknown; javascript?: unknown }) => {
+    const html = String(input?.html || '');
+    const css = String(input?.css || '');
+    const javascript = String(input?.javascript || '');
+    const errors: string[] = [];
+    if ([html, css, javascript].some((value) => value.length > 24000)) errors.push('Each custom code section must contain at most 24,000 characters.');
+    if (/<\s*script\b/i.test(html)) errors.push('Put JavaScript in the JavaScript tab, not an HTML <script> element.');
+    const cssWithoutStrings = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/g, '');
+    let cssDepth = 0;
+    for (const character of cssWithoutStrings) {
+      if (character === '{') cssDepth++;
+      if (character === '}' && --cssDepth < 0) break;
+    }
+    if (cssDepth !== 0) errors.push('CSS braces are not balanced.');
+    try { Function('data', 'variables', 'elements', `'use strict';\n${javascript}`); } catch (error) { errors.push(`JavaScript: ${(error as Error).message}`); }
+    return { ok: errors.length === 0, errors };
+  });
+
+  ipcMain.handle('studio:import-alert-design-template', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Import Tempest Alert Design', properties: ['openFile'], filters: [{ name: 'Tempest alert design', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile() || details.size > 1024 * 1024) throw new Error('Alert design templates must be JSON files smaller than 1 MB.');
+    const document = JSON.parse(await readFile(filePath, 'utf8')) as { type?: unknown; name?: unknown; kind?: unknown; design?: unknown };
+    if (document.type !== 'tempest.alert-design') throw new Error('This is not a Tempest alert design template.');
+    const design = validateTwitchAlertDesign(document.design);
+    return { path: filePath, name: String(document.name || path.basename(filePath, '.json')), kind: String(document.kind || 'alert'), design };
+  });
+
+  ipcMain.handle('studio:export-alert-design-template', async (_event, input: { name?: unknown; kind?: unknown; design?: unknown }) => {
+    const name = String(input?.name || 'Alert').trim().slice(0, 100) || 'Alert';
+    const design = validateTwitchAlertDesign(input?.design);
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'alert';
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Export Tempest Alert Design', defaultPath: `${slug}.tempest-alert.json`, filters: [{ name: 'Tempest alert design', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify({ schemaVersion: 1, type: 'tempest.alert-design', name, kind: String(input?.kind || 'alert'), design, exportedAt: new Date().toISOString() }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath };
+  });
+
+  ipcMain.handle('studio:export-alert-pack', async (_event, input: { name?: unknown; description?: unknown; kind?: unknown; alert?: unknown }) => {
+    const document = await buildTempestAlertPack({ ...input, createdWithVersion: TEMPEST_STUDIO_VERSION });
+    const slug = document.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'tempest-alert';
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Export Tempest Alert Pack',
+      defaultPath: `${slug}.tempest-alert-pack`,
+      filters: [{ name: 'Tempest Alert Pack', extensions: ['tempest-alert-pack'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath, assetCount: document.assets.length, totalAssetBytes: document.assets.reduce((sum, asset) => sum + asset.size, 0) };
+  });
+
+  ipcMain.handle('studio:import-alert-pack', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Import Tempest Alert Pack', properties: ['openFile'], filters: [{ name: 'Tempest Alert Pack', extensions: ['tempest-alert-pack'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile() || details.size > 205 * 1024 * 1024) throw new Error('Alert Packs must be smaller than 205 MB.');
+    const document = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+    const imported = await importTempestAlertPack(document, path.join(app.getPath('userData'), 'bridge', 'visual-alerts', 'imported'));
+    if (imported.containsCustomCode) {
+      const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
+        type: 'warning',
+        title: 'Custom Alert Code',
+        message: `${imported.name} contains custom HTML, CSS, or JavaScript.`,
+        detail: 'Custom code runs only inside the local Browser Source, but you should import packs only from creators you trust.',
+        buttons: ['Cancel Import', 'Import Trusted Pack'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+      });
+      if (decision.response !== 1) return null;
+    }
+    return { ...imported, sourcePath: filePath };
+  });
+
+  ipcMain.handle('studio:export-backup', async (_event, rendererSettings: unknown) => {
+    const document = await buildTempestStudioBackup({ userDataDirectory: app.getPath('userData'), productVersion: TEMPEST_STUDIO_VERSION, rendererSettings });
+    const date = new Date().toISOString().slice(0, 10);
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Back Up Tempest Streaming Studio', defaultPath: `tempest-studio-backup-${date}.tempest-studio-backup`, filters: [{ name: 'Tempest Studio Backup', extensions: ['tempest-studio-backup'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath, documentCount: Object.keys(document.documents).length, assetCount: document.assets.length, excluded: document.exclusions };
+  });
+
+  ipcMain.handle('studio:restore-backup', async () => {
+    const selection = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Restore Tempest Streaming Studio', properties: ['openFile'], filters: [{ name: 'Tempest Studio Backup', extensions: ['tempest-studio-backup'] }]
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    const filePath = path.normalize(selection.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile() || details.size > 700 * 1024 * 1024) throw new Error('Studio backups must be smaller than 700 MB.');
+    const document = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+    const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'warning',
+      title: 'Restore Studio Backup',
+      message: 'Replace the current Studio configuration with this backup?',
+      detail: 'Studio will create a local rollback snapshot first, restore settings and alert media, then restart. Twitch, chatbot, Extension, and GIPHY credentials are never restored and must be reconnected.',
+      buttons: ['Cancel', 'Restore and Restart'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    if (decision.response !== 1) return null;
+    const restored = await restoreTempestStudioBackup(document, app.getPath('userData'), async () => {
+      const activeBridge = bridge;
+      bridge = null;
+      await activeBridge?.close();
+      const activeWarudo = warudoAdapter;
+      warudoAdapter = null;
+      await activeWarudo?.close();
+    });
+    return { ...restored, sourcePath: filePath, restartRequired: true };
+  });
+
+  ipcMain.handle('studio:restart-app', () => {
+    app.relaunch();
+    app.exit(0);
+    return true;
+  });
+
   ipcMain.handle('studio:get-giphy-status', async () => ({ configured: Boolean(await loadGiphyApiKey()), encryptionAvailable: safeStorage.isEncryptionAvailable() }));
 
   ipcMain.handle('studio:save-giphy-api-key', async (_event, apiKey: unknown) => {
@@ -532,9 +705,7 @@ function registerDesktopHandlers(): void {
 
   ipcMain.handle('studio:open-external', async (_event, targetUrl: string) => {
     const url = new URL(String(targetUrl || ''));
-    const twitchLink = ['twitch.tv', 'www.twitch.tv', 'dev.twitch.tv'].includes(url.hostname);
-    const stormHorizonPlayer = url.hostname === 'a12.asurahosting.com' && url.pathname === '/public/storm_horizon_radio';
-    if (url.protocol !== 'https:' || (!twitchLink && !stormHorizonPlayer)) throw new Error('Only approved Twitch and Storm Horizon Radio HTTPS links may be opened from Studio.');
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Only public HTTPS links may be opened from Studio.');
     await shell.openExternal(url.href);
     return true;
   });
@@ -544,7 +715,9 @@ function registerDesktopHandlers(): void {
 }
 
 app.whenReady().then(async () => {
-  const bridgeDataDirectory = path.join(app.getPath('userData'), 'bridge');
+  const userDataDirectory = app.getPath('userData');
+  dataMigrationStatus = await runStudioDataMigrations({ userDataDirectory, productVersion: TEMPEST_STUDIO_VERSION });
+  const bridgeDataDirectory = path.join(userDataDirectory, 'bridge');
   bridge = await startTempestBridge({
     host: '127.0.0.1',
     port: bridgePort,
@@ -593,6 +766,7 @@ app.whenReady().then(async () => {
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+      await mainWindow.webContents.executeJavaScript(`document.getElementById('onboardingDialog')?.close()`);
       const captureSection = captureSectionArgument?.slice('--capture-section='.length);
       if (captureSection && /^[a-z]+$/.test(captureSection)) {
         await mainWindow.webContents.executeJavaScript(`document.querySelector('[data-section="${captureSection}"]')?.click()`);
@@ -605,7 +779,9 @@ app.whenReady().then(async () => {
       if (captureDialog && /^[A-Za-z][A-Za-z0-9_-]*$/.test(captureDialog)) {
         await mainWindow.webContents.executeJavaScript(captureDialog === 'twitchDesignDialog'
           ? `document.querySelector('[data-twitch-alert-design]')?.click()`
-          : `document.getElementById('${captureDialog}')?.showModal()`);
+          : captureDialog === 'twitchVariantDialog'
+            ? `document.querySelector('[data-twitch-alert-variants]:not([disabled])')?.click()`
+            : `document.getElementById('${captureDialog}')?.showModal()`);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
       const outputPath = path.resolve(captureArgument.slice('--capture-ui='.length));

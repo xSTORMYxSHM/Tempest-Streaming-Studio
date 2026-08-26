@@ -12,6 +12,16 @@ export interface TempestAlertQueueItem {
   state: 'waiting' | 'playing';
   enqueuedAt: string;
   startedAt?: string;
+  diagnostics?: {
+    viewerName?: string;
+    variantId?: string;
+    variantName?: string;
+    audioAssigned?: boolean;
+    visualAssigned?: boolean;
+    audioRoute?: 'browser-source' | 'studio-local' | 'broadcast-source' | 'none';
+    browserClients?: number;
+    preview?: boolean;
+  };
 }
 
 export interface TempestAlertQueueStatus {
@@ -34,6 +44,7 @@ export interface TempestAlertQueueRequest {
   name: string;
   source: string;
   durationMs: number;
+  diagnostics?: TempestAlertQueueItem['diagnostics'];
   onAccepted?: () => void;
   execute: AlertQueueJob['execute'];
 }
@@ -50,6 +61,9 @@ export interface TempestAlertQueueOptions {
   transitionGapMs?: number;
   onChange?: (status: TempestAlertQueueStatus) => void;
   onError?: (item: TempestAlertQueueItem, error: Error) => void;
+  onStarted?: (item: TempestAlertQueueItem) => void;
+  onCompleted?: (item: TempestAlertQueueItem) => void;
+  onCleared?: (items: TempestAlertQueueItem[]) => void;
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -59,6 +73,9 @@ export class TempestAlertQueue {
   private readonly transitionGapMs: number;
   private readonly onChange?: TempestAlertQueueOptions['onChange'];
   private readonly onError?: TempestAlertQueueOptions['onError'];
+  private readonly onStarted?: TempestAlertQueueOptions['onStarted'];
+  private readonly onCompleted?: TempestAlertQueueOptions['onCompleted'];
+  private readonly onCleared?: TempestAlertQueueOptions['onCleared'];
   private readonly waiting: AlertQueueJob[] = [];
   private active?: AlertQueueJob;
   private completionTimer?: NodeJS.Timeout;
@@ -69,6 +86,9 @@ export class TempestAlertQueue {
     this.transitionGapMs = Math.max(0, Math.min(5000, Math.round(options.transitionGapMs ?? 500)));
     this.onChange = options.onChange;
     this.onError = options.onError;
+    this.onStarted = options.onStarted;
+    this.onCompleted = options.onCompleted;
+    this.onCleared = options.onCleared;
   }
 
   async enqueue(request: TempestAlertQueueRequest): Promise<TempestAlertQueueAcceptance> {
@@ -82,7 +102,8 @@ export class TempestAlertQueue {
       source: request.source,
       durationMs: Math.min(300000, Math.round(request.durationMs)),
       state: 'waiting',
-      enqueuedAt: new Date().toISOString()
+      enqueuedAt: new Date().toISOString(),
+      ...(request.diagnostics ? { diagnostics: copy(request.diagnostics) } : {})
     };
     const job: AlertQueueJob = { item, execute: request.execute };
     request.onAccepted?.();
@@ -107,13 +128,16 @@ export class TempestAlertQueue {
   }
 
   clearWaiting(): number {
+    const items = this.waiting.map((job) => copy(job.item));
     const removed = this.waiting.length;
     this.waiting.splice(0);
+    if (items.length) this.onCleared?.(items);
     this.changed();
     return removed;
   }
 
   clearAll(): number {
+    const items = [...(this.active ? [copy(this.active.item)] : []), ...this.waiting.map((job) => copy(job.item))];
     const removed = this.waiting.length + (this.active ? 1 : 0);
     this.waiting.splice(0);
     if (this.completionTimer) clearTimeout(this.completionTimer);
@@ -121,6 +145,7 @@ export class TempestAlertQueue {
     this.completionTimer = undefined;
     this.transitionTimer = undefined;
     this.active = undefined;
+    if (items.length) this.onCleared?.(items);
     this.changed();
     return removed;
   }
@@ -133,6 +158,7 @@ export class TempestAlertQueue {
     this.active = job;
     job.item.state = 'playing';
     job.item.startedAt = new Date().toISOString();
+    this.onStarted?.(copy(job.item));
     this.changed();
     try {
       const result = await job.execute();
@@ -150,8 +176,10 @@ export class TempestAlertQueue {
 
   private finish(itemId: string): void {
     if (this.active?.item.id !== itemId) return;
+    const completedItem = copy(this.active.item);
     this.completionTimer = undefined;
     this.active = undefined;
+    this.onCompleted?.(completedItem);
     this.changed();
     this.scheduleNext();
   }

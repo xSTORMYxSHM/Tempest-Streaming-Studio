@@ -11,9 +11,10 @@
     twitch: { title: 'Twitch Gateway', kicker: 'STUDIO-OWNED INTEGRATION' },
     extensiondesigner: { title: 'Twitch Panel Designer', kicker: 'CHANNEL EXTENSION THEME' },
     chatbot: { title: 'Chatbot', kicker: 'STUDIO CHAT AUTOMATION' },
-    api: { title: 'Connections', kicker: 'TEMPEST BRIDGE' },
+    api: { title: 'Connections', kicker: 'LOCAL CONTROL PLANE' },
     software: { title: 'Software Management', kicker: 'SUITE REGISTRY' },
-    assets: { title: 'Asset Control', kicker: 'ASSET LIBRARY' }
+    assets: { title: 'Asset Control', kicker: 'ASSET LIBRARY' },
+    settings: { title: 'Settings + About', kicker: 'STUDIO INFORMATION' }
   };
   const targetNames = {
     'com.tempestmainframe.warudo': 'Warudo',
@@ -32,6 +33,8 @@
     workflows: [],
     runs: [],
     events: [],
+    alertHistory: { summary: {}, records: [] },
+    alertDiagnostics: null,
     soundAlerts: { alerts: [] },
     visualAlerts: null,
     twitchVisualAlerts: { alerts: [] },
@@ -43,6 +46,7 @@
     localExtension: null,
     panelDesign: null,
     warudo: null,
+    appInfo: null,
     twitchDeviceAuthorization: null,
     chatbotDeviceAuthorization: null
   };
@@ -54,6 +58,12 @@
   let onboardingStep = 0;
   let onboardingAutoOpened = false;
   const activeSoundAlertAudio = new Map();
+  let activeAlertDesignAssets = { visualUri: '', audioUri: '', volume: 0.8 };
+  let alertDesignAudio = null;
+  let alertDesignPreviewRevision = 0;
+  let alertDesignHistory = [];
+  let alertDesignHistoryIndex = -1;
+  let alertDesignHistoryLocked = false;
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
@@ -176,6 +186,56 @@
     return next;
   }
 
+  function validCanvasDimension(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 320 && number <= 16384 ? number : null;
+  }
+
+  function broadcastCanvasProfile() {
+    const connection = state.connections.find((entry) => entry.capabilities?.includes('broadcast.status') || entry.applicationId === 'com.tempestmainframe.tempest-broadcast');
+    const profile = connection?.status?.canvasProfile;
+    if (!profile || typeof profile !== 'object') return null;
+    const baseWidth = validCanvasDimension(profile.baseWidth);
+    const baseHeight = validCanvasDimension(profile.baseHeight);
+    const outputWidth = validCanvasDimension(profile.outputWidth);
+    const outputHeight = validCanvasDimension(profile.outputHeight);
+    if (!baseWidth || !baseHeight || !outputWidth || !outputHeight) return null;
+    const fpsNumerator = Number(profile.fpsNumerator) || 0;
+    const fpsDenominator = Number(profile.fpsDenominator) || 1;
+    return { baseWidth, baseHeight, outputWidth, outputHeight, fps: fpsNumerator > 0 ? fpsNumerator / fpsDenominator : 0, source: 'broadcast', label: 'Live from Broadcast' };
+  }
+
+  function activeCanvasProfile() {
+    const preferences = readOnboardingPreferences();
+    const mode = preferences.canvasProfileMode || 'auto';
+    const live = broadcastCanvasProfile();
+    if (mode === 'auto' && live) return { ...live, mode };
+    const presets = {
+      standard: { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, label: 'Standard HD' },
+      qhd: { baseWidth: 2560, baseHeight: 1440, outputWidth: 2560, outputHeight: 1440, label: 'QHD' },
+      ultrawide: { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, label: 'Ultrawide' }
+    };
+    if (mode === 'custom') {
+      const custom = preferences.customCanvasProfile || {};
+      return {
+        baseWidth: validCanvasDimension(custom.baseWidth) || 1920,
+        baseHeight: validCanvasDimension(custom.baseHeight) || 1080,
+        outputWidth: validCanvasDimension(custom.outputWidth) || 1920,
+        outputHeight: validCanvasDimension(custom.outputHeight) || 1080,
+        fps: Number(custom.fps) || 60,
+        source: 'manual', label: 'Custom', mode
+      };
+    }
+    const selected = presets[mode] || presets.standard;
+    return { ...selected, fps: 60, source: mode === 'auto' ? 'fallback' : 'manual', mode };
+  }
+
+  function canvasAspectLabel(profile) {
+    const divisor = (a, b) => b ? divisor(b, a % b) : a;
+    const common = divisor(profile.baseWidth, profile.baseHeight);
+    return `${profile.baseWidth / common}:${profile.baseHeight / common}`;
+  }
+
   function onboardingStatus() {
     const preferences = readOnboardingPreferences();
     const flags = preferences.flags || {};
@@ -187,12 +247,12 @@
     const interactionSourceReady = Boolean(state.visualAlerts?.interaction?.connectedClients) || flags.interactionSource === true;
     const chatSourceReady = Boolean(state.chatOverlay?.connectedClients) || flags.chatSource === true;
     const browserSourcesReady = twitchSourceReady && interactionSourceReady;
-    const canvasReady = flags.canvasConfigured === true;
+    const canvasReady = Boolean(broadcastCanvasProfile()) || flags.canvasConfigured === true;
     const liveTestReady = Number(state.chatbot?.commandsTriggered || 0) > 0 || flags.alertTested === true;
     const checks = [Boolean(state.health), broadcasterReady && chatbotReady, browserSourcesReady, canvasReady, liveTestReady];
     return {
       preferences, flags, broadcasterReady, chatbotReady, twitchSourceReady, interactionSourceReady, chatSourceReady,
-      browserSourcesReady, canvasReady, liveTestReady, checks, readyCount: checks.filter(Boolean).length
+      browserSourcesReady, canvasReady, liveTestReady, canvasProfile: activeCanvasProfile(), checks, readyCount: checks.filter(Boolean).length
     };
   }
 
@@ -229,18 +289,20 @@
     const chatUrl = state.chatOverlay?.url || `${baseUrl}/chat-overlay`;
     const broadcasterLogin = state.twitch?.oauth?.account?.login;
     const botLogin = state.chatbot?.oauth?.account?.login;
+    const canvas = setup.canvasProfile;
+    const canvasAspect = canvasAspectLabel(canvas);
     $('#onboardingKicker').textContent = `STEP ${onboardingStep + 1} OF ${onboardingSteps.length}`;
     $('#onboardingTitle').textContent = onboardingSteps[onboardingStep].title;
     $('#onboardingStepList').innerHTML = onboardingSteps.map((step, index) => `<button class="onboarding-step-button ${index === onboardingStep ? 'active' : ''} ${setup.checks[index] ? 'done' : ''}" type="button" data-onboarding-step="${index}"><b>${String(index + 1).padStart(2, '0')}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.short)}</small></span><i></i></button>`).join('');
     let markup = '';
     if (onboardingStep === 0) {
-      markup = `<div class="onboarding-intro"><p class="eyebrow">TEMPEST STREAMING STUDIO</p><h3>One guided path from installation to an on-air test</h3><p>This setup checks the local Bridge, Twitch identities, browser sources, canvas dimensions, and one real command or alert. It never asks for a Twitch client secret and can be reviewed again from Studio Home.</p><div class="onboarding-check-grid">${setupCheckCard(Boolean(state.health), 'Local Studio Bridge', state.health ? `API ${state.health.protocolVersion || '1.0'} is online on this computer.` : 'Studio is waiting for its local control plane.')}${setupCheckCard(setup.broadcasterReady, 'Broadcaster identity', setup.broadcasterReady ? `Authorized as @${broadcasterLogin}.` : 'Connect the channel owner in Twitch Gateway.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot identity', setup.chatbotReady ? `@${botLogin} can listen and reply.` : 'Authorize a separate Twitch user for chat operations.')}${setupCheckCard(setup.browserSourcesReady, 'Alert browser sources', setup.browserSourcesReady ? 'Twitch and Interaction sources are confirmed.' : 'Add the two dedicated alert sources to OBS or Broadcast.')}${setupCheckCard(setup.canvasReady, 'Canvas + audio routing', setup.canvasReady ? 'OBS dimensions and track routing confirmed.' : 'Confirm the 3440 × 1440 source dimensions and VOD routing.')}${setupCheckCard(setup.liveTestReady, 'Live route test', setup.liveTestReady ? 'At least one real command or alert reached Studio.' : 'Run one safe test before going live.')}</div></div>`;
+      markup = `<div class="onboarding-intro"><p class="eyebrow">TEMPEST STREAMING STUDIO</p><h3>One guided path from installation to an on-air test</h3><p>This setup checks the local Bridge, Twitch identities, browser sources, canvas dimensions, and one real command or alert. It never asks for a Twitch client secret and can be reviewed again from Studio Home.</p><div class="onboarding-check-grid">${setupCheckCard(Boolean(state.health), 'Local Studio Bridge', state.health ? `API ${state.health.protocolVersion || '1.0'} is online on this computer.` : 'Studio is waiting for its local control plane.')}${setupCheckCard(setup.broadcasterReady, 'Broadcaster identity', setup.broadcasterReady ? `Authorized as @${broadcasterLogin}.` : 'Connect the channel owner in Twitch Gateway.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot identity', setup.chatbotReady ? `@${botLogin} can listen and reply.` : 'Authorize a separate Twitch user for chat operations.')}${setupCheckCard(setup.browserSourcesReady, 'Alert browser sources', setup.browserSourcesReady ? 'Twitch and Interaction sources are confirmed.' : 'Add the two dedicated alert sources to OBS or Broadcast.')}${setupCheckCard(setup.canvasReady, 'Canvas + audio routing', setup.canvasReady ? `${canvas.baseWidth} × ${canvas.baseHeight} ${canvas.source === 'broadcast' ? 'detected from Broadcast.' : 'profile confirmed.'}` : `Confirm the ${canvas.baseWidth} × ${canvas.baseHeight} source dimensions and VOD routing.`)}${setupCheckCard(setup.liveTestReady, 'Live route test', setup.liveTestReady ? 'At least one real command or alert reached Studio.' : 'Run one safe test before going live.')}</div></div>`;
     } else if (onboardingStep === 1) {
       markup = `<div class="onboarding-intro"><p>Twitch uses two deliberately separate authorizations: the broadcaster owns channel events, while the bot account reads and replies in chat.</p><div class="onboarding-check-grid">${setupCheckCard(setup.broadcasterReady, 'Broadcaster account', setup.broadcasterReady ? `@${broadcasterLogin} is authorized.` : 'A Public Twitch application Client ID and broadcaster authorization are required.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot account', setup.chatbotReady ? `@${botLogin} is connected for EventSub and chat output.` : 'Connect a second Twitch user account in the isolated sign-in window.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="twitch">Open Twitch Gateway</button><button class="secondary-button" type="button" data-onboarding-go="chatbot">Open Chatbot Setup</button></div><div class="onboarding-note"><strong>Why two accounts?</strong> The broadcaster remains the channel owner. The secondary account gives chat automation its own visible identity and keeps those credentials isolated.</div></div>`;
     } else if (onboardingStep === 2) {
       markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}</div></div>`;
     } else if (onboardingStep === 3) {
-      markup = `<div class="onboarding-intro"><p>The current Tempest canvas profile matches your ultrawide streaming layout. Set every Studio Browser Source to the base canvas size; OBS handles the final output scaling.</p><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>3440 × 1440</strong><small>43:18 placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>2580 × 1080</strong><small>Your current output profile; OBS scales from the base canvas.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', 'Twitch Alerts, Interaction Alerts, and Chat Overlay use 3440 × 1440 Browser Sources.')}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>OBS audio:</strong> enable Control audio via OBS on both alert sources. Keep Twitch Alerts on live + recording tracks; keep claim-prone Interaction Alerts off the YouTube/VOD track.</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Twitch Alerts, Interaction Alerts, and Chat Overlay use ${canvas.baseWidth} × ${canvas.baseHeight} Browser Sources.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
     } else {
       const allReady = setup.readyCount === onboardingSteps.length;
       markup = `<div class="onboarding-complete"><i>${allReady ? '✓' : `${setup.readyCount}/${onboardingSteps.length}`}</i><h3>${allReady ? 'Studio is ready for an on-air test' : 'Finish the remaining checks when ready'}</h3><p>${allReady ? 'Your broadcaster, bot, sources, canvas, and live route have all been confirmed.' : 'You can finish for now and reopen this guide from Studio Home. The status card will continue showing anything that needs attention.'}</p></div><div class="onboarding-check-grid">${setupCheckCard(setup.liveTestReady, 'Command or alert received', setup.liveTestReady ? `${state.chatbot?.commandsTriggered || 0} live chatbot command${Number(state.chatbot?.commandsTriggered || 0) === 1 ? '' : 's'} processed.` : 'Send !song in Twitch chat or preview an alert.')}${setupCheckCard(Boolean(state.safety?.armed), 'Interaction safety armed', state.safety?.armed ? 'Viewer triggers are allowed.' : 'Arm interactions before testing viewer-triggered actions.')}${setupCheckCard(Boolean(state.visualAlerts?.queue) && !state.visualAlerts?.queue?.active, 'Alert queue standing by', state.visualAlerts?.queue?.active ? `Currently playing ${state.visualAlerts.queue.active.name}.` : 'The shared queue is idle and ready.')}${setupCheckCard(Boolean(state.health), 'Bridge online', state.health ? 'Local services are responding.' : 'Bridge connection needs attention.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="chatbot">Test a Command</button><button class="secondary-button" type="button" data-onboarding-go="visualalerts">Preview Twitch Alert</button><button class="secondary-button" type="button" data-onboarding-go="soundalerts">Test Interaction Alert</button></div><div class="onboarding-confirm-list">${onboardingFlag('alertTested', setup.liveTestReady, 'I completed a real command or alert test', 'This may be detected automatically when Studio processes a live chatbot command.')}</div>`;
@@ -305,6 +367,43 @@
     timeline.innerHTML = events.map((event) => `<article class="event-record ${escapeHtml(event.level)}"><i></i><time>${new Date(event.timestamp).toLocaleTimeString()}</time><div><strong>${escapeHtml(event.message)}</strong><small>${escapeHtml(event.type)}${event.target ? ` · ${escapeHtml(targetNames[event.target] || event.target)}` : ''}</small></div><code>${escapeHtml(event.level)}</code></article>`).join('');
   }
 
+  function renderAlertHistory() {
+    const history = state.alertHistory || { summary: {}, records: [] };
+    const summary = history.summary || {};
+    const diagnostics = state.alertDiagnostics || { configured: {}, sources: {}, issues: [] };
+    $('#alertHistory24h').textContent = summary.last24Hours || 0;
+    $('#alertHistoryFailures').textContent = summary.failures || 0;
+    $('#alertHistoryWait').textContent = (summary.averageWaitMs || 0) < 1000 ? `${summary.averageWaitMs || 0} ms` : durationLabel(summary.averageWaitMs);
+    $('#alertDiagnosticIssueCount').textContent = diagnostics.configured?.unavailableAssets || 0;
+    const interactionClients = diagnostics.sources?.interactionClients || 0;
+    const twitchClients = diagnostics.sources?.twitchClients || 0;
+    $('#alertSourceDiagnostic').innerHTML = `<strong>Browser Sources:</strong> Twitch Alerts ${twitchClients ? `${twitchClients} connected` : 'waiting'} · Interaction Alerts ${interactionClients ? `${interactionClients} connected` : 'waiting'} · ${(diagnostics.configured?.assignedAssets || 0)} assigned media files checked.`;
+    const issues = diagnostics.issues || [];
+    const issueList = $('#alertDiagnosticIssues');
+    issueList.classList.toggle('empty-state', !issues.length);
+    issueList.innerHTML = issues.length ? issues.map((issue) => `<article><b>!</b><div><strong>${escapeHtml(issue.alertName)}${issue.variantId ? ` · ${escapeHtml(issue.variantId)}` : ''}</strong><small>${escapeHtml(issue.message)} Reassign the ${escapeHtml(issue.role)} file from the alert card.</small></div><code>${escapeHtml(issue.kind)}</code></article>`).join('') : 'No assigned-media problems detected.';
+    const query = $('#alertHistorySearch').value.trim().toLowerCase();
+    const kind = $('#alertHistoryKind').value;
+    const playbackState = $('#alertHistoryState').value;
+    const records = (history.records || []).filter((record) => {
+      const searchable = [record.alertName, record.alertId, record.viewerName, record.variantName, record.variantId, record.source, record.audioRoute].join(' ').toLowerCase();
+      return (!query || searchable.includes(query)) && (!kind || record.kind === kind) && (!playbackState || record.state === playbackState);
+    });
+    const list = $('#alertHistoryList');
+    list.classList.toggle('empty-state', !records.length);
+    list.innerHTML = records.length ? records.map((record) => `<article class="alert-history-record ${escapeHtml(record.state)}"><i></i><time>${new Date(record.startedAt || record.enqueuedAt).toLocaleString()}</time><div class="alert-history-primary"><strong>${escapeHtml(record.alertName)}${record.variantName ? ` · ${escapeHtml(record.variantName)}` : ''}</strong><small>${escapeHtml(record.kind === 'twitch' ? 'Twitch Alert' : 'Interaction Alert')}${record.viewerName ? ` · ${escapeHtml(record.viewerName)}` : ''} · ${escapeHtml(record.source)}</small></div><div class="alert-history-route"><span>${record.audioAssigned ? `AUDIO: ${escapeHtml(String(record.audioRoute).replaceAll('-', ' ').toUpperCase())}` : 'NO AUDIO'}</span><span>${record.visualAssigned ? 'VISUAL READY' : 'NO VISUAL'}</span><small>Wait ${record.waitMs < 1000 ? `${record.waitMs} ms` : durationLabel(record.waitMs)} · Play ${durationLabel(record.durationMs)}</small></div><code>${escapeHtml(record.state)}</code>${record.error ? `<p>${escapeHtml(record.error)}</p>` : ''}</article>`).join('') : ((history.records || []).length ? 'No alert playback matches these filters.' : 'No alert playback has been recorded yet.');
+  }
+
+  async function clearAlertHistory() {
+    if (!confirm('Clear the durable Alert History? This does not remove alerts or media.')) return;
+    try {
+      await api('/v1/alert-history', { method: 'DELETE' });
+      state.alertHistory = await api('/v1/alert-history?limit=200');
+      renderAlertHistory();
+      toast('Alert History cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   function soundAlertAudioName(uri) {
     if (!uri) return 'No local audio assigned';
     try {
@@ -322,7 +421,7 @@
   }
 
   function broadcastSourceInventory() {
-    const connection = state.connections.find((entry) => entry.applicationId === 'com.tempestmainframe.tempest-broadcast');
+    const connection = state.connections.find((entry) => entry.capabilities?.includes('broadcast.status') || entry.capabilities?.includes('broadcast.audio.play') || entry.applicationId === 'com.tempestmainframe.tempest-broadcast');
     const inventory = connection?.status?.sourceInventory;
     return {
       connected: Boolean(connection),
@@ -382,7 +481,7 @@
           <label>Effect strength <span><input data-visual-alert-strength="${escapeHtml(alert.id)}" type="number" min="5" max="150" value="${Math.round((alert.broadcastEffectStrength || 1) * 100)}" /> %</span></label>
         </div></div>
       </div></details>
-      <div class="sound-alert-actions interaction-alert-actions"><button data-interaction-alert-save="${escapeHtml(alert.id)}">Save Alert</button><button data-interaction-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-sound-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-sound-alert-visual="${escapeHtml(alert.id)}">Assign Visual</button><button data-sound-alert-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button data-visual-alert-preview="${escapeHtml(alert.id)}">Preview Alert</button><button class="primary-button" data-sound-alert-trigger="${escapeHtml(alert.id)}" ${!alert.enabled || !state.safety.armed ? 'disabled' : ''}>Test Interaction</button></div>
+      <div class="sound-alert-actions interaction-alert-actions"><button data-interaction-alert-save="${escapeHtml(alert.id)}">Save Alert</button><button data-interaction-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-interaction-alert-pack="${escapeHtml(alert.id)}">Export Pack</button><button data-sound-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-sound-alert-visual="${escapeHtml(alert.id)}">Assign Visual</button><button data-sound-alert-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button data-visual-alert-preview="${escapeHtml(alert.id)}">Preview Alert</button><button class="primary-button" data-sound-alert-trigger="${escapeHtml(alert.id)}" ${!alert.enabled || !state.safety.armed ? 'disabled' : ''}>Test Interaction</button></div>
     </article>`).join('');
   }
 
@@ -456,7 +555,8 @@
         <label>Volume <span><input data-twitch-alert-volume="${escapeHtml(alert.id)}" type="number" min="0" max="100" value="${Math.round((alert.volume ?? 0.8) * 100)}" /> %</span></label>
         <label>Alert accent <input data-twitch-visual-accent="${escapeHtml(alert.id)}" type="color" value="${escapeHtml(alert.accent || '#54f2eb')}" /></label>
       </div>
-      <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Alert</button></div>
+      <div class="twitch-variant-summary"><span>VARIANTS</span><strong>${(alert.alertVariants || []).filter((variant) => variant.enabled).length} active · ${(alert.alertVariants || []).length} total</strong><small>Amount, tier, tenure, raid size, or reward rules</small></div>
+      <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-twitch-alert-pack="${escapeHtml(alert.id)}">Export Pack</button>${variantConditionChoices(alert.topic).length ? `<button data-twitch-alert-variants="${escapeHtml(alert.id)}">Manage Variants${(alert.alertVariants || []).length ? ` (${(alert.alertVariants || []).length})` : ''}</button>` : '<button disabled title="This event has no amount, tier, tenure, raid-size, or reward field">Variants unavailable</button>'}<button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Base Alert</button></div>
     </article>`).join('') : 'No Twitch Alert presets are configured.';
   }
 
@@ -513,9 +613,14 @@
     grid.classList.remove('empty-state');
     const applicationCards = state.applications.map((application) => {
       const capabilities = [...application.capabilities.provides, ...application.assetTypes.writes].slice(0, 6);
-      return `<article class="software-card"><div class="card-top"><div><p>${escapeHtml(application.id)}</p><h3>${escapeHtml(application.name)}</h3></div><span class="state-chip ${escapeHtml(application.state)}">${escapeHtml(application.state)}</span></div><p class="card-description">${escapeHtml(application.description || 'Tempest application registered with the Mainframe.')}</p><div class="tag-list">${capabilities.map((value) => `<span>${escapeHtml(value)}</span>`).join('') || '<span>NO CAPABILITIES</span>'}</div><div class="card-actions">${application.launch ? `<button data-launch="${escapeHtml(application.id)}">Launch</button>` : '<button disabled>No launcher</button>'}${application.manifestPath ? `<button data-reveal="${escapeHtml(application.manifestPath)}">Manifest</button>` : ''}<button class="danger-action" data-remove-application="${escapeHtml(application.id)}">Remove</button></div></article>`;
+      return `<article class="software-card"><div class="card-top"><div><p>${escapeHtml(application.id)}</p><h3>${escapeHtml(application.name)}</h3></div><span class="state-chip ${escapeHtml(application.state)}">${escapeHtml(application.state)}</span></div><p class="card-description">${escapeHtml(application.description || 'Compatible application registered with Studio.')}</p><div class="tag-list">${capabilities.map((value) => `<span>${escapeHtml(value)}</span>`).join('') || '<span>NO CAPABILITIES</span>'}</div><div class="card-actions">${application.launch ? `<button data-launch="${escapeHtml(application.id)}">Launch</button>` : '<button disabled>No launcher</button>'}${application.manifestPath ? `<button data-reveal="${escapeHtml(application.manifestPath)}">Manifest</button>` : ''}<button class="danger-action" data-remove-application="${escapeHtml(application.id)}">Remove</button></div></article>`;
     }).join('');
-    const radio = state.radio || { name: 'Storm Horizon Radio', provider: 'AzuraCast', state: 'unavailable' };
+    const radio = state.radio;
+    if (!radio) {
+      grid.classList.toggle('empty-state', !applicationCards);
+      grid.innerHTML = applicationCards || 'No compatible applications or optional services are configured.';
+      return;
+    }
     const song = radio.nowPlaying || {};
     const track = song.artist && song.title ? `${song.artist} — ${song.title}` : song.title || song.text;
     const radioDescription = radio.state === 'online'
@@ -524,7 +629,7 @@
     const radioAction = radio.publicPlayerUrl
       ? `<button data-radio-player="${escapeHtml(radio.publicPlayerUrl)}">Open Public Player</button>`
       : '<button disabled>Player unavailable</button>';
-    const radioCard = `<article class="software-card service-card"><div class="card-top"><div><p>storm-horizon-radio · ${escapeHtml(radio.provider || 'AzuraCast')}</p><h3>${escapeHtml(radio.name || 'Storm Horizon Radio')}</h3></div><span class="state-chip ${escapeHtml(radio.state || 'unavailable')}">${escapeHtml(radio.state || 'unavailable')}</span></div><p class="card-description">${escapeHtml(radioDescription)}</p><div class="tag-list"><span>RADIO SERVICE</span><span>NOW PLAYING</span><span>BROADCAST ASSET</span></div><div class="card-actions">${radioAction}</div></article>`;
+    const radioCard = `<article class="software-card service-card"><div class="card-top"><div><p>now-playing-provider · ${escapeHtml(radio.provider || 'AzuraCast')}</p><h3>${escapeHtml(radio.name || 'Configured station')}</h3></div><span class="state-chip ${escapeHtml(radio.state || 'unavailable')}">${escapeHtml(radio.state || 'unavailable')}</span></div><p class="card-description">${escapeHtml(radioDescription)}</p><div class="tag-list"><span>RADIO SERVICE</span><span>NOW PLAYING</span><span>OPTIONAL</span></div><div class="card-actions">${radioAction}</div></article>`;
     grid.innerHTML = applicationCards + radioCard;
   }
 
@@ -666,16 +771,36 @@
     if (device) $('#chatbotDeviceCode').textContent = device.userCode;
     if (document.activeElement !== $('#chatbotPrefix')) $('#chatbotPrefix').value = chatbot.prefix || '!';
     $('#chatbotPrefixLabel').textContent = chatbot.prefix || '!';
+    const weather = chatbot.providers?.weather;
+    const nowPlaying = chatbot.providers?.nowPlaying;
+    if (!$('#chatbotProvidersForm').contains(document.activeElement)) {
+      $('#weatherProviderEnabled').checked = Boolean(weather);
+      $('#nowPlayingProviderEnabled').checked = Boolean(nowPlaying);
+      for (const [id, value] of [
+        ['weatherLocationName', weather?.locationName || ''], ['weatherLatitude', weather?.latitude ?? ''], ['weatherLongitude', weather?.longitude ?? ''], ['weatherTimeZone', weather?.timeZone || ''],
+        ['nowPlayingStationName', nowPlaying?.stationName || ''], ['nowPlayingApiUrl', nowPlaying?.apiUrl || ''], ['nowPlayingPublicUrl', nowPlaying?.publicPlayerUrl || ''], ['nowPlayingStreamUrl', nowPlaying?.streamUrl || '']
+      ]) $(`#${id}`).value = value;
+    }
+    const handlerSelect = $('#chatbotCommandHandler');
+    const handlers = chatbot.providers?.availableHandlers || [];
+    const handlerSignature = handlers.join('|');
+    if (handlerSelect.dataset.handlers !== handlerSignature) {
+      const currentHandler = handlerSelect.value;
+      const labels = { 'command-directory': 'Enabled command directory', 'stream-uptime': 'Current stream uptime', 'channel-title': 'Current Twitch title', 'channel-game': 'Current Twitch category', 'stream-schedule': 'Next scheduled stream', 'local-weather': 'Local time and weather — National Weather Service', 'radio-now-playing': 'Configured station — now playing' };
+      handlerSelect.innerHTML = '<option value="">Custom chat response</option>' + handlers.map((handler) => `<option value="${escapeHtml(handler)}">${escapeHtml(labels[handler] || handler)}</option>`).join('');
+      if ([...handlerSelect.options].some((option) => option.value === currentHandler)) handlerSelect.value = currentHandler;
+      handlerSelect.dataset.handlers = handlerSignature;
+    }
 
     const workflowSelect = $('#chatbotCommandWorkflow');
     const selectedWorkflow = workflowSelect.value;
-    workflowSelect.innerHTML = '<option value="">No workflow — chat response only</option>' + state.workflows.map((workflow) => `<option value="${escapeHtml(workflow.id)}">${escapeHtml(workflow.name)}${workflow.enabled ? '' : ' (disabled)'}</option>`).join('');
+    workflowSelect.innerHTML = '<option value="">No automation — chat response only</option>' + state.workflows.map((workflow) => `<option value="${escapeHtml(workflow.id)}">${escapeHtml(workflow.name)}${workflow.enabled ? '' : ' (disabled)'}</option>`).join('');
     if (state.workflows.some((workflow) => workflow.id === selectedWorkflow)) workflowSelect.value = selectedWorkflow;
 
     const commands = chatbot.commands || [];
     const list = $('#chatbotCommandList');
     list.classList.toggle('empty-state', !commands.length);
-    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'shared chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'seattle-weather' ? 'SEATTLE WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
+    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'shared chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
 
     const activity = chatbot.activity || [];
     const activityList = $('#chatbotActivity');
@@ -865,6 +990,19 @@
       if (quiet) throw error;
       return null;
     }
+  }
+
+  async function saveChatbotProviders(event) {
+    event.preventDefault();
+    const weatherProvider = $('#weatherProviderEnabled').checked ? { provider: 'nws', locationName: $('#weatherLocationName').value.trim(), latitude: Number($('#weatherLatitude').value), longitude: Number($('#weatherLongitude').value), timeZone: $('#weatherTimeZone').value.trim() } : null;
+    const nowPlayingProvider = $('#nowPlayingProviderEnabled').checked ? { provider: 'azuracast', stationName: $('#nowPlayingStationName').value.trim(), apiUrl: $('#nowPlayingApiUrl').value.trim(), publicPlayerUrl: $('#nowPlayingPublicUrl').value.trim(), streamUrl: $('#nowPlayingStreamUrl').value.trim() || undefined } : null;
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { weatherProvider, nowPlayingProvider } });
+      state.radio = await api('/v1/integrations/now-playing');
+      renderChatbot();
+      renderSoftware();
+      toast('Optional response providers saved. Add or edit commands to use them.');
+    } catch (error) { toast(error.message, true); }
   }
 
   function resetChatbotCommandForm() {
@@ -1114,11 +1252,22 @@
     $('#apiOnlineBadge').classList.toggle('offline', !online);
   }
 
+  function renderAbout() {
+    const info = state.appInfo;
+    if (!info) return;
+    $('#aboutBuildBadge').textContent = `BUILD ${info.version}`;
+    $('#aboutVersion').textContent = info.version;
+    $('#aboutDataVersion').textContent = `v${info.dataVersion || '?'}`;
+    $('#aboutRuntime').textContent = `Electron ${info.electron} · Node ${info.node}`;
+    $('#aboutBuildType').textContent = info.packaged ? `${info.platform} ${info.arch} · installed` : `${info.platform} ${info.arch} · development`;
+  }
+
   function renderAll() {
     renderSafety();
     renderOverview();
     renderWorkflows();
     renderEvents();
+    renderAlertHistory();
     renderSoundAlerts();
     renderVisualAlerts();
     renderChatOverlay({ settings: true });
@@ -1128,13 +1277,14 @@
     renderChatbot();
     renderSoftware();
     renderAssets();
+    renderAbout();
   }
 
   async function refreshRuntime({ quiet = true } = {}) {
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, warudo, localExtension] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus()]);
+      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, warudo, localExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
       state.runs = runs.runs || [];
@@ -1145,11 +1295,14 @@
       state.chatOverlay = chatOverlay;
       state.warudo = warudo;
       state.localExtension = localExtension;
+      state.alertHistory = alertHistory;
+      state.alertDiagnostics = alertDiagnostics;
       renderBridgeStatus(true);
       renderSafety();
       renderOverview();
       renderWorkflows();
       renderEvents();
+      renderAlertHistory();
       renderVisualAlertStatus();
       renderChatOverlay();
       renderWarudo();
@@ -1164,8 +1317,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/storm-horizon-radio'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getGiphyStatus()]);
-      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy });
+      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -1243,6 +1396,79 @@
 
   function alertKey(value) {
     return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  }
+
+  function uniqueImportedAlertId(prefix, preferred, alerts) {
+    const preferredKey = alertKey(String(preferred || '').replace(/^[^.]+\./, '')) || 'imported-alert';
+    let id = `${prefix}.${preferredKey}`;
+    let suffix = 2;
+    while (alerts.some((entry) => entry.id === id || entry.cue === id)) id = `${prefix}.${preferredKey}-${suffix++}`;
+    return id;
+  }
+
+  async function exportAlertPack(kind, id) {
+    const alert = kind === 'interaction'
+      ? state.soundAlerts.alerts.find((entry) => entry.id === id)
+      : state.twitchVisualAlerts.alerts.find((entry) => entry.id === id);
+    if (!alert) return toast('The alert could not be found.', true);
+    try {
+      const result = await window.tempestStudio.exportAlertPack({
+        name: alert.name,
+        description: kind === 'interaction' ? alert.description || 'Portable Interaction Alert.' : `Portable ${alert.topic} Twitch Alert.`,
+        kind,
+        alert
+      });
+      if (result) toast(`${alert.name} exported with ${result.assetCount} embedded media file${result.assetCount === 1 ? '' : 's'}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function importAlertPack(expectedKind) {
+    try {
+      const imported = await window.tempestStudio.importAlertPack();
+      if (!imported) return;
+      const alert = imported.alert;
+      if (imported.kind === 'interaction') {
+        const id = uniqueImportedAlertId('sound-alert', alert.id || imported.name, state.soundAlerts.alerts);
+        const result = await api('/v1/sound-alerts', { method: 'POST', body: { ...alert, id, cue: id, custom: undefined, updatedAt: undefined } });
+        state.soundAlerts.alerts.push(result.alert);
+        renderSoundAlerts();
+        renderVisualAlerts();
+        showSection('soundalerts');
+        toast(`${imported.name} imported as ${result.alert.name} with ${imported.assetCount} verified media file${imported.assetCount === 1 ? '' : 's'}.`);
+        return;
+      }
+      const subscriptionVariant = alert.topic === 'viewer.subscription.started' ? alert.variant || 'standard' : undefined;
+      const existing = state.twitchVisualAlerts.alerts.find((entry) => entry.topic === alert.topic && (entry.topic !== 'viewer.subscription.started' || (entry.variant || 'standard') === subscriptionVariant));
+      if (existing) {
+        if (!confirm(`${existing.name} already handles ${alert.topic}${subscriptionVariant ? ` (${subscriptionVariant})` : ''}. Replace its design, media, timing, and variants with ${imported.name}?`)) return;
+        await updateTwitchVisualAlert(existing.id, { enabled: alert.enabled !== false, durationMs: alert.durationMs, audioUri: alert.audioUri || null, volume: alert.volume, visualUri: alert.visualUri || null, accent: alert.accent, design: alert.design, alertVariants: alert.alertVariants || [] }, `${imported.name} imported into ${existing.name}.`);
+      } else {
+        const id = uniqueImportedAlertId('twitch', alert.id || imported.name, state.twitchVisualAlerts.alerts);
+        const result = await api('/v1/visual-alerts/twitch', { method: 'POST', body: { ...alert, id, custom: undefined, updatedAt: undefined } });
+        state.twitchVisualAlerts.alerts.push(result.alert);
+        renderVisualAlerts();
+        toast(`${imported.name} imported as a new Twitch Alert.`);
+      }
+      showSection('visualalerts');
+      if (expectedKind && expectedKind !== imported.kind) toast(`${imported.name} is a ${imported.kind === 'twitch' ? 'Twitch' : 'Interaction'} pack, so Studio opened the matching section.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function exportStudioBackup() {
+    try {
+      const result = await window.tempestStudio.exportBackup(readOnboardingPreferences());
+      if (result) toast(`Studio backup created with ${result.documentCount} configuration files and ${result.assetCount} alert media file${result.assetCount === 1 ? '' : 's'}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function restoreStudioBackup() {
+    try {
+      const result = await window.tempestStudio.restoreBackup();
+      if (!result) return;
+      if (result.rendererSettings && typeof result.rendererSettings === 'object') localStorage.setItem(onboardingStorageKey, JSON.stringify(result.rendererSettings));
+      toast(`Backup from Studio ${result.productVersion} restored. Restarting with the migrated configuration…`);
+      setTimeout(() => window.tempestStudio.restartApp(), 900);
+    } catch (error) { toast(`${error.message} Restart Studio if the local Bridge was already stopped.`, true); }
   }
 
   function updateInteractionCuePreview() {
@@ -1372,6 +1598,182 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  function variantConditionChoices(topic) {
+    if (topic === 'viewer.cheer.received') return [['bits', 'Bit amount']];
+    if (topic === 'viewer.raid.received') return [['viewers', 'Raid viewers']];
+    if (topic === 'viewer.subscription.started') return [['months', 'Subscribed months'], ['tier', 'Subscription tier']];
+    if (topic === 'viewer.reward.redeemed') return [['reward-id', 'Specific reward ID'], ['reward-cost', 'Reward point cost']];
+    return [];
+  }
+
+  function updateVariantConditionFields() {
+    const type = $('#newVariantConditionType').value;
+    const exact = type === 'tier' || type === 'reward-id';
+    $('#newVariantMinimumLabel').hidden = exact;
+    $('#newVariantMaximumLabel').hidden = exact;
+    $('#newVariantExactLabel').hidden = !exact;
+    $('#newVariantExactLabel').querySelector('span')?.remove();
+    const exactInput = $('#newVariantExact');
+    if (type === 'tier') exactInput.placeholder = 'prime, 1000, 2000, or 3000';
+    else if (type === 'reward-id') exactInput.placeholder = 'Twitch reward ID';
+    $('#newVariantMinimumLabel').firstChild.textContent = type === 'months' ? 'Minimum months' : type === 'viewers' ? 'Minimum viewers' : type === 'reward-cost' ? 'Minimum point cost' : 'Minimum Bits';
+    $('#newVariantMaximumLabel').firstChild.textContent = 'Maximum (optional)';
+  }
+
+  function variantConditionFromForm() {
+    const type = $('#newVariantConditionType').value;
+    const minimum = Number($('#newVariantMinimum').value);
+    const maximumValue = $('#newVariantMaximum').value;
+    const maximum = maximumValue === '' ? undefined : Number(maximumValue);
+    if (type === 'bits') return { minimumBits: minimum, ...(maximum === undefined ? {} : { maximumBits: maximum }) };
+    if (type === 'viewers') return { minimumViewers: minimum, ...(maximum === undefined ? {} : { maximumViewers: maximum }) };
+    if (type === 'months') return { minimumMonths: minimum, ...(maximum === undefined ? {} : { maximumMonths: maximum }) };
+    if (type === 'reward-cost') return { minimumRewardCost: minimum, ...(maximum === undefined ? {} : { maximumRewardCost: maximum }) };
+    if (type === 'tier') return { subscriptionTier: $('#newVariantExact').value.trim().toLowerCase() };
+    if (type === 'reward-id') return { rewardId: $('#newVariantExact').value.trim() };
+    throw new Error('This Twitch event does not expose a supported variant value.');
+  }
+
+  function variantConditionSummary(condition) {
+    const range = (label, minimum, maximum) => minimum !== undefined && maximum !== undefined ? `${label} ${minimum}–${maximum}` : minimum !== undefined ? `${label} ≥ ${minimum}` : `${label} ≤ ${maximum}`;
+    if (condition.minimumBits !== undefined || condition.maximumBits !== undefined) return range('Bits', condition.minimumBits, condition.maximumBits);
+    if (condition.minimumViewers !== undefined || condition.maximumViewers !== undefined) return range('Raid viewers', condition.minimumViewers, condition.maximumViewers);
+    if (condition.minimumMonths !== undefined || condition.maximumMonths !== undefined) return range('Subscribed months', condition.minimumMonths, condition.maximumMonths);
+    if (condition.minimumRewardCost !== undefined || condition.maximumRewardCost !== undefined) return range('Reward cost', condition.minimumRewardCost, condition.maximumRewardCost);
+    if (condition.subscriptionTier) return `Tier is ${condition.subscriptionTier === 'prime' ? 'Prime' : condition.subscriptionTier}`;
+    if (condition.rewardId) return `Reward ID is ${condition.rewardId}`;
+    return 'No matching rule';
+  }
+
+  function variantConditionType(condition) {
+    if (condition.minimumBits !== undefined || condition.maximumBits !== undefined) return 'bits';
+    if (condition.minimumViewers !== undefined || condition.maximumViewers !== undefined) return 'viewers';
+    if (condition.minimumMonths !== undefined || condition.maximumMonths !== undefined) return 'months';
+    if (condition.minimumRewardCost !== undefined || condition.maximumRewardCost !== undefined) return 'reward-cost';
+    if (condition.subscriptionTier) return 'tier';
+    return 'reward-id';
+  }
+
+  function resetVariantRuleForm(alert) {
+    $('#newVariantEditId').value = '';
+    $('#newVariantName').value = '';
+    $('#newVariantName').placeholder = alert.topic === 'viewer.cheer.received' ? 'Mega Cheer' : alert.topic === 'viewer.raid.received' ? 'Raid Party' : alert.topic === 'viewer.subscription.started' ? 'One Year Subscriber' : 'Premium Reward';
+    $('#newVariantMinimum').value = alert.topic === 'viewer.raid.received' ? '50' : alert.topic === 'viewer.subscription.started' ? '12' : alert.topic === 'viewer.reward.redeemed' ? '10000' : '1000';
+    $('#newVariantMaximum').value = '';
+    $('#newVariantExact').value = '';
+    $('#newVariantPriority').value = '0';
+    $('#saveVariantRule').textContent = 'Create Variant';
+    $('#cancelVariantEdit').hidden = true;
+    updateVariantConditionFields();
+  }
+
+  function renderTwitchVariants(alertId) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    if (!alert) return;
+    const variants = [...(alert.alertVariants || [])].sort((left, right) => right.priority - left.priority);
+    const list = $('#twitchVariantList');
+    list.classList.toggle('empty-state', !variants.length);
+    list.innerHTML = variants.length ? variants.map((variant) => `<article class="twitch-variant-card ${variant.enabled ? '' : 'disabled'}" style="--alert-accent:${escapeHtml(variant.accent)}">
+      <div class="variant-card-head"><div><span>PRIORITY ${variant.priority}</span><h3>${escapeHtml(variant.name)}</h3><p>${escapeHtml(variantConditionSummary(variant.condition))}</p></div><b>${variant.enabled ? 'ACTIVE' : 'OFF'}</b></div>
+      <div class="alert-media-summary"><div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(variant.audioUri))}</strong></div><div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(variant.visualUri))}</strong></div></div>
+      <div class="variant-settings-grid"><label>Priority<input data-variant-priority="${escapeHtml(variant.id)}" type="number" min="-1000" max="1000" value="${variant.priority}" /></label><label>Duration<input data-variant-duration="${escapeHtml(variant.id)}" type="number" min="1" max="60" value="${Math.round(variant.durationMs / 1000)}" /><small>seconds</small></label><label>Volume<input data-variant-volume="${escapeHtml(variant.id)}" type="number" min="0" max="100" value="${Math.round(variant.volume * 100)}" /><small>percent</small></label><label>Accent<input data-variant-accent="${escapeHtml(variant.id)}" type="color" value="${escapeHtml(variant.accent)}" /></label></div>
+      <div class="variant-card-actions"><button type="button" data-variant-edit="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Edit Rule</button><button type="button" data-variant-save="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Save Settings</button><button type="button" data-variant-design="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Design</button><button type="button" data-variant-audio="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Sound</button><button type="button" data-variant-visual="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Visual</button><button type="button" data-variant-toggle="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">${variant.enabled ? 'Disable' : 'Enable'}</button><button type="button" class="primary-button" data-variant-preview="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Preview</button><button type="button" class="danger-outline" data-variant-delete="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Delete</button></div>
+    </article>`).join('') : 'No variants yet. The base alert handles every event.';
+  }
+
+  function openTwitchVariantManager(alertId) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    if (!alert) return;
+    $('#twitchVariantAlertId').value = alert.id;
+    $('#twitchVariantTitle').textContent = `${alert.name} Variants`;
+    const choices = variantConditionChoices(alert.topic);
+    $('#newVariantConditionType').innerHTML = choices.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+    $('#twitchVariantHelp').textContent = choices.length ? 'Higher priority matching rules play first. If none match, Studio plays the base alert.' : 'This event has no amount, tier, tenure, raid-size, or reward field available for a reliable variant rule.';
+    $('#twitchVariantForm').querySelector('.variant-create-panel').classList.toggle('unavailable', !choices.length);
+    $('#twitchVariantForm').querySelector('.variant-create-panel button[type="submit"]').disabled = !choices.length;
+    resetVariantRuleForm(alert);
+    renderTwitchVariants(alert.id);
+    $('#twitchVariantDialog').showModal();
+  }
+
+  async function createTwitchVariant(event) {
+    event.preventDefault();
+    const alertId = $('#twitchVariantAlertId').value;
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    if (!alert) return;
+    try {
+      const name = $('#newVariantName').value.trim();
+      const editId = $('#newVariantEditId').value;
+      let variants;
+      let message;
+      if (editId) {
+        variants = (alert.alertVariants || []).map((variant) => variant.id === editId ? { ...variant, name, priority: Number($('#newVariantPriority').value), condition: variantConditionFromForm() } : variant);
+        message = `${name} matching rule updated.`;
+      } else {
+        const stem = alertKey(name) || 'variant';
+        let id = stem;
+        let suffix = 2;
+        while ((alert.alertVariants || []).some((entry) => entry.id === id)) id = `${stem}-${suffix++}`;
+        const variant = { schemaVersion: 1, id, name, enabled: true, priority: Number($('#newVariantPriority').value), condition: variantConditionFromForm(), durationMs: alert.durationMs, audioUri: alert.audioUri, volume: alert.volume, visualUri: alert.visualUri, accent: alert.accent, design: structuredClone(alert.design || defaultTwitchDesign()) };
+        variants = [...(alert.alertVariants || []), variant];
+        message = `${name} variant created from the base alert.`;
+      }
+      const updated = await updateTwitchVisualAlert(alert.id, { alertVariants: variants }, message);
+      if (updated) { renderTwitchVariants(updated.id); resetVariantRuleForm(updated); }
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function beginEditTwitchVariant(alertId, variantId) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    const variant = alert?.alertVariants?.find((entry) => entry.id === variantId);
+    if (!alert || !variant) return;
+    const type = variantConditionType(variant.condition);
+    $('#newVariantEditId').value = variant.id;
+    $('#newVariantName').value = variant.name;
+    $('#newVariantConditionType').value = type;
+    updateVariantConditionFields();
+    const minimum = type === 'bits' ? variant.condition.minimumBits : type === 'viewers' ? variant.condition.minimumViewers : type === 'months' ? variant.condition.minimumMonths : variant.condition.minimumRewardCost;
+    const maximum = type === 'bits' ? variant.condition.maximumBits : type === 'viewers' ? variant.condition.maximumViewers : type === 'months' ? variant.condition.maximumMonths : variant.condition.maximumRewardCost;
+    $('#newVariantMinimum').value = minimum ?? '0';
+    $('#newVariantMaximum').value = maximum ?? '';
+    $('#newVariantExact').value = type === 'tier' ? variant.condition.subscriptionTier || '' : type === 'reward-id' ? variant.condition.rewardId || '' : '';
+    $('#newVariantPriority').value = String(variant.priority);
+    $('#saveVariantRule').textContent = 'Save Matching Rule';
+    $('#cancelVariantEdit').hidden = false;
+    $('#newVariantName').focus();
+    $('#twitchVariantForm').querySelector('.variant-create-panel').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  async function updateTwitchVariant(alertId, variantId, changes, message) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    if (!alert) return null;
+    const variants = (alert.alertVariants || []).map((variant) => variant.id === variantId ? { ...variant, ...changes } : variant);
+    const updated = await updateTwitchVisualAlert(alert.id, { alertVariants: variants }, message);
+    if (updated && $('#twitchVariantDialog').open) renderTwitchVariants(updated.id);
+    return updated;
+  }
+
+  async function saveTwitchVariantSettings(alertId, variantId) {
+    const selectorId = CSS.escape(variantId);
+    return updateTwitchVariant(alertId, variantId, { priority: Number(document.querySelector(`[data-variant-priority="${selectorId}"]`).value), durationMs: Math.round(Number(document.querySelector(`[data-variant-duration="${selectorId}"]`).value) * 1000), volume: Number(document.querySelector(`[data-variant-volume="${selectorId}"]`).value) / 100, accent: document.querySelector(`[data-variant-accent="${selectorId}"]`).value }, 'Variant timing, priority, sound level, and accent saved.');
+  }
+
+  async function assignTwitchVariantAsset(alertId, variantId, kind) {
+    try {
+      const selection = kind === 'audio' ? await window.tempestStudio.selectSoundAlertAudio() : await window.tempestStudio.selectSoundAlertVisual();
+      if (!selection) return;
+      await updateTwitchVariant(alertId, variantId, { [kind === 'audio' ? 'audioUri' : 'visualUri']: selection.uri }, `${selection.name} assigned to the variant ${kind === 'audio' ? 'sound' : 'visual'}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function deleteTwitchVariant(alertId, variantId) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    const variant = alert?.alertVariants?.find((entry) => entry.id === variantId);
+    if (!alert || !variant || !confirm(`Delete the ${variant.name} variant? Assigned local files will not be deleted.`)) return;
+    await updateTwitchVisualAlert(alert.id, { alertVariants: alert.alertVariants.filter((entry) => entry.id !== variantId) }, `${variant.name} variant deleted.`);
+    renderTwitchVariants(alert.id);
+  }
+
   async function deleteTwitchAlert(id) {
     const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === id);
     if (!alert || !confirm(`Delete ${alert.name}? Its local media files will not be deleted.`)) return;
@@ -1410,10 +1812,10 @@
   function defaultTwitchDesign() {
     return {
       preset: 'tempest', layout: 'media-left', position: 'bottom-center', positionOffsetX: 0, positionOffsetY: 0, customPositionX: 50, customPositionY: 82, scale: 1, entranceAnimation: 'slide-up', exitAnimation: 'fade', textAnimation: 'glow',
-      headlineTemplate: '{event}', detailTemplate: 'Triggered by {viewer}', showViewerMessage: true,
-      fontFamily: 'Inter', fontSize: 42, fontWeight: 800, textAlign: 'left', textColor: '#F5FBFF', secondaryTextColor: '#A9BDC7', textShadow: 0.35, letterSpacing: 0,
-      textOffsetX: 0, textOffsetY: 0, textPositionX: 50, textPositionY: 72, cardWidth: 900, backgroundColor: '#050C13', backgroundOpacity: 0.94, borderWidth: 1, borderRadius: 24, padding: 22, cardShadow: 0.55,
-      mediaWidth: 320, mediaHeight: 210, mediaFit: 'contain', mediaBorderRadius: 16, mediaDelayMs: 0, textDelayMs: 0, textDurationMs: 0, soundDelayMs: 0,
+      headlineTemplate: '{event}', detailTemplate: 'Triggered by {viewer}', showEyebrow: true, showHeadline: true, showDetail: true, showViewerMessage: true,
+      fontFamily: 'Inter', fontSize: 42, eyebrowFontSize: 13, detailFontSize: 21, messageFontSize: 16, fontWeight: 800, textAlign: 'left', textColor: '#F5FBFF', secondaryTextColor: '#A9BDC7', eyebrowTextColor: '#54F2EB', messageTextColor: '#F5FBFF', textShadow: 0.35, letterSpacing: 0,
+      textOffsetX: 0, textOffsetY: 0, textPositionX: 50, textPositionY: 72, eyebrowPositionX: 50, eyebrowPositionY: 52, headlinePositionX: 50, headlinePositionY: 63, detailPositionX: 50, detailPositionY: 74, messagePositionX: 50, messagePositionY: 84, eyebrowMaxWidth: 1000, headlineMaxWidth: 1800, detailMaxWidth: 1600, messageMaxWidth: 1600, cardWidth: 900, backgroundColor: '#050C13', backgroundOpacity: 0.94, borderWidth: 1, borderRadius: 24, padding: 22, cardShadow: 0.55,
+      mediaWidth: 320, mediaHeight: 210, mediaFit: 'contain', mediaScale: 1, mediaPositionX: 50, mediaPositionY: 50, mediaOpacity: 1, mediaBorderRadius: 16, mediaDelayMs: 0, textDelayMs: 0, textDurationMs: 0, soundDelayMs: 0,
       ttsEnabled: false, ttsTemplate: '{viewer}: {event}', ttsVolume: 0.8, ttsRate: 1, ttsPitch: 1, customHtml: '', customCss: '', customJavaScript: ''
     };
   }
@@ -1449,19 +1851,42 @@
     $('#twitchDesignTextAnimation').value = design.textAnimation;
     $('#twitchDesignHeadline').value = design.headlineTemplate;
     $('#twitchDesignDetail').value = design.detailTemplate;
+    $('#twitchDesignShowEyebrow').checked = design.showEyebrow;
+    $('#twitchDesignShowHeadline').checked = design.showHeadline;
+    $('#twitchDesignShowDetail').checked = design.showDetail;
     $('#twitchDesignShowMessage').checked = design.showViewerMessage;
     $('#twitchDesignFont').value = design.fontFamily;
     $('#twitchDesignFontSize').value = design.fontSize;
+    $('#twitchDesignHeadlineFontSize').value = design.fontSize;
+    $('#twitchDesignEyebrowFontSize').value = design.eyebrowFontSize;
+    $('#twitchDesignDetailFontSize').value = design.detailFontSize;
+    $('#twitchDesignMessageFontSize').value = design.messageFontSize;
     $('#twitchDesignFontWeight').value = design.fontWeight;
     $('#twitchDesignTextAlign').value = design.textAlign;
     $('#twitchDesignTextColor').value = design.textColor;
     $('#twitchDesignSecondaryColor').value = design.secondaryTextColor;
+    $('#twitchDesignHeadlineColor').value = design.textColor;
+    $('#twitchDesignDetailColor').value = design.secondaryTextColor;
+    $('#twitchDesignEyebrowColor').value = design.eyebrowTextColor;
+    $('#twitchDesignMessageColor').value = design.messageTextColor;
     $('#twitchDesignTextShadow').value = Math.round(design.textShadow * 100);
     $('#twitchDesignLetterSpacing').value = design.letterSpacing;
     $('#twitchDesignTextX').value = design.textOffsetX;
     $('#twitchDesignTextY').value = design.textOffsetY;
     $('#twitchDesignTextPositionX').value = design.textPositionX;
     $('#twitchDesignTextPositionY').value = design.textPositionY;
+    $('#twitchDesignEyebrowX').value = design.eyebrowPositionX;
+    $('#twitchDesignEyebrowY').value = design.eyebrowPositionY;
+    $('#twitchDesignHeadlineX').value = design.headlinePositionX;
+    $('#twitchDesignHeadlineY').value = design.headlinePositionY;
+    $('#twitchDesignDetailX').value = design.detailPositionX;
+    $('#twitchDesignDetailY').value = design.detailPositionY;
+    $('#twitchDesignMessageX').value = design.messagePositionX;
+    $('#twitchDesignMessageY').value = design.messagePositionY;
+    $('#twitchDesignEyebrowMaxWidth').value = design.eyebrowMaxWidth;
+    $('#twitchDesignHeadlineMaxWidth').value = design.headlineMaxWidth;
+    $('#twitchDesignDetailMaxWidth').value = design.detailMaxWidth;
+    $('#twitchDesignMessageMaxWidth').value = design.messageMaxWidth;
     $('#twitchDesignCardWidth').value = design.cardWidth;
     $('#twitchDesignBackgroundColor').value = design.backgroundColor;
     $('#twitchDesignBackgroundOpacity').value = Math.round(design.backgroundOpacity * 100);
@@ -1472,6 +1897,10 @@
     $('#twitchDesignMediaWidth').value = design.mediaWidth;
     $('#twitchDesignMediaHeight').value = design.mediaHeight;
     $('#twitchDesignMediaFit').value = design.mediaFit;
+    $('#twitchDesignMediaScale').value = Math.round(design.mediaScale * 100);
+    $('#twitchDesignMediaPositionX').value = design.mediaPositionX;
+    $('#twitchDesignMediaPositionY').value = design.mediaPositionY;
+    $('#twitchDesignMediaOpacity').value = Math.round(design.mediaOpacity * 100);
     $('#twitchDesignMediaRadius').value = design.mediaBorderRadius;
     $('#twitchDesignMediaDelay').value = design.mediaDelayMs;
     $('#twitchDesignTextDelay').value = design.textDelayMs;
@@ -1495,6 +1924,51 @@
     return { x: horizontal, y: vertical };
   }
 
+  function renderAlertDesignerMedia() {
+    const container = $('#twitchPlacementMockMedia');
+    if (!container) return;
+    const uri = activeAlertDesignAssets.visualUri;
+    if (!uri) {
+      container.innerHTML = '<span>NO VISUAL ASSIGNED</span>';
+      return;
+    }
+    const video = /\.(?:mp4|webm)(?:$|\?)/i.test(uri);
+    const element = document.createElement(video ? 'video' : 'img');
+    element.src = uri;
+    if (video) {
+      element.autoplay = true;
+      element.loop = true;
+      element.muted = true;
+      element.playsInline = true;
+    }
+    container.replaceChildren(element);
+  }
+
+  const layerControlIds = {
+    eyebrow: ['#twitchDesignEyebrowX', '#twitchDesignEyebrowY', '#twitchDesignShowEyebrow'],
+    headline: ['#twitchDesignHeadlineX', '#twitchDesignHeadlineY', '#twitchDesignShowHeadline'],
+    detail: ['#twitchDesignDetailX', '#twitchDesignDetailY', '#twitchDesignShowDetail'],
+    message: ['#twitchDesignMessageX', '#twitchDesignMessageY', '#twitchDesignShowMessage']
+  };
+
+  function alertDesignerPreviewVariables() {
+    const viewer = $('#alertDesignPreviewViewer').value || 'Studio Operator';
+    return { viewer, name: viewer, event: $('#twitchDesignTitle').textContent.replace(/\s+Design$/, '') || 'Alert', amount: $('#alertDesignPreviewAmount').value || '100', message: $('#alertDesignPreviewMessage').value || '', reward: 'Sample Reward', tier: 'Tier 1', months: '3', topic: 'viewer.event' };
+  }
+
+  function renderAlertDesignerTemplate(value) {
+    const variables = alertDesignerPreviewVariables();
+    return String(value || '').replace(/\{([a-z]+)\}/gi, (_match, key) => variables[String(key).toLowerCase()] ?? '');
+  }
+
+  function positionDesignerLayer(layer, x, y) {
+    const controls = layerControlIds[layer];
+    if (!controls) return;
+    $(controls[0]).value = Math.min(100, Math.max(0, x)).toFixed(1);
+    $(controls[1]).value = Math.min(100, Math.max(0, y)).toFixed(1);
+    updateTwitchPlacementPreview();
+  }
+
   function updateTwitchPlacementPreview() {
     const canvas = $('#twitchPlacementCanvas');
     const mock = $('#twitchPlacementMock');
@@ -1510,23 +1984,56 @@
     x = Math.min(100, Math.max(0, Number.isFinite(x) ? x : 50));
     y = Math.min(100, Math.max(0, Number.isFinite(y) ? y : 50));
     const scalePercent = Math.min(200, Math.max(25, Number($('#twitchDesignScale').value) || 100));
+    const canvasProfile = activeCanvasProfile();
+    const baseCanvasWidth = canvasProfile.baseWidth;
+    const baseCanvasHeight = canvasProfile.baseHeight;
+    canvas.style.aspectRatio = `${baseCanvasWidth} / ${baseCanvasHeight}`;
+    $('#alertDesignerCanvasProfile').textContent = `${baseCanvasWidth} × ${baseCanvasHeight} · ${canvasAspectLabel(canvasProfile)} BROWSER SOURCE${canvasProfile.source === 'broadcast' ? ' · LIVE' : ''}`;
     const canvasWidth = canvas.clientWidth || 920;
     const overlayLayout = $('#twitchDesignLayout').value === 'media-overlay';
     const cardWidth = overlayLayout
       ? Math.min(2400, Math.max(40, Number($('#twitchDesignMediaWidth').value) || 320))
       : Math.min(2600, Math.max(280, Number($('#twitchDesignCardWidth').value) || 900));
-    const previewWidth = Math.min(canvasWidth * 0.88, Math.max(90, canvasWidth * cardWidth / 3440));
+    const previewWidth = Math.min(canvasWidth * 0.88, Math.max(90, canvasWidth * cardWidth / baseCanvasWidth));
     mock.style.left = `${x}%`;
     mock.style.top = `${y}%`;
     mock.style.width = `${previewWidth}px`;
     mock.style.aspectRatio = overlayLayout ? `${Math.max(40, Number($('#twitchDesignMediaWidth').value) || 320)} / ${Math.max(40, Number($('#twitchDesignMediaHeight').value) || 210)}` : '';
     mock.classList.toggle('media-overlay', overlayLayout);
-    mock.style.setProperty('--mock-text-x', `${Math.min(100, Math.max(0, Number($('#twitchDesignTextPositionX').value) || 50))}%`);
-    mock.style.setProperty('--mock-text-y', `${Math.min(100, Math.max(0, Number($('#twitchDesignTextPositionY').value) || 72))}%`);
+    mock.style.setProperty('--mock-media-fit', $('#twitchDesignMediaFit').value);
+    mock.style.setProperty('--mock-media-scale', Number($('#twitchDesignMediaScale').value) / 100);
+    mock.style.setProperty('--mock-media-position-x', `${Number($('#twitchDesignMediaPositionX').value)}%`);
+    mock.style.setProperty('--mock-media-position-y', `${Number($('#twitchDesignMediaPositionY').value)}%`);
+    mock.style.setProperty('--mock-media-opacity', Number($('#twitchDesignMediaOpacity').value) / 100);
+    mock.style.setProperty('--mock-font', $('#twitchDesignFont').value);
+    mock.style.setProperty('--mock-text-align', $('#twitchDesignTextAlign').value);
+    for (const [layer, controls] of Object.entries(layerControlIds)) {
+      const element = mock.querySelector(`[data-design-layer="${layer}"]`);
+      const layerX = Math.min(100, Math.max(0, Number($(controls[0]).value) || 50));
+      const layerY = Math.min(100, Math.max(0, Number($(controls[1]).value) || 50));
+      element.style.setProperty('--layer-x', `${layerX}%`);
+      element.style.setProperty('--layer-y', `${layerY}%`);
+      element.hidden = !$(controls[2]).checked;
+    }
+    const layerStyles = {
+      eyebrow: ['#twitchDesignEyebrowFontSize', '#twitchDesignEyebrowColor', '#twitchDesignEyebrowMaxWidth'],
+      headline: ['#twitchDesignHeadlineFontSize', '#twitchDesignHeadlineColor', '#twitchDesignHeadlineMaxWidth'],
+      detail: ['#twitchDesignDetailFontSize', '#twitchDesignDetailColor', '#twitchDesignDetailMaxWidth'],
+      message: ['#twitchDesignMessageFontSize', '#twitchDesignMessageColor', '#twitchDesignMessageMaxWidth']
+    };
+    for (const [layer, controls] of Object.entries(layerStyles)) {
+      const element = mock.querySelector(`[data-design-layer="${layer}"]`);
+      element.style.fontSize = `${Math.max(6, Number($(controls[0]).value) * canvasWidth / baseCanvasWidth)}px`;
+      element.style.color = $(controls[1]).value;
+      element.style.maxWidth = `${Math.max(30, Number($(controls[2]).value) * canvasWidth / baseCanvasWidth)}px`;
+    }
     mock.style.transform = `translate(-50%, -50%) scale(${scalePercent / 100})`;
     $('#twitchDesignScaleValue').textContent = `${Math.round(scalePercent)}%`;
     $('#twitchPlacementReadout').textContent = `X ${x.toFixed(1)}% · Y ${y.toFixed(1)}% · Size ${Math.round(scalePercent)}%`;
-    $('#twitchPlacementMockTitle').textContent = $('#twitchDesignTitle').textContent.replace(/\s+Design$/, '') || 'Alert';
+    $('#twitchPlacementMockEyebrow').textContent = $('#alertDesignKind').value === 'interaction' ? 'TEMPEST INTERACTION ALERT' : 'TEMPEST TWITCH ALERT';
+    $('#twitchPlacementMockTitle').textContent = renderAlertDesignerTemplate($('#twitchDesignHeadline').value) || 'Alert';
+    $('#twitchPlacementMockDetail').textContent = renderAlertDesignerTemplate($('#twitchDesignDetail').value);
+    $('#twitchPlacementMockMessage').textContent = $('#alertDesignPreviewMessage').value;
   }
 
   function setCustomTwitchPlacement(x, y) {
@@ -1540,8 +2047,12 @@
     if (event.button !== 0) return;
     const canvas = $('#twitchPlacementCanvas');
     const mock = $('#twitchPlacementMock');
+    const layerElement = event.target.closest?.('[data-design-layer]');
+    const overlayLayout = $('#twitchDesignLayout').value === 'media-overlay';
     const resizing = event.target === $('#twitchPlacementResizeHandle');
     const startScale = Number($('#twitchDesignScale').value) / 100;
+    const startMediaWidth = Number($('#twitchDesignMediaWidth').value);
+    const startMediaHeight = Number($('#twitchDesignMediaHeight').value);
     const mockRect = mock.getBoundingClientRect();
     const centerX = mockRect.left + mockRect.width / 2;
     const centerY = mockRect.top + mockRect.height / 2;
@@ -1550,8 +2061,20 @@
     event.preventDefault();
 
     const move = (moveEvent) => {
+      if (layerElement && overlayLayout) {
+        const bounds = mock.getBoundingClientRect();
+        positionDesignerLayer(layerElement.dataset.designLayer, (moveEvent.clientX - bounds.left) / bounds.width * 100, (moveEvent.clientY - bounds.top) / bounds.height * 100);
+        return;
+      }
       if (resizing) {
         const distance = Math.hypot(moveEvent.clientX - centerX, moveEvent.clientY - centerY);
+        if (overlayLayout) {
+          const factor = Math.min(5, Math.max(0.2, distance / startDistance));
+          $('#twitchDesignMediaWidth').value = Math.round(Math.min(2400, Math.max(40, startMediaWidth * factor)));
+          $('#twitchDesignMediaHeight').value = Math.round(Math.min(1440, Math.max(40, startMediaHeight * factor)));
+          updateTwitchPlacementPreview();
+          return;
+        }
         const scale = Math.min(2, Math.max(0.25, startScale * distance / startDistance));
         $('#twitchDesignScale').value = Math.round(scale * 100);
         updateTwitchPlacementPreview();
@@ -1564,6 +2087,7 @@
       mock.removeEventListener('pointermove', move);
       mock.removeEventListener('pointerup', finish);
       mock.removeEventListener('pointercancel', finish);
+      pushAlertDesignHistory();
     };
     mock.addEventListener('pointermove', move);
     mock.addEventListener('pointerup', finish);
@@ -1575,6 +2099,13 @@
     if (!movement) return;
     event.preventDefault();
     const step = event.shiftKey ? 5 : 1;
+    const layer = event.target.dataset?.designLayer;
+    if (layer && $('#twitchDesignLayout').value === 'media-overlay') {
+      const controls = layerControlIds[layer];
+      positionDesignerLayer(layer, Number($(controls[0]).value) + movement[0] * step, Number($(controls[1]).value) + movement[1] * step);
+      pushAlertDesignHistory();
+      return;
+    }
     const position = $('#twitchDesignPosition').value;
     const current = position === 'custom'
       ? { x: Number($('#twitchDesignCustomX').value), y: Number($('#twitchDesignCustomY').value) }
@@ -1597,19 +2128,39 @@
       textAnimation: $('#twitchDesignTextAnimation').value,
       headlineTemplate: $('#twitchDesignHeadline').value,
       detailTemplate: $('#twitchDesignDetail').value,
+      showEyebrow: $('#twitchDesignShowEyebrow').checked,
+      showHeadline: $('#twitchDesignShowHeadline').checked,
+      showDetail: $('#twitchDesignShowDetail').checked,
       showViewerMessage: $('#twitchDesignShowMessage').checked,
       fontFamily: $('#twitchDesignFont').value,
-      fontSize: Number($('#twitchDesignFontSize').value),
+      fontSize: Number($('#twitchDesignHeadlineFontSize').value),
+      eyebrowFontSize: Number($('#twitchDesignEyebrowFontSize').value),
+      detailFontSize: Number($('#twitchDesignDetailFontSize').value),
+      messageFontSize: Number($('#twitchDesignMessageFontSize').value),
       fontWeight: Number($('#twitchDesignFontWeight').value),
       textAlign: $('#twitchDesignTextAlign').value,
-      textColor: $('#twitchDesignTextColor').value,
-      secondaryTextColor: $('#twitchDesignSecondaryColor').value,
+      textColor: $('#twitchDesignHeadlineColor').value,
+      secondaryTextColor: $('#twitchDesignDetailColor').value,
+      eyebrowTextColor: $('#twitchDesignEyebrowColor').value,
+      messageTextColor: $('#twitchDesignMessageColor').value,
       textShadow: Number($('#twitchDesignTextShadow').value) / 100,
       letterSpacing: Number($('#twitchDesignLetterSpacing').value),
       textOffsetX: Number($('#twitchDesignTextX').value),
       textOffsetY: Number($('#twitchDesignTextY').value),
       textPositionX: Number($('#twitchDesignTextPositionX').value),
       textPositionY: Number($('#twitchDesignTextPositionY').value),
+      eyebrowPositionX: Number($('#twitchDesignEyebrowX').value),
+      eyebrowPositionY: Number($('#twitchDesignEyebrowY').value),
+      headlinePositionX: Number($('#twitchDesignHeadlineX').value),
+      headlinePositionY: Number($('#twitchDesignHeadlineY').value),
+      detailPositionX: Number($('#twitchDesignDetailX').value),
+      detailPositionY: Number($('#twitchDesignDetailY').value),
+      messagePositionX: Number($('#twitchDesignMessageX').value),
+      messagePositionY: Number($('#twitchDesignMessageY').value),
+      eyebrowMaxWidth: Number($('#twitchDesignEyebrowMaxWidth').value),
+      headlineMaxWidth: Number($('#twitchDesignHeadlineMaxWidth').value),
+      detailMaxWidth: Number($('#twitchDesignDetailMaxWidth').value),
+      messageMaxWidth: Number($('#twitchDesignMessageMaxWidth').value),
       cardWidth: Number($('#twitchDesignCardWidth').value),
       backgroundColor: $('#twitchDesignBackgroundColor').value,
       backgroundOpacity: Number($('#twitchDesignBackgroundOpacity').value) / 100,
@@ -1620,6 +2171,10 @@
       mediaWidth: Number($('#twitchDesignMediaWidth').value),
       mediaHeight: Number($('#twitchDesignMediaHeight').value),
       mediaFit: $('#twitchDesignMediaFit').value,
+      mediaScale: Number($('#twitchDesignMediaScale').value) / 100,
+      mediaPositionX: Number($('#twitchDesignMediaPositionX').value),
+      mediaPositionY: Number($('#twitchDesignMediaPositionY').value),
+      mediaOpacity: Number($('#twitchDesignMediaOpacity').value) / 100,
       mediaBorderRadius: Number($('#twitchDesignMediaRadius').value),
       mediaDelayMs: Number($('#twitchDesignMediaDelay').value),
       textDelayMs: Number($('#twitchDesignTextDelay').value),
@@ -1636,6 +2191,128 @@
     };
   }
 
+  function updateAlertDesignHistoryButtons() {
+    $('#undoAlertDesign').disabled = alertDesignHistoryIndex <= 0;
+    $('#redoAlertDesign').disabled = alertDesignHistoryIndex < 0 || alertDesignHistoryIndex >= alertDesignHistory.length - 1;
+  }
+
+  function resetAlertDesignHistory() {
+    alertDesignHistory = [structuredClone(readTwitchDesign())];
+    alertDesignHistoryIndex = 0;
+    updateAlertDesignHistoryButtons();
+  }
+
+  function pushAlertDesignHistory() {
+    if (alertDesignHistoryLocked || !$('#twitchDesignDialog').open) return;
+    const next = readTwitchDesign();
+    if (JSON.stringify(next) === JSON.stringify(alertDesignHistory[alertDesignHistoryIndex])) return;
+    alertDesignHistory = alertDesignHistory.slice(0, alertDesignHistoryIndex + 1);
+    alertDesignHistory.push(structuredClone(next));
+    if (alertDesignHistory.length > 80) alertDesignHistory.shift();
+    alertDesignHistoryIndex = alertDesignHistory.length - 1;
+    updateAlertDesignHistoryButtons();
+  }
+
+  function moveAlertDesignHistory(direction) {
+    const nextIndex = alertDesignHistoryIndex + direction;
+    if (nextIndex < 0 || nextIndex >= alertDesignHistory.length) return;
+    alertDesignHistoryIndex = nextIndex;
+    alertDesignHistoryLocked = true;
+    populateTwitchDesign(alertDesignHistory[alertDesignHistoryIndex]);
+    alertDesignHistoryLocked = false;
+    updateAlertDesignHistoryButtons();
+  }
+
+  function stopAlertDesignPreview() {
+    alertDesignPreviewRevision++;
+    if (alertDesignAudio) {
+      alertDesignAudio.pause();
+      alertDesignAudio.currentTime = 0;
+      alertDesignAudio = null;
+    }
+    $('#twitchPlacementMock').classList.remove('previewing');
+  }
+
+  function previewAlertDesignHere() {
+    stopAlertDesignPreview();
+    const revision = alertDesignPreviewRevision;
+    const mock = $('#twitchPlacementMock');
+    void mock.offsetWidth;
+    mock.classList.add('previewing');
+    const video = $('#twitchPlacementMockMedia video');
+    if (video) { video.currentTime = 0; void video.play().catch(() => {}); }
+    if (activeAlertDesignAssets.audioUri) {
+      const previewAudio = new Audio(activeAlertDesignAssets.audioUri);
+      alertDesignAudio = previewAudio;
+      previewAudio.volume = Math.min(1, Math.max(0, Number(activeAlertDesignAssets.volume) || 0));
+      setTimeout(() => { if (revision === alertDesignPreviewRevision && alertDesignAudio === previewAudio) void previewAudio.play().catch(() => {}); }, Math.max(0, Number($('#twitchDesignSoundDelay').value) || 0));
+    }
+    setTimeout(() => { if (revision === alertDesignPreviewRevision) mock.classList.remove('previewing'); }, 1800);
+  }
+
+  async function validateAlertDesignCode(showSuccess = true) {
+    const result = await window.tempestStudio.validateAlertCode({
+      html: $('#twitchDesignCustomHtml').value,
+      css: $('#twitchDesignCustomCss').value,
+      javascript: $('#twitchDesignCustomJavaScript').value
+    });
+    const status = $('#alertDesignCodeStatus');
+    status.classList.toggle('valid', result.ok);
+    status.classList.toggle('invalid', !result.ok);
+    status.textContent = result.ok ? 'HTML, CSS, and JavaScript passed validation.' : result.errors.join('\n');
+    if (showSuccess) toast(result.ok ? 'Custom alert code is valid.' : result.errors[0], !result.ok);
+    return result.ok;
+  }
+
+  async function importAlertDesignTemplate() {
+    try {
+      const imported = await window.tempestStudio.importAlertDesignTemplate();
+      if (!imported) return;
+      alertDesignHistoryLocked = true;
+      populateTwitchDesign(imported.design);
+      alertDesignHistoryLocked = false;
+      pushAlertDesignHistory();
+      toast(`${imported.name || 'Alert'} template imported. Save to apply it.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function exportAlertDesignTemplate() {
+    try {
+      const exported = await window.tempestStudio.exportAlertDesignTemplate({
+        name: $('#twitchDesignTitle').textContent.replace(/\s+Design$/, ''),
+        kind: $('#alertDesignKind').value,
+        design: readTwitchDesign()
+      });
+      if (exported) toast('Alert design template exported.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function openDuplicateAlertDesign() {
+    const currentId = $('#twitchDesignAlertId').value;
+    const currentKind = $('#alertDesignKind').value;
+    const targets = [
+      ...(state.twitchVisualAlerts.alerts || []).map((alert) => ({ value: `twitch:${alert.id}`, label: `Twitch — ${alert.name}`, id: alert.id, kind: 'twitch' })),
+      ...(state.soundAlerts.alerts || []).map((alert) => ({ value: `interaction:${alert.id}`, label: `Interaction — ${alert.name}`, id: alert.id, kind: 'interaction' }))
+    ].filter((target) => target.id !== currentId || target.kind !== currentKind);
+    if (!targets.length) return toast('Create another alert before duplicating this design.', true);
+    $('#duplicateAlertDesignTarget').innerHTML = targets.map((target) => `<option value="${escapeHtml(target.value)}">${escapeHtml(target.label)}</option>`).join('');
+    $('#duplicateAlertDesignDialog').showModal();
+  }
+
+  async function duplicateAlertDesign(event) {
+    event.preventDefault();
+    try {
+      if (!await validateAlertDesignCode(false)) throw new Error('Fix the custom code errors before copying this design.');
+      const [kind, ...idParts] = $('#duplicateAlertDesignTarget').value.split(':');
+      const id = idParts.join(':');
+      if (!id || !['twitch', 'interaction'].includes(kind)) throw new Error('Choose a destination alert.');
+      const copied = kind === 'interaction'
+        ? await updateSoundAlert(id, { design: readTwitchDesign() }, 'Alert design duplicated. Sound and visual assignments were preserved.')
+        : await updateTwitchVisualAlert(id, { design: readTwitchDesign() }, 'Alert design duplicated. Sound and visual assignments were preserved.');
+      if (copied) $('#duplicateAlertDesignDialog').close();
+    } catch (error) { toast(error.message, true); }
+  }
+
   function switchAlertCodeTab(tabName) {
     document.querySelectorAll('[data-design-code-tab]').forEach((button) => button.classList.toggle('active', button.dataset.designCodeTab === tabName));
     document.querySelectorAll('[data-design-code-panel]').forEach((panel) => { panel.hidden = panel.dataset.designCodePanel !== tabName; });
@@ -1648,9 +2325,32 @@
     $('#alertDesignKicker').textContent = 'TWITCH ALERT DESIGNER';
     $('#alertDesignHelp').textContent = 'Use template variables to make the same design respond to the live Twitch event.';
     $('#twitchDesignAlertId').value = alert.id;
+    $('#twitchDesignVariantId').value = '';
     $('#twitchDesignTitle').textContent = `${alert.name} Design`;
+    activeAlertDesignAssets = { visualUri: alert.visualUri || '', audioUri: alert.audioUri || '', volume: alert.volume };
     populateTwitchDesign(alert.design);
+    renderAlertDesignerMedia();
     $('#twitchDesignDialog').showModal();
+    resetAlertDesignHistory();
+    requestAnimationFrame(updateTwitchPlacementPreview);
+  }
+
+  function openTwitchVariantDesignEditor(alertId, variantId) {
+    const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === alertId);
+    const variant = alert?.alertVariants?.find((entry) => entry.id === variantId);
+    if (!alert || !variant) return;
+    if ($('#twitchVariantDialog').open) $('#twitchVariantDialog').close();
+    $('#alertDesignKind').value = 'twitch-variant';
+    $('#alertDesignKicker').textContent = 'TWITCH ALERT VARIANT DESIGNER';
+    $('#alertDesignHelp').textContent = `${variantConditionSummary(variant.condition)}. This design and its assigned media are independent from the base alert.`;
+    $('#twitchDesignAlertId').value = alert.id;
+    $('#twitchDesignVariantId').value = variant.id;
+    $('#twitchDesignTitle').textContent = `${variant.name} Design`;
+    activeAlertDesignAssets = { visualUri: variant.visualUri || '', audioUri: variant.audioUri || '', volume: variant.volume };
+    populateTwitchDesign(variant.design || alert.design);
+    renderAlertDesignerMedia();
+    $('#twitchDesignDialog').showModal();
+    resetAlertDesignHistory();
     requestAnimationFrame(updateTwitchPlacementPreview);
   }
 
@@ -1659,11 +2359,16 @@
     if (!alert) return;
     $('#alertDesignKind').value = 'interaction';
     $('#alertDesignKicker').textContent = 'INTERACTION ALERT DESIGNER';
-    $('#alertDesignHelp').textContent = 'Place this sound-and-visual interaction anywhere on the dedicated 3440 × 1440 Interaction Alert Browser Source canvas.';
+    const canvas = activeCanvasProfile();
+    $('#alertDesignHelp').textContent = `Place this sound-and-visual interaction anywhere on the dedicated ${canvas.baseWidth} × ${canvas.baseHeight} Interaction Alert Browser Source canvas.`;
     $('#twitchDesignAlertId').value = alert.id;
+    $('#twitchDesignVariantId').value = '';
     $('#twitchDesignTitle').textContent = `${alert.name} Design`;
+    activeAlertDesignAssets = { visualUri: alert.visualUri || '', audioUri: alert.audioUri || '', volume: alert.volume };
     populateTwitchDesign(alert.design || defaultInteractionDesign());
+    renderAlertDesignerMedia();
     $('#twitchDesignDialog').showModal();
+    resetAlertDesignHistory();
     requestAnimationFrame(updateTwitchPlacementPreview);
   }
 
@@ -1671,24 +2376,32 @@
     event?.preventDefault();
     const id = $('#twitchDesignAlertId').value;
     if (!id) return;
+    if (!await validateAlertDesignCode(false)) {
+      $('#twitchDesignDialog').querySelector('.design-custom-code').open = true;
+      toast('Fix the custom code errors before saving.', true);
+      return;
+    }
     const kind = $('#alertDesignKind').value;
+    const variantId = $('#twitchDesignVariantId').value;
     const saved = kind === 'interaction'
       ? await updateSoundAlert(id, { design: readTwitchDesign() }, 'Interaction Alert design and canvas placement saved.')
-      : await updateTwitchVisualAlert(id, { design: readTwitchDesign() }, 'Twitch Alert design saved.');
+      : kind === 'twitch-variant'
+        ? await updateTwitchVariant(id, variantId, { design: readTwitchDesign() }, 'Twitch Alert variant design saved.')
+        : await updateTwitchVisualAlert(id, { design: readTwitchDesign() }, 'Twitch Alert design saved.');
     if (!saved) return;
     $('#twitchDesignDialog').close();
     if (preview) {
       if (kind === 'interaction') await previewVisualAlert(id);
-      else await previewTwitchVisualAlert(id);
+      else await previewTwitchVisualAlert(id, variantId || undefined);
     }
   }
 
-  async function previewTwitchVisualAlert(id) {
+  async function previewTwitchVisualAlert(id, variantId) {
     try {
-      const result = await api(`/v1/visual-alerts/twitch/${encodeURIComponent(id)}/preview`, { method: 'POST', body: {} });
+      const result = await api(`/v1/visual-alerts/twitch/${encodeURIComponent(id)}/preview`, { method: 'POST', body: variantId ? { variantId } : {} });
       state.visualAlerts = await api('/v1/visual-alerts');
       renderVisualAlerts();
-      toast(`${result.activeAlert.name} preview started.`);
+      toast(`${result.activeAlert.name}${variantId ? ' variant' : ''} preview started.`);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -1891,6 +2604,9 @@
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.copyText) return copyToClipboard(button.dataset.copyText, button);
+    if (button.dataset.exportStudioBackup) return exportStudioBackup();
+    if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
+    if (button.dataset.clearAlertHistory) return clearAlertHistory();
     if (button.dataset.designCodeTab) return switchAlertCodeTab(button.dataset.designCodeTab);
     if (button.dataset.onboardingStep !== undefined) {
       onboardingStep = Math.max(0, Math.min(onboardingSteps.length - 1, Number(button.dataset.onboardingStep) || 0));
@@ -1902,6 +2618,9 @@
     }
     if (button.dataset.deleteInteractionAlert) return deleteInteractionAlert(button.dataset.deleteInteractionAlert);
     if (button.dataset.deleteTwitchAlert) return deleteTwitchAlert(button.dataset.deleteTwitchAlert);
+    if (button.dataset.importAlertPack) return importAlertPack(button.dataset.importAlertPack);
+    if (button.dataset.exportInteractionAlertPack) return exportAlertPack('interaction', button.dataset.exportInteractionAlertPack);
+    if (button.dataset.exportTwitchAlertPack) return exportAlertPack('twitch', button.dataset.exportTwitchAlertPack);
     if (button.dataset.section) return showSection(button.dataset.section);
     if (button.dataset.go) return showSection(button.dataset.go);
     if (button.dataset.triggerWorkflow) return triggerWorkflow(button.dataset.triggerWorkflow);
@@ -1915,6 +2634,20 @@
     if (button.dataset.visualAlertClear) return clearVisualAlert();
     if (button.dataset.alertQueueClear) return clearAlertQueue();
     if (button.dataset.twitchVisualSave) return saveTwitchVisualSettings(button.dataset.twitchVisualSave);
+    if (button.dataset.twitchAlertVariants) return openTwitchVariantManager(button.dataset.twitchAlertVariants);
+    if (button.dataset.variantEdit) return beginEditTwitchVariant(button.dataset.parentAlert, button.dataset.variantEdit);
+    if (button.dataset.variantSave) return saveTwitchVariantSettings(button.dataset.parentAlert, button.dataset.variantSave);
+    if (button.dataset.variantDesign) return openTwitchVariantDesignEditor(button.dataset.parentAlert, button.dataset.variantDesign);
+    if (button.dataset.variantAudio) return assignTwitchVariantAsset(button.dataset.parentAlert, button.dataset.variantAudio, 'audio');
+    if (button.dataset.variantVisual) return assignTwitchVariantAsset(button.dataset.parentAlert, button.dataset.variantVisual, 'visual');
+    if (button.dataset.variantPreview) return previewTwitchVisualAlert(button.dataset.parentAlert, button.dataset.variantPreview);
+    if (button.dataset.variantDelete) return deleteTwitchVariant(button.dataset.parentAlert, button.dataset.variantDelete);
+    if (button.dataset.variantToggle) {
+      const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === button.dataset.parentAlert);
+      const variant = alert?.alertVariants?.find((entry) => entry.id === button.dataset.variantToggle);
+      if (alert && variant) return updateTwitchVariant(alert.id, variant.id, { enabled: !variant.enabled }, `${variant.name} ${variant.enabled ? 'disabled' : 'enabled'}.`);
+      return;
+    }
     if (button.dataset.interactionAlertDesign) return openInteractionDesignEditor(button.dataset.interactionAlertDesign);
     if (button.dataset.twitchAlertDesign) return openTwitchDesignEditor(button.dataset.twitchAlertDesign);
     if (button.dataset.twitchAlertAudio) return assignTwitchAlertAudio(button.dataset.twitchAlertAudio);
@@ -1978,23 +2711,43 @@
     $('#assetTypeFilter').addEventListener('change', renderAssets);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);
+    $('#alertHistorySearch').addEventListener('input', renderAlertHistory);
+    $('#alertHistoryKind').addEventListener('change', renderAlertHistory);
+    $('#alertHistoryState').addEventListener('change', renderAlertHistory);
     $('#giphyTargetAlert').addEventListener('change', updateGiphyTargetContext);
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);
     $('#interactionAlertForm').addEventListener('submit', createInteractionAlert);
     $('#twitchAlertForm').addEventListener('submit', createTwitchAlert);
+    $('#twitchVariantForm').addEventListener('submit', createTwitchVariant);
+    $('#newVariantConditionType').addEventListener('change', updateVariantConditionFields);
+    $('#cancelVariantEdit').addEventListener('click', () => {
+      const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === $('#twitchVariantAlertId').value);
+      if (alert) resetVariantRuleForm(alert);
+    });
     $('#twitchDesignForm').addEventListener('submit', (event) => saveTwitchDesign(event));
     $('#savePreviewTwitchDesign').addEventListener('click', (event) => saveTwitchDesign(event, true));
-    $('#resetTwitchDesign').addEventListener('click', () => populateTwitchDesign(defaultCurrentAlertDesign()));
+    $('#resetTwitchDesign').addEventListener('click', () => { populateTwitchDesign(defaultCurrentAlertDesign()); pushAlertDesignHistory(); });
+    $('#undoAlertDesign').addEventListener('click', () => moveAlertDesignHistory(-1));
+    $('#redoAlertDesign').addEventListener('click', () => moveAlertDesignHistory(1));
+    $('#previewAlertDesignHere').addEventListener('click', previewAlertDesignHere);
+    $('#stopAlertDesignPreview').addEventListener('click', stopAlertDesignPreview);
+    $('#validateAlertDesignCode').addEventListener('click', () => validateAlertDesignCode().catch((error) => toast(error.message, true)));
+    $('#importAlertDesign').addEventListener('click', importAlertDesignTemplate);
+    $('#exportAlertDesign').addEventListener('click', exportAlertDesignTemplate);
+    $('#duplicateAlertDesign').addEventListener('click', openDuplicateAlertDesign);
+    $('#duplicateAlertDesignForm').addEventListener('submit', duplicateAlertDesign);
     $('#twitchDesignPosition').addEventListener('change', updateTwitchPlacementPreview);
     ['#twitchDesignCustomX', '#twitchDesignCustomY'].forEach((selector) => $(selector).addEventListener('input', () => {
       $('#twitchDesignPosition').value = 'custom';
       updateTwitchPlacementPreview();
     }));
-    ['#twitchDesignScale', '#twitchDesignCardWidth', '#twitchDesignMediaWidth', '#twitchDesignMediaHeight', '#twitchDesignTextPositionX', '#twitchDesignTextPositionY'].forEach((selector) => $(selector).addEventListener('input', updateTwitchPlacementPreview));
+    ['#twitchDesignScale', '#twitchDesignCardWidth', '#twitchDesignMediaWidth', '#twitchDesignMediaHeight', '#twitchDesignTextPositionX', '#twitchDesignTextPositionY', '#twitchDesignEyebrowX', '#twitchDesignEyebrowY', '#twitchDesignHeadlineX', '#twitchDesignHeadlineY', '#twitchDesignDetailX', '#twitchDesignDetailY', '#twitchDesignMessageX', '#twitchDesignMessageY', '#twitchDesignShowEyebrow', '#twitchDesignShowHeadline', '#twitchDesignShowDetail', '#twitchDesignShowMessage', '#twitchDesignFont', '#twitchDesignTextAlign', '#twitchDesignMediaFit', '#twitchDesignMediaScale', '#twitchDesignMediaPositionX', '#twitchDesignMediaPositionY', '#twitchDesignMediaOpacity', '#twitchDesignEyebrowFontSize', '#twitchDesignHeadlineFontSize', '#twitchDesignDetailFontSize', '#twitchDesignMessageFontSize', '#twitchDesignEyebrowColor', '#twitchDesignHeadlineColor', '#twitchDesignDetailColor', '#twitchDesignMessageColor', '#twitchDesignEyebrowMaxWidth', '#twitchDesignHeadlineMaxWidth', '#twitchDesignDetailMaxWidth', '#twitchDesignMessageMaxWidth', '#twitchDesignHeadline', '#twitchDesignDetail', '#alertDesignPreviewViewer', '#alertDesignPreviewAmount', '#alertDesignPreviewMessage'].forEach((selector) => $(selector).addEventListener('input', updateTwitchPlacementPreview));
     $('#twitchDesignLayout').addEventListener('change', updateTwitchPlacementPreview);
+    $('#twitchDesignForm').addEventListener('change', pushAlertDesignHistory);
     $('#twitchPlacementMock').addEventListener('pointerdown', beginTwitchPlacementInteraction);
     $('#twitchPlacementMock').addEventListener('keydown', moveTwitchPlacementWithKeyboard);
+    $('#twitchDesignDialog').addEventListener('close', stopAlertDesignPreview);
     window.addEventListener('resize', updateTwitchPlacementPreview);
     $('#newInteractionAlertName').addEventListener('input', () => {
       const key = $('#newInteractionAlertKey');
@@ -2027,6 +2780,7 @@
     $('#copyChatbotAuthorizationLink').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.verificationUri, event.currentTarget));
     $('#openChatbotAuthorization').addEventListener('click', () => state.chatbotDeviceAuthorization && window.tempestStudio.openExternal(state.chatbotDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     $('#chatbotCommandForm').addEventListener('submit', saveChatbotCommand);
+    $('#chatbotProvidersForm').addEventListener('submit', saveChatbotProviders);
     $('#chatbotCommandPermission').addEventListener('change', protectSharedChatCommandPolicy);
     $('#chatbotCommandWorkflow').addEventListener('change', protectSharedChatCommandPolicy);
     $('#resetChatbotCommand').addEventListener('click', resetChatbotCommandForm);
@@ -2043,9 +2797,34 @@
     $('#panelDesignPreset').addEventListener('change', applyPanelPreset);
     $('#resetPanelDesign').addEventListener('click', () => populatePanelDesign(defaultPanelDesign()));
     $('#openDesignedPanel').addEventListener('click', openDesignedPanel);
+    $('#openStudioDataDirectory').addEventListener('click', () => window.tempestStudio.openDataDirectory().catch((error) => toast(error.message, true)));
+    $('#exportStudioDiagnostics').addEventListener('click', async () => {
+      try {
+        const result = await window.tempestStudio.exportDiagnostics();
+        if (result) toast('Redacted diagnostics exported.');
+      } catch (error) { toast(error.message, true); }
+    });
     $('#openTwitchAuthorization').addEventListener('click', () => state.twitchDeviceAuthorization && window.tempestStudio.openExternal(state.twitchDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     document.querySelectorAll('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
     document.body.addEventListener('change', (event) => {
+      const canvasMode = event.target.closest('#onboardingCanvasProfileMode');
+      if (canvasMode) {
+        writeOnboardingPreferences({ canvasProfileMode: canvasMode.value, flags: { canvasConfigured: canvasMode.value === 'auto' ? Boolean(broadcastCanvasProfile()) : true } });
+        renderOnboardingSummary();
+        renderOnboarding();
+        updateTwitchPlacementPreview();
+        return;
+      }
+      const canvasField = event.target.closest('[data-canvas-field]');
+      if (canvasField) {
+        const preferences = readOnboardingPreferences();
+        const current = { ...(preferences.customCanvasProfile || activeCanvasProfile()), [canvasField.dataset.canvasField]: Number(canvasField.value) };
+        writeOnboardingPreferences({ canvasProfileMode: 'custom', customCanvasProfile: current, flags: { canvasConfigured: true } });
+        renderOnboardingSummary();
+        renderOnboarding();
+        updateTwitchPlacementPreview();
+        return;
+      }
       const onboardingFlag = event.target.closest('[data-onboarding-flag]');
       if (onboardingFlag) {
         writeOnboardingPreferences({ flags: { [onboardingFlag.dataset.onboardingFlag]: onboardingFlag.checked } });
@@ -2064,13 +2843,15 @@
   async function initialize() {
     bindEvents();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
-    [state.config, state.panelDesign] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign()]);
+    [state.config, state.panelDesign, state.appInfo] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo()]);
     populatePanelDesign(state.panelDesign);
     $('#panelDesignStateBadge').textContent = 'SAVED LOCALLY';
     $('#panelDesignStateBadge').classList.remove('offline');
     $('#protocolBadge').textContent = `API ${state.config.protocolVersion}`;
+    $('#studioDataVersion').textContent = `DATA V${state.config.dataMigration?.dataVersion || '?'}${state.config.dataMigration?.migrated ? ' · UPGRADED' : ' · CURRENT'}`;
     $('#httpEndpoint').textContent = state.config.baseUrl;
     $('#socketEndpoint').textContent = `${state.config.baseUrl.replace('http', 'ws')}/v1/socket`;
+    renderAbout();
     await refresh();
     if (!onboardingAutoOpened && readOnboardingPreferences().completed !== true) {
       onboardingAutoOpened = true;

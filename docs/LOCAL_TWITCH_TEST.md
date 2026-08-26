@@ -39,7 +39,7 @@ The CLI remains available for diagnostics. Close any running Studio instance fir
 
 ```powershell
 $env:TWITCH_EXTENSION_SECRET = '<your base64 Extension secret>'
-$env:TEMPEST_TWITCH_CHANNEL_ID = '546679431'
+$env:TEMPEST_TWITCH_CHANNEL_ID = '<your numeric Twitch channel ID>'
 pnpm local:twitch
 ```
 

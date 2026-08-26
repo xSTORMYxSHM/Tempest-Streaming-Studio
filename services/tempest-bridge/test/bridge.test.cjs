@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const WebSocket = require('ws');
-const { startTempestBridge } = require('../dist');
+const { startTempestBridge, TempestTwitchVisualAlertCatalog } = require('../dist');
 const { createBridgeMessage } = require('@tempest/contracts');
 
 const application = {
@@ -19,6 +19,31 @@ const application = {
   assetTypes: { reads: ['tempest.scene'], writes: ['tempest.profile'] }
 };
 
+test('selects the highest-priority matching Twitch alert variant and keeps the base fallback', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-twitch-variant-test-'));
+  const catalog = new TempestTwitchVisualAlertCatalog(dataDirectory);
+  await catalog.initialize();
+  const base = catalog.find('twitch.cheer');
+  assert.ok(base);
+  await catalog.update('twitch.cheer', {
+    alertVariants: [
+      { schemaVersion: 1, id: 'large', name: 'Large Cheer', enabled: true, priority: 5, condition: { minimumBits: 500 }, durationMs: 5000, volume: 0.6, accent: '#22CCFF', design: base.design },
+      { schemaVersion: 1, id: 'mega', name: 'Mega Cheer', enabled: true, priority: 20, condition: { minimumBits: 1000 }, durationMs: 8000, volume: 0.9, accent: '#FF44AA', design: { ...base.design, preset: 'cinematic' } }
+    ]
+  });
+  const event = (id, bits) => ({ schemaVersion: 1, id, topic: 'viewer.cheer.received', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel' }, viewer: { id: 'viewer', displayName: 'Variant Tester' }, payload: { bits } });
+  const mega = catalog.findForEvent(event('mega-event', 1500));
+  assert.equal(mega.selectedVariantId, 'mega');
+  assert.equal(mega.name, 'Mega Cheer');
+  assert.equal(mega.durationMs, 8000);
+  assert.equal(mega.design.preset, 'cinematic');
+  const large = catalog.findForEvent(event('large-event', 750));
+  assert.equal(large.selectedVariantId, 'large');
+  const fallback = catalog.findForEvent(event('base-event', 100));
+  assert.equal(fallback.selectedVariantId, undefined);
+  assert.equal(fallback.name, 'Cheer / Bits');
+});
+
 test('persists applications and assets behind authenticated routes', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-bridge-test-'));
   const runtime = await startTempestBridge({
@@ -26,10 +51,10 @@ test('persists applications and assets behind authenticated routes', async (cont
     dataDirectory,
     logger: { info() {}, warn() {}, error() {} },
     chatbotFetchImplementation: async (url) => {
-      assert.equal(String(url), 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio');
+      assert.equal(String(url), 'https://radio.example/api/nowplaying/station');
       return new Response(JSON.stringify({
         is_online: true,
-        station: { name: 'Storm Horizon Radio' },
+        station: { name: 'Example Radio' },
         now_playing: { song: { artist: 'Aster Null', title: 'Error Stars', album: 'The Coordinates Are Laughing' } }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -38,12 +63,13 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '0.11.6');
+  assert.equal(health.productVersion, '0.20.0');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
 
   const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  await fetch(`${runtime.baseUrl}/v1/chatbot/configuration`, { method: 'POST', headers, body: JSON.stringify({ nowPlayingProvider: { provider: 'azuracast', stationName: 'Example Radio', apiUrl: 'https://radio.example/api/nowplaying/station', publicPlayerUrl: 'https://radio.example/public/station' } }) });
   const registered = await fetch(`${runtime.baseUrl}/v1/applications`, {
     method: 'POST', headers, body: JSON.stringify(application)
   });
@@ -64,7 +90,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const applications = await fetch(`${runtime.baseUrl}/v1/applications`, { headers }).then((response) => response.json());
   const assets = await fetch(`${runtime.baseUrl}/v1/assets`, { headers }).then((response) => response.json());
-  const radio = await fetch(`${runtime.baseUrl}/v1/integrations/storm-horizon-radio`, { headers }).then((response) => response.json());
+  const radio = await fetch(`${runtime.baseUrl}/v1/integrations/now-playing`, { headers }).then((response) => response.json());
   assert.equal(applications.applications.length, 1);
   assert.equal(assets.assets.length, 1);
   assert.equal(radio.state, 'online');
@@ -111,7 +137,7 @@ test('reports adapter identity, capabilities, and published health on the connec
     kind: 'publish',
     source: 'com.tempestmainframe.tempest-broadcast',
     topic: 'broadcast.status',
-    payload: { ready: true, streaming: false, recording: true, activeLeases: 1 }
+    payload: { ready: true, streaming: false, recording: true, activeLeases: 1, canvasProfile: { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 } }
   })));
   await new Promise((resolve) => setTimeout(resolve, 30));
   const headers = { 'X-Tempest-Token': runtime.token };
@@ -121,12 +147,13 @@ test('reports adapter identity, capabilities, and published health on the connec
   assert.deepEqual(body.connections[0].capabilities, ['broadcast.reaction.trigger', 'broadcast.status']);
   assert.equal(body.connections[0].status.recording, true);
   assert.equal(body.connections[0].status.activeLeases, 1);
+  assert.deepEqual(body.connections[0].status.canvasProfile, { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 });
 });
 
 test('owns a free Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-sound-alert-test-'));
-  const visualPath = path.join(dataDirectory, 'fishie.png');
-  const audioPath = path.join(dataDirectory, 'fishie.mp3');
+  const visualPath = path.join(dataDirectory, 'hype-pulse.png');
+  const audioPath = path.join(dataDirectory, 'hype-pulse.mp3');
   const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]);
   await writeFile(visualPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   await writeFile(audioPath, audioBytes);
@@ -143,11 +170,12 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const catalog = await fetch(`${runtime.baseUrl}/v1/sound-alerts`, { headers }).then((response) => response.json());
   assert.equal(catalog.owner, 'tempest-mainframe-studio');
   assert.equal(catalog.pricing, 'free');
-  assert.equal(catalog.alerts.length, 13);
+  assert.equal(catalog.alerts.length, 6);
   assert.ok(catalog.alerts.every((alert) => alert.free === true));
-  assert.equal(catalog.alerts.find((alert) => alert.id === 'sound-alert.crab-rave').durationMs, 58000);
+  assert.ok(catalog.alerts.every((alert) => alert.warudoEnabled === false));
+  assert.equal(catalog.alerts.find((alert) => alert.id === 'sound-alert.hype-pulse').durationMs, 8000);
 
-  const configured = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.fishie')}`, {
+  const configured = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
     method: 'POST', headers, body: JSON.stringify({
       durationMs: 1000,
       viewerCooldownMs: 5000,
@@ -156,7 +184,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
       audioUri: pathToFileURL(audioPath).href,
       visualUri: pathToFileURL(visualPath).href,
       visualDurationMs: 2000,
-      broadcastVisualSource: 'Fishie GIF',
+      broadcastVisualSource: 'Hype Pulse GIF',
       broadcastEffect: 'glitch',
       broadcastCircuit: 'frame',
       broadcastEffectStrength: 1.25,
@@ -169,20 +197,21 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(configuredAlert.visualUri, pathToFileURL(visualPath).href);
   assert.equal(configuredAlert.visualDurationMs, 2000);
   assert.equal(configuredAlert.broadcastAudioSource, undefined);
-  assert.equal(configuredAlert.broadcastVisualSource, 'Fishie GIF');
+  assert.equal(configuredAlert.broadcastVisualSource, 'Hype Pulse GIF');
   assert.equal(configuredAlert.broadcastEffect, 'glitch');
   assert.equal(configuredAlert.broadcastCircuit, 'frame');
   assert.equal(configuredAlert.broadcastEffectStrength, 1.25);
   assert.equal(configuredAlert.accent, '#22CCFF');
 
-  const triggered = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.fishie')}/trigger`, {
-    method: 'POST', headers, body: JSON.stringify({ source: 'studio.operator', eventId: 'fishie-test-1', viewerId: 'operator', simulateMissing: true, bypassCooldown: true })
+  const triggered = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}/trigger`, {
+    method: 'POST', headers, body: JSON.stringify({ source: 'studio.operator', eventId: 'hype-pulse-test-1', viewerId: 'operator', simulateMissing: true, bypassCooldown: true })
   });
   assert.equal(triggered.status, 202);
   const result = await triggered.json();
-  assert.equal(result.alert.cue, 'sound-alert.fishie');
-  assert.equal(result.run.triggerEventId, 'fishie-test-1');
-  assert.equal(result.run.actions[0].capability, 'avatar.performance.apply');
+  assert.equal(result.alert.cue, 'sound-alert.hype-pulse');
+  assert.equal(result.run.triggerEventId, 'hype-pulse-test-1');
+  assert.equal(result.run.actions[0].capability, 'broadcast.reaction.trigger');
+  assert.equal(result.run.actions.some((action) => action.capability === 'avatar.performance.apply'), false);
   assert.equal(new Date(result.run.endsAt).getTime() - new Date(result.run.startedAt).getTime(), 1000);
   assert.equal(playback[0].phase, 'play');
   assert.equal(playback[0].alert.audioUri, pathToFileURL(audioPath).href);
@@ -209,21 +238,21 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(overlayStatus.twitch.url, `${runtime.baseUrl}/visual-alerts/twitch`);
   assert.equal(overlayStatus.interaction.state, 'showing');
   assert.equal(overlayStatus.twitch.state, 'ready');
-  assert.equal(overlayStatus.interaction.activeAlert.name, 'Fishie');
+  assert.equal(overlayStatus.interaction.activeAlert.name, 'Hype Pulse');
   assert.equal(overlayStatus.interaction.activeAlert.viewerName, 'A viewer');
   assert.equal(overlayStatus.interaction.activeAlert.durationMs, 2000);
-  assert.equal(overlayStatus.interaction.activeAlert.audioUrl, '/visual-alerts/audio/sound-alert.fishie');
+  assert.equal(overlayStatus.interaction.activeAlert.audioUrl, '/visual-alerts/audio/sound-alert.hype-pulse');
   assert.equal(overlayStatus.interaction.activeAlert.audioDurationMs, 1000);
   assert.equal(overlayStatus.interaction.activeAlert.volume, 0.5);
-  const visual = await fetch(`${runtime.baseUrl}/visual-alerts/media/${encodeURIComponent('sound-alert.fishie')}`);
+  const visual = await fetch(`${runtime.baseUrl}/visual-alerts/media/${encodeURIComponent('sound-alert.hype-pulse')}`);
   assert.equal(visual.status, 200);
   assert.equal(visual.headers.get('content-type'), 'image/png');
   assert.deepEqual(Buffer.from(await visual.arrayBuffer()), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-  const audio = await fetch(`${runtime.baseUrl}/visual-alerts/audio/${encodeURIComponent('sound-alert.fishie')}`);
+  const audio = await fetch(`${runtime.baseUrl}/visual-alerts/audio/${encodeURIComponent('sound-alert.hype-pulse')}`);
   assert.equal(audio.status, 200);
   assert.equal(audio.headers.get('content-type'), 'audio/mpeg');
   assert.deepEqual(Buffer.from(await audio.arrayBuffer()), audioBytes);
-  const audioRange = await fetch(`${runtime.baseUrl}/visual-alerts/audio/${encodeURIComponent('sound-alert.fishie')}`, { headers: { Range: 'bytes=1-3' } });
+  const audioRange = await fetch(`${runtime.baseUrl}/visual-alerts/audio/${encodeURIComponent('sound-alert.hype-pulse')}`, { headers: { Range: 'bytes=1-3' } });
   assert.equal(audioRange.status, 206);
   assert.equal(audioRange.headers.get('content-range'), `bytes 1-3/${audioBytes.length}`);
   assert.deepEqual(Buffer.from(await audioRange.arrayBuffer()), audioBytes.subarray(1, 4));
@@ -231,24 +260,24 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   await new Promise((resolve) => setTimeout(resolve, 1050));
   const browserSourceEvents = await fetch(`${runtime.baseUrl}/visual-alerts/interactions/events`);
   assert.equal(browserSourceEvents.status, 200);
-  const browserRouted = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.fishie')}/trigger`, {
-    method: 'POST', headers, body: JSON.stringify({ source: 'studio.simulator', eventId: 'fishie-test-browser-audio', viewerId: 'operator', simulateMissing: true, bypassCooldown: true })
+  const browserRouted = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}/trigger`, {
+    method: 'POST', headers, body: JSON.stringify({ source: 'studio.simulator', eventId: 'hype-pulse-test-browser-audio', viewerId: 'operator', simulateMissing: true, bypassCooldown: true })
   });
   assert.equal(browserRouted.status, 202);
   const browserRoutedResult = await browserRouted.json();
   assert.equal(browserRoutedResult.queued, true);
   assert.equal(browserRoutedResult.queuePosition, 1);
   const queuedStatus = await fetch(`${runtime.baseUrl}/v1/alert-queue`, { headers }).then((response) => response.json());
-  assert.equal(queuedStatus.active.alertId, 'sound-alert.fishie');
+  assert.equal(queuedStatus.active.alertId, 'sound-alert.hype-pulse');
   assert.equal(queuedStatus.waitingCount, 1);
-  assert.equal(queuedStatus.waiting[0].alertId, 'sound-alert.fishie');
+  assert.equal(queuedStatus.waiting[0].alertId, 'sound-alert.hype-pulse');
   assert.equal(playback.length, 1, 'connected Browser Source suppresses the duplicate desktop audio copy');
   await browserSourceEvents.body.cancel();
-  const separateAudioOverride = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.fishie')}`, {
-    method: 'POST', headers, body: JSON.stringify({ broadcastAudioSource: 'Fishie Song' })
+  const separateAudioOverride = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
+    method: 'POST', headers, body: JSON.stringify({ broadcastAudioSource: 'Interaction Song' })
   });
   assert.equal(separateAudioOverride.status, 200);
-  assert.equal((await separateAudioOverride.json()).alert.broadcastAudioSource, 'Fishie Song');
+  assert.equal((await separateAudioOverride.json()).alert.broadcastAudioSource, 'Interaction Song');
 
   const stopped = await fetch(`${runtime.baseUrl}/v1/safety/stop`, { method: 'POST', headers, body: '{}' });
   assert.equal(stopped.status, 200);
@@ -259,12 +288,12 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(clearedOverlay.interaction.activeAlert, undefined);
   assert.equal(clearedOverlay.twitch.activeAlert, undefined);
 
-  const previewed = await fetch(`${runtime.baseUrl}/v1/visual-alerts/${encodeURIComponent('sound-alert.fishie')}/preview`, {
+  const previewed = await fetch(`${runtime.baseUrl}/v1/visual-alerts/${encodeURIComponent('sound-alert.hype-pulse')}/preview`, {
     method: 'POST', headers, body: JSON.stringify({ viewerName: 'Visual Operator' })
   });
   assert.equal(previewed.status, 202);
   const preview = await previewed.json();
-  assert.equal(preview.activeAlert.name, 'Fishie');
+  assert.equal(preview.activeAlert.name, 'Hype Pulse');
   assert.equal(preview.activeAlert.viewerName, 'Visual Operator');
   assert.equal(preview.activeAlert.audioUrl, undefined);
   const clearedPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/clear`, { method: 'POST', headers, body: '{}' });
@@ -300,11 +329,20 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
         showViewerMessage: false,
         fontFamily: 'Impact',
         fontSize: 58,
+        eyebrowFontSize: 15,
+        detailFontSize: 26,
+        messageFontSize: 18,
         textColor: '#ffffff',
+        eyebrowTextColor: '#54f2eb',
+        messageTextColor: '#ffccdd',
         textPositionX: 48.5,
         textPositionY: 76.25,
         mediaWidth: 1920,
         mediaHeight: 1080,
+        mediaScale: 1.2,
+        mediaPositionX: 62,
+        mediaPositionY: 41,
+        mediaOpacity: 0.9,
         soundDelayMs: 500,
         ttsEnabled: true,
         ttsTemplate: '{viewer} cheered {amount} Bits',
@@ -331,9 +369,19 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(configuredTwitchAlert.design.textPositionY, 76.25);
   assert.equal(configuredTwitchAlert.design.mediaWidth, 1920);
   assert.equal(configuredTwitchAlert.design.mediaHeight, 1080);
+  assert.equal(configuredTwitchAlert.design.eyebrowFontSize, 15);
+  assert.equal(configuredTwitchAlert.design.detailFontSize, 26);
+  assert.equal(configuredTwitchAlert.design.messageTextColor, '#FFCCDD');
+  assert.equal(configuredTwitchAlert.design.mediaScale, 1.2);
+  assert.equal(configuredTwitchAlert.design.mediaPositionX, 62);
+  assert.equal(configuredTwitchAlert.design.mediaOpacity, 0.9);
   assert.equal(configuredTwitchAlert.design.customHtml, '<div class="custom-badge">{amount}</div>');
   assert.equal(configuredTwitchAlert.design.customCss, '.name { text-transform: uppercase; }');
   assert.equal(configuredTwitchAlert.design.customJavaScript, 'elements.card.dataset.testAmount = variables.amount;');
+  const configuredVariantResponse = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}`, {
+    method: 'POST', headers, body: JSON.stringify({ alertVariants: [{ schemaVersion: 1, id: 'mega-cheer', name: 'Mega Cheer', enabled: true, priority: 10, condition: { minimumBits: 1000 }, durationMs: 5000, volume: 0.75, audioUri: pathToFileURL(audioPath).href, visualUri: pathToFileURL(visualPath).href, accent: '#FF44AA', design: { ...configuredTwitchAlert.design, preset: 'cinematic' } }] })
+  });
+  assert.equal(configuredVariantResponse.status, 200);
   const armedForTwitchPreview = await fetch(`${runtime.baseUrl}/v1/safety/arm`, { method: 'POST', headers, body: '{}' });
   assert.equal(armedForTwitchPreview.status, 200);
   const broadcastSocket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
@@ -383,10 +431,24 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(reactionCommand.payload.arguments.accent, '#9146FF');
   assert.equal(reactionCommand.payload.arguments.preview, true);
   assert.equal(reactionCommand.payload.lease.durationMs, 3000);
+  const variantPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}/preview`, { method: 'POST', headers, body: JSON.stringify({ variantId: 'mega-cheer' }) });
+  assert.equal(variantPreview.status, 202);
+  const variantActiveAlert = (await variantPreview.json()).activeAlert;
+  assert.equal(variantActiveAlert.name, '1000 Bits');
+  assert.equal(variantActiveAlert.mediaUrl, '/visual-alerts/media/twitch.cheer?variant=mega-cheer');
+  assert.equal(variantActiveAlert.audioUrl, '/visual-alerts/audio/twitch.cheer?variant=mega-cheer');
+  assert.equal(variantActiveAlert.design.preset, 'cinematic');
+  assert.equal((await fetch(`${runtime.baseUrl}${variantActiveAlert.mediaUrl}`)).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}${variantActiveAlert.audioUrl}`)).status, 200);
   const splitOverlayStatus = await fetch(`${runtime.baseUrl}/v1/visual-alerts`, { headers }).then((response) => response.json());
   assert.equal(splitOverlayStatus.interaction.state, 'ready');
   assert.equal(splitOverlayStatus.twitch.state, 'showing');
   assert.equal(splitOverlayStatus.twitch.activeAlert.alertId, 'twitch.cheer');
+  const alertHistory = await fetch(`${runtime.baseUrl}/v1/alert-history`, { headers }).then((response) => response.json());
+  assert.ok(alertHistory.records.some((record) => record.alertId === 'twitch.cheer' && record.preview && record.state === 'completed'));
+  const alertDiagnostics = await fetch(`${runtime.baseUrl}/v1/alert-diagnostics`, { headers }).then((response) => response.json());
+  assert.equal(alertDiagnostics.configured.unavailableAssets, 0);
+  assert.ok(alertDiagnostics.configured.assignedAssets >= 3);
   const twitchAudio = await fetch(`${runtime.baseUrl}/visual-alerts/audio/${encodeURIComponent('twitch.cheer')}`);
   assert.equal(twitchAudio.status, 200);
   assert.equal(twitchAudio.headers.get('content-type'), 'audio/mpeg');
@@ -411,6 +473,10 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
 
 test('creates, persists, protects, and removes custom Interaction and Twitch Alerts', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-custom-alert-test-'));
+  const packedAudioPath = path.join(dataDirectory, 'packed-alert.mp3');
+  const packedVisualPath = path.join(dataDirectory, 'packed-alert.gif');
+  await writeFile(packedAudioPath, Buffer.from([0x49, 0x44, 0x33, 0x04]));
+  await writeFile(packedVisualPath, Buffer.from('GIF89a', 'ascii'));
   let runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
   let headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
 
@@ -423,6 +489,8 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
       visualDurationMs: 7000,
       viewerCooldownMs: 45000,
       globalCooldownMs: 11000,
+      audioUri: pathToFileURL(packedAudioPath).href,
+      visualUri: pathToFileURL(packedVisualPath).href,
       accent: '#123abc'
     })
   });
@@ -433,6 +501,8 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(interactionAlert.accent, '#123ABC');
   assert.equal(interactionAlert.warudoEnabled, false);
   assert.equal(interactionAlert.design.position, 'custom');
+  assert.equal(interactionAlert.audioUri, pathToFileURL(packedAudioPath).href);
+  assert.equal(interactionAlert.visualUri, pathToFileURL(packedVisualPath).href);
 
   const overlayOnlyTrigger = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent(interactionAlert.id)}/trigger`, {
     method: 'POST', headers, body: JSON.stringify({ source: 'studio.operator', viewerName: 'Test Operator', bypassCooldown: true })
@@ -459,12 +529,14 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(duplicateInteraction.status, 400);
 
   const twitchCreated = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, {
-    method: 'POST', headers, body: JSON.stringify({ id: 'twitch.stream-online', topic: 'channel.stream.online', name: 'Stream Online', durationMs: 8000, volume: 0.6, accent: '#ff8800' })
+    method: 'POST', headers, body: JSON.stringify({ id: 'twitch.stream-online', topic: 'channel.stream.online', name: 'Stream Online', durationMs: 8000, volume: 0.6, audioUri: pathToFileURL(packedAudioPath).href, visualUri: pathToFileURL(packedVisualPath).href, accent: '#ff8800' })
   });
   assert.equal(twitchCreated.status, 201);
   const twitchAlert = (await twitchCreated.json()).alert;
   assert.equal(twitchAlert.custom, true);
   assert.equal(twitchAlert.topic, 'channel.stream.online');
+  assert.equal(twitchAlert.audioUri, pathToFileURL(packedAudioPath).href);
+  assert.equal(twitchAlert.visualUri, pathToFileURL(packedVisualPath).href);
 
   const duplicateTopic = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, {
     method: 'POST', headers, body: JSON.stringify({ id: 'twitch.also-online', topic: 'channel.stream.online', name: 'Also Online' })
@@ -480,7 +552,7 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
     const twitchAlerts = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, { headers }).then((response) => response.json());
     assert.ok(twitchAlerts.alerts.some((alert) => alert.id === twitchAlert.id && alert.custom));
 
-    const protectedBundled = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.fishie')}`, { method: 'DELETE', headers });
+    const protectedBundled = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, { method: 'DELETE', headers });
     assert.equal(protectedBundled.status, 400);
     assert.equal((await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent(interactionAlert.id)}`, { method: 'DELETE', headers })).status, 200);
     assert.equal((await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent(twitchAlert.id)}`, { method: 'DELETE', headers })).status, 200);

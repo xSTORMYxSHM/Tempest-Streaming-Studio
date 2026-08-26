@@ -25,7 +25,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     source: 'twitch',
     channel: { id: channelId },
     viewer: { id: 'Uviewer123', roles: ['viewer'] },
-    payload: { action: 'sound-alert.fishie', alertId: 'sound-alert.fishie' }
+    payload: { action: 'sound-alert.hype-pulse', alertId: 'sound-alert.hype-pulse' }
   };
   let handled;
   const result = new Promise((resolve, reject) => {

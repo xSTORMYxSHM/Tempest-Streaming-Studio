@@ -6,7 +6,7 @@ When the Chatbot Device Code poll reports success, expiry, or another terminal r
 
 ## 0.11.5 Isolated Chatbot authorization
 
-The broadcaster and `TempestMainframe` remain separate Twitch principals. Starting the secondary Chatbot Device Code flow now opens Twitch activation in a unique, non-persistent Electron session instead of automatically launching the operating system's default browser. This gives the bot a clean login without signing the broadcaster out of Edge, Chrome, Firefox, or another normal browser profile.
+The broadcaster and secondary Chatbot account remain separate Twitch principals. Starting the secondary Chatbot Device Code flow opens Twitch activation in a unique, non-persistent Electron session instead of automatically launching the operating system's default browser. This gives the bot a clean login without signing the broadcaster out of Edge, Chrome, Firefox, or another normal browser profile.
 
 The isolated window permits only Twitch HTTPS navigation, denies downloads and browser permission requests, and clears its temporary cookies and storage when closed. Studio continues polling the Device Code exchange in the Bridge and never receives either account's Twitch password. Operators may copy the activation code or link, reopen the isolated sign-in, or explicitly choose the default-browser fallback.
 
@@ -18,7 +18,7 @@ Studio automatically installs `!commands`, `!uptime`, `!title`, `!game`, `!sched
 
 ## 0.11.3 Shared Chat command safety
 
-Twitch mirrors ordinary messages between participants in a Shared Chat session. `TempestMainframe` keeps its single `channel.chat.message` subscription attached to the owner's authorized home channel, but now preserves Twitch's `source_broadcaster_*`, `source_message_id`, and `is_source_only` fields in the normalized chat payload. The source message ID is the duplicate key when Twitch supplies one.
+Twitch mirrors ordinary messages between participants in a Shared Chat session. The configured Chatbot keeps its single `channel.chat.message` subscription attached to the owner's authorized home channel, while preserving Twitch's `source_broadcaster_*`, `source_message_id`, and `is_source_only` fields in the normalized chat payload. The source message ID is the duplicate key when Twitch supplies one.
 
 Each command has an **Allow from Shared Chat** policy. The built-in `!tempest` and `!weather` response commands allow collaborator-channel invocation. Existing and newly loaded everyone-access response commands migrate to allowed; commands with a workflow or elevated permission migrate to home-channel-only unless the operator explicitly enables Shared Chat access. Cooldowns remain global to the running Chatbot, so one shared session cannot multiply command throughput.
 
@@ -26,18 +26,18 @@ Permissions always use the badges Twitch reports for the owner's destination cha
 
 The Chatbot uses a user access token for output. Twitch therefore distributes accepted command responses to all participants in an active Shared Chat session; the current user-token API does not provide a source-channel-only output option.
 
-## 0.11.1 Seattle weather response
+## 0.20.0 optional response providers
 
-The Chatbot automatically installs `!weather` with the `seattle-weather` response handler. Studio formats current Pacific time with the `America/Los_Angeles` time zone and retrieves the first hourly forecast period for `47.6062,-122.3321` through `api.weather.gov`. Forecast data is cached for ten minutes; a last-good reading remains usable for up to one hour if the provider has a short outage. No API key, Windows taskbar scraping, viewer location, Nightbot, or Botrix connection is used.
+Clean installations do not contain a weather location or radio station. The Chatbot page can configure a United States National Weather Service location using a label, coordinates, and IANA time zone. Forecast data is cached for ten minutes; a last-good reading remains usable through a short provider outage. NWS does not require an API key.
 
-The built-in `!song` command reads Storm Horizon Radio's public AzuraCast Now Playing endpoint. It reports the current artist, title, and album with the public player-page link, caches successful reads for 15 seconds, and returns a compact offline or provider-outage fallback without exposing raw HTTP errors. Broadcast uses the station's embed widget separately, while the `/listen/storm_horizon_radio/radio.mp3` endpoint remains the raw audio-only stream.
+Operators can also configure an AzuraCast station name, Now Playing API URL, public player URL, and optional stream URL. The response reports current artist, title, and album, caches successful reads for 15 seconds, and returns a compact offline or provider-outage fallback without exposing raw HTTP errors. Once configured, these providers become available as handlers for any command name the streamer chooses.
 
-## 0.11.0 TempestMainframe Chatbot
+## 0.11.0 separate Chatbot identity
 
 Studio now authorizes two distinct Twitch principals with the same public client ID:
 
 - The broadcaster account owns channel identity, rewards, subscriptions, follows, and other interaction-facing channel authorization.
-- `TempestMainframe` owns chat intake and chat output using a separately encrypted token with `user:read:chat` and `user:write:chat`.
+- The operator's secondary Chatbot account owns chat intake and chat output using a separately encrypted token with `user:read:chat` and `user:write:chat`.
 
 After both accounts are authorized, Studio opens one EventSub WebSocket and creates a `channel.chat.message` subscription for the broadcaster's channel and the bot identity. Welcome, keepalive, notification, reconnect, revocation, close, and resubscription paths are handled inside the Bridge. Twitch message IDs are deduplicated before commands can run.
 
@@ -93,4 +93,4 @@ An unmapped reward remains an observation. Studio inserts the configured action 
 
 ## Product ownership
 
-Studio owns interaction-facing Twitch OAuth, EventSub, chat, rewards, Extensions, normalization, and routing. Tempest Broadcast continues to own OBS/Twitch stream-service authentication, outgoing stream credentials, and Stream Information.
+Studio owns interaction-facing Twitch OAuth, EventSub, chat, rewards, Extensions, normalization, and routing. OBS or compatible broadcast software continues to own stream-service authentication, outgoing stream credentials, and Stream Information.

@@ -60,7 +60,7 @@ test('forwards Bridge performance commands to the Warudo blueprint socket', asyn
       runId: randomUUID(),
       actionId: 'warudo-performance',
       phase: 'activate',
-      arguments: { cue: 'sound-alert.fishie', durationMs: 8000, intensity: 0.75, dedupeId: 'fishie-1' },
+      arguments: { cue: 'sound-alert.hype-pulse', durationMs: 8000, intensity: 0.75, dedupeId: 'hype-pulse-1' },
       lease: { durationMs: 8000 }
     }
   }));
@@ -68,7 +68,7 @@ test('forwards Bridge performance commands to the Warudo blueprint socket', asyn
   const message = await forwarded;
   assert.equal(message.action, 'tempestPerformance');
   assert.equal(message.data.phase, 'activate');
-  assert.equal(message.data.cue, 'sound-alert.fishie');
+  assert.equal(message.data.cue, 'sound-alert.hype-pulse');
   assert.equal(message.data.durationMs, 8000);
   assert.equal(message.data.intensity, 0.75);
 });

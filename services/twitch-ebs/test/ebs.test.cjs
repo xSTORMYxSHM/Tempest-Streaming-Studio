@@ -36,7 +36,7 @@ function connectStudio(runtime, relayToken, channelId = '123456') {
   });
 }
 
-async function postAlert(runtime, token, requestId = randomUUID(), alertId = 'sound-alert.fishie') {
+async function postAlert(runtime, token, requestId = randomUUID(), alertId = 'sound-alert.hype-pulse') {
   return fetch(`${runtime.baseUrl}/v1/extension/alerts/${encodeURIComponent(alertId)}/trigger`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': token, 'X-Request-ID': requestId },
@@ -75,8 +75,8 @@ test('verifies Twitch JWTs and relays a normalized Sound Alert interaction to St
   assert.equal((await response.json()).cooldownMs, 60000);
   assert.equal(relayed.event.channel.id, '123456');
   assert.equal(relayed.event.viewer.id, 'Uviewer123');
-  assert.equal(relayed.event.payload.action, 'sound-alert.fishie');
-  assert.equal(relayed.event.payload.alertId, 'sound-alert.fishie');
+  assert.equal(relayed.event.payload.action, 'sound-alert.hype-pulse');
+  assert.equal(relayed.event.payload.alertId, 'sound-alert.hype-pulse');
 
   const replay = await postAlert(runtime, jwt(secret), requestId);
   assert.equal(replay.status, 202);
@@ -138,10 +138,10 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   }
   assert.equal((await fetch(`${ebs.baseUrl}/health`).then((response) => response.json())).studioConnections, 1);
 
-  const response = await postAlert(ebs, jwt(secret), randomUUID(), 'sound-alert.fishie');
+  const response = await postAlert(ebs, jwt(secret), randomUUID(), 'sound-alert.hype-pulse');
   assert.equal(response.status, 202);
   const result = await response.json();
-  assert.equal(result.alert.id, 'sound-alert.fishie');
+  assert.equal(result.alert.id, 'sound-alert.hype-pulse');
   assert.equal(result.run.source, 'twitch.extension');
   assert.equal(result.cooldownMs, 60000);
 
