@@ -22,7 +22,7 @@ Generate a relay token in PowerShell:
 
 ## Deploy the EBS
 
-Deploy from the repository root with `services/twitch-ebs/Dockerfile`, or run the compiled Node service behind an HTTPS reverse proxy. The hosting platform must support WebSocket upgrades on `/v1/studio` and should keep one service instance active for this single-channel deployment.
+Deploy the repository's root `Dockerfile`, use `services/twitch-ebs/Dockerfile` as an explicit custom Dockerfile, or run the compiled Node service behind an HTTPS reverse proxy. The hosting platform must support WebSocket upgrades on `/v1/studio` and should keep one service instance active for this single-channel deployment.
 
 Configure these secret/environment values on the host:
 
@@ -33,6 +33,30 @@ TEMPEST_EBS_CHANNEL_IDS=<numeric channel ID>
 TEMPEST_EBS_ALLOWED_ACTIONS=tempest.blackhole
 PORT=8080
 ```
+
+### Railway
+
+The repository's root `Dockerfile` is the Railway entry point and starts only the Twitch EBS. Connect Railway to the GitHub repository with the repository root as its source directory. Do not set a custom build or start command.
+
+In the service's **Variables** tab, add:
+
+```text
+TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
+TEMPEST_EBS_RELAY_TOKEN=<random relay token of at least 32 characters>
+TEMPEST_EBS_CHANNEL_IDS=<numeric Twitch channel ID>
+TEMPEST_EBS_ALLOWED_ACTIONS=tempest.blackhole
+```
+
+Do not add `PORT`, TLS certificate, or TLS password variables on Railway. Railway supplies the port and terminates public HTTPS. Twitch Extension origins matching `https://<extension-id>.ext-twitch.tv` are accepted automatically, so `TEMPEST_EBS_ALLOWED_ORIGINS` is not needed for the hosted Extension.
+
+In **Settings**:
+
+1. Set the healthcheck path to `/health`.
+2. Keep one replica for the single-channel in-memory relay.
+3. Generate a public Railway domain.
+4. Prefer a US West region for a Seattle-based Studio connection when that region is available.
+
+After deployment, open `https://<railway-domain>/health`. A successful response reports `"status":"online"`; `studioConnections` may remain `0` until Studio is configured with the relay URL and restarted.
 
 The public endpoints are:
 
