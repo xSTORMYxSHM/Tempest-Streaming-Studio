@@ -1,5 +1,7 @@
 import type { ExtensionRelayOptions } from '@tempest/bridge';
 
+export const OFFICIAL_HOSTED_EBS_URL = 'https://signal.tempestmainframe.com';
+
 export interface HostedExtensionCredentials {
   schemaVersion: 1;
   ebsBaseUrl: string;
@@ -12,6 +14,7 @@ export interface HostedExtensionCredentials {
 
 export interface HostedExtensionStatus {
   paired: boolean;
+  defaultEbsBaseUrl: string;
   ebsBaseUrl?: string;
   installationId?: string;
   channel?: { id: string; login: string };

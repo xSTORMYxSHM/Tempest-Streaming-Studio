@@ -816,7 +816,10 @@
     const authorized = state.twitch?.oauth?.state === 'authorized';
     const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
     const urlInput = $('#hostedExtensionUrl');
-    if (document.activeElement !== urlInput && paired && hosted.ebsBaseUrl) urlInput.value = hosted.ebsBaseUrl;
+    if (document.activeElement !== urlInput) {
+      if (paired && hosted.ebsBaseUrl) urlInput.value = hosted.ebsBaseUrl;
+      else if (!urlInput.value) urlInput.value = hosted.defaultEbsBaseUrl || 'https://signal.tempestmainframe.com';
+    }
     $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
     $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
     $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
@@ -828,7 +831,7 @@
     $('#hostedExtensionMessage').textContent = hosted.lastError || (paired
       ? relayState === 'CONNECTED' ? 'This channel is paired. Studio publishes its enabled signal catalog to the public Twitch panel automatically.' : 'The installation is paired. Studio will keep retrying the hosted relay connection.'
       : !authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
-        : 'Enter the Railway HTTPS domain and pair once. Studio stores the per-installation relay credential with Windows encryption.');
+        : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
   }
 
   function renderLocalExtension() {

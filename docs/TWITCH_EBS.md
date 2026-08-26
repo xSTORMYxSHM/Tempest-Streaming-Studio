@@ -69,7 +69,7 @@ Confirm `https://<your-ebs-host>/health` returns `status: "online"`. Add `https:
 
 ## Connect Studio
 
-Authorize the broadcaster in Studio's **Twitch Gateway**, enter the Railway HTTPS domain under **Public Extension Service**, and select **Pair Hosted Extension**. Studio sends the existing Twitch user access token directly to the EBS for validation, receives a unique relay credential, and stores it with Windows encryption. The EBS does not store the Twitch OAuth token.
+Authorize the broadcaster in Studio's **Twitch Gateway** and select **Pair Hosted Extension**. Official builds use `https://signal.tempestmainframe.com` automatically; the visible service field remains editable only for development and self-hosted deployments. Studio sends the existing Twitch user access token directly to the EBS for validation, receives a unique relay credential, and stores it with Windows encryption. The EBS does not store the Twitch OAuth token.
 
 Studio's Twitch page reports **EXTENSION RELAY: CONNECTED** when the EBS accepts the connection. The relay reconnects with bounded exponential backoff if the network or EBS restarts.
 

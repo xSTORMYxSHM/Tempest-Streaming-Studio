@@ -78,12 +78,11 @@ The public Extension Client ID belongs in front-end/EBS configuration. The share
 
 ## Build hosted assets
 
-Set the public EBS origin before building. This value is public; it must not contain credentials or a path-specific token.
+Official builds embed `https://signal.tempestmainframe.com` automatically. The value is public and contains no credentials or path-specific token.
 
 ```powershell
-$env:TEMPEST_EXTENSION_EBS_URL='https://extensions.example.com'
 pnpm extension:build
 Compress-Archive -Path 'apps/twitch-extension/dist/*' -DestinationPath 'apps/twitch-extension/tempest-twitch-extension-hosted.zip' -Force
 ```
 
-The generated `runtime-config.json` disables mock mode and is shared by every viewer. Add the same HTTPS origin to Twitch's **Allowlist for URL Fetching Domains** before uploading the ZIP. Twitch supplies the hosted Extension CSP, so the packaged HTML does not define its own CSP meta tag.
+Set `TEMPEST_EXTENSION_EBS_URL` only to override the official endpoint for development or self-hosting; set `TEMPEST_EXTENSION_MOCK_MODE=1` for an explicit mock build. The generated `runtime-config.json` disables mock mode by default and is shared by every viewer. Add `https://signal.tempestmainframe.com` to Twitch's **Allowlist for URL Fetching Domains** before uploading the ZIP. Twitch supplies the hosted Extension CSP, so the packaged HTML does not define its own CSP meta tag.

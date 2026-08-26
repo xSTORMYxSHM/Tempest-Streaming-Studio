@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url';
 const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDirectory = path.join(appDirectory, 'src');
 const outputDirectory = path.join(appDirectory, 'dist');
+const officialEbsUrl = 'https://signal.tempestmainframe.com';
 
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await cp(sourceDirectory, outputDirectory, { recursive: true });
-const configuredEbsUrl = String(process.env.TEMPEST_EXTENSION_EBS_URL || '').trim().replace(/\/$/, '');
+const mockMode = process.env.TEMPEST_EXTENSION_MOCK_MODE === '1';
+const configuredEbsUrl = String(mockMode ? '' : process.env.TEMPEST_EXTENSION_EBS_URL || officialEbsUrl).trim().replace(/\/$/, '');
 if (configuredEbsUrl) {
   const url = new URL(configuredEbsUrl);
   const localDevelopment = url.protocol === 'http:' && ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
@@ -19,6 +21,6 @@ if (configuredEbsUrl) {
 await writeFile(path.join(outputDirectory, 'runtime-config.json'), `${JSON.stringify({
   schemaVersion: 1,
   ebsBaseUrl: configuredEbsUrl,
-  mockMode: !configuredEbsUrl
+  mockMode
 }, null, 2)}\n`, 'utf8');
 console.log(`Built Twitch Extension assets in ${outputDirectory}`);

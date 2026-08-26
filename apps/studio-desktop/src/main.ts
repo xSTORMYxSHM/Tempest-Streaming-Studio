@@ -22,6 +22,7 @@ import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migra
 import {
   HostedExtensionCredentials,
   HostedExtensionStatus,
+  OFFICIAL_HOSTED_EBS_URL,
   hostedExtensionRelayOptions,
   validateHostedEbsUrl,
   validateHostedExtensionCredentials
@@ -138,6 +139,7 @@ async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
   const credentials = await loadHostedExtensionCredentials().catch(() => null);
   return {
     paired: Boolean(credentials),
+    defaultEbsBaseUrl: OFFICIAL_HOSTED_EBS_URL,
     ...(credentials ? {
       ebsBaseUrl: credentials.ebsBaseUrl,
       installationId: credentials.installationId,
@@ -412,7 +414,7 @@ function registerDesktopHandlers(): void {
     }
     const tokens = await broadcasterCredentialStore.load();
     if (!tokens?.accessToken) throw new Error('Authorize your broadcaster account in Twitch Gateway before pairing the hosted Extension.');
-    const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl);
+    const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl || OFFICIAL_HOSTED_EBS_URL);
     hostedExtensionLastError = undefined;
     try {
       const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {

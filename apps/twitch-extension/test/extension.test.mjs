@@ -46,8 +46,8 @@ test('never embeds the Extension secret or the localhost Bridge endpoint', async
 test('generates a public runtime configuration without secrets', async () => {
   const runtime = JSON.parse(await readFile(path.join(appDirectory, 'dist', 'runtime-config.json'), 'utf8'));
   assert.equal(runtime.schemaVersion, 1);
-  assert.equal(typeof runtime.ebsBaseUrl, 'string');
-  assert.equal(typeof runtime.mockMode, 'boolean');
+  assert.equal(runtime.ebsBaseUrl, 'https://signal.tempestmainframe.com');
+  assert.equal(runtime.mockMode, false);
   assert.equal(Object.keys(runtime).some((key) => /secret|token/i.test(key)), false);
 });
 

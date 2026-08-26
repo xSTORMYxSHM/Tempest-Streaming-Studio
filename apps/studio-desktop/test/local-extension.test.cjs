@@ -5,7 +5,7 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
-const { hostedExtensionRelayOptions, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, hostedExtensionRelayOptions, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -51,4 +51,9 @@ test('validates a public hosted EBS and derives a credential-free WSS relay URL'
   assert.equal(hostedExtensionRelayOptions(credentials).channelId, '123456');
   assert.throws(() => validateHostedEbsUrl('http://tempest.example.com'), /HTTPS/);
   assert.throws(() => validateHostedEbsUrl('https://user:pass@tempest.example.com'), /credentials/);
+});
+
+test('ships the official Tempest Signal endpoint as the hosted default', () => {
+  assert.equal(OFFICIAL_HOSTED_EBS_URL, 'https://signal.tempestmainframe.com');
+  assert.equal(validateHostedEbsUrl(OFFICIAL_HOSTED_EBS_URL), OFFICIAL_HOSTED_EBS_URL);
 });
