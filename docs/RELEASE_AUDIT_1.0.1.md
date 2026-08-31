@@ -37,5 +37,6 @@ The 1.0.1 Windows release passed its install, build, test, packaging, resource, 
 
 ## Publication status
 
-- Ready to publish the stable `v1.0.1` GitHub release with the installer, blockmap, updater metadata, portable ZIP, checksums, and signed-payload manifest.
+- Published the stable, non-draft [`v1.0.1` GitHub release](https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.0.1) with the installer, blockmap, updater metadata, portable ZIP, checksums, and signed-payload manifest.
+- GitHub reports `v1.0.1` as the latest release. All six public asset sizes and SHA-256 digests match the locally verified release files.
 - Public Extension review and hosted EBS publication remain separate from the Studio desktop release.
