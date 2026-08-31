@@ -1445,7 +1445,7 @@ export class TwitchChatbot {
     if (!provider) throw new Error('Now Playing is not configured.');
     if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
     const response = await this.request(provider.apiUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.0' },
+      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
       signal: AbortSignal.timeout(5_000)
     });
     const result = await response.json().catch(() => ({})) as {
@@ -1499,7 +1499,7 @@ export class TwitchChatbot {
     const now = Date.now();
     if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
     try {
-      const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.0', Accept: 'application/geo+json' };
+      const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.1', Accept: 'application/geo+json' };
       if (!this.weatherForecastUrl) {
         const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
         const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };

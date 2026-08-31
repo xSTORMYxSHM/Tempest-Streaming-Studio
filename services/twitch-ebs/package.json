@@ -1,6 +1,6 @@
 {
   "name": "@tempest/twitch-ebs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Hosted Twitch Extension Backend Service and secure relay for Tempest Streaming Studio.",
   "main": "dist/index.js",

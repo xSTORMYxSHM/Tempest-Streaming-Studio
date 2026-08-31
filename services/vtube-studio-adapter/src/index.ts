@@ -196,7 +196,7 @@ export function startVTubeStudioAdapter(options: StartVTubeStudioAdapterOptions)
     bridge = socket;
     socket.on('open', () => {
       update({ bridge: 'connected' });
-      socket.send(JSON.stringify(createBridgeMessage({ kind: 'hello', source: applicationId, payload: { applicationId, version: '1.0.0', protocolVersion: TEMPEST_PROTOCOL_VERSION, capabilities } })));
+      socket.send(JSON.stringify(createBridgeMessage({ kind: 'hello', source: applicationId, payload: { applicationId, version: '1.0.1', protocolVersion: TEMPEST_PROTOCOL_VERSION, capabilities } })));
       logger.info('VTube Studio adapter connected to Tempest Bridge.');
     });
     socket.on('message', (raw) => {

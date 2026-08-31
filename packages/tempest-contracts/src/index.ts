@@ -1,5 +1,5 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '1.0.0';
+export const TEMPEST_STUDIO_VERSION = '1.0.1';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 

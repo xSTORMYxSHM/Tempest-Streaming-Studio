@@ -11,7 +11,8 @@ const expectedPublisher = 'CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa,
 const packageFiles = [
   'package.json', 'apps/studio-desktop/package.json', 'apps/twitch-extension/package.json',
   'services/tempest-bridge/package.json', 'services/twitch-ebs/package.json',
-  'services/warudo-adapter/package.json', 'packages/tempest-contracts/package.json'
+  'services/warudo-adapter/package.json', 'services/vtube-studio-adapter/package.json',
+  'packages/tempest-contracts/package.json'
 ];
 
 for (const relativePath of packageFiles) {
@@ -36,7 +37,7 @@ if (!new RegExp(`^version: ['\"]?${expectedVersion.replaceAll('.', '\\.')}['\"]?
 if (!updateMetadata.includes(setupName) || !/^sha512:\s*\S+/m.test(updateMetadata) || !/^\s*size:\s*\d+/m.test(updateMetadata)) throw new Error(`${updateMetadataName} is missing signed installer update metadata.`);
 
 const unpackedResources = path.join(releaseDirectory, 'win-unpacked', 'resources');
-for (const relativePath of ['app.asar', 'twitch-extension/panel.html', 'tools/create-extension-certificate.ps1']) {
+for (const relativePath of ['app.asar', 'twitch-extension/panel.html', 'tools/create-extension-certificate.ps1', 'avatar-controllers/warudo/TempestPerformanceNode.cs']) {
   if (!(await stat(path.join(unpackedResources, relativePath))).isFile()) throw new Error(`Packaged resource ${relativePath} is missing.`);
 }
 const forbidden = [];

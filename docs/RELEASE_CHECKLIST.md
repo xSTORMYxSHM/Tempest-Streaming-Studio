@@ -1,4 +1,4 @@
-# 1.0.0 release checklist
+# 1.0.1 release checklist
 
 ## Automated gates
 
@@ -30,8 +30,8 @@
 
 ## Updater-enabled release gates
 
-- [ ] Build and Azure-sign the versioned NSIS installer before creating the GitHub release.
-- [ ] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
+- [x] Build and Azure-sign the versioned NSIS installer before creating the GitHub release.
+- [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
 - [ ] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
 - [ ] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From the previous installed version, check, download, verify, restart, migrate data, and confirm the new version in **Settings + About**.
+- [ ] From the previous updater-enabled installed version, check, download, verify, restart, migrate data, and confirm the new version in **Settings + About**. Version 1.0.0 predates the updater, so this gate begins with the release after 1.0.1.

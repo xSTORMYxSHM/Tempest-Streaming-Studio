@@ -1,6 +1,6 @@
 {
   "name": "@tempest/twitch-extension",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Viewer-facing Twitch Video Component, Panel, and Mobile interface for Tempest Streaming Studio interactions.",
   "scripts": {

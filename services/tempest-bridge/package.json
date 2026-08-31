@@ -1,6 +1,6 @@
 {
   "name": "@tempest/bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Local application, asset, command, and event bridge for Tempest Streaming Studio.",
   "main": "dist/index.js",
