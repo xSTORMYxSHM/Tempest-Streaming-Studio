@@ -56,6 +56,7 @@ export const bundledSoundAlerts: TempestSoundAlertDefinition[] = catalogSeed.map
   enabled: true,
   free: true,
   warudoEnabled: false,
+  vtubeStudioEnabled: false,
   viewerCooldownMs: 60000,
   globalCooldownMs: alert.durationMs,
   volume: 0.8,
@@ -129,6 +130,14 @@ function validateEffectStrength(value: unknown): number | undefined {
   return strength;
 }
 
+function validateVTubeStudioHotkey(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') throw new Error('vtubeStudioHotkey must be a VTube Studio hotkey ID.');
+  const hotkey = value.trim();
+  if (!hotkey || hotkey.length > 128 || /[\r\n\0]/.test(hotkey)) throw new Error('vtubeStudioHotkey must contain 1 to 128 printable characters.');
+  return hotkey;
+}
+
 export class TempestSoundAlertCatalog {
   private alerts: TempestSoundAlertDefinition[] = [];
   private lastAlertTrigger = new Map<string, number>();
@@ -182,13 +191,15 @@ export class TempestSoundAlertCatalog {
     if (index < 0) throw new Error(`Sound Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Sound Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'warudoEnabled', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
+    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Sound Alert catalog.`);
     const current = this.alerts[index];
     const updated = this.validate({
       ...current,
       ...(source.enabled === undefined ? {} : { enabled: source.enabled }),
       ...(source.warudoEnabled === undefined ? {} : { warudoEnabled: source.warudoEnabled }),
+      ...(source.vtubeStudioEnabled === undefined ? {} : { vtubeStudioEnabled: source.vtubeStudioEnabled }),
+      ...(Object.hasOwn(source, 'vtubeStudioHotkey') ? { vtubeStudioHotkey: validateVTubeStudioHotkey(source.vtubeStudioHotkey) } : {}),
       ...(source.durationMs === undefined ? {} : { durationMs: source.durationMs }),
       ...(source.viewerCooldownMs === undefined ? {} : { viewerCooldownMs: source.viewerCooldownMs }),
       ...(source.globalCooldownMs === undefined ? {} : { globalCooldownMs: source.globalCooldownMs }),
@@ -226,6 +237,8 @@ export class TempestSoundAlertCatalog {
       enabled: source.enabled === undefined ? true : source.enabled,
       free: true,
       warudoEnabled: source.warudoEnabled === undefined ? false : source.warudoEnabled,
+      vtubeStudioEnabled: source.vtubeStudioEnabled === undefined ? false : source.vtubeStudioEnabled,
+      vtubeStudioHotkey: source.vtubeStudioHotkey,
       cue,
       durationMs,
       viewerCooldownMs: source.viewerCooldownMs === undefined ? 60000 : source.viewerCooldownMs,
@@ -284,6 +297,8 @@ export class TempestSoundAlertCatalog {
         alertId: alert.id,
         cue: alert.cue,
         warudoEnabled: alert.warudoEnabled,
+        vtubeStudioEnabled: alert.vtubeStudioEnabled,
+        vtubeStudioHotkey: alert.vtubeStudioHotkey,
         name: alert.name,
         durationMs: alert.durationMs,
         visualDurationMs: alert.visualDurationMs,
@@ -316,6 +331,10 @@ export class TempestSoundAlertCatalog {
     if (typeof input.enabled !== 'boolean') throw new Error('Sound Alert enabled must be boolean.');
     const warudoEnabled = input.warudoEnabled === undefined ? true : input.warudoEnabled;
     if (typeof warudoEnabled !== 'boolean') throw new Error('Sound Alert warudoEnabled must be boolean.');
+    const vtubeStudioEnabled = input.vtubeStudioEnabled === undefined ? false : input.vtubeStudioEnabled;
+    if (typeof vtubeStudioEnabled !== 'boolean') throw new Error('Sound Alert vtubeStudioEnabled must be boolean.');
+    const vtubeStudioHotkey = validateVTubeStudioHotkey(input.vtubeStudioHotkey);
+    if (vtubeStudioEnabled && !vtubeStudioHotkey) throw new Error('Choose a VTube Studio hotkey before enabling VTube Studio for this alert.');
     if (input.free !== true) throw new Error('Studio Sound Alerts must remain free.');
     const volume = Number(input.volume);
     if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('Sound Alert volume must be between 0 and 1.');
@@ -328,6 +347,8 @@ export class TempestSoundAlertCatalog {
       enabled: input.enabled,
       free: true,
       warudoEnabled,
+      vtubeStudioEnabled,
+      vtubeStudioHotkey,
       durationMs: boundedInteger(input.durationMs, 'durationMs', 1000, 60000),
       viewerCooldownMs: boundedInteger(input.viewerCooldownMs, 'viewerCooldownMs', 0, 24 * 60 * 60 * 1000),
       globalCooldownMs: boundedInteger(input.globalCooldownMs, 'globalCooldownMs', 0, 24 * 60 * 60 * 1000),

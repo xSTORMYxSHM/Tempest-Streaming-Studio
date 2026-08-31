@@ -1,6 +1,6 @@
-# Warudo and Tempest Broadcast Adapter Contracts
+# Avatar and Tempest Broadcast Adapter Contracts
 
-Neither adapter owns interaction-facing Twitch ingestion. Studio owns interaction OAuth, EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast still owns OBS/Twitch stream-service authentication, streaming credentials, and Stream Information because those control the outgoing broadcast.
+No adapter owns interaction-facing Twitch ingestion. Studio owns interaction OAuth, EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast still owns OBS/Twitch stream-service authentication, streaming credentials, and Stream Information because those control the outgoing broadcast.
 
 ## Shared command envelope
 
@@ -59,3 +59,13 @@ The Warudo adapter must connect to the Bridge, advertise this capability, map ac
 The supplied Sound Alert Dancing blueprint has 13 song branches with explicit 8–58 second durations. Studio now exposes those branches as stable `sound-alert.*` catalog IDs. The Warudo adapter maps each ID to its existing animation sequence, including the sitting reset and Crab Rave lighting restoration. `Interactions_Twitch` currently recognizes follows, subscriptions, Bits, redeems, props, stickers, and liquid interactions; move that platform classification into Studio and reduce the Warudo side to `cue + durationMs + intensity`. Preserve the blueprint's exact duration and use the upstream event ID as `dedupeId`.
 
 The supplied Playground node exposes local **Test Activate** and **Test Release** triggers, live match diagnostics, and exact/comma-separated/trailing-wildcard cue filters. Use those controls to validate a replacement animation locally before connecting it to a catalog cue. A missing or incompatible animation asset is a blueprint configuration failure; it must not be mistaken for a Bridge or Twitch delivery failure.
+
+## VTube Studio
+
+Application ID: `com.tempestmainframe.vtube-studio`
+
+Required capability:
+
+- `avatar.performance.apply` — trigger the Interaction Alert's assigned VTube Studio hotkey on activation. VTube Studio owns hotkey duration and auto-deactivation, so release acknowledges completion without triggering the hotkey a second time.
+
+The desktop app is the VTube Studio plugin client and connects only to the local VTube Studio WebSocket API. It requests permission only after the user selects **Authorize in VTube Studio**, stores the returned token with Windows encryption, reauthenticates locally on later launches, and lists hotkeys from the currently loaded Live2D model. It never requires or installs a separate VTube Studio DLL or script.

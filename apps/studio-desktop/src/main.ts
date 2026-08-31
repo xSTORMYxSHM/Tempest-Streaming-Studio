@@ -8,6 +8,7 @@ import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridge
 import { TEMPEST_STUDIO_VERSION, TempestSoundAlertPlaybackCommand } from '@tempest/contracts';
 import { validateTwitchAlertDesign } from '@tempest/bridge';
 import { startWarudoAdapter, WarudoAdapterRuntime } from '@tempest/warudo-adapter';
+import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
 import {
   LocalExtensionRuntime,
   LocalExtensionStatus,
@@ -38,6 +39,7 @@ const captureOverlay = process.argv.includes('--capture-overlay');
 const capturePreviewArgument = process.argv.find((argument) => argument.startsWith('--capture-preview='));
 let bridge: TempestBridgeRuntime | null = null;
 let warudoAdapter: WarudoAdapterRuntime | null = null;
+let vtubeStudioAdapter: VTubeStudioAdapterRuntime | null = null;
 let localExtension: LocalExtensionRuntime | null = null;
 let localExtensionLastError: string | undefined;
 let hostedExtensionLastError: string | undefined;
@@ -169,6 +171,9 @@ const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
 const supportRoot = app.isPackaged ? process.resourcesPath : workspaceRoot;
 const extensionAssetRoot = app.isPackaged ? path.join(supportRoot, 'twitch-extension') : path.join(workspaceRoot, 'apps', 'twitch-extension', 'dist');
 const extensionCertificateScript = path.join(supportRoot, 'tools', 'create-extension-certificate.ps1');
+const warudoReceiverSource = app.isPackaged
+  ? path.join(supportRoot, 'avatar-controllers', 'warudo', 'TempestPerformanceNode.cs')
+  : path.join(workspaceRoot, 'integrations', 'warudo', 'TempestPerformanceNode.cs');
 const extensionCertificatePassword = 'tempest-local-dev';
 
 function privacySettingsPath(): string {
@@ -303,6 +308,32 @@ async function restoreHostedExtensionRelay(): Promise<void> {
 
 function giphyCredentialPath(): string {
   return path.join(app.getPath('userData'), 'giphy-api-key.bin');
+}
+
+function vtubeStudioTokenPath(): string {
+  return path.join(app.getPath('userData'), 'vtube-studio-token.bin');
+}
+
+function createVTubeStudioTokenStore(): VTubeStudioTokenStore {
+  return {
+    async load(): Promise<string | null> {
+      if (!safeStorage.isEncryptionAvailable()) return null;
+      try { return safeStorage.decryptString(await readFile(vtubeStudioTokenPath())).trim() || null; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw new Error(`Could not read the encrypted VTube Studio authorization: ${(error as Error).message}`);
+      }
+    },
+    async save(token: string): Promise<void> {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows credential encryption is unavailable.');
+      if (!token || token.length > 128 || /[\r\n\0]/.test(token)) throw new Error('VTube Studio returned an invalid authorization token.');
+      await mkdir(path.dirname(vtubeStudioTokenPath()), { recursive: true });
+      await writeFile(vtubeStudioTokenPath(), safeStorage.encryptString(token), { mode: 0o600 });
+    },
+    async clear(): Promise<void> {
+      await unlink(vtubeStudioTokenPath()).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    }
+  };
 }
 
 function twitchPanelDesignPath(): string {
@@ -523,7 +554,7 @@ function registerDesktopHandlers(): void {
       if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([entryKey, entry]) => [entryKey, sanitize(entry, entryKey)]));
       return value;
     };
-    const report = sanitize({ schemaVersion: 1, type: 'tempest.studio-diagnostics', generatedAt: new Date().toISOString(), product: { name: productName, version: TEMPEST_STUDIO_VERSION, dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }, health, alertDiagnostics: alerts, browserSources: sources, warudo: warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }, localExtension: { running: Boolean(localExtension), certificateAvailable: Boolean((await getLocalExtensionStatus()).certificateAvailable) } });
+    const report = sanitize({ schemaVersion: 1, type: 'tempest.studio-diagnostics', generatedAt: new Date().toISOString(), product: { name: productName, version: TEMPEST_STUDIO_VERSION, dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }, health, alertDiagnostics: alerts, browserSources: sources, avatarControllers: { warudo: warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }, vtubeStudio: vtubeStudioAdapter?.status() || { bridge: 'disconnected', vtubeStudio: 'disconnected', authorization: 'required' } }, localExtension: { running: Boolean(localExtension), certificateAvailable: Boolean((await getLocalExtensionStatus()).certificateAvailable) } });
     const result = await dialog.showSaveDialog(mainWindow || undefined as never, { title: 'Export Redacted Studio Diagnostics', defaultPath: `tempest-studio-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON diagnostics', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
     await writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
@@ -554,6 +585,39 @@ function registerDesktopHandlers(): void {
     endpoint: process.env.TEMPEST_WARUDO_URL || 'ws://localhost:4770/',
     action: 'tempestPerformance'
   }));
+
+  ipcMain.handle('studio:save-warudo-receiver', async () => {
+    await stat(warudoReceiverSource).catch(() => { throw new Error('The bundled Warudo receiver is missing. Reinstall Tempest Streaming Studio.'); });
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Save Warudo Receiver',
+      defaultPath: path.join(app.getPath('downloads'), 'TempestPerformanceNode.cs'),
+      filters: [{ name: 'Warudo Playground C# file', extensions: ['cs'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, await readFile(warudoReceiverSource), { mode: 0o600 });
+    return { path: result.filePath };
+  });
+
+  ipcMain.handle('studio:get-vtube-studio-status', () => ({
+    ...(vtubeStudioAdapter?.status() || { bridge: 'disconnected', vtubeStudio: 'disconnected', authorization: 'required', endpoint: process.env.TEMPEST_VTUBE_STUDIO_URL || 'ws://localhost:8001', hotkeyCount: 0 }),
+    hotkeys: vtubeStudioAdapter?.hotkeys() || [],
+    credentialStorage: safeStorage.isEncryptionAvailable() ? 'windows-encrypted' : 'unavailable'
+  }));
+  ipcMain.handle('studio:authorize-vtube-studio', async () => {
+    if (!vtubeStudioAdapter) throw new Error('The VTube Studio controller is not running.');
+    await vtubeStudioAdapter.authorize();
+    return { ...vtubeStudioAdapter.status(), hotkeys: vtubeStudioAdapter.hotkeys() };
+  });
+  ipcMain.handle('studio:refresh-vtube-studio-hotkeys', async () => {
+    if (!vtubeStudioAdapter) throw new Error('The VTube Studio controller is not running.');
+    await vtubeStudioAdapter.refreshHotkeys();
+    return { ...vtubeStudioAdapter.status(), hotkeys: vtubeStudioAdapter.hotkeys() };
+  });
+  ipcMain.handle('studio:forget-vtube-studio', async () => {
+    if (!vtubeStudioAdapter) throw new Error('The VTube Studio controller is not running.');
+    await vtubeStudioAdapter.forgetAuthorization();
+    return { ...vtubeStudioAdapter.status(), hotkeys: [] };
+  });
 
   ipcMain.handle('studio:get-local-extension-status', () => getLocalExtensionStatus());
   ipcMain.handle('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
@@ -826,6 +890,9 @@ function registerDesktopHandlers(): void {
       const activeWarudo = warudoAdapter;
       warudoAdapter = null;
       await activeWarudo?.close();
+      const activeVTubeStudio = vtubeStudioAdapter;
+      vtubeStudioAdapter = null;
+      await activeVTubeStudio?.close();
     });
     return { ...restored, sourcePath: filePath, restartRequired: true };
   });
@@ -924,6 +991,13 @@ app.whenReady().then(async () => {
     // Packaged GUI launches do not have a durable stdout/stderr pipe on Windows.
     logger: { info() {}, warn() {}, error() {} }
   });
+  vtubeStudioAdapter = startVTubeStudioAdapter({
+    bridgeUrl: `${bridge.baseUrl.replace('http', 'ws')}/v1/socket`,
+    bridgeToken: bridge.token,
+    vtubeStudioUrl: process.env.TEMPEST_VTUBE_STUDIO_URL,
+    tokenStore: createVTubeStudioTokenStore(),
+    logger: { info() {}, warn() {}, error() {} }
+  });
   registerDesktopHandlers();
   mainWindow = createWindow();
 
@@ -1006,6 +1080,11 @@ app.on('before-quit', () => {
   if (warudoAdapter) {
     const activeAdapter = warudoAdapter;
     warudoAdapter = null;
+    void activeAdapter.close().catch(() => {});
+  }
+  if (vtubeStudioAdapter) {
+    const activeAdapter = vtubeStudioAdapter;
+    vtubeStudioAdapter = null;
     void activeAdapter.close().catch(() => {});
   }
   if (bridge) {

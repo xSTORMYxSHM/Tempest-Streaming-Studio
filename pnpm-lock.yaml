@@ -26,6 +26,9 @@ importers:
       '@tempest/twitch-ebs':
         specifier: workspace:*
         version: link:../../services/twitch-ebs
+      '@tempest/vtube-studio-adapter':
+        specifier: workspace:*
+        version: link:../../services/vtube-studio-adapter
       '@tempest/warudo-adapter':
         specifier: workspace:*
         version: link:../../services/warudo-adapter
@@ -75,6 +78,19 @@ importers:
       '@types/pg':
         specifier: ^8.23.1
         version: 8.23.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+
+  services/vtube-studio-adapter:
+    dependencies:
+      '@tempest/contracts':
+        specifier: workspace:*
+        version: link:../../packages/tempest-contracts
+      ws:
+        specifier: ^8.18.3
+        version: 8.21.3
+    devDependencies:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1

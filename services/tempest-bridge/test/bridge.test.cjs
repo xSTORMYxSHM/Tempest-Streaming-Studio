@@ -193,6 +193,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(catalog.alerts.length, 6);
   assert.ok(catalog.alerts.every((alert) => alert.free === true));
   assert.ok(catalog.alerts.every((alert) => alert.warudoEnabled === false));
+  assert.ok(catalog.alerts.every((alert) => alert.vtubeStudioEnabled === false));
   assert.equal(catalog.alerts.find((alert) => alert.id === 'sound-alert.hype-pulse').durationMs, 8000);
 
   const configured = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
@@ -536,6 +537,7 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(interactionAlert.free, true);
   assert.equal(interactionAlert.accent, '#123ABC');
   assert.equal(interactionAlert.warudoEnabled, false);
+  assert.equal(interactionAlert.vtubeStudioEnabled, false);
   assert.equal(interactionAlert.design.position, 'custom');
   assert.equal(interactionAlert.audioUri, pathToFileURL(packedAudioPath).href);
   assert.equal(interactionAlert.visualUri, pathToFileURL(packedVisualPath).href);
@@ -550,12 +552,16 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   const interactionUpdated = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent(interactionAlert.id)}`, {
     method: 'POST', headers, body: JSON.stringify({
       warudoEnabled: true,
+      vtubeStudioEnabled: true,
+      vtubeStudioHotkey: 'hotkey-dance',
       design: { ...interactionAlert.design, position: 'custom', customPositionX: 27.5, customPositionY: 41.25, scale: 1.2 }
     })
   });
   assert.equal(interactionUpdated.status, 200);
   const updatedInteractionAlert = (await interactionUpdated.json()).alert;
   assert.equal(updatedInteractionAlert.warudoEnabled, true);
+  assert.equal(updatedInteractionAlert.vtubeStudioEnabled, true);
+  assert.equal(updatedInteractionAlert.vtubeStudioHotkey, 'hotkey-dance');
   assert.equal(updatedInteractionAlert.design.customPositionX, 27.5);
   assert.equal(updatedInteractionAlert.design.customPositionY, 41.25);
 
@@ -584,7 +590,7 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
   try {
     const interactions = await fetch(`${runtime.baseUrl}/v1/sound-alerts`, { headers }).then((response) => response.json());
-    assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.design.customPositionX === 27.5));
+    assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.vtubeStudioEnabled && alert.vtubeStudioHotkey === 'hotkey-dance' && alert.design.customPositionX === 27.5));
     const twitchAlerts = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, { headers }).then((response) => response.json());
     assert.ok(twitchAlerts.alerts.some((alert) => alert.id === twitchAlert.id && alert.custom));
 

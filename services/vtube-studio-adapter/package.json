@@ -1,0 +1,19 @@
+{
+  "name": "@tempest/vtube-studio-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Tempest Bridge adapter for VTube Studio hotkeys.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.cjs"
+  },
+  "dependencies": {
+    "@tempest/contracts": "workspace:*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

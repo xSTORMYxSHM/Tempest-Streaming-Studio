@@ -27,6 +27,15 @@ The Chatbot is optional and uses a second, separate Twitch user authorization. I
 
 The Twitch Extension/Panel is a universal Extension whose appearance is configured per channel. Its public-safe starter interactions correspond to a clean Studio catalog; publishing a separately tailored interaction catalog requires a matching Extension asset build and Studio configuration. Public Extension review and hosted EBS deployment are separate from installing Studio.
 
+## Avatar controllers
+
+Open **Apps + Connections → Avatar Controllers** to connect an optional avatar app.
+
+- **Warudo:** select **Save Warudo Receiver**. Studio copies the bundled `TempestPerformanceNode.cs` file to the location you choose. Copy that file into Warudo's Playground folder, add **Tempest Performance Cue** to the blueprint, and connect its Activate and Release flows. The installer always carries this receiver with Studio.
+- **VTube Studio:** enable **Allow Plugin API access** in VTube Studio, then select **Authorize in VTube Studio** in Tempest and approve the one-time prompt. No separate plugin file is required because the installed Tempest Studio application is the VTube Studio plugin client. The authorization token is stored with Windows encryption. After authorization, assign a loaded-model hotkey on each Interaction Alert that should control the Live2D avatar.
+
+VTube Studio hotkey timing and auto-deactivation remain configured in VTube Studio. Refresh the hotkey list after changing models or adding hotkeys.
+
 ## Upgrading
 
 Version 1.0.0 predates the in-app updater. Install the first updater-enabled release manually from the official GitHub release. After that one-time upgrade, Studio checks the stable release channel shortly after launch and every six hours while running. Open **Settings + About → Automatic updates** to check at any time.

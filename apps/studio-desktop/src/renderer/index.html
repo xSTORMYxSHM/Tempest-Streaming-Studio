@@ -67,7 +67,7 @@
             <button class="home-menu-card" data-go="twitch"><b>SETUP 02</b><strong>Twitch</strong><span>Authorize your channel, EventSub intake, rewards, and stream information.</span><i>OPEN TWITCH →</i></button>
             <button class="home-menu-card" data-go="extensiondesigner"><b>SETUP 03</b><strong>Panel Designer</strong><span>Style the universal Twitch panel to match your channel and interactions.</span><i>DESIGN PANEL →</i></button>
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
-            <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional Warudo reactions.</span><i>BUILD INTERACTIONS →</i></button>
+            <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional avatar reactions.</span><i>BUILD INTERACTIONS →</i></button>
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat + Emotes</strong><span>Design the local chat stack and bouncing Emote Wall sources.</span><i>DESIGN OVERLAYS →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio automations.</span><i>MANAGE CHATBOT →</i></button>
           </div>
@@ -445,8 +445,28 @@
           </div>
 
           <div class="connection-section-heading">
-            <div><p class="eyebrow">AVATAR CONNECTION</p><h2>Connect Warudo</h2><p>Studio connects to Warudo automatically on this computer. Add one receiver to your Warudo blueprint so Studio can route performances and reactions into your scene.</p></div>
-            <span id="warudoOverallBadge" class="status-badge offline">CHECKING</span>
+            <div><p class="eyebrow">AVATAR CONTROLLERS</p><h2>Connect your avatar app</h2><p>Choose the controller that matches your avatar. Studio includes any receiver file the app requires and uses direct one-time authorization when the app provides its own plugin API.</p></div>
+            <span class="status-badge">2 CONTROLLERS</span>
+          </div>
+
+          <div class="avatar-controller-grid">
+            <article class="panel avatar-controller-card">
+              <div class="panel-header"><div><span>3D AVATARS</span><h3>Warudo</h3></div><span id="warudoOverallBadge" class="status-badge offline">CHECKING</span></div>
+              <p>Uses the included Tempest Playground receiver. Save it anywhere, then copy it into Warudo's Playground folder.</p>
+              <div class="controller-card-meta"><span>SETUP</span><strong>Bundled receiver file</strong><span>LAST CUE</span><strong id="warudoLastCue">None yet</strong></div>
+              <button id="saveWarudoReceiver" class="primary-button" type="button">Save Warudo Receiver</button>
+            </article>
+            <article class="panel avatar-controller-card">
+              <div class="panel-header"><div><span>LIVE2D AVATARS</span><h3>VTube Studio</h3></div><span id="vtubeStudioBadge" class="status-badge offline">CHECKING</span></div>
+              <p>Uses VTube Studio's built-in Plugin API. Tempest Studio is the plugin, so there is no extra DLL or script to install.</p>
+              <div class="controller-card-meta"><span>MODEL</span><strong id="vtubeStudioModel">Not connected</strong><span>HOTKEYS</span><strong id="vtubeStudioHotkeyCount">0 available</strong></div>
+              <p id="vtubeStudioStatusMessage">Open VTube Studio and enable Allow Plugin API access.</p>
+              <div class="controller-card-actions"><button id="authorizeVTubeStudio" class="primary-button" type="button">Authorize in VTube Studio</button><button id="refreshVTubeStudioHotkeys" class="secondary-button" type="button">Refresh Hotkeys</button><button id="forgetVTubeStudio" class="secondary-button" type="button" hidden>Forget</button></div>
+            </article>
+          </div>
+
+          <div class="connection-section-heading compact-heading">
+            <div><p class="eyebrow">WARUDO RECEIVER SETUP</p><h2>Finish the Warudo connection</h2><p>Studio connects locally after the supplied receiver is added to your blueprint.</p></div>
           </div>
 
           <div class="connection-path" aria-label="Studio to Warudo connection path">
@@ -465,7 +485,7 @@
               <div class="warudo-status-grid">
                 <div><span>WARUDO ENDPOINT</span><code id="warudoEndpoint" data-sensitive>ws://localhost:4770/</code></div>
                 <div><span>BLUEPRINT ACTION</span><code id="warudoAction">tempestPerformance</code></div>
-                <div><span>LAST CUE</span><strong id="warudoLastCue">None yet</strong></div>
+                <div><span>RECEIVER</span><strong>TempestPerformanceNode.cs</strong></div>
               </div>
               <p id="warudoStatusMessage">Checking whether Warudo is open…</p>
             </article>
@@ -528,6 +548,10 @@
         <div id="newInteractionWarudoOptions" class="interaction-integration-options" hidden>
           <div class="generated-cue">WARUDO CUE <code id="newInteractionAlertCue">sound-alert.moonlight-dance</code></div>
           <label>Performance length (seconds)<input id="newInteractionAlertDuration" type="number" min="1" max="60" value="10" required /></label>
+        </div>
+        <label class="interaction-integration-toggle"><input id="newInteractionVTubeStudioEnabled" type="checkbox" /><span><strong>Use VTube Studio</strong><small>Trigger one hotkey from the currently loaded Live2D model.</small></span></label>
+        <div id="newInteractionVTubeStudioOptions" class="interaction-integration-options" hidden>
+          <label>VTube Studio hotkey<select id="newInteractionVTubeStudioHotkey"><option value="">Connect VTube Studio in Connections first</option></select></label>
         </div>
         <div class="form-row alert-create-fields"><label>Visual length (seconds)<input id="newInteractionVisualDuration" type="number" min="1" max="60" value="6" required /></label><label>Volume (%)<input id="newInteractionVolume" type="number" min="0" max="100" value="80" required /></label></div>
         <div class="form-row alert-create-fields"><label>Viewer cooldown (seconds)<input id="newInteractionViewerCooldown" type="number" min="0" max="86400" value="60" required /></label><label>Global cooldown (seconds)<input id="newInteractionGlobalCooldown" type="number" min="0" max="86400" value="10" required /></label></div>

@@ -116,7 +116,7 @@ export interface TempestWorkflowAction {
   releaseCapability?: string;
   arguments?: Record<string, unknown>;
   forwardInteractionPayload?: boolean;
-  whenPayload?: { field: string; equals: string | number | boolean };
+  whenPayload?: { field: string; equals: string | number | boolean; ifMissing?: boolean };
   delayMs?: number;
   lease?: TempestWorkflowLease;
 }
@@ -154,6 +154,8 @@ export interface TempestSoundAlertDefinition {
   enabled: boolean;
   free: true;
   warudoEnabled: boolean;
+  vtubeStudioEnabled: boolean;
+  vtubeStudioHotkey?: string;
   cue: string;
   durationMs: number;
   viewerCooldownMs: number;
@@ -701,6 +703,7 @@ export function validateWorkflowDefinition(input: unknown): ValidationResult<Tem
         else {
           if (typeof action.whenPayload.field !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]*$/.test(action.whenPayload.field)) errors.push(`actions[${index}].whenPayload.field must be a top-level interaction payload field name.`);
           if (!['string', 'number', 'boolean'].includes(typeof action.whenPayload.equals)) errors.push(`actions[${index}].whenPayload.equals must be a string, number, or boolean.`);
+          if (action.whenPayload.ifMissing !== undefined && typeof action.whenPayload.ifMissing !== 'boolean') errors.push(`actions[${index}].whenPayload.ifMissing must be a boolean.`);
         }
       }
       if (action.lease !== undefined) {

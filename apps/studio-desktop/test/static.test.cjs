@@ -116,7 +116,11 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /DOWNLOADS LOCALLY/);
   assert.match(html, /Powered by GIPHY/);
   assert.match(html, /Stored with Windows encryption/);
-  assert.match(html, /Connect Warudo/);
+  assert.match(html, /Connect your avatar app/);
+  assert.match(html, /Save Warudo Receiver/);
+  assert.match(html, /VTube Studio/);
+  assert.match(renderer, /authorizeVTubeStudio/);
+  assert.match(renderer, /vtubeStudioHotkeyOptions/);
   assert.match(html, /Tempest Performance Cue/);
   assert.match(html, /Test Activate/);
   assert.match(html, /Test Release/);

@@ -15,6 +15,7 @@
   };
   const targetNames = {
     'com.tempestmainframe.warudo': 'Warudo',
+    'com.tempestmainframe.vtube-studio': 'VTube Studio',
     'com.tempestmainframe.tempest-broadcast': 'Tempest Broadcast',
     'com.tempestmainframe.quartic-pulse': 'Quartic Pulse',
     'com.tempestmainframe.data-horizon': 'Data Horizon'
@@ -44,6 +45,7 @@
     hostedExtension: null,
     panelDesign: null,
     warudo: null,
+    vtubeStudio: null,
     appInfo: null,
     update: null,
     privacy: { streamerMode: true, captureProtection: true },
@@ -454,6 +456,14 @@
     return values.map((value) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${value.toUpperCase()}</option>`).join('');
   }
 
+  function vtubeStudioHotkeyOptions(selected = '') {
+    const hotkeys = state.vtubeStudio?.hotkeys || [];
+    const known = hotkeys.some((hotkey) => hotkey.hotkeyID === selected);
+    const preserved = selected && !known ? `<option value="${escapeHtml(selected)}" selected>Previously selected hotkey</option>` : '';
+    const placeholder = hotkeys.length ? '<option value="">Choose a VTube Studio hotkey</option>' : '<option value="">Connect VTube Studio in Connections first</option>';
+    return preserved + placeholder + hotkeys.map((hotkey) => `<option value="${escapeHtml(hotkey.hotkeyID)}" ${hotkey.hotkeyID === selected ? 'selected' : ''}>${escapeHtml(hotkey.name)} · ${escapeHtml(hotkey.type)}</option>`).join('');
+  }
+
   function renderSoundAlerts() {
     const alerts = state.soundAlerts?.alerts || [];
     const inventory = broadcastSourceInventory();
@@ -472,7 +482,7 @@
     const visualOptions = inventory.visual.map((name) => `<option value="${escapeHtml(name)}"></option>`).join('');
     grid.innerHTML = `<datalist id="broadcastAudioSourceOptions">${audioOptions}</datalist><datalist id="visualAlertBroadcastSourceOptions">${visualOptions}</datalist>` + alerts.map((alert) => `<article class="sound-alert-card interaction-alert-card ${alert.enabled ? '' : 'disabled'}" style="--alert-accent:${escapeHtml(alert.accent || '#54f2eb')}">
       <div class="sound-alert-head"><div><span class="copyable-value">${escapeHtml(alert.id)}${copyButton(alert.id, 'interaction alert ID')}</span><h3>${escapeHtml(alert.name)}</h3></div><div class="card-head-actions"><b>${alert.enabled ? (alert.custom ? 'CUSTOM' : 'READY') : 'OFF'}</b>${alert.custom ? `<button class="card-delete-button" data-delete-interaction-alert="${escapeHtml(alert.id)}" title="Delete custom Interaction Alert" aria-label="Delete ${escapeHtml(alert.name)}">×</button>` : ''}</div></div>
-      <div class="sound-alert-cue"><span>${alert.warudoEnabled ? 'WARUDO + OVERLAY' : 'OVERLAY'}</span><span>${durationLabel(alert.visualDurationMs)}</span></div>
+      <div class="sound-alert-cue"><span>${alert.warudoEnabled || alert.vtubeStudioEnabled ? `${alert.warudoEnabled ? 'WARUDO' : ''}${alert.warudoEnabled && alert.vtubeStudioEnabled ? ' + ' : ''}${alert.vtubeStudioEnabled ? 'VTUBE STUDIO' : ''} + OVERLAY` : 'OVERLAY'}</span><span>${durationLabel(alert.visualDurationMs)}</span></div>
       <div class="alert-media-summary">
         <div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(alert.audioUri))}</strong></div>
         <div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(alert.visualUri))}</strong></div>
@@ -486,6 +496,12 @@
       <div class="interaction-integration-options card-options" data-alert-warudo-options="${escapeHtml(alert.id)}" ${alert.warudoEnabled ? '' : 'hidden'}>
         <span>WARUDO PERFORMANCE</span>
         <div class="sound-alert-cue"><span class="copyable-value"><code>${escapeHtml(alert.cue)}</code>${copyButton(alert.cue, 'Warudo cue')}</span><label>Length <span><input data-alert-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label></div>
+      </div>
+      <label class="interaction-integration-toggle compact"><input data-alert-vtube-studio-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.vtubeStudioEnabled ? 'checked' : ''} /><span><strong>Use VTube Studio</strong><small>Trigger a Live2D model hotkey with this alert.</small></span></label>
+      <div class="interaction-integration-options card-options" data-alert-vtube-studio-options="${escapeHtml(alert.id)}" ${alert.vtubeStudioEnabled ? '' : 'hidden'}>
+        <span>VTUBE STUDIO HOTKEY</span>
+        <label>Loaded-model hotkey<select data-alert-vtube-studio-hotkey="${escapeHtml(alert.id)}">${vtubeStudioHotkeyOptions(alert.vtubeStudioHotkey || '')}</select></label>
+        <small>Hotkey duration and auto-deactivation are controlled in VTube Studio.</small>
       </div>
       <details class="interaction-routing-details"><summary>Request + Broadcast routing</summary><div class="alert-settings-groups">
         <div class="alert-settings-group"><span>REQUEST</span><div class="sound-alert-settings">
@@ -732,6 +748,66 @@
       ? 'Studio and Warudo are connected. Complete the blueprint receiver steps below, then test a Sound Alert.'
       : warudoConnected ? 'Warudo is reachable; the adapter is finishing its connection to Studio.'
         : 'Open Warudo and load your scene. Studio retries this local connection automatically.');
+  }
+
+  function renderVTubeStudio() {
+    const status = state.vtubeStudio;
+    if (!status) return;
+    const connected = status.vtubeStudio === 'connected';
+    const authorized = status.authorization === 'authorized';
+    const badge = $('#vtubeStudioBadge');
+    badge.textContent = authorized ? 'AUTHORIZED' : connected ? 'APPROVAL NEEDED' : 'VTS OFFLINE';
+    badge.classList.toggle('offline', !authorized);
+    $('#vtubeStudioModel').textContent = status.modelLoaded ? status.modelName || 'Loaded model' : connected ? 'No model loaded' : 'Not connected';
+    $('#vtubeStudioHotkeyCount').textContent = `${status.hotkeys?.length || status.hotkeyCount || 0} available`;
+    $('#vtubeStudioStatusMessage').textContent = status.lastError || (authorized
+      ? 'Ready. Choose any loaded-model hotkey on an Interaction Alert.'
+      : connected ? 'Click Authorize, then approve Tempest Studio once in VTube Studio.'
+        : 'Open VTube Studio and enable Allow Plugin API access. Studio reconnects automatically.');
+    $('#authorizeVTubeStudio').hidden = authorized;
+    $('#authorizeVTubeStudio').disabled = !connected || status.authorization === 'pending' || status.credentialStorage === 'unavailable';
+    $('#refreshVTubeStudioHotkeys').disabled = !authorized;
+    $('#forgetVTubeStudio').hidden = !authorized;
+  }
+
+  async function saveWarudoReceiver() {
+    try {
+      const result = await window.tempestStudio.saveWarudoReceiver();
+      if (result) toast('Warudo receiver saved. Copy it into the Warudo Playground folder.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function authorizeVTubeStudio() {
+    try {
+      state.vtubeStudio = { ...(state.vtubeStudio || {}), authorization: 'pending' };
+      renderVTubeStudio();
+      state.vtubeStudio = await window.tempestStudio.authorizeVTubeStudio();
+      renderVTubeStudio();
+      renderSoundAlerts();
+      toast('VTube Studio authorized. Its model hotkeys are ready to assign.');
+    } catch (error) {
+      state.vtubeStudio = await window.tempestStudio.getVTubeStudioStatus().catch(() => state.vtubeStudio);
+      renderVTubeStudio();
+      toast(error.message, true);
+    }
+  }
+
+  async function refreshVTubeStudioHotkeys() {
+    try {
+      state.vtubeStudio = await window.tempestStudio.refreshVTubeStudioHotkeys();
+      renderVTubeStudio();
+      renderSoundAlerts();
+      toast(`${state.vtubeStudio.hotkeys?.length || 0} VTube Studio hotkeys loaded.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function forgetVTubeStudio() {
+    try {
+      state.vtubeStudio = await window.tempestStudio.forgetVTubeStudio();
+      renderVTubeStudio();
+      renderSoundAlerts();
+      toast('Saved VTube Studio authorization removed from this computer.');
+    } catch (error) { toast(error.message, true); }
   }
 
   function renderTwitch() {
@@ -1560,6 +1636,7 @@
     renderEmoteWall({ settings: true });
     renderTwitchExperiences({ settings: true });
     renderWarudo();
+    renderVTubeStudio();
     renderApi();
     renderTwitch();
     renderChatbot();
@@ -1571,7 +1648,7 @@
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
       state.runs = runs.runs || [];
@@ -1583,6 +1660,7 @@
       state.emoteWall = emoteWall;
       state.twitchExperiences = twitchExperiences;
       state.warudo = warudo;
+      state.vtubeStudio = vtubeStudio;
       state.localExtension = localExtension;
       state.hostedExtension = hostedExtension;
       state.alertHistory = alertHistory;
@@ -1597,6 +1675,7 @@
       renderEmoteWall();
       renderTwitchExperiences();
       renderWarudo();
+      renderVTubeStudio();
       renderLocalExtension();
       renderHostedExtension();
       renderChatbot();
@@ -1609,8 +1688,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -1730,6 +1809,8 @@
     $('#interactionAlertForm').reset();
     $('#newInteractionAlertKey').dataset.auto = 'true';
     $('#newInteractionWarudoOptions').hidden = true;
+    $('#newInteractionVTubeStudioOptions').hidden = true;
+    $('#newInteractionVTubeStudioHotkey').innerHTML = vtubeStudioHotkeyOptions();
     updateInteractionCuePreview();
     $('#interactionAlertDialog').showModal();
     $('#newInteractionAlertName').focus();
@@ -1744,6 +1825,8 @@
         cue: `sound-alert.${key}`,
         name: $('#newInteractionAlertName').value.trim(),
         warudoEnabled: $('#newInteractionWarudoEnabled').checked,
+        vtubeStudioEnabled: $('#newInteractionVTubeStudioEnabled').checked,
+        vtubeStudioHotkey: $('#newInteractionVTubeStudioHotkey').value,
         durationMs: Math.round(Number($('#newInteractionAlertDuration').value) * 1000),
         visualDurationMs: Math.round(Number($('#newInteractionVisualDuration').value) * 1000),
         volume: Number($('#newInteractionVolume').value) / 100,
@@ -2844,6 +2927,8 @@
   async function saveSoundAlertSettings(id) {
     const selectorId = CSS.escape(id);
     const warudoEnabled = document.querySelector(`[data-alert-warudo-enabled="${selectorId}"]`).checked;
+    const vtubeStudioEnabled = document.querySelector(`[data-alert-vtube-studio-enabled="${selectorId}"]`).checked;
+    const vtubeStudioHotkey = document.querySelector(`[data-alert-vtube-studio-hotkey="${selectorId}"]`).value;
     const durationSeconds = Number(document.querySelector(`[data-alert-duration="${selectorId}"]`).value);
     const viewerSeconds = Number(document.querySelector(`[data-alert-viewer-cooldown="${selectorId}"]`).value);
     const globalSeconds = Number(document.querySelector(`[data-alert-global-cooldown="${selectorId}"]`).value);
@@ -2857,6 +2942,8 @@
     const accent = document.querySelector(`[data-visual-alert-accent="${selectorId}"]`).value;
     await updateSoundAlert(id, {
       warudoEnabled,
+      vtubeStudioEnabled,
+      vtubeStudioHotkey,
       durationMs: Math.round(durationSeconds * 1000),
       viewerCooldownMs: Math.round(viewerSeconds * 1000),
       globalCooldownMs: Math.round(globalSeconds * 1000),
@@ -3034,6 +3121,10 @@
       renderOnboarding();
     });
     $('#refreshWarudoButton').addEventListener('click', () => refreshRuntime({ quiet: false }));
+    $('#saveWarudoReceiver').addEventListener('click', saveWarudoReceiver);
+    $('#authorizeVTubeStudio').addEventListener('click', authorizeVTubeStudio);
+    $('#refreshVTubeStudioHotkeys').addEventListener('click', refreshVTubeStudioHotkeys);
+    $('#forgetVTubeStudio').addEventListener('click', forgetVTubeStudio);
     $('#emergencyStopButton').addEventListener('click', toggleSafety);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);
@@ -3082,6 +3173,7 @@
     });
     $('#newInteractionAlertKey').addEventListener('input', () => { $('#newInteractionAlertKey').dataset.auto = 'false'; updateInteractionCuePreview(); });
     $('#newInteractionWarudoEnabled').addEventListener('change', () => { $('#newInteractionWarudoOptions').hidden = !$('#newInteractionWarudoEnabled').checked; });
+    $('#newInteractionVTubeStudioEnabled').addEventListener('change', () => { $('#newInteractionVTubeStudioOptions').hidden = !$('#newInteractionVTubeStudioEnabled').checked; });
     $('#newTwitchAlertName').addEventListener('input', () => {
       const key = $('#newTwitchAlertKey');
       if (key.dataset.auto === 'true') key.value = alertKey($('#newTwitchAlertName').value);
@@ -3169,10 +3261,17 @@
         renderOnboarding();
         return;
       }
-      const input = event.target.closest('[data-alert-warudo-enabled]');
-      if (!input) return;
-      const options = document.querySelector(`[data-alert-warudo-options="${CSS.escape(input.dataset.alertWarudoEnabled)}"]`);
-      if (options) options.hidden = !input.checked;
+      const warudoInput = event.target.closest('[data-alert-warudo-enabled]');
+      if (warudoInput) {
+        const options = document.querySelector(`[data-alert-warudo-options="${CSS.escape(warudoInput.dataset.alertWarudoEnabled)}"]`);
+        if (options) options.hidden = !warudoInput.checked;
+        return;
+      }
+      const vtubeStudioInput = event.target.closest('[data-alert-vtube-studio-enabled]');
+      if (vtubeStudioInput) {
+        const options = document.querySelector(`[data-alert-vtube-studio-options="${CSS.escape(vtubeStudioInput.dataset.alertVtubeStudioEnabled)}"]`);
+        if (options) options.hidden = !vtubeStudioInput.checked;
+      }
     });
     document.body.addEventListener('click', handleAction);
   }

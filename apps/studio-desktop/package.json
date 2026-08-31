@@ -16,6 +16,7 @@
     "@tempest/bridge": "workspace:*",
     "@tempest/contracts": "workspace:*",
     "@tempest/twitch-ebs": "workspace:*",
+    "@tempest/vtube-studio-adapter": "workspace:*",
     "@tempest/warudo-adapter": "workspace:*",
     "electron-updater": "6.8.9"
   },
@@ -47,6 +48,10 @@
       {
         "from": "../../tools/create-extension-certificate.ps1",
         "to": "tools/create-extension-certificate.ps1"
+      },
+      {
+        "from": "../../integrations/warudo/TempestPerformanceNode.cs",
+        "to": "avatar-controllers/warudo/TempestPerformanceNode.cs"
       }
     ],
     "extraFiles": [

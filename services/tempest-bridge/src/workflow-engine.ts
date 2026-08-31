@@ -105,6 +105,16 @@ export const soundAlertPerformanceWorkflow: TempestWorkflowDefinition = {
       lease: { durationMs: 60000, durationInput: 'durationMs', fadeOutMs: 500 }
     },
     {
+      id: 'vtube-studio-performance',
+      name: 'VTube Studio hotkey',
+      target: 'com.tempestmainframe.vtube-studio',
+      capability: 'avatar.performance.apply',
+      arguments: { source: 'sound-alerts' },
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'vtubeStudioEnabled', equals: true, ifMissing: false },
+      lease: { durationMs: 60000, durationInput: 'durationMs' }
+    },
+    {
       id: 'broadcast-performance',
       name: 'Broadcast performance reaction',
       target: 'com.tempestmainframe.tempest-broadcast',
@@ -330,7 +340,11 @@ export class TempestWorkflowEngine {
   }
 
   private resolveActions(actions: TempestWorkflowAction[], payload: Record<string, unknown> | undefined): TempestWorkflowAction[] {
-    return actions.filter((action) => !action.whenPayload || payload?.[action.whenPayload.field] === undefined || payload[action.whenPayload.field] === action.whenPayload.equals).map((action) => {
+    return actions.filter((action) => {
+      if (!action.whenPayload) return true;
+      const value = payload?.[action.whenPayload.field];
+      return value === undefined ? action.whenPayload.ifMissing !== false : value === action.whenPayload.equals;
+    }).map((action) => {
       const resolved = copy(action);
       if (resolved.forwardInteractionPayload && payload) resolved.arguments = { ...(resolved.arguments || {}), ...payload };
       const durationInput = resolved.lease?.durationInput;
