@@ -24,14 +24,11 @@
           <button class="nav-button" data-section="extensiondesigner">Panel Designer</button>
           <p class="nav-group">AUTOMATION</p>
           <button class="nav-button" data-section="chatbot">Chatbot</button>
-          <button class="nav-button" data-section="workflows">Workflows</button>
           <p class="nav-group">CONNECTIONS</p>
           <button class="nav-button" data-section="twitch">Twitch</button>
           <button class="nav-button" data-section="api">Apps + Connections</button>
           <p class="nav-group">TOOLS + RECORDS</p>
           <button class="nav-button" data-section="events">Event Log</button>
-          <button class="nav-button" data-section="software">Software</button>
-          <button class="nav-button" data-section="assets">Assets</button>
           <p class="nav-group">STUDIO</p>
           <button class="nav-button" data-section="settings">Settings + About</button>
         </nav>
@@ -63,7 +60,7 @@
             <div class="home-setup-progress" aria-hidden="true"><i id="homeSetupProgressBar"></i></div>
             <button id="reviewOnboardingWizard" class="secondary-button">Review Setup</button>
           </article>
-          <article id="studioDataPanel" class="studio-data-panel"><div><span>BACKUP + MIGRATION · <b id="studioDataVersion">CHECKING DATA</b></span><strong>Keep your Studio portable</strong><small>Back up alerts, variants, commands, workflows, panel styling, setup preferences, and alert media. Encrypted account credentials are deliberately excluded.</small></div><div class="studio-data-actions"><button data-export-studio-backup="true" class="secondary-button">Create Backup</button><button data-restore-studio-backup="true" class="secondary-button">Restore Backup</button></div></article>
+          <article id="studioDataPanel" class="studio-data-panel"><div><span>BACKUP + MIGRATION · <b id="studioDataVersion">CHECKING DATA</b></span><strong>Keep your Studio portable</strong><small>Back up alerts, variants, chatbot settings, panel styling, setup preferences, and alert media. Encrypted account credentials are deliberately excluded.</small></div><div class="studio-data-actions"><button data-export-studio-backup="true" class="secondary-button">Create Backup</button><button data-restore-studio-backup="true" class="secondary-button">Restore Backup</button></div></article>
           <div class="home-menu-heading"><div><p class="eyebrow">MAIN MENU</p><h3>What would you like to work on?</h3></div><p>Choose a task to jump directly into its workspace.</p></div>
           <div class="home-menu-grid">
             <button class="home-menu-card" data-go="api"><b>SETUP 01</b><strong>Connections</strong><span>Connect optional avatar, broadcast, visual, and performance tools.</span><i>OPEN CONNECTIONS →</i></button>
@@ -73,29 +70,22 @@
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional Warudo reactions.</span><i>BUILD INTERACTIONS →</i></button>
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat + Emotes</strong><span>Design the local chat stack and bouncing Emote Wall sources.</span><i>DESIGN OVERLAYS →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio automations.</span><i>MANAGE CHATBOT →</i></button>
-            <button class="home-menu-card" data-go="workflows"><b>AUTOMATE 02</b><strong>Workflows</strong><span>Inspect coordinated actions, cooldowns, leases, and restoration.</span><i>VIEW WORKFLOWS →</i></button>
           </div>
           <div class="home-runtime-heading"><div><p class="eyebrow">RUNTIME SNAPSHOT</p><h3>Studio right now</h3></div><button data-go="events" class="text-button">Open Event Log</button></div>
-          <div class="metric-grid">
-            <article><span>ACTIVE WORKFLOWS</span><strong id="activeRunMetric">0</strong><small id="activeRunMetricNote">Runtime standing by</small></article>
-            <article><span>READY WORKFLOWS</span><strong id="workflowMetric">0</strong><small>Versioned orchestration plans</small></article>
+          <div class="metric-grid home-runtime-metrics">
+            <article><span>ACTIVE INTERACTIONS</span><strong id="activeRunMetric">0</strong><small id="activeRunMetricNote">Runtime standing by</small></article>
             <article><span>LIVE CONNECTIONS</span><strong id="connectionMetric">0</strong><small id="connectionMetricNote">Simulation is available</small></article>
             <article><span>SAFETY STATE</span><strong id="safetyMetric">—</strong><small id="safetyMetricNote">Checking runtime</small></article>
           </div>
           <div class="overview-grid live-grid">
-            <article class="panel active-run-panel"><div class="panel-header"><div><span>ACTIVE ORCHESTRATION</span><h3>Current event</h3></div><button data-go="workflows" class="text-button">All workflows</button></div><div id="activeRunDisplay" class="empty-state">No workflow is active.</div></article>
+            <article class="panel active-run-panel"><div class="panel-header"><div><span>LIVE INTERACTION</span><h3>Current activity</h3></div><button data-go="events" class="text-button">View activity</button></div><div id="activeRunDisplay" class="empty-state">No interaction is active.</div></article>
             <article class="panel"><div class="panel-header"><div><span>RECENT SIGNALS</span><h3>Runtime activity</h3></div><button data-go="events" class="text-button">Full log</button></div><div id="overviewEvents" class="compact-list empty-state">No events have been received.</div></article>
           </div>
         </section>
 
-        <section id="workflowsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">AUTOMATION DIRECTORY</p><h2>Interaction Workflows</h2><p>Map normalized viewer events to capability-aware commands, timed leases, cooldowns, and guaranteed restoration.</p></div><span id="workflowSafetyBadge" class="status-badge">CHECKING</span></div>
-          <div id="workflowGrid" class="workflow-grid empty-state">No workflows registered.</div>
-        </section>
-
         <section id="eventsSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">NORMALIZED EVENT STREAM</p><h2>Event Log</h2><p>Trace every trigger, delivery decision, temporary override, release, failure, and safety action.</p></div><span id="eventCountBadge" class="status-badge">0 EVENTS</span></div>
-          <div class="filter-bar event-filters"><input id="eventSearch" type="search" placeholder="Search workflows, targets, messages, or event types" /><select id="eventLevelFilter"><option value="">All levels</option><option value="success">Success</option><option value="info">Information</option><option value="warning">Warning</option><option value="error">Errors</option></select></div>
+          <div class="filter-bar event-filters"><input id="eventSearch" type="search" placeholder="Search activity, messages, or event types" /><select id="eventLevelFilter"><option value="">All levels</option><option value="success">Success</option><option value="info">Information</option><option value="warning">Warning</option><option value="error">Errors</option></select></div>
           <div id="eventTimeline" class="event-timeline empty-state">No runtime events recorded.</div>
           <div class="visual-section-heading alert-history-heading"><div><span>DURABLE PLAYBACK LEDGER</span><h3>Alert History &amp; Diagnostics</h3><p>See exactly what played, how long it waited, which variant matched, where its audio was routed, and whether assigned media is still available.</p></div><button data-clear-alert-history="true" class="danger-outline">Clear History</button></div>
           <div class="metric-grid alert-history-metrics"><article><span>LAST 24 HOURS</span><strong id="alertHistory24h">0</strong><small>Alerts started</small></article><article><span>FAILED</span><strong id="alertHistoryFailures">0</strong><small>Playback startup failures</small></article><article><span>AVERAGE WAIT</span><strong id="alertHistoryWait">0 ms</strong><small>Time spent in queue</small></article><article><span>ASSET ISSUES</span><strong id="alertDiagnosticIssueCount">0</strong><small>Assigned files unavailable</small></article></div>
@@ -500,17 +490,6 @@
           <article class="panel capability-panel"><div class="panel-header"><div><span>CAPABILITY DIRECTORY</span><h3>Provided and consumed services</h3></div></div><div id="capabilityDirectory" class="capability-list empty-state">Capabilities appear after applications are registered.</div></article>
         </section>
 
-        <section id="softwareSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">APPLICATIONS + LINKED SERVICES</p><h2>Software Management</h2><p>Register compatible applications, inspect capabilities, launch installed software, and monitor optional services used by your stream.</p></div><button id="registerApplicationButton" class="primary-button">Register Application</button></div>
-          <div id="applicationGrid" class="card-grid empty-state">No applications registered.</div>
-        </section>
-
-        <section id="assetsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">CENTRAL ASSET REGISTRY</p><h2>Asset Control</h2><p>Index visuals, overlays, profiles, audio, and performance packages in place so compatible tools can discover them.</p></div><button id="addAssetButton" class="primary-button">Add Asset</button></div>
-          <div class="filter-bar"><input id="assetSearch" type="search" placeholder="Search names, types, producers, or tags" /><select id="assetTypeFilter"><option value="">All asset types</option></select></div>
-          <div id="assetGrid" class="card-grid empty-state">No assets indexed.</div>
-        </section>
-
         <section id="settingsSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">SETTINGS + ABOUT</p><h2>Tempest Streaming Studio</h2><p>Review local data, privacy boundaries, release information, and support diagnostics.</p></div><span id="aboutBuildBadge" class="status-badge">BUILD</span></div>
           <div class="settings-about-grid">
@@ -539,16 +518,6 @@
       </div>
     </dialog>
 
-    <dialog id="assetDialog">
-      <form id="assetForm" method="dialog">
-        <div class="dialog-header"><div><span>ASSET REGISTRATION</span><h2>Add to Asset Library</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>
-        <input id="assetId" type="hidden" /><input id="assetUri" type="hidden" /><input id="assetChecksum" type="hidden" />
-        <label>Name<input id="assetName" required maxlength="120" /></label>
-        <div class="form-row"><label>Asset type<select id="assetType" required><option value="tempest.scene">Tempest Scene</option><option value="tempest.visual">Visualizer</option><option value="tempest.overlay">Stream Overlay</option><option value="tempest.effect">Effect</option><option value="tempest.profile">Profile</option><option value="tempest.performance">Performance</option><option value="tempest.output-preset">Output Preset</option><option value="tempest.media">Media</option></select></label><label>Version<input id="assetVersion" required value="1.0.0" pattern="[0-9]+\.[0-9]+\.[0-9]+.*" /></label></div>
-        <label>Producer<select id="assetProducer" required></select></label><label>Tags<input id="assetTags" placeholder="audio-reactive, overlay, performance" /></label>
-        <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Register Asset</button></div>
-      </form>
-    </dialog>
     <dialog id="interactionAlertDialog">
       <form id="interactionAlertForm">
         <div class="dialog-header"><div><span>CUSTOM INTERACTION</span><h2>Create Interaction Alert</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>

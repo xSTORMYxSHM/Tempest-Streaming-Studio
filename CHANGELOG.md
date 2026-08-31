@@ -4,6 +4,7 @@
 
 - Made Twitch onboarding a normal sign-in experience by bundling the official Public Tempest application Client ID; streamers no longer need a developer account, while self-hosters retain an Advanced custom Client ID override.
 - Added an in-app stable release updater with quiet background checks, user-approved downloads and restarts, download progress, and Windows publisher verification for signed NSIS installers.
+- Simplified the end-user navigation by removing the developer-oriented Workflows, Software, and Assets pages while retaining workflow execution and companion-app registry APIs internally.
 
 ## 1.0.0 — Stream experiences, emotes, privacy, and moderation
 

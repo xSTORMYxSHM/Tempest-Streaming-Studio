@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -6,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet } from '@tempest/bridge';
-import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
+import { TEMPEST_STUDIO_VERSION, TempestSoundAlertPlaybackCommand } from '@tempest/contracts';
 import { validateTwitchAlertDesign } from '@tempest/bridge';
 import { startWarudoAdapter, WarudoAdapterRuntime } from '@tempest/warudo-adapter';
 import {
@@ -226,11 +225,6 @@ async function waitForRendererReady(window: BrowserWindow): Promise<boolean> {
     };
     check();
   })`);
-}
-
-function resolveManifestPath(value: string | undefined, manifestDirectory: string): string | undefined {
-  if (!value) return value;
-  return path.isAbsolute(value) ? path.normalize(value) : path.resolve(manifestDirectory, value);
 }
 
 function createTwitchCredentialStore(dataDirectory: string, fileName = 'twitch-credentials.bin'): TwitchCredentialStore {
@@ -682,57 +676,6 @@ function registerDesktopHandlers(): void {
     return true;
   });
 
-  ipcMain.handle('studio:select-application-manifest', async () => {
-    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
-      title: 'Register Tempest Application',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Tempest application manifest', extensions: ['json'] },
-        { name: 'All files', extensions: ['*'] }
-      ]
-    });
-    if (result.canceled || !result.filePaths[0]) return null;
-    const manifestPath = result.filePaths[0];
-    const parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as TempestApplicationManifest;
-    const validation = validateApplicationManifest(parsed);
-    if (!validation.ok || !validation.value) throw new Error(validation.errors.join('\n'));
-    const manifestDirectory = path.dirname(manifestPath);
-    const manifest: TempestApplicationManifest = {
-      ...validation.value,
-      manifestPath,
-      icon: resolveManifestPath(validation.value.icon, manifestDirectory),
-      launch: validation.value.launch ? {
-        ...validation.value.launch,
-        executable: resolveManifestPath(validation.value.launch.executable, manifestDirectory) as string,
-        workingDirectory: resolveManifestPath(validation.value.launch.workingDirectory, manifestDirectory)
-      } : undefined
-    };
-    return manifest;
-  });
-
-  ipcMain.handle('studio:select-asset', async () => {
-    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
-      title: 'Add Asset to Tempest Library',
-      properties: ['openFile'],
-      filters: [{ name: 'All assets', extensions: ['*'] }]
-    });
-    if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = result.filePaths[0];
-    const bytes = await readFile(filePath);
-    const details = await stat(filePath);
-    const baseName = path.basename(filePath, path.extname(filePath));
-    const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'asset';
-    return {
-      path: filePath,
-      uri: pathToFileURL(filePath).href,
-      name: baseName,
-      suggestedId: `com.tempestmainframe.asset.${slug}`,
-      checksum: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
-      size: details.size,
-      extension: path.extname(filePath).toLowerCase()
-    };
-  });
-
   ipcMain.handle('studio:select-sound-alert-audio', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Assign Sound Alert Audio',
@@ -943,33 +886,6 @@ function registerDesktopHandlers(): void {
     const filePath = path.join(directory, `${id}${extension}`);
     await writeFile(filePath, bytes, { mode: 0o600 });
     return { path: filePath, uri: pathToFileURL(filePath).href, name: `GIPHY ${id}${extension}`, size: bytes.length };
-  });
-
-  ipcMain.handle('studio:launch-application', async (_event, input: unknown) => {
-    const validation = validateApplicationManifest(input);
-    if (!validation.ok || !validation.value) throw new Error(validation.errors.join(' '));
-    const launch = validation.value.launch;
-    if (!launch) throw new Error(`${validation.value.name} has no launch configuration.`);
-    const executable = path.normalize(launch.executable);
-    const executableDetails = await stat(executable).catch(() => null);
-    if (!executableDetails?.isFile()) throw new Error(`Application executable was not found: ${executable}`);
-    const workingDirectory = launch.workingDirectory || path.dirname(executable);
-    const child = spawn(executable, launch.args || [], {
-      cwd: workingDirectory,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false,
-      shell: false
-    });
-    child.unref();
-    return { launched: true, pid: child.pid };
-  });
-
-  ipcMain.handle('studio:reveal-path', async (_event, targetPath: string) => {
-    const normalized = path.normalize(String(targetPath || ''));
-    if (!normalized) throw new Error('No path was supplied.');
-    shell.showItemInFolder(normalized);
-    return true;
   });
 
   ipcMain.handle('studio:open-external', async (_event, targetUrl: string) => {

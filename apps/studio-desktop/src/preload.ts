@@ -18,8 +18,6 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   prepareLocalExtensionCertificate: () => ipcRenderer.invoke('studio:prepare-local-extension-certificate'),
   openLocalExtensionPanel: () => ipcRenderer.invoke('studio:open-local-extension-panel'),
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
-  selectApplicationManifest: () => ipcRenderer.invoke('studio:select-application-manifest'),
-  selectAsset: () => ipcRenderer.invoke('studio:select-asset'),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
   selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
   validateAlertCode: (input: { html?: string; css?: string; javascript?: string }) => ipcRenderer.invoke('studio:validate-alert-code', input),
@@ -51,8 +49,6 @@ contextBridge.exposeInMainWorld('tempestStudio', {
     ipcRenderer.on('studio:sound-alert-playback', handler);
     return () => ipcRenderer.removeListener('studio:sound-alert-playback', handler);
   },
-  launchApplication: (manifest: unknown) => ipcRenderer.invoke('studio:launch-application', manifest),
-  revealPath: (targetPath: string) => ipcRenderer.invoke('studio:reveal-path', targetPath),
   openExternal: (targetUrl: string) => ipcRenderer.invoke('studio:open-external', targetUrl),
   openIsolatedTwitchAuthorization: (targetUrl: string) => ipcRenderer.invoke('studio:open-isolated-twitch-authorization', targetUrl),
   closeIsolatedTwitchAuthorization: () => ipcRenderer.invoke('studio:close-isolated-twitch-authorization'),

@@ -3,7 +3,6 @@
 
   const sections = {
     overview: { title: 'Studio Home', kicker: 'START HERE' },
-    workflows: { title: 'Interaction Workflows', kicker: 'AUTOMATION DIRECTORY' },
     events: { title: 'Event Log', kicker: 'NORMALIZED SIGNALS' },
     soundalerts: { title: 'Interaction Alerts', kicker: 'PERFORMANCE + DANCE CATALOG' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
@@ -12,8 +11,6 @@
     extensiondesigner: { title: 'Twitch Panel Designer', kicker: 'CHANNEL EXTENSION THEME' },
     chatbot: { title: 'Chatbot', kicker: 'STUDIO CHAT AUTOMATION' },
     api: { title: 'Connections', kicker: 'LOCAL CONTROL PLANE' },
-    software: { title: 'Software Management', kicker: 'SUITE REGISTRY' },
-    assets: { title: 'Asset Control', kicker: 'ASSET LIBRARY' },
     settings: { title: 'Settings + About', kicker: 'STUDIO INFORMATION' }
   };
   const targetNames = {
@@ -28,7 +25,6 @@
     health: null,
     safety: { armed: false, activeRuns: 0 },
     applications: [],
-    assets: [],
     connections: [],
     workflows: [],
     runs: [],
@@ -44,7 +40,6 @@
     twitchExperiences: null,
     twitch: null,
     chatbot: null,
-    radio: null,
     localExtension: null,
     hostedExtension: null,
     panelDesign: null,
@@ -55,7 +50,6 @@
     twitchDeviceAuthorization: null,
     chatbotDeviceAuthorization: null
   };
-  let selectedAsset = null;
   let toastTimer = null;
   let runtimeRefreshBusy = false;
   let twitchPollTimer = null;
@@ -168,10 +162,6 @@
     return `<div class="compact-row event-${escapeHtml(event.level)}"><div><strong>${escapeHtml(event.message)}</strong><small>${new Date(event.timestamp).toLocaleTimeString()} · ${escapeHtml(event.type)}</small></div><i class="event-dot"></i></div>`;
   }
 
-  function runActionState(run, actionId) {
-    return run?.actions?.find((action) => action.id === actionId)?.state || 'ready';
-  }
-
   function renderSafety() {
     const armed = Boolean(state.safety.armed);
     const active = state.runs.filter(activeRun).length;
@@ -179,30 +169,26 @@
     $('#railSafetyState').classList.toggle('armed', armed);
     $('#safetyBadge').textContent = armed ? 'INTERACTIONS ARMED' : 'INTERACTIONS DISARMED';
     $('#safetyBadge').classList.toggle('offline', !armed);
-    $('#workflowSafetyBadge').textContent = armed ? 'ARMED' : 'DISARMED';
-    $('#workflowSafetyBadge').classList.toggle('offline', !armed);
     $('#emergencyStopButton').textContent = armed ? (active ? `Restore ${active} Active` : 'Emergency Restore') : 'Arm Interactions';
     $('#emergencyStopButton').classList.toggle('arm-button', !armed);
     $('#safetyMetric').textContent = armed ? 'ARMED' : 'SAFE';
     $('#safetyMetric').classList.toggle('danger-text', !armed);
     $('#safetyMetricNote').textContent = armed ? 'Viewer triggers accepted' : 'Triggers blocked; overrides released';
-    document.querySelectorAll('[data-trigger-workflow]').forEach((button) => { button.disabled = !armed; });
     document.querySelectorAll('[data-sound-alert-trigger]').forEach((button) => { button.disabled = !armed; });
   }
 
   function renderOverview() {
     const active = state.runs.filter(activeRun);
     $('#activeRunMetric').textContent = active.length;
-    $('#workflowMetric').textContent = state.workflows.filter((workflow) => workflow.enabled).length;
     $('#connectionMetric').textContent = state.connections.length;
     $('#activeRunMetricNote').textContent = active.length ? `${active[0].workflowName} in progress` : 'Runtime standing by';
-    $('#connectionMetricNote').textContent = state.connections.length ? 'Commands use live delivery' : 'Simulation is available';
+    $('#connectionMetricNote').textContent = state.connections.length ? 'Connected tools are ready' : 'Waiting for connected tools';
     $('#heroCore').classList.toggle('active', Boolean(active.length));
 
     const display = $('#activeRunDisplay');
     const run = active[0];
     display.classList.toggle('empty-state', !run);
-    if (!run) display.textContent = 'No workflow is active.';
+    if (!run) display.textContent = 'No interaction is active.';
     else {
       const total = Math.max(1, new Date(run.endsAt || run.startedAt).getTime() - new Date(run.startedAt).getTime());
       const elapsed = Math.max(0, Date.now() - new Date(run.startedAt).getTime());
@@ -380,24 +366,6 @@
     $('#onboardingDialog').close();
     renderOnboardingSummary();
     toast(onboardingStatus().readyCount === onboardingSteps.length ? 'First-run setup complete.' : 'Setup progress saved. Reopen it from Studio Home anytime.');
-  }
-
-  function renderWorkflows() {
-    const grid = $('#workflowGrid');
-    grid.classList.toggle('empty-state', !state.workflows.length);
-    if (!state.workflows.length) return grid.textContent = 'No workflows registered.';
-    grid.innerHTML = state.workflows.map((workflow) => {
-      const latest = state.runs.find((run) => run.workflowId === workflow.id);
-      const running = latest && activeRun(latest);
-      const cooldowns = workflow.cooldowns || {};
-      return `<article class="workflow-card ${running ? 'running' : ''}">
-        <div class="workflow-heading"><div><p>${escapeHtml(workflow.trigger.type)} · ${escapeHtml(workflow.trigger.action)}</p><h3>${escapeHtml(workflow.name)}</h3></div><span class="state-chip ${running ? 'running' : workflow.enabled ? 'installed' : 'disabled'}">${running ? remainingLabel(latest.endsAt) : workflow.enabled ? 'READY' : 'DISABLED'}</span></div>
-        <p class="card-description">${escapeHtml(workflow.description || 'Tempest interaction workflow.')}</p>
-        <div class="cooldown-row"><span>VIEWER ${durationLabel(cooldowns.viewerMs)}</span><span>EFFECT ${durationLabel(cooldowns.effectMs)}</span><span>GLOBAL ${durationLabel(cooldowns.globalMs)}</span></div>
-        <div class="workflow-actions">${workflow.actions.map((action, index) => `<div><b>${String(index + 1).padStart(2, '0')}</b><i class="action-state ${escapeHtml(runActionState(latest, action.id))}"></i><span><strong>${escapeHtml(action.name)}</strong><small>${escapeHtml(targetNames[action.target] || action.target)} · ${escapeHtml(action.capability)}${action.releaseCapability ? ` → ${escapeHtml(action.releaseCapability)}` : ''}</small></span><code>${action.lease?.durationInput ? `${escapeHtml(action.lease.durationInput)} ≤ ${durationLabel(action.lease.durationMs)}` : action.lease ? durationLabel(action.lease.durationMs) : 'ONCE'}</code></div>`).join('')}</div>
-        <div class="workflow-footer"><span>${workflow.actions.length} coordinated actions · ${escapeHtml(workflow.concurrencyGroup || 'independent')}</span><button class="primary-button" data-trigger-workflow="${escapeHtml(workflow.id)}" ${running || !state.safety.armed ? 'disabled' : ''}>${running ? 'Running' : 'Simulate Event'}</button></div>
-      </article>`;
-    }).join('');
   }
 
   function filteredEvents() {
@@ -723,52 +691,6 @@
     const timer = setTimeout(() => { audio.pause(); audio.currentTime = 0; finish(); }, Number(command.alert.durationMs) || 60000);
     activeSoundAlertAudio.set(command.runId, { audio, timer });
     audio.play().catch((error) => { finish(); toast(`Could not play ${command.alert.name}: ${error.message}`, true); });
-  }
-
-  function renderSoftware() {
-    const grid = $('#applicationGrid');
-    grid.classList.remove('empty-state');
-    const applicationCards = state.applications.map((application) => {
-      const capabilities = [...application.capabilities.provides, ...application.assetTypes.writes].slice(0, 6);
-      return `<article class="software-card"><div class="card-top"><div><p>${escapeHtml(application.id)}</p><h3>${escapeHtml(application.name)}</h3></div><span class="state-chip ${escapeHtml(application.state)}">${escapeHtml(application.state)}</span></div><p class="card-description">${escapeHtml(application.description || 'Compatible application registered with Studio.')}</p><div class="tag-list">${capabilities.map((value) => `<span>${escapeHtml(value)}</span>`).join('') || '<span>NO CAPABILITIES</span>'}</div><div class="card-actions">${application.launch ? `<button data-launch="${escapeHtml(application.id)}">Launch</button>` : '<button disabled>No launcher</button>'}${application.manifestPath ? `<button data-reveal="${escapeHtml(application.manifestPath)}">Manifest</button>` : ''}<button class="danger-action" data-remove-application="${escapeHtml(application.id)}">Remove</button></div></article>`;
-    }).join('');
-    const radio = state.radio;
-    if (!radio) {
-      grid.classList.toggle('empty-state', !applicationCards);
-      grid.innerHTML = applicationCards || 'No compatible applications or optional services are configured.';
-      return;
-    }
-    const song = radio.nowPlaying || {};
-    const track = song.artist && song.title ? `${song.artist} — ${song.title}` : song.title || song.text;
-    const radioDescription = radio.state === 'online'
-      ? `Broadcasting now${track ? `: ${track}` : '.'}`
-      : radio.state === 'offline' ? 'The station is currently offline.' : 'Studio could not reach the station status API.';
-    const radioAction = radio.publicPlayerUrl
-      ? `<button data-radio-player="${escapeHtml(radio.publicPlayerUrl)}">Open Public Player</button>`
-      : '<button disabled>Player unavailable</button>';
-    const radioCard = `<article class="software-card service-card"><div class="card-top"><div><p>now-playing-provider · ${escapeHtml(radio.provider || 'AzuraCast')}</p><h3>${escapeHtml(radio.name || 'Configured station')}</h3></div><span class="state-chip ${escapeHtml(radio.state || 'unavailable')}">${escapeHtml(radio.state || 'unavailable')}</span></div><p class="card-description">${escapeHtml(radioDescription)}</p><div class="tag-list"><span>RADIO SERVICE</span><span>NOW PLAYING</span><span>OPTIONAL</span></div><div class="card-actions">${radioAction}</div></article>`;
-    grid.innerHTML = applicationCards + radioCard;
-  }
-
-  function filteredAssets() {
-    const query = $('#assetSearch').value.trim().toLowerCase();
-    const type = $('#assetTypeFilter').value;
-    return state.assets.filter((asset) => {
-      const searchable = [asset.name, asset.type, asset.producer, ...(asset.tags || [])].join(' ').toLowerCase();
-      return (!query || searchable.includes(query)) && (!type || asset.type === type);
-    });
-  }
-
-  function renderAssets() {
-    const types = [...new Set(state.assets.map((asset) => asset.type))].sort();
-    const currentType = $('#assetTypeFilter').value;
-    $('#assetTypeFilter').innerHTML = '<option value="">All asset types</option>' + types.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
-    if (types.includes(currentType)) $('#assetTypeFilter').value = currentType;
-    const assets = filteredAssets();
-    const grid = $('#assetGrid');
-    grid.classList.toggle('empty-state', !assets.length);
-    if (!assets.length) return grid.textContent = state.assets.length ? 'No assets match the current filters.' : 'No assets indexed.';
-    grid.innerHTML = assets.map((asset) => `<article class="asset-card"><div class="card-top"><div><p>${escapeHtml(asset.type)}</p><h3>${escapeHtml(asset.name)}</h3></div><span class="state-chip installed">v${escapeHtml(asset.version)}</span></div><p class="card-description">Produced by ${escapeHtml(asset.producer)}</p><div class="tag-list">${(asset.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('') || '<span>UNTAGGED</span>'}</div><div class="card-actions"><button data-reveal-uri="${escapeHtml(asset.uri)}">Show File</button><button class="danger-action" data-remove-asset="${escapeHtml(asset.id)}">Remove</button></div></article>`).join('');
   }
 
   function renderApi() {
@@ -1208,9 +1130,7 @@
     const nowPlayingProvider = $('#nowPlayingProviderEnabled').checked ? { provider: 'azuracast', stationName: $('#nowPlayingStationName').value.trim(), apiUrl: $('#nowPlayingApiUrl').value.trim(), publicPlayerUrl: $('#nowPlayingPublicUrl').value.trim(), streamUrl: $('#nowPlayingStreamUrl').value.trim() || undefined } : null;
     try {
       state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { weatherProvider, nowPlayingProvider } });
-      state.radio = await api('/v1/integrations/now-playing');
       renderChatbot();
-      renderSoftware();
       toast('Optional response providers saved. Add or edit commands to use them.');
     } catch (error) { toast(error.message, true); }
   }
@@ -1632,7 +1552,6 @@
   function renderAll() {
     renderSafety();
     renderOverview();
-    renderWorkflows();
     renderEvents();
     renderAlertHistory();
     renderSoundAlerts();
@@ -1644,8 +1563,6 @@
     renderApi();
     renderTwitch();
     renderChatbot();
-    renderSoftware();
-    renderAssets();
     renderAbout();
     renderUpdateStatus();
   }
@@ -1673,7 +1590,6 @@
       renderBridgeStatus(true);
       renderSafety();
       renderOverview();
-      renderWorkflows();
       renderEvents();
       renderAlertHistory();
       renderVisualAlertStatus();
@@ -1693,22 +1609,14 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
     }
-  }
-
-  async function triggerWorkflow(id) {
-    try {
-      const response = await api(`/v1/workflows/${encodeURIComponent(id)}/trigger`, { method: 'POST', body: { source: 'studio.simulator', viewerId: 'studio-simulator', viewerName: 'Studio Simulator', simulateMissing: true, bypassCooldown: true } });
-      await refreshRuntime();
-      toast(`${response.run.workflowName} started in simulation-aware mode.`);
-    } catch (error) { toast(error.message, true); }
   }
 
   async function toggleSafety() {
@@ -1721,40 +1629,6 @@
         toast('Viewer interactions armed.');
       }
       await refreshRuntime();
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function registerApplication() {
-    try {
-      const manifest = await window.tempestStudio.selectApplicationManifest();
-      if (!manifest) return;
-      await api('/v1/applications', { method: 'POST', body: manifest });
-      await refresh();
-      toast(`${manifest.name} registered with Studio.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function beginAssetRegistration() {
-    try {
-      selectedAsset = await window.tempestStudio.selectAsset();
-      if (!selectedAsset) return;
-      $('#assetId').value = selectedAsset.suggestedId;
-      $('#assetUri').value = selectedAsset.uri;
-      $('#assetChecksum').value = selectedAsset.checksum;
-      $('#assetName').value = selectedAsset.name;
-      $('#assetVersion').value = '1.0.0';
-      $('#assetTags').value = '';
-      $('#assetProducer').innerHTML = state.applications.length ? state.applications.map((application) => `<option value="${escapeHtml(application.id)}">${escapeHtml(application.name)}</option>`).join('') : '<option value="com.tempestmainframe.studio">Tempest Streaming Studio</option>';
-      $('#assetDialog').showModal();
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function submitAsset(event) {
-    event.preventDefault();
-    const asset = { schemaVersion: 1, id: $('#assetId').value, type: $('#assetType').value, name: $('#assetName').value.trim(), version: $('#assetVersion').value.trim(), producer: $('#assetProducer').value, uri: $('#assetUri').value, checksum: $('#assetChecksum').value, tags: $('#assetTags').value.split(',').map((tag) => tag.trim()).filter(Boolean), dependencies: [], metadata: { size: selectedAsset?.size || 0, extension: selectedAsset?.extension || '' } };
-    try {
-      await api('/v1/assets', { method: 'POST', body: asset });
-      $('#assetDialog').close(); selectedAsset = null; await refresh(); toast(`${asset.name} added to the Asset Library.`);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -3090,7 +2964,6 @@
     if (button.dataset.exportTwitchAlertPack) return exportAlertPack('twitch', button.dataset.exportTwitchAlertPack);
     if (button.dataset.section) return showSection(button.dataset.section);
     if (button.dataset.go) return showSection(button.dataset.go);
-    if (button.dataset.triggerWorkflow) return triggerWorkflow(button.dataset.triggerWorkflow);
     if (button.dataset.soundAlertTrigger) return testSoundAlert(button.dataset.soundAlertTrigger);
     if (button.dataset.soundAlertAudio) return assignSoundAlertAudio(button.dataset.soundAlertAudio);
     if (button.dataset.soundAlertVisual) return assignSoundAlertVisual(button.dataset.soundAlertVisual);
@@ -3140,29 +3013,10 @@
       return;
     }
     if (button.dataset.chatbotCommand) return editChatbotCommand(button.dataset.chatbotCommand);
-    if (button.dataset.radioPlayer) return window.tempestStudio.openExternal(button.dataset.radioPlayer).catch((error) => toast(error.message, true));
     if (button.dataset.soundAlertToggle) {
       const alert = state.soundAlerts.alerts.find((entry) => entry.id === button.dataset.soundAlertToggle);
       if (alert) return updateSoundAlert(alert.id, { enabled: !alert.enabled }, `${alert.name} ${alert.enabled ? 'disabled' : 'enabled'}.`);
       return;
-    }
-    if (button.dataset.launch) {
-      const application = state.applications.find((entry) => entry.id === button.dataset.launch);
-      if (!application) return;
-      try { await window.tempestStudio.launchApplication(application); toast(`${application.name} launched.`); } catch (error) { toast(error.message, true); }
-    } else if (button.dataset.reveal) await window.tempestStudio.revealPath(button.dataset.reveal).catch((error) => toast(error.message, true));
-    else if (button.dataset.revealUri) {
-      try {
-        const url = new URL(button.dataset.revealUri);
-        if (url.protocol !== 'file:') throw new Error('Only local file assets can be revealed in this build.');
-        await window.tempestStudio.revealPath(decodeURIComponent(url.pathname.replace(/^\/(?:([A-Za-z]:))/, '$1')).replaceAll('/', '\\'));
-      } catch (error) { toast(error.message, true); }
-    } else if (button.dataset.removeApplication) {
-      if (!confirm(`Remove ${button.dataset.removeApplication} from Studio? The application files will not be deleted.`)) return;
-      await api(`/v1/applications/${encodeURIComponent(button.dataset.removeApplication)}`, { method: 'DELETE' }).then(() => refresh()).catch((error) => toast(error.message, true));
-    } else if (button.dataset.removeAsset) {
-      if (!confirm('Remove this asset from the registry? The source file will not be deleted.')) return;
-      await api(`/v1/assets/${encodeURIComponent(button.dataset.removeAsset)}`, { method: 'DELETE' }).then(() => refresh()).catch((error) => toast(error.message, true));
     }
   }
 
@@ -3181,11 +3035,6 @@
     });
     $('#refreshWarudoButton').addEventListener('click', () => refreshRuntime({ quiet: false }));
     $('#emergencyStopButton').addEventListener('click', toggleSafety);
-    $('#registerApplicationButton').addEventListener('click', registerApplication);
-    $('#addAssetButton').addEventListener('click', beginAssetRegistration);
-    $('#assetForm').addEventListener('submit', submitAsset);
-    $('#assetSearch').addEventListener('input', renderAssets);
-    $('#assetTypeFilter').addEventListener('change', renderAssets);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);
     $('#alertHistorySearch').addEventListener('input', renderAlertHistory);
