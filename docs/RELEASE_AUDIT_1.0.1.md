@@ -4,7 +4,7 @@ Audit date: 2026-08-31 (America/Los_Angeles)
 
 ## Result
 
-The 1.0.1 Windows release passed its install, build, test, packaging, resource, clean-profile smoke, secret-boundary, updater-metadata, and Authenticode gates. The installer, embedded uninstaller, elevation helper, desktop executable, and every native DLL in both the unpacked and ZIP payloads have valid, timestamped signatures from Azure Trusted Signing profile `TempestSoftwarePublic`.
+The 1.0.1 Windows release passed its install, build, test, packaging, resource, clean-profile smoke, secret-boundary, updater-metadata, and Authenticode gates. The installer, embedded uninstaller, elevation helper, desktop executable, and every native DLL in both the unpacked and ZIP payloads have valid, timestamped signatures from the configured Azure Trusted Signing profile.
 
 ## Verified commands and gates
 
@@ -13,8 +13,8 @@ The 1.0.1 Windows release passed its install, build, test, packaging, resource, 
 - `pnpm package:win` — completed with the repository's Windows Application Control-safe NSIS extraction preparation and release verifier.
 - Packaged `Tempest Streaming Studio.exe --smoke-test` with a new isolated Windows profile — exit code 0.
 - `Get-AuthenticodeSignature` against the installer and every `.exe`, `.dll`, and `.pyd` in the unpacked and extracted ZIP payloads — all report `Valid`, use the expected publisher, and include a timestamp.
-- Publisher: `CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US`.
-- Signing certificate thumbprint: `ECE29EA7CFD324FD377BD9AD872998BF18E47BC1`.
+- Publisher identity matched the private release-signing configuration.
+- Signing certificate thumbprint matched the private release-signing configuration.
 
 ## Updater and bundled-resource result
 

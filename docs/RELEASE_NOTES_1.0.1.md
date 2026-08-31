@@ -11,9 +11,7 @@ This release makes Studio friendlier for streamers, adds signed in-app updates, 
 
 ## Installing and upgrading
 
-Download and run `Tempest-Streaming-Studio-Setup-1.0.1-x64.exe`. The installer and packaged Windows binaries are timestamped with Azure Trusted Signing for:
-
-`CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US`
+Download and run `Tempest-Streaming-Studio-Setup-1.0.1-x64.exe`. The installer and packaged Windows binaries are timestamped with Azure Trusted Signing and verified against the configured Tempest Windows publisher.
 
 Version 1.0.0 did not yet contain the updater, so 1.0.0 users need to install 1.0.1 manually once. After that upgrade, use **Settings + About → Automatic updates** for future stable releases. Existing per-user settings and media are preserved.
 
