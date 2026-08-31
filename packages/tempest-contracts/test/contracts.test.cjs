@@ -116,4 +116,40 @@ test('validates canonical Twitch interaction and reward events', () => {
     payload: { action: 'tempest.sound-alert.performance', cue: 'song-branch-01', durationMs: 58000, intensity: 0.8, dedupeId: 'sound-alert-123' }
   });
   assert.equal(soundAlert.ok, true, soundAlert.errors.join(' '));
+
+  const chatWithEmote = validateNormalizedTwitchEvent({
+    ...base,
+    id: 'chat-message-emote-1',
+    topic: 'viewer.chat.message',
+    payload: {
+      messageId: 'chat-message-emote-1',
+      text: 'Kappa',
+      fragments: [{ type: 'emote', text: 'Kappa', emote: { id: '25', format: ['static', 'animated'] } }]
+    }
+  });
+  assert.equal(chatWithEmote.ok, true, chatWithEmote.errors.join(' '));
+
+  const chatWithProviderText = validateNormalizedTwitchEvent({
+    ...base,
+    id: 'chat-message-provider-1',
+    topic: 'viewer.chat.message',
+    payload: { messageId: 'chat-message-provider-1', text: 'SevenDance', fragments: [{ type: 'text', text: 'SevenDance' }] }
+  });
+  assert.equal(chatWithProviderText.ok, true, chatWithProviderText.errors.join(' '));
+
+  const goalProgress = validateNormalizedTwitchEvent({
+    ...base,
+    id: 'goal-progress-1',
+    topic: 'channel.goal.updated',
+    payload: { phase: 'progress', goalId: 'goal-1', description: 'Signal Goal', currentAmount: 72, targetAmount: 100 }
+  });
+  assert.equal(goalProgress.ok, true, goalProgress.errors.join(' '));
+
+  const unsafeGif = validateNormalizedTwitchEvent({
+    ...base,
+    id: 'chat-message-gif-1',
+    topic: 'viewer.chat.message',
+    payload: { messageId: 'chat-message-gif-1', text: 'GIF', fragments: [{ type: 'gif', text: 'GIF', gif: { url: 'javascript:alert(1)' } }] }
+  });
+  assert.equal(unsafeGif.ok, false);
 });

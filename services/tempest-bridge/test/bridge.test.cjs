@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '0.21.0');
+  assert.equal(health.productVersion, '1.0.0');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -95,6 +95,26 @@ test('persists applications and assets behind authenticated routes', async (cont
   assert.equal(assets.assets.length, 1);
   assert.equal(radio.state, 'online');
   assert.equal(radio.nowPlaying.title, 'Error Stars');
+});
+
+test('enforces assigned-creator access before Extension interactions enter Studio', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-interaction-access-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const configured = await fetch(`${runtime.baseUrl}/v1/chatbot/configuration`, {
+    method: 'POST', headers, body: JSON.stringify({
+      firstChatShoutouts: { enabled: false, channels: ['creator_one'] },
+      interactionAccess: { mode: 'assigned-creators', allowBroadcasterAndModerators: true }
+    })
+  });
+  assert.equal(configured.status, 200);
+  const event = (id, viewer) => ({ schemaVersion: 1, id, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: '546679431' }, viewer, payload: { action: 'sound-alert.hype-pulse' } });
+  const unlinked = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, { method: 'POST', headers, body: JSON.stringify(event('restricted-unlinked', { id: 'Uviewer123', roles: ['viewer'] })) });
+  assert.equal(unlinked.status, 403);
+  assert.equal((await unlinked.json()).code, 'identity_required');
+  const moderator = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, { method: 'POST', headers, body: JSON.stringify(event('restricted-moderator', { id: '303', roles: ['moderator'] })) });
+  assert.equal(moderator.status, 202);
 });
 
 test('accepts authenticated WebSocket clients and sends a welcome envelope', async (context) => {
@@ -469,6 +489,22 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(chatStatus.messageCount, 1);
   assert.equal(chatStatus.settings.accent, '#22CCFF');
   assert.equal((await fetch(`${runtime.baseUrl}/v1/chat-overlay/clear`, { method: 'POST', headers, body: '{}' })).status, 200);
+
+  const emoteWallPage = await fetch(`${runtime.baseUrl}/emote-wall`);
+  assert.equal(emoteWallPage.status, 200);
+  assert.match(await emoteWallPage.text(), /Tempest Studio Emote Wall/);
+  const emoteSettings = await fetch(`${runtime.baseUrl}/v1/emote-wall/settings`, {
+    method: 'POST', headers, body: JSON.stringify({ enabled: true, maxActive: 12, lifetimeMs: 6000, sizePx: 120, speed: 140, includeAnimated: true, includeGifs: false })
+  });
+  assert.equal(emoteSettings.status, 200);
+  assert.equal((await emoteSettings.json()).settings.maxActive, 12);
+  const emotePreview = await fetch(`${runtime.baseUrl}/v1/emote-wall/preview`, { method: 'POST', headers, body: '{}' });
+  assert.equal(emotePreview.status, 202);
+  assert.equal((await emotePreview.json()).items.length, 2);
+  const emoteStatus = await fetch(`${runtime.baseUrl}/v1/emote-wall`, { headers }).then((response) => response.json());
+  assert.equal(emoteStatus.activeCount, 2);
+  assert.equal(emoteStatus.settings.sizePx, 120);
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/emote-wall/clear`, { method: 'POST', headers, body: '{}' })).status, 200);
 });
 
 test('creates, persists, protects, and removes custom Interaction and Twitch Alerts', async () => {
@@ -687,13 +723,20 @@ test('runs simulated workflows, expires leases, and exposes the safety control',
       id: 'chat-overlay-event-1',
       topic: 'viewer.chat.message',
       viewer: { id: 'viewer-1', displayName: 'Overlay Viewer', roles: ['subscriber'] },
-      payload: { messageId: 'chat-overlay-message-1', text: '<b>This stays text</b>' }
+      payload: {
+        messageId: 'chat-overlay-message-1',
+        text: '<b>This stays text</b> Kappa',
+        fragments: [{ type: 'emote', text: 'Kappa', emote: { id: '25', format: ['static'] } }]
+      }
     })
   });
   assert.equal(chatMessage.status, 202);
   const chatOverlayStatus = await fetch(`${runtime.baseUrl}/v1/chat-overlay`, { headers }).then((response) => response.json());
   assert.equal(chatOverlayStatus.messages.at(-1).viewerName, 'Overlay Viewer');
-  assert.equal(chatOverlayStatus.messages.at(-1).text, '<b>This stays text</b>');
+  assert.equal(chatOverlayStatus.messages.at(-1).text, '<b>This stays text</b> Kappa');
+  const emoteWallStatus = await fetch(`${runtime.baseUrl}/v1/emote-wall`, { headers }).then((response) => response.json());
+  assert.equal(emoteWallStatus.items.at(-1).name, 'Kappa');
+  assert.match(emoteWallStatus.items.at(-1).url, /emoticons\/v2\/25\/static\/dark\/3\.0/);
 
   const cheerWorkflow = {
     ...workflow,

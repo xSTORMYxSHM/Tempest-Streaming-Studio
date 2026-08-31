@@ -46,11 +46,52 @@ let mainWindow: BrowserWindow | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
 
+interface StudioPrivacySettings {
+  streamerMode: boolean;
+  captureProtection: boolean;
+}
+
+const defaultPrivacySettings: StudioPrivacySettings = {
+  streamerMode: true,
+  captureProtection: true
+};
+let privacySettings: StudioPrivacySettings = { ...defaultPrivacySettings };
+
 const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
 const supportRoot = app.isPackaged ? process.resourcesPath : workspaceRoot;
 const extensionAssetRoot = app.isPackaged ? path.join(supportRoot, 'twitch-extension') : path.join(workspaceRoot, 'apps', 'twitch-extension', 'dist');
 const extensionCertificateScript = path.join(supportRoot, 'tools', 'create-extension-certificate.ps1');
 const extensionCertificatePassword = 'tempest-local-dev';
+
+function privacySettingsPath(): string {
+  return path.join(app.getPath('userData'), 'privacy-settings.json');
+}
+
+async function loadPrivacySettings(): Promise<StudioPrivacySettings> {
+  try {
+    const parsed = JSON.parse(await readFile(privacySettingsPath(), 'utf8')) as Partial<StudioPrivacySettings>;
+    return {
+      streamerMode: typeof parsed.streamerMode === 'boolean' ? parsed.streamerMode : true,
+      captureProtection: typeof parsed.captureProtection === 'boolean' ? parsed.captureProtection : true
+    };
+  } catch {
+    return { ...defaultPrivacySettings };
+  }
+}
+
+async function savePrivacySettings(value: unknown): Promise<StudioPrivacySettings> {
+  const input = value && typeof value === 'object' ? value as Partial<StudioPrivacySettings> : {};
+  privacySettings = {
+    streamerMode: typeof input.streamerMode === 'boolean' ? input.streamerMode : privacySettings.streamerMode,
+    captureProtection: typeof input.captureProtection === 'boolean' ? input.captureProtection : privacySettings.captureProtection
+  };
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(privacySettingsPath(), `${JSON.stringify(privacySettings, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  if (mainWindow && !mainWindow.isDestroyed() && !captureArgument) {
+    mainWindow.setContentProtection(privacySettings.captureProtection);
+  }
+  return { ...privacySettings };
+}
 
 function extensionCertificateDirectory(): string {
   return path.join(app.getPath('userData'), 'local-extension');
@@ -257,6 +298,7 @@ function createWindow(): BrowserWindow {
       sandbox: false
     }
   });
+  window.setContentProtection(Boolean(privacySettings.captureProtection && !captureArgument));
   window.removeMenu();
   window.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   window.once('ready-to-show', () => window.show());
@@ -297,6 +339,7 @@ async function openIsolatedTwitchAuthorization(value: unknown): Promise<boolean>
       spellcheck: false
     }
   });
+  authWindow.setContentProtection(true);
   twitchAuthorizationWindows.add(authWindow);
   const authSession = authWindow.webContents.session;
   authSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
@@ -333,6 +376,9 @@ function closeIsolatedTwitchAuthorization(): number {
 }
 
 function registerDesktopHandlers(): void {
+  ipcMain.handle('studio:get-privacy-settings', () => ({ ...privacySettings }));
+  ipcMain.handle('studio:save-privacy-settings', (_event, value: unknown) => savePrivacySettings(value));
+
   ipcMain.handle('studio:copy-text', (_event, value: unknown) => {
     const text = String(value || '');
     if (!text || text.length > 4096) throw new Error('The value could not be copied.');
@@ -826,6 +872,7 @@ function registerDesktopHandlers(): void {
 
 app.whenReady().then(async () => {
   const userDataDirectory = app.getPath('userData');
+  privacySettings = await loadPrivacySettings();
   dataMigrationStatus = await runStudioDataMigrations({ userDataDirectory, productVersion: TEMPEST_STUDIO_VERSION });
   const bridgeDataDirectory = path.join(userDataDirectory, 'bridge');
   broadcasterCredentialStore = createTwitchCredentialStore(bridgeDataDirectory);

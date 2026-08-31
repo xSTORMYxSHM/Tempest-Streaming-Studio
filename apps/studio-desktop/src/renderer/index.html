@@ -7,31 +7,33 @@
     <title>Tempest Streaming Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="streamer-privacy">
     <div class="shell">
       <aside class="rail">
-        <div class="brand-mark"><img src="assets/storm-horizon-sh.png" alt="Storm Horizon Media" /></div>
-        <div class="brand-copy"><p>TEMPEST STREAMING</p><strong>STUDIO</strong></div>
+        <div class="rail-brand">
+          <div class="brand-mark"><img src="assets/storm-horizon-sh.png" alt="Storm Horizon Media" /></div>
+          <div class="brand-copy"><p>TEMPEST STREAMING</p><strong>STUDIO</strong></div>
+        </div>
         <nav aria-label="Studio sections">
-          <button class="nav-button active" data-section="overview"><span>01</span>Studio Home</button>
-          <p class="nav-group">ALERTS + OVERLAYS</p>
-          <button class="nav-button" data-section="visualalerts"><span>02</span>Twitch Alerts</button>
-          <button class="nav-button" data-section="soundalerts"><span>03</span>Interaction Alerts</button>
-          <button class="nav-button" data-section="chatoverlay"><span>04</span>Chat Overlay</button>
+          <p class="nav-group">START</p>
+          <button class="nav-button active" data-section="overview">Studio Home</button>
+          <p class="nav-group">STREAM DESIGN</p>
+          <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
+          <button class="nav-button" data-section="soundalerts">Interaction Alerts</button>
+          <button class="nav-button" data-section="chatoverlay">Chat + Emotes</button>
+          <button class="nav-button" data-section="extensiondesigner">Panel Designer</button>
           <p class="nav-group">AUTOMATION</p>
-          <button class="nav-button" data-section="chatbot"><span>05</span>Chatbot</button>
-          <button class="nav-button" data-section="workflows"><span>06</span>Workflows</button>
-          <p class="nav-group">CHANNEL + APPS</p>
-          <button class="nav-button" data-section="api"><span>07</span>Connections</button>
-          <button class="nav-button" data-section="twitch"><span>08</span>Twitch</button>
-          <button class="nav-button" data-section="extensiondesigner"><span>09</span>Panel Designer</button>
-          <p class="nav-group">MONITOR</p>
-          <button class="nav-button" data-section="events"><span>10</span>Event Log</button>
-          <p class="nav-group">LIBRARY</p>
-          <button class="nav-button" data-section="software"><span>11</span>Software</button>
-          <button class="nav-button" data-section="assets"><span>12</span>Assets</button>
+          <button class="nav-button" data-section="chatbot">Chatbot</button>
+          <button class="nav-button" data-section="workflows">Workflows</button>
+          <p class="nav-group">CONNECTIONS</p>
+          <button class="nav-button" data-section="twitch">Twitch</button>
+          <button class="nav-button" data-section="api">Apps + Connections</button>
+          <p class="nav-group">TOOLS + RECORDS</p>
+          <button class="nav-button" data-section="events">Event Log</button>
+          <button class="nav-button" data-section="software">Software</button>
+          <button class="nav-button" data-section="assets">Assets</button>
           <p class="nav-group">STUDIO</p>
-          <button class="nav-button" data-section="settings"><span>13</span>Settings + About</button>
+          <button class="nav-button" data-section="settings">Settings + About</button>
         </nav>
         <div class="safety-control">
           <span>INTERACTION SAFETY</span><strong id="railSafetyState">CHECKING</strong>
@@ -42,8 +44,8 @@
 
       <main>
         <header class="topbar">
-          <div><p id="sectionKicker">START HERE</p><h1 id="sectionTitle">Studio Home</h1></div>
-          <div class="topbar-actions"><span class="protocol-badge">BUILD 0.21.0</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
+          <div class="topbar-context"><p id="sectionKicker">START HERE</p><span aria-hidden="true">/</span><h1 id="sectionTitle">Studio Home</h1></div>
+          <div class="topbar-actions"><button id="privacyModeButton" class="privacy-mode-button" type="button" aria-pressed="true" title="Mask streamer-sensitive information throughout Studio">PRIVACY ON</button><span class="protocol-badge">BUILD 1.0.0</span><span id="safetyBadge" class="status-badge">CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button">Refresh</button></div>
         </header>
 
         <section id="overviewSection" class="page active">
@@ -69,7 +71,7 @@
             <button class="home-menu-card" data-go="extensiondesigner"><b>SETUP 03</b><strong>Panel Designer</strong><span>Style the universal Twitch panel to match your channel and interactions.</span><i>DESIGN PANEL →</i></button>
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional Warudo reactions.</span><i>BUILD INTERACTIONS →</i></button>
-            <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat Overlay</strong><span>Put your local Twitch chat overlay on the stream canvas.</span><i>DESIGN CHAT →</i></button>
+            <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat + Emotes</strong><span>Design the local chat stack and bouncing Emote Wall sources.</span><i>DESIGN OVERLAYS →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio automations.</span><i>MANAGE CHATBOT →</i></button>
             <button class="home-menu-card" data-go="workflows"><b>AUTOMATE 02</b><strong>Workflows</strong><span>Inspect coordinated actions, cooldowns, leases, and restoration.</span><i>VIEW WORKFLOWS →</i></button>
           </div>
@@ -113,10 +115,15 @@
           </div>
           <div id="interactionAlertQueueStatus" class="sound-alert-note"><strong>Alert Queue:</strong> Loading shared playback order…</div>
           <div id="interactionAlertOverlayStatus" class="sound-alert-note"><strong>Interaction Alert source:</strong> Loading the local Browser Source address…</div>
-          <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Add this as its own Browser Source using the active base-canvas dimensions shown in Guided Setup, with <strong>Control audio via OBS</strong>. Keep it on the live audio track, but remove it from the recording/VOD track used for YouTube when interaction music may be claimed.</div>
-          <div class="sound-alert-note"><strong>Interaction route:</strong> Every request resolves the saved audio, visual, and canvas design. Warudo performance routing appears only on alerts where you enable it.</div>
-          <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export any complete alert—including its sound, GIF/video, canvas design, and custom code—as one shareable file. Imported media is verified and copied into Studio-managed storage.</div>
-          <div id="soundAlertBroadcastInventory" class="sound-alert-note"><strong>Broadcast executor:</strong> Waiting for its live OBS source inventory.</div>
+          <details class="setup-guidance">
+            <summary><span><b>SETUP &amp; ROUTING</b><strong>Broadcast, VOD, Warudo, and portable packs</strong></span><em>Show details</em></summary>
+            <div class="setup-guidance-body">
+              <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Add this as its own Browser Source using the active base-canvas dimensions shown in Guided Setup, with <strong>Control audio via OBS</strong>. Keep it on the live audio track, but remove it from the recording/VOD track used for YouTube when interaction music may be claimed.</div>
+              <div class="sound-alert-note"><strong>Interaction route:</strong> Every request resolves the saved audio, visual, and canvas design. Warudo performance routing appears only on alerts where you enable it.</div>
+              <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export any complete alert—including its sound, GIF/video, canvas design, and custom code—as one shareable file. Imported media is verified and copied into Studio-managed storage.</div>
+              <div id="soundAlertBroadcastInventory" class="sound-alert-note"><strong>Broadcast executor:</strong> Waiting for its live OBS source inventory.</div>
+            </div>
+          </details>
           <div id="soundAlertGrid" class="sound-alert-grid interaction-alert-grid empty-state">Loading the Interaction Alert catalog…</div>
           <div class="visual-section-heading"><div><span>VISUAL LIBRARY</span><h3>Find a GIF for an interaction</h3><p>Search GIPHY or assign a local image, GIF, or video directly from the interaction card.</p></div><span id="visualProviderBadge" class="provider-badge">LOCAL FILES READY · GIPHY KEY REQUIRED</span></div>
           <article class="panel giphy-picker-panel">
@@ -160,13 +167,40 @@
           </div>
           <div id="twitchAlertQueueStatus" class="sound-alert-note"><strong>Alert Queue:</strong> Loading shared playback order…</div>
           <div id="visualAlertOverlayStatus" class="sound-alert-note"><strong>Twitch Alert source:</strong> Loading the local Browser Source address…</div>
-          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add this as a separate Browser Source using the active base-canvas dimensions shown in Guided Setup and enable <strong>Control audio via OBS</strong>. Keep this source on both the live and recording/VOD tracks so follows, subscriptions, Bits, raids, and reward alerts remain in uploaded videos.</div>
-          <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export a base Twitch alert together with every variant, rule, sound, visual, and custom design. Packs never contain Twitch authorization or the original computer's file paths.</div>
+          <details class="setup-guidance">
+            <summary><span><b>SETUP &amp; SHARING</b><strong>Broadcast routing and portable alert packs</strong></span><em>Show details</em></summary>
+            <div class="setup-guidance-body">
+              <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add this as a separate Browser Source using the active base-canvas dimensions shown in Guided Setup and enable <strong>Control audio via OBS</strong>. Keep this source on both the live and recording/VOD tracks so follows, subscriptions, Bits, raids, and reward alerts remain in uploaded videos.</div>
+              <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export a base Twitch alert together with every variant, rule, sound, visual, and custom design. Packs never contain Twitch authorization or the original computer's file paths.</div>
+            </div>
+          </details>
           <div id="twitchVisualAlertGrid" class="sound-alert-grid twitch-alert-grid empty-state">Loading Twitch Alert presets…</div>
+          <div class="visual-section-heading twitch-experience-heading"><div><span>LIVE CHANNEL EXPERIENCES</span><h3>Hype Train Takeover, Raid Portal + Goals</h3><p>One transparent canvas source for longer-running Twitch moments that sit outside the normal alert queue.</p></div><span id="twitchExperienceBadge" class="status-badge">CHECKING</span></div>
+          <div id="twitchExperienceSourceStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local Twitch Experiences address…</div>
+          <div id="twitchExperienceAuthorizationNote" class="sound-alert-note"><strong>EventSub:</strong> Checking broadcaster authorization and feature subscriptions…</div>
+          <article class="panel twitch-experience-panel">
+            <div class="panel-header"><div><span>EXPERIENCE CONTROLS</span><h3>Channel-wide presentation</h3></div><button data-twitch-experience-clear="true" class="secondary-button danger-outline">Clear Canvas</button></div>
+            <div class="twitch-experience-settings">
+              <label class="checkbox-label"><input id="twitchExperienceEnabled" type="checkbox" checked /> Enable Twitch Experiences source</label>
+              <label class="checkbox-label"><input id="twitchExperienceHype" type="checkbox" checked /> Hype Train Takeover</label>
+              <label class="checkbox-label"><input id="twitchExperienceRaid" type="checkbox" checked /> Raid Portal</label>
+              <label class="checkbox-label"><input id="twitchExperienceGoal" type="checkbox" checked /> Goal Overlay</label>
+              <label>Raid portal duration<input id="twitchExperienceRaidDuration" type="number" min="5" max="30" value="12" /><small>seconds</small></label>
+              <label>Hype accent<input id="twitchExperienceHypeAccent" type="color" value="#ff4ccf" /></label>
+              <label>Raid accent<input id="twitchExperienceRaidAccent" type="color" value="#54f2eb" /></label>
+              <label>Goal accent<input id="twitchExperienceGoalAccent" type="color" value="#a7ff5c" /></label>
+            </div>
+            <div class="twitch-experience-card-grid">
+              <article><span>HYPE TRAIN TAKEOVER</span><strong id="twitchExperienceHypeState">STANDBY</strong><p>Full-canvas level and progress presentation while the train is active.</p><button data-twitch-experience-preview="hype-train" class="secondary-button">Preview Takeover</button></article>
+              <article><span>RAID PORTAL</span><strong id="twitchExperienceRaidState">STANDBY</strong><p>Incoming channel, viewer count, and animated portal without delaying the welcome or shoutout.</p><button data-twitch-experience-preview="raid-portal" class="secondary-button">Preview Portal</button></article>
+              <article><span>GOAL OVERLAY</span><strong id="twitchExperienceGoalState">STANDBY</strong><p>Persistent progress card that updates from Twitch goal events.</p><button data-twitch-experience-preview="goal-overlay" class="secondary-button">Preview Goal</button></article>
+            </div>
+            <div class="chat-overlay-actions"><button data-twitch-experience-save="true" class="primary-button">Save Experiences</button></div>
+          </article>
         </section>
 
         <section id="chatoverlaySection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat Overlay</h2><p>Render normalized Twitch chat locally in OBS or another browser-source-capable broadcaster.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat + Emotes</h2><p>Render normalized Twitch chat and canvas-wide emote effects through independent local Browser Sources.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
           <div class="metric-grid">
             <article><span>BROWSER SOURCES</span><strong id="chatOverlayClientCount">0</strong><small>Connected Broadcast canvases</small></article>
             <article><span>VISIBLE MESSAGES</span><strong id="chatOverlayMessageCount">0</strong><small>Current overlay buffer</small></article>
@@ -188,11 +222,44 @@
             <div class="chat-overlay-actions"><button data-chat-overlay-save="true" class="secondary-button">Save Design</button><button data-chat-overlay-preview="true" class="primary-button">Preview Message</button><button data-chat-overlay-clear="true" class="secondary-button danger-outline">Clear Chat</button></div>
           </article>
           <article class="panel chat-overlay-monitor"><div class="panel-header"><div><span>LOCAL BUFFER</span><h3>Recent overlay messages</h3></div></div><div id="chatOverlayMessages" class="compact-list empty-state">No chat messages are visible.</div></article>
+          <div class="visual-section-heading emote-wall-heading"><div><span>CHAT EMOTE OVERLAY</span><h3>Emote Wall</h3><p>Make each Twitch emote used in chat bounce independently around the full stream canvas.</p></div><span id="emoteWallStateBadge" class="status-badge">CHECKING</span></div>
+          <div id="emoteWallBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local Emote Wall address…</div>
+          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add the URL above as a separate transparent Browser Source matching the active base-canvas dimensions. Keep it independent from Chat Overlay so either effect can be hidden per scene.</div>
+          <article class="panel chat-overlay-settings-panel emote-wall-panel">
+            <div class="panel-header"><div><span>EMOTE PHYSICS</span><h3>Wall behavior</h3></div><div class="emote-wall-status-chips"><span id="emoteWallPyramidStatus" class="state-chip installed">PYRAMIDS ON</span><span id="emoteWallActiveCount" class="state-chip installed">0 ACTIVE</span></div></div>
+            <div class="chat-overlay-settings">
+              <label class="checkbox-label"><input id="emoteWallEnabled" type="checkbox" checked /> Enable emotes received from Twitch chat</label>
+              <label>Maximum on screen<input id="emoteWallMaxActive" type="number" min="1" max="50" value="18" /></label>
+              <label>Lifetime<input id="emoteWallLifetime" type="number" min="3" max="30" value="10" /><small>seconds</small></label>
+              <label>Emote size<input id="emoteWallSize" type="number" min="32" max="240" value="96" /><small>pixels before canvas scaling</small></label>
+              <label>Bounce speed<input id="emoteWallSpeed" type="number" min="25" max="300" value="100" /><small>pixels per second</small></label>
+              <label class="checkbox-label"><input id="emoteWallAnimated" type="checkbox" checked /> Use animated Twitch emotes when available</label>
+              <label class="checkbox-label"><input id="emoteWallGifs" type="checkbox" checked /> Include Twitch GIF chat fragments</label>
+              <label class="checkbox-label"><input id="emoteWallPyramids" type="checkbox" checked /> Celebrate 1–2–3–2–1 emote pyramids</label>
+              <label>Pyramid build window<input id="emoteWallPyramidWindow" type="number" min="5" max="60" value="20" /><small>seconds between pyramid rows</small></label>
+              <label>Celebration cooldown<input id="emoteWallPyramidCooldown" type="number" min="5" max="300" value="30" /><small>seconds before another pyramid can fire</small></label>
+            </div>
+            <div class="chat-overlay-actions"><button data-emote-wall-save="true" class="secondary-button">Save Wall</button><button data-emote-wall-preview="true" class="secondary-button">Preview Emotes</button><button data-emote-pyramid-preview="true" class="primary-button">Preview Pyramid</button><button data-emote-wall-clear="true" class="secondary-button danger-outline">Clear Emotes</button></div>
+          </article>
+          <article class="panel emote-provider-panel">
+            <div class="panel-header"><div><span>OPTIONAL EMOTE PROVIDERS</span><h3>7TV, BetterTTV + FrankerFaceZ</h3><p>Resolve exact emote names from enabled provider catalogs. No provider API keys are required.</p></div><span id="emoteProviderCatalogCount" class="state-chip">0 CATALOGED</span></div>
+            <div class="provider-privacy-note"><strong>Privacy:</strong> Each enabled provider receives your public numeric Twitch channel ID when Studio refreshes its catalog. Provider images are fetched and cached by the local Bridge, so the Broadcast browser source stays connected only to Studio.</div>
+            <div class="emote-provider-controls">
+              <div class="emote-provider-toggles">
+                <label class="checkbox-label"><input id="emoteWallSevenTv" type="checkbox" /> Enable 7TV</label>
+                <label class="checkbox-label"><input id="emoteWallBttv" type="checkbox" /> Enable BetterTTV</label>
+                <label class="checkbox-label"><input id="emoteWallFfz" type="checkbox" /> Enable FrankerFaceZ</label>
+              </div>
+              <label>Duplicate-name priority<select id="emoteWallProviderOrder"><option value="seventv,bttv,ffz">7TV → BetterTTV → FrankerFaceZ</option><option value="seventv,ffz,bttv">7TV → FrankerFaceZ → BetterTTV</option><option value="bttv,seventv,ffz">BetterTTV → 7TV → FrankerFaceZ</option><option value="bttv,ffz,seventv">BetterTTV → FrankerFaceZ → 7TV</option><option value="ffz,seventv,bttv">FrankerFaceZ → 7TV → BetterTTV</option><option value="ffz,bttv,seventv">FrankerFaceZ → BetterTTV → 7TV</option></select></label>
+            </div>
+            <div id="emoteProviderStatusGrid" class="emote-provider-status-grid"></div>
+            <div class="chat-overlay-actions"><button data-emote-wall-save="true" class="primary-button">Save Providers</button><button data-emote-provider-refresh="true" class="secondary-button">Refresh Catalogs</button></div>
+          </article>
         </section>
 
         <section id="twitchSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED INTERACTIONS</p><h2>Twitch Gateway</h2><p>One viewer-interaction boundary for your streaming setup. Studio normalizes platform events before optional avatar, broadcast, and automation integrations receive them.</p></div><span id="twitchOwnerBadge" class="status-badge">STUDIO OWNED</span></div>
-          <div class="metric-grid twitch-metrics">
+          <div class="metric-grid five-up twitch-metrics">
             <article><span>OAUTH LIFECYCLE</span><strong id="twitchOauthState">—</strong><small>Tokens stay in the OS credential vault</small></article>
             <article><span>EVENTSUB</span><strong id="twitchEventSubState">—</strong><small>Events and channel points</small></article>
             <article><span>CHAT</span><strong id="twitchChatState">—</strong><small>Normalized chat intake</small></article>
@@ -200,16 +267,16 @@
             <article><span>LAST SIGNAL</span><strong id="twitchLastEvent">NEVER</strong><small id="twitchEventCounts">0 accepted · 0 duplicates</small></article>
           </div>
           <article class="panel twitch-setup-panel">
-            <div class="panel-header"><div><span>DEVICE AUTHORIZATION</span><h3>Connect interaction services</h3></div><span id="twitchAccountBadge" class="status-badge offline">NOT CONNECTED</span></div>
+            <div class="panel-header"><div><span>DEVICE AUTHORIZATION</span><h3>Connect interaction services</h3></div><span id="twitchAccountBadge" class="status-badge offline" data-sensitive>NOT CONNECTED</span></div>
             <div class="twitch-setup-grid">
               <div class="twitch-form-stack">
-                <label>Twitch application client ID<input id="twitchClientId" autocomplete="off" spellcheck="false" placeholder="Public client ID from dev.twitch.tv" /></label>
-                <label>Channel-point reward mappings<textarea id="twitchRewardMappings" rows="4" spellcheck="false" placeholder="reward-id = tempest.blackhole"></textarea><small>One mapping per line. Rewards without a mapping remain observations.</small></label>
+                <label>Twitch application client ID<input id="twitchClientId" data-sensitive autocomplete="off" spellcheck="false" placeholder="Public client ID from dev.twitch.tv" /></label>
+                <label>Channel-point reward mappings<textarea id="twitchRewardMappings" data-sensitive rows="4" spellcheck="false" placeholder="reward-id = tempest.blackhole"></textarea><small>One mapping per line. Rewards without a mapping remain observations.</small></label>
                 <div class="twitch-setup-actions"><button id="saveTwitchConfiguration" class="secondary-button">Save Configuration</button><button id="connectTwitchButton" class="primary-button">Connect Twitch</button><button id="validateTwitchButton" class="secondary-button">Validate Token</button><button id="disconnectTwitchButton" class="secondary-button danger-outline">Disconnect</button></div>
               </div>
               <div class="twitch-auth-summary">
                 <span>REQUESTED SCOPES</span><div id="twitchScopeList" class="scope-list"></div>
-                <div id="twitchDeviceAuthorization" class="device-authorization hidden"><span>ACTIVATION CODE</span><strong id="twitchDeviceCode">—</strong><p>Enter this code on Twitch. Studio checks authorization without receiving your password.</p><button id="openTwitchAuthorization" class="primary-button">Open Twitch Activation</button></div>
+                <div id="twitchDeviceAuthorization" class="device-authorization hidden"><span>ACTIVATION CODE</span><strong id="twitchDeviceCode" data-sensitive>—</strong><p>Enter this code on Twitch. Studio checks authorization without receiving your password.</p><button id="openTwitchAuthorization" class="primary-button">Open Twitch Activation</button></div>
                 <p id="twitchSetupMessage">Save a public Twitch application client ID to begin.</p>
               </div>
             </div>
@@ -223,7 +290,7 @@
               </div>
               <div class="twitch-auth-summary">
                 <span>PER-INSTALLATION TRUST</span>
-                <div class="local-extension-status"><div><small>CREDENTIAL</small><strong id="hostedExtensionCredentialState">NOT ISSUED</strong></div><div><small>CHANNEL</small><strong id="hostedExtensionChannelState">—</strong></div><div><small>RELAY</small><strong id="hostedExtensionRelayState">—</strong></div></div>
+                <div class="local-extension-status"><div><small>CREDENTIAL</small><strong id="hostedExtensionCredentialState">NOT ISSUED</strong></div><div><small>CHANNEL</small><strong id="hostedExtensionChannelState" data-sensitive>—</strong></div><div><small>RELAY</small><strong id="hostedExtensionRelayState">—</strong></div></div>
                 <p id="hostedExtensionMessage">Authorize Twitch, then pair this Studio with the public Extension service. The issued relay credential is stored with Windows encryption.</p>
               </div>
             </div>
@@ -232,15 +299,15 @@
             <div class="panel-header"><div><span>SINGLE-CHANNEL EXTENSION</span><h3>Run your Twitch panel from Studio</h3></div><span id="localExtensionBadge" class="status-badge offline">STOPPED</span></div>
             <div class="local-extension-grid">
               <div class="twitch-form-stack">
-                <label>Your numeric Twitch channel ID<input id="localExtensionChannelId" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Filled from the authorized Twitch account" /></label>
+                <label>Your numeric Twitch channel ID<input id="localExtensionChannelId" data-sensitive inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Filled from the authorized Twitch account" /></label>
                 <label>Extension Secret Key<input id="localExtensionSecret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste once; stored with Windows encryption" /><small>Use Extension Client Configuration → Extension Secrets → Key. Studio never displays the saved value.</small></label>
                 <div class="twitch-setup-actions"><button id="startLocalExtension" class="primary-button">Start Local Panel</button><button id="stopLocalExtension" class="secondary-button">Stop</button><button id="openLocalExtensionPanel" class="secondary-button">Open Panel</button><button id="prepareLocalExtensionCertificate" class="secondary-button">Prepare Certificate</button><button id="forgetLocalExtensionSecret" class="secondary-button danger-outline">Forget Secret</button></div>
               </div>
               <div class="twitch-auth-summary">
                 <span>LOCAL TRUST BOUNDARY</span>
-                <div class="local-extension-status"><div><small>SECRET</small><strong id="localExtensionSecretState">NOT STORED</strong></div><div><small>CERTIFICATE</small><strong id="localExtensionCertificateState">NOT READY</strong></div><div><small>CHANNEL</small><strong id="localExtensionChannelState">—</strong></div></div>
+                <div class="local-extension-status"><div><small>SECRET</small><strong id="localExtensionSecretState">NOT STORED</strong></div><div><small>CERTIFICATE</small><strong id="localExtensionCertificateState">NOT READY</strong></div><div><small>CHANNEL</small><strong id="localExtensionChannelState" data-sensitive>—</strong></div></div>
                 <p id="localExtensionMessage">Authorize Twitch above, then paste the Extension Secret once. Studio handles the local services without PowerShell.</p>
-                <code id="localExtensionPanelUrl">https://localhost:8080/panel.html</code>
+                <code id="localExtensionPanelUrl" data-sensitive>https://localhost:8080/panel.html</code>
               </div>
             </div>
           </article>
@@ -285,7 +352,7 @@
 
         <section id="chatbotSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">STUDIO CHAT AUTOMATION</p><h2>Chatbot</h2><p>Manage Twitch commands, permissions, cooldowns, replies, and Studio automation triggers from one control surface.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
-          <div class="metric-grid chatbot-metrics">
+          <div class="metric-grid five-up chatbot-metrics">
             <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
             <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
             <article><span>CHAT OUTPUT</span><strong id="chatbotChatMetric">DISCONNECTED</strong><small>Replies through Twitch Helix</small></article>
@@ -299,18 +366,48 @@
           </article>
 
           <article class="panel chatbot-identity-panel">
-            <div class="panel-header"><div><span>BOT IDENTITY</span><h3 id="chatbotIdentityTitle">Connect a bot account</h3></div><span id="chatbotAccountBadge" class="status-badge offline">NOT AUTHORIZED</span></div>
+            <div class="panel-header"><div><span>BOT IDENTITY</span><h3 id="chatbotIdentityTitle" data-sensitive>Connect a bot account</h3></div><span id="chatbotAccountBadge" class="status-badge offline" data-sensitive>NOT AUTHORIZED</span></div>
             <div class="chatbot-identity-grid">
-              <div class="chatbot-identity-copy"><p>The Twitch Gateway remains authorized as your broadcaster. This second authorization lets the bot account listen and reply under its own Twitch username.</p><label class="chatbot-name-control">Bot display name <span>OPTIONAL</span><div><input id="chatbotDisplayName" maxlength="40" placeholder="Use the Twitch username automatically" /><button id="saveChatbotIdentity" class="secondary-button" type="button">Save Name</button></div><small>This is a Studio label. Leave it blank to use the verified Twitch username.</small></label><div class="scope-list"><code>user:read:chat</code><code>user:write:chat</code></div><div class="twitch-setup-actions"><button id="connectChatbotButton" class="primary-button">Connect Bot Account</button><button id="validateChatbotButton" class="secondary-button">Validate Bot Token</button><button id="disconnectChatbotButton" class="secondary-button danger-outline">Disconnect Bot</button></div></div>
-              <div class="twitch-auth-summary"><span>CONNECTION STATUS</span><p id="chatbotSetupMessage">Authorize the broadcaster in Twitch Gateway first.</p><div id="chatbotVerifiedIdentity" class="chatbot-verified-identity hidden"><span>VERIFIED TWITCH USER</span><strong id="chatbotVerifiedLogin">—</strong><small>This is the account that reads and sends chat messages.</small></div><div id="chatbotDeviceAuthorization" class="device-authorization hidden"><span>BOT ACTIVATION CODE</span><strong id="chatbotDeviceCode">—</strong><p>Use the isolated sign-in for your <strong>secondary bot account</strong>. It has a temporary Twitch session and will not sign the broadcaster out of Edge or another browser.</p><div class="twitch-setup-actions"><button id="openChatbotIsolatedAuthorization" class="primary-button">Open Isolated Sign-In</button><button id="copyChatbotAuthorizationCode" class="secondary-button" data-copy-label="Activation code">Copy Code</button><button id="copyChatbotAuthorizationLink" class="secondary-button" data-copy-label="Activation link">Copy Link</button><button id="openChatbotAuthorization" class="text-button">Open Default Browser</button></div><small>The temporary sign-in cookies are erased when the isolated window closes.</small></div></div>
+              <div class="chatbot-identity-copy"><p>The Twitch Gateway remains authorized as your broadcaster. This second authorization lets the bot account listen and reply under its own Twitch username.</p><label class="chatbot-name-control">Bot display name <span>OPTIONAL</span><div><input id="chatbotDisplayName" data-sensitive maxlength="40" placeholder="Use the Twitch username automatically" /><button id="saveChatbotIdentity" class="secondary-button" type="button">Save Name</button></div><small>This is a Studio label. Leave it blank to use the verified Twitch username.</small></label><div class="scope-list"><code>user:read:chat</code><code>user:write:chat</code><code>moderator:manage:shoutouts</code><code>moderator:manage:chat_messages</code><code>moderator:manage:banned_users</code></div><div class="twitch-setup-actions"><button id="connectChatbotButton" class="primary-button">Connect Bot Account</button><button id="validateChatbotButton" class="secondary-button">Validate Bot Token</button><button id="disconnectChatbotButton" class="secondary-button danger-outline">Disconnect Bot</button></div></div>
+              <div class="twitch-auth-summary"><span>CONNECTION STATUS</span><p id="chatbotSetupMessage" data-sensitive>Authorize the broadcaster in Twitch Gateway first.</p><div id="chatbotVerifiedIdentity" class="chatbot-verified-identity hidden"><span>VERIFIED TWITCH USER</span><strong id="chatbotVerifiedLogin" data-sensitive>—</strong><small>This is the account that reads and sends chat messages.</small></div><div id="chatbotDeviceAuthorization" class="device-authorization hidden"><span>BOT ACTIVATION CODE</span><strong id="chatbotDeviceCode" data-sensitive>—</strong><p>Use the isolated sign-in for your <strong>secondary bot account</strong>. It has a temporary Twitch session and will not sign the broadcaster out of Edge or another browser.</p><div class="twitch-setup-actions"><button id="openChatbotIsolatedAuthorization" class="primary-button">Open Isolated Sign-In</button><button id="copyChatbotAuthorizationCode" class="secondary-button" data-copy-label="Activation code">Copy Code</button><button id="copyChatbotAuthorizationLink" class="secondary-button" data-copy-label="Activation link">Copy Link</button><button id="openChatbotAuthorization" class="text-button">Open Default Browser</button></div><small>The temporary sign-in cookies are erased when the isolated window closes.</small></div></div>
             </div>
           </article>
+
+          <form id="chatbotAutoModForm" class="panel chatbot-provider-panel chatbot-automod-panel">
+            <div class="panel-header"><div><span>CHAT MODERATION</span><h3>AutoMod + link protection</h3><p>Check home-channel messages before commands run. Shared Chat messages are left to their source channel's moderators.</p></div><span id="chatbotAutoModBadge" class="status-badge offline">OFF</span></div>
+            <label class="toggle-label automod-master"><input id="chatbotAutoModEnabled" type="checkbox" /> Enable Studio AutoMod</label>
+            <div class="chatbot-automod-grid">
+              <fieldset><legend>MESSAGE RULES</legend><label class="toggle-label"><input id="chatbotAutoModLinks" type="checkbox" /> Block links outside the allowlist</label><label>Allowed domains <textarea id="chatbotAutoModDomains" data-sensitive rows="3" maxlength="4000" placeholder="twitch.tv&#10;youtube.com&#10;mychannel.example"></textarea><small>One domain per line. Subdomains are allowed automatically.</small></label><label class="toggle-label"><input id="chatbotAutoModTermsEnabled" type="checkbox" /> Block custom terms or phrases</label><label>Blocked terms <textarea id="chatbotAutoModTerms" data-sensitive rows="4" maxlength="12000" placeholder="One term or phrase per line"></textarea></label><div class="automod-number-row"><label class="toggle-label"><input id="chatbotAutoModCaps" type="checkbox" /> Excessive caps</label><label>Minimum letters<input id="chatbotAutoModCapsMinimum" type="number" min="5" max="100" value="12" /></label><label>Caps threshold<input id="chatbotAutoModCapsPercentage" type="number" min="50" max="100" value="75" /><small>%</small></label></div><div class="automod-number-row"><label class="toggle-label"><input id="chatbotAutoModRepetition" type="checkbox" /> Repeated characters</label><label>Character limit<input id="chatbotAutoModRepetitionLimit" type="number" min="4" max="30" value="8" /></label></div></fieldset>
+              <fieldset><legend>ENFORCEMENT</legend><label>Action<select id="chatbotAutoModAction"><option value="delete">Delete the message</option><option value="timeout">Timeout the viewer</option></select></label><label id="chatbotAutoModTimeoutControl">Timeout duration<input id="chatbotAutoModTimeout" type="number" min="1" max="1209600" value="60" /><small>seconds</small></label><div class="automod-role-list"><span>EXEMPT HOME-CHANNEL ROLES</span><label><input id="chatbotAutoModExemptBroadcaster" type="checkbox" checked /> Broadcaster</label><label><input id="chatbotAutoModExemptModerator" type="checkbox" checked /> Moderators</label><label><input id="chatbotAutoModExemptVip" type="checkbox" checked /> VIPs</label></div><label class="toggle-label"><input id="chatbotAutoModNotice" type="checkbox" checked /> Post a short notice after acting</label><label>Notice message<input id="chatbotAutoModNoticeMessage" maxlength="500" value="@{user}, that message was removed by channel AutoMod ({reason})." /><small>Variables: <code>{user}</code>, <code>{reason}</code>, and <code>{action}</code>.</small></label><div id="chatbotAutoModPermissionStatus" class="automod-permission-status">Reconnect the bot account with moderation permissions.</div></fieldset>
+            </div>
+            <div class="automod-preview"><label>Preview a message<input id="chatbotAutoModTestMessage" maxlength="500" value="visit suspicious.example right now" /></label><button id="testChatbotAutoMod" class="secondary-button" type="button">Test Rules</button><p id="chatbotAutoModTestResult">Testing does not moderate Twitch chat.</p></div>
+            <div class="dialog-actions"><button class="primary-button" type="submit">Save AutoMod</button></div>
+          </form>
+
+          <form id="chatbotRaidAutomationForm" class="panel chatbot-provider-panel chatbot-raid-panel">
+            <div class="panel-header"><div><span>RAID AUTOMATION</span><h3>Welcome + shout out incoming raiders</h3><p>Every received raid can post a custom welcome through the bot and enter Twitch's official shoutout queue.</p></div><span id="chatbotRaidBadge" class="status-badge offline">SETUP REQUIRED</span></div>
+            <div class="chatbot-raid-grid">
+              <fieldset><legend><label class="toggle-label"><input id="chatbotRaidWelcomeEnabled" type="checkbox" /> Post a welcome message</label></legend><label>Welcome message<textarea id="chatbotRaidWelcomeMessage" rows="3" maxlength="500" placeholder="Welcome {raider} and your {viewers} raiders!"></textarea></label><small>Variables: <code>{raider}</code>, <code>{viewers}</code>, <code>{channel}</code>, and <code>{bot}</code>.</small></fieldset>
+              <fieldset><legend><label class="toggle-label"><input id="chatbotRaidShoutoutEnabled" type="checkbox" /> Send an official Twitch shoutout</label></legend><p id="chatbotRaidShoutoutStatus">Reconnect the bot account with shoutout permission, then make that account a moderator in your channel.</p><small>Twitch allows one channel shoutout every 2 minutes and one per raider every 60 minutes. Studio queues close-together raids automatically.</small></fieldset>
+            </div>
+            <div class="dialog-actions"><button id="testChatbotRaidAutomation" class="secondary-button" type="button">Preview Raid</button><button class="primary-button" type="submit">Save Raid Automation</button></div>
+            <p id="chatbotRaidTestResult" class="chatbot-raid-result">Previewing does not post to Twitch.</p>
+          </form>
+
+          <form id="chatbotFirstChatShoutoutForm" class="panel chatbot-provider-panel chatbot-first-chat-panel">
+            <div class="panel-header"><div><span>ASSIGNED CREATORS</span><h3>Shoutouts + interaction access</h3><p>Maintain one public creator list for first-chat shoutouts and optional Twitch-panel access control.</p></div><span id="chatbotFirstChatBadge" class="status-badge offline">OPEN ACCESS</span></div>
+            <div class="chatbot-first-chat-grid">
+              <fieldset><legend><label class="toggle-label"><input id="chatbotFirstChatEnabled" type="checkbox" /> Enable assigned first-chat shoutouts</label></legend><label>Assigned Twitch channel logins<textarea id="chatbotFirstChatChannels" rows="5" maxlength="1400" placeholder="creator_one&#10;creator_two&#10;creator_three"></textarea></label><small>Enter one Twitch login per line, with or without <code>@</code>. Up to 50 channels. This public creator list remains readable while Privacy Shield is active.</small></fieldset>
+              <fieldset><legend>TWITCH PANEL ACCESS</legend><label>Who can trigger interactions<select id="chatbotInteractionAccessMode"><option value="everyone">Everyone</option><option value="assigned-creators">Assigned creators only</option></select></label><label class="toggle-label"><input id="chatbotInteractionAllowStaff" type="checkbox" checked /> Always allow broadcaster and moderators</label><strong id="chatbotFirstChatCount">0 ASSIGNED</strong><p id="chatbotFirstChatStatus">Everyone can currently use enabled panel interactions.</p><small>Restricted viewers must share their Twitch identity with the Extension. Studio checks the signed Twitch identity against this list before anything is queued.</small></fieldset>
+            </div>
+            <div class="dialog-actions"><button class="primary-button" type="submit">Save Assigned Creators</button></div>
+          </form>
 
           <form id="chatbotProvidersForm" class="panel chatbot-provider-panel">
             <div class="panel-header"><div><span>OPTIONAL RESPONSE PROVIDERS</span><h3>Local weather + now playing</h3><p>These stay hidden from command choices until configured. No API key is required for NWS or public AzuraCast metadata.</p></div><button class="primary-button" type="submit">Save Providers</button></div>
             <div class="chatbot-provider-grid">
-              <fieldset><legend><label class="toggle-label"><input id="weatherProviderEnabled" type="checkbox" /> Local weather (United States)</label></legend><label>Location name<input id="weatherLocationName" maxlength="80" placeholder="Portland" /></label><div class="form-row"><label>Latitude<input id="weatherLatitude" type="number" min="-90" max="90" step="0.0001" placeholder="45.5152" /></label><label>Longitude<input id="weatherLongitude" type="number" min="-180" max="180" step="0.0001" placeholder="-122.6784" /></label></div><label>IANA time zone<input id="weatherTimeZone" maxlength="80" placeholder="America/Los_Angeles" /></label><small>Uses the U.S. National Weather Service. Enter coordinates within NWS coverage.</small></fieldset>
-              <fieldset><legend><label class="toggle-label"><input id="nowPlayingProviderEnabled" type="checkbox" /> AzuraCast now playing</label></legend><label>Station name<input id="nowPlayingStationName" maxlength="100" placeholder="My Radio Station" /></label><label>Now Playing API URL<input id="nowPlayingApiUrl" type="url" maxlength="500" placeholder="https://radio.example/api/nowplaying/station" /></label><label>Public player URL<input id="nowPlayingPublicUrl" type="url" maxlength="500" placeholder="https://radio.example/public/station" /></label><label>Direct stream URL <span>OPTIONAL</span><input id="nowPlayingStreamUrl" type="url" maxlength="500" placeholder="https://radio.example/listen/station/radio.mp3" /></label></fieldset>
+              <fieldset><legend><label class="toggle-label"><input id="weatherProviderEnabled" type="checkbox" /> Local weather (United States)</label></legend><label>Location name<input id="weatherLocationName" data-sensitive maxlength="80" placeholder="Portland" /></label><div class="form-row"><label>Latitude<input id="weatherLatitude" data-sensitive type="number" min="-90" max="90" step="0.0001" placeholder="45.5152" /></label><label>Longitude<input id="weatherLongitude" data-sensitive type="number" min="-180" max="180" step="0.0001" placeholder="-122.6784" /></label></div><label>IANA time zone<input id="weatherTimeZone" data-sensitive maxlength="80" placeholder="America/Los_Angeles" /></label><small>Uses the U.S. National Weather Service. Enter coordinates within NWS coverage.</small></fieldset>
+              <fieldset><legend><label class="toggle-label"><input id="nowPlayingProviderEnabled" type="checkbox" /> AzuraCast now playing</label></legend><label>Station name<input id="nowPlayingStationName" data-sensitive maxlength="100" placeholder="My Radio Station" /></label><label>Now Playing API URL<input id="nowPlayingApiUrl" data-sensitive type="url" maxlength="500" placeholder="https://radio.example/api/nowplaying/station" /></label><label>Public player URL<input id="nowPlayingPublicUrl" data-sensitive type="url" maxlength="500" placeholder="https://radio.example/public/station" /></label><label>Direct stream URL <span>OPTIONAL</span><input id="nowPlayingStreamUrl" data-sensitive type="url" maxlength="500" placeholder="https://radio.example/listen/station/radio.mp3" /></label></fieldset>
             </div>
           </form>
 
@@ -346,7 +443,7 @@
         <section id="apiSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">LOCAL CONTROL PLANE</p><h2>Connections</h2><p>Monitor compatible applications and the authenticated local command and event service. Optional integrations can remain disconnected.</p></div><span id="apiOnlineBadge" class="status-badge">CONNECTING</span></div>
           <div class="api-grid">
-            <article class="panel api-summary"><span>HTTP ENDPOINT</span><code id="httpEndpoint">http://127.0.0.1:4765</code><span>WEBSOCKET ENDPOINT</span><code id="socketEndpoint">ws://127.0.0.1:4765/v1/socket</code><span>AUTHENTICATION</span><strong>Per-installation bearer token</strong><p>Commands and state use the authenticated control plane. Video and continuous audio remain on Spout, NDI, shared textures, or purpose-built media transports.</p></article>
+            <article class="panel api-summary"><span>HTTP ENDPOINT</span><code id="httpEndpoint" data-sensitive>http://127.0.0.1:4765</code><span>WEBSOCKET ENDPOINT</span><code id="socketEndpoint" data-sensitive>ws://127.0.0.1:4765/v1/socket</code><span>AUTHENTICATION</span><strong>Per-installation bearer token</strong><p>Commands and state use the authenticated control plane. Video and continuous audio remain on Spout, NDI, shared textures, or purpose-built media transports.</p></article>
             <article class="panel"><div class="panel-header"><div><span>CONNECTED CLIENTS</span><h3>Live applications</h3></div><strong id="apiConnectionCount">0</strong></div><div id="connectionList" class="compact-list empty-state">No applications are connected to the Bridge.</div></article>
           </div>
 
@@ -369,7 +466,7 @@
             <article class="panel warudo-status-panel">
               <div class="panel-header"><div><span>LIVE CONNECTION</span><h3>Automatic local adapter</h3></div><button id="refreshWarudoButton" class="secondary-button">Check Again</button></div>
               <div class="warudo-status-grid">
-                <div><span>WARUDO ENDPOINT</span><code id="warudoEndpoint">ws://localhost:4770/</code></div>
+                <div><span>WARUDO ENDPOINT</span><code id="warudoEndpoint" data-sensitive>ws://localhost:4770/</code></div>
                 <div><span>BLUEPRINT ACTION</span><code id="warudoAction">tempestPerformance</code></div>
                 <div><span>LAST CUE</span><strong id="warudoLastCue">None yet</strong></div>
               </div>
@@ -410,10 +507,11 @@
         <section id="settingsSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">SETTINGS + ABOUT</p><h2>Tempest Streaming Studio</h2><p>Review local data, privacy boundaries, release information, and support diagnostics.</p></div><span id="aboutBuildBadge" class="status-badge">BUILD</span></div>
           <div class="settings-about-grid">
+            <article class="panel settings-privacy-controls"><div class="panel-header"><div><span>STREAMER PROTECTION</span><h3>Privacy Shield</h3></div><span id="privacySettingsBadge" class="status-badge">PROTECTED</span></div><p>Keep Studio safe if a display, window, or desktop is accidentally shown while live. Both protections are enabled by default.</p><div class="privacy-setting-list"><label><input id="streamerPrivacyMode" type="checkbox" checked /><span><strong>Mask sensitive values in Studio</strong><small>Hides account identities, OAuth codes, client IDs, channel IDs, locations, provider URLs, and local endpoints.</small></span></label><label><input id="windowCaptureProtection" type="checkbox" checked /><span><strong>Protect the Studio window from capture</strong><small>Asks Windows to exclude Studio and isolated Twitch sign-in windows from compatible screen-capture methods.</small></span></label></div><div class="settings-actions"><button id="savePrivacySettings" class="primary-button" type="button">Save Privacy Settings</button><small id="privacySettingsStatus">Privacy Shield is active.</small></div><p class="privacy-capture-note">Display capture support varies by capture method. The in-app masking layer remains visible even when Windows capture exclusion is bypassed.</p></article>
             <article class="panel"><div class="panel-header"><div><span>INSTALLATION</span><h3>Release information</h3></div></div><dl class="about-details"><div><dt>Version</dt><dd id="aboutVersion">—</dd></div><div><dt>Data schema</dt><dd id="aboutDataVersion">—</dd></div><div><dt>Runtime</dt><dd id="aboutRuntime">—</dd></div><div><dt>Build type</dt><dd id="aboutBuildType">—</dd></div></dl><div class="settings-actions"><button id="openStudioDataDirectory" class="secondary-button">Open Data Folder</button><button data-export-studio-backup="true" class="secondary-button">Create Backup</button></div></article>
             <article class="panel"><div class="panel-header"><div><span>SUPPORT</span><h3>Redacted diagnostics</h3></div></div><p>Export health, source, alert, runtime, and version information. Credentials, account identities, viewer details, and local file paths are removed.</p><button id="exportStudioDiagnostics" class="primary-button">Export Diagnostics</button></article>
             <article class="panel settings-privacy"><div class="panel-header"><div><span>PRIVACY BOUNDARY</span><h3>What leaves this computer</h3></div></div><ul><li>Twitch authorization and API requests only after you connect Twitch.</li><li>GIPHY searches only after you save a GIPHY API key and run a search.</li><li>NWS weather and AzuraCast now-playing requests only after those optional providers are configured.</li><li>Alert media, browser sources, backups, histories, and control traffic remain local unless you export a file yourself.</li></ul></article>
-            <article class="panel settings-privacy"><div class="panel-header"><div><span>RELEASE CHANNEL</span><h3>Manual updates</h3></div></div><p>0.21.0 uses manual, versioned Windows releases. Create a backup before installing a newer build; the installer preserves Studio data and migrations run automatically on first launch.</p><p>Tempest branding and publisher attribution remain part of the public product. Streamer identities, station details, locations, alert media, and companion tools are your own configuration.</p></article>
+            <article class="panel settings-privacy"><div class="panel-header"><div><span>RELEASE CHANNEL</span><h3>Manual updates</h3></div></div><p>1.0.0 uses manual, versioned Windows releases. Create a backup before installing a newer build; the installer preserves Studio data and migrations run automatically on first launch.</p><p>Tempest branding and publisher attribution remain part of the public product. Streamer identities, station details, locations, alert media, and companion tools are your own configuration.</p></article>
           </div>
         </section>
       </main>

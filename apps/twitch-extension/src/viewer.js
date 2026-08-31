@@ -163,6 +163,7 @@
     if (!response.ok) {
       const error = new Error(body.error || `Signal rejected with status ${response.status}.`);
       error.retryAfterMs = body.retryAfterMs;
+      error.code = body.code;
       throw error;
     }
     setConnection('MAINFRAME ONLINE', true);
@@ -181,7 +182,10 @@
       toast(`${alert.name} signal accepted.`);
     } catch (error) {
       if (Number(error.retryAfterMs) > 0) cooldowns.set(id, Date.now() + Number(error.retryAfterMs));
-      toast(error.message, true);
+      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) {
+        toast('Share your Twitch identity to use this channel’s restricted interactions.', true);
+        window.Twitch.ext.actions.requestIdShare();
+      } else toast(error.message, true);
     } finally {
       state.busy = false;
       render();

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+## 1.0.0 — Stream experiences, emotes, privacy, and moderation
+
+- Added a native broadcaster EventSub connection and a shared Twitch Experiences Browser Source for Hype Train Takeover, Raid Portal, and channel-goal progress, with independent enablement, previews, colors, connection health, persistence, backup support, and safe raid coexistence.
+- Added a configurable Emote Wall Browser Source that turns native Twitch emote and GIF chat fragments into independently bouncing canvas sprites, with enablement, density, lifetime, size, speed, animation, preview, and clearing controls.
+- Added community-built `1 → 2 → 3 → 2 → 1` Emote Pyramid recognition with a full-canvas celebration, participant credit, configurable build window and cooldown, and an in-app preview.
+- Added opt-in 7TV, BetterTTV, and FrankerFaceZ catalogs with exact-name matching, provider priority and health controls, manual refresh, host validation, and a bounded local media proxy/cache.
+- Reorganized the sidebar into Stream Design, Automation, Connections, Tools + Records, and Studio categories and removed numeric prefixes from navigation tabs.
+- Added a default-on Privacy Shield with persistent in-app masking for streamer identities, authorization codes, channel/client IDs, locations, provider URLs, local endpoints, and all four Browser Source URLs.
+- Added Windows capture protection for the Studio and isolated Twitch authorization windows, with independent controls in Settings and a quick masking toggle in the top bar.
+- Added configurable Chatbot AutoMod rules for unapproved links, blocked terms, excessive caps, and repeated-character spam, including domain allowlists, trusted-role exemptions, dry-run previews, message deletion, optional timeouts, and chat notices.
+- Added the narrow Twitch moderator scopes required for message deletion and timeouts; existing bot connections must be reauthorized before those actions can run.
+- Added automatic raid welcomes, queued official Twitch shoutouts, and assigned-creator first-chat shoutouts.
+- Added an Assigned Creators access policy that can restrict all Twitch-panel interactions to the same creator list, with optional broadcaster/moderator override, server-side enforcement, Twitch identity linking, and denied-request logging.
+
 ## 0.21.0 — Public Extension installations
 
 - Replaced the single global channel allowlist and relay token with PostgreSQL-backed public installations.

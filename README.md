@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current release candidate: **0.21.0**
+Current release: **1.0.0**
 
 Tempest Streaming Studio is the interaction and orchestration hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed workflows across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Studio also manages application registrations and shared assets, while creative rendering and live production stay inside focused applications.
 
@@ -19,7 +19,9 @@ The **Interaction Alerts** page includes starter viewer performances and can cre
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 
-The **Chat Overlay** page replaces a hosted Botrix chat widget with Studio's local `http://127.0.0.1:4765/chat-overlay` Browser Source. It renders normalized Twitch chat as safely escaped message cards and controls position, message count, lifetime, role chips, accent, opacity, preview, and clearing. See `docs/CHAT_OVERLAY.md` for setup.
+The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Train Takeover, Raid Portal, and Twitch Goal progress from Studio's broadcaster EventSub connection. These sustained presentations remain independent from the one-shot alert queue and share one full-canvas transparent source. See `docs/TWITCH_EXPERIENCES.md`.
+
+The **Chat + Emotes** page replaces hosted chat effects with two independent local sources. `http://127.0.0.1:4765/chat-overlay` renders safely escaped message cards, while `http://127.0.0.1:4765/emote-wall` makes native Twitch emotes—and optional exact-name 7TV, BetterTTV, and FrankerFaceZ emotes—bounce across the canvas. Each source can be shown only on the scenes where it belongs. Third-party providers are opt-in and their media is proxied through the local Bridge. See `docs/CHAT_OVERLAY.md` and `docs/EMOTE_WALL.md` for setup.
 
 The **Panel Designer** creates a channel-specific appearance for the universal Twitch Extension with a real 318 by 496 preview, safe theme controls, local persistence, and runtime delivery to the Local Panel. Hosted releases use the same validated theme model as per-broadcaster configuration, so streamers customize one shared Extension without supplying viewer-facing code.
 
@@ -49,13 +51,15 @@ Use the workflow simulator in **Interaction Workflows** to exercise a configured
 
 Studio is the sole owner of interaction-facing Twitch integration for the suite. It validates, deduplicates, logs, publishes, and routes canonical Twitch events at `/v1/integrations/twitch/events`; the desktop exposes authorization, connection state, the free Sound Alert catalog, and the topic directory. The hosted Extension Backend Service verifies Twitch JWTs, resolves PostgreSQL-backed broadcaster installations, and forwards catalog-approved interactions over a per-installation connection opened outbound by Studio. Broadcast retains OBS/Twitch stream-service authentication and Stream Information because those belong to output operation. Bits do not trigger bundled workflows.
 
-The Chatbot stores its secondary account's OAuth tokens separately from the broadcaster, receives `channel.chat.message` through EventSub WebSocket, and manages commands, aliases, permissions, replies, cooldowns, workflow links, simulation, and activity. Device authorization runs in an isolated temporary Twitch session and its cookies are erased when authorization completes or the window closes.
+The Chatbot stores its secondary account's OAuth tokens separately from the broadcaster, receives `channel.chat.message` through EventSub WebSocket, and manages commands, aliases, permissions, replies, cooldowns, workflow links, simulation, activity, raid welcomes, queued shoutouts, and assigned first-chat shoutouts. Its optional AutoMod layer can delete unapproved links, blocked terms, caps, and repeated-character spam or apply a bounded timeout through a moderator bot. Device authorization runs in an isolated temporary Twitch session and its cookies are erased when authorization completes or the window closes.
 
 Weather and now-playing commands are optional providers rather than creator-specific defaults. Operators can configure a United States National Weather Service location and an AzuraCast station from the Chatbot page, then assign those handlers to any command. Clean installations contain no streamer account, location, station, canvas, or companion-application assumptions.
 
 ## Security boundary
 
 The Bridge binds to localhost and requires a per-installation token for registry access, WebSocket connections, commands, and events. High-bandwidth video and audio frames do not pass through the JSON API. Applications advertise Spout, NDI, shared-memory, or other media endpoints through capabilities and output descriptors.
+
+Studio's default-on Privacy Shield masks streamer-sensitive values and all five Browser Source URLs in the desktop UI. On Windows, the Studio and isolated authorization windows also request capture exclusion from compatible screen-capture methods.
 
 ## License and trademarks
 

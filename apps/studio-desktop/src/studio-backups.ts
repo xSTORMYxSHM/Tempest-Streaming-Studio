@@ -29,6 +29,8 @@ const safeDocuments = new Map([
   ['twitchIntegration', ['bridge', 'twitch-integration.json']],
   ['interactionAlerts', ['bridge', 'sound-alerts.json']],
   ['chatOverlay', ['bridge', 'chat-overlay.json']],
+  ['emoteWall', ['bridge', 'emote-wall.json']],
+  ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
   ['panelDesign', ['twitch-panel-design.json']]
 ]);
 const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.mp4', '.webm']);

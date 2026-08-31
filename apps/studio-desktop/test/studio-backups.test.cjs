@@ -14,11 +14,15 @@ test('backs up portable settings and media while excluding credentials and machi
   await writeFile(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0xaa]));
   await writeFile(path.join(source, 'bridge', 'sound-alerts.json'), JSON.stringify({ schemaVersion: 1, alerts: [{ id: 'sound-alert.test', audioUri: pathToFileURL(audioPath).href }] }));
   await writeFile(path.join(source, 'bridge', 'registry.json'), JSON.stringify({ schemaVersion: 1, applications: [{ id: 'app.test', launch: { executable: 'C:\\Private\\app.exe' } }], assets: [{ uri: 'file:///C:/Private/scene.json' }], workflows: [{ id: 'workflow.test' }] }));
+  await writeFile(path.join(source, 'bridge', 'emote-wall.json'), JSON.stringify({ schemaVersion: 1, enabled: true, maxActive: 12, lifetimeMs: 8000, sizePx: 96, speed: 120, includeAnimated: true, includeGifs: true }));
+  await writeFile(path.join(source, 'bridge', 'twitch-experiences.json'), JSON.stringify({ schemaVersion: 1, enabled: true, hypeTrainEnabled: true, raidPortalEnabled: true, goalOverlayEnabled: true, raidDurationMs: 12000, accent: '#54F2EB', hypeAccent: '#FF4CCF', raidAccent: '#54F2EB', goalAccent: '#A7FF5C' }));
   await writeFile(path.join(source, 'bridge', 'twitch-credentials.bin'), 'DO-NOT-BACK-UP-TWITCH-TOKEN');
   const backup = await buildTempestStudioBackup({ userDataDirectory: source, productVersion: '0.20.0-test', rendererSettings: { completed: true, canvasProfile: { mode: 'standard' } } });
   assert.equal(backup.assets.length, 1);
   assert.equal(backup.documents.registry.applications[0].launch, undefined);
   assert.deepEqual(backup.documents.registry.assets, []);
+  assert.equal(backup.documents.emoteWall.maxActive, 12);
+  assert.equal(backup.documents.twitchExperiences.hypeTrainEnabled, true);
   const serialized = JSON.stringify(backup);
   assert.doesNotMatch(serialized, /DO-NOT-BACK-UP/);
   assert.doesNotMatch(serialized, /private-music/i);
@@ -34,5 +38,7 @@ test('backs up portable settings and media while excluding credentials and machi
   const restoredAudioPath = fileURLToPath(restoredAlerts.alerts[0].audioUri);
   assert.match(restoredAudioPath, /visual-alerts[\\/]restored/);
   assert.deepEqual(await readFile(restoredAudioPath), Buffer.from([0x49, 0x44, 0x33, 0x04, 0xaa]));
+  assert.equal(JSON.parse(await readFile(path.join(target, 'bridge', 'emote-wall.json'), 'utf8')).speed, 120);
+  assert.equal(JSON.parse(await readFile(path.join(target, 'bridge', 'twitch-experiences.json'), 'utf8')).raidDurationMs, 12000);
   assert.equal(JSON.parse(await readFile(path.join(restored.snapshotDirectory, 'interactionAlerts.json'), 'utf8')).old, true);
 });

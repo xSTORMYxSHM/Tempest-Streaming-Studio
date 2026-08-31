@@ -33,3 +33,27 @@ The Chatbot page can configure a United States National Weather Service location
 | `!points`, `!rank` | A Studio loyalty database or an external loyalty provider; Twitch Channel Points balances are not exposed as a general viewer-balance API. |
 
 Privileged commands should remain home-channel-only unless the operator deliberately enables **Allow from Shared Chat**. Shared Chat access never imports moderator, subscriber, or broadcaster permissions from a collaborator's channel.
+
+## Studio AutoMod
+
+The Chatbot page can inspect home-channel chat before command handling and enforce any combination of:
+
+- link protection with an allowed-domain list;
+- custom blocked terms and phrases;
+- excessive-capital-letter thresholds;
+- repeated-character spam limits.
+
+The broadcaster, home-channel moderators, and VIPs are exempt by default. Shared Chat messages remain under their source channel's moderation boundary. Every configuration includes a dry-run preview that does not act on Twitch.
+
+Deleting a matched message requires `moderator:manage:chat_messages`. Optional viewer timeouts require `moderator:manage:banned_users`. The secondary bot account must be reauthorized with the selected scope and remain a moderator in the broadcaster's channel. AutoMod intentionally does not issue permanent bans.
+
+## Assigned Creators
+
+The **Assigned Creators** card owns one public Twitch-login list that can be used for either or both of these independent features:
+
+- send an official shoutout the first time an assigned creator chats during a live stream;
+- restrict every hosted Twitch-panel interaction to assigned creators, with an optional broadcaster and moderator override.
+
+Restricted access is enforced inside Studio before an alert or workflow enters its queue. Hiding buttons is not treated as authorization. Studio resolves the configured logins to numeric Twitch user IDs through the connected bot account and also learns a verified ID when an assigned creator chats.
+
+Viewers must share their Twitch identity with the Extension before Studio can compare them to the assigned list. The Extension opens Twitch's own identity-sharing prompt when an otherwise valid restricted interaction lacks a linked identity. The Extension's **Request Identity Link** capability must be enabled in the Twitch Developer Console for that prompt to work.

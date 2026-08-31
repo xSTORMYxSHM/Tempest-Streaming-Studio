@@ -1,14 +1,16 @@
-# Installing Tempest Streaming Studio 0.21.0
+# Installing Tempest Streaming Studio 1.0.0
 
 ## Windows installation
 
-1. Download `Tempest-Streaming-Studio-Setup-0.21.0-x64.exe` from the official release.
+1. Download `Tempest-Streaming-Studio-Setup-1.0.0-x64.exe` from the official release.
 2. Run the per-user installer and choose an installation directory if desired.
 3. Open Tempest Streaming Studio and complete **Guided Setup**.
 4. In OBS or compatible broadcast software, add these transparent Browser Sources using the base-canvas dimensions shown by Guided Setup:
    - Twitch Alerts: `http://127.0.0.1:4765/visual-alerts/twitch`
    - Interaction Alerts: `http://127.0.0.1:4765/visual-alerts/interactions`
    - Chat Overlay, optional: `http://127.0.0.1:4765/chat-overlay`
+   - Emote Wall, optional: `http://127.0.0.1:4765/emote-wall`
+   - Twitch Experiences, optional: `http://127.0.0.1:4765/twitch-experiences`
 5. Enable **Control audio via OBS** for both alert sources. Keep Twitch Alert audio on live and recording tracks. Route Interaction Alert audio to the live track and exclude it from the VOD track when its media may be copyrighted.
 
 The ZIP artifact is a portable application directory for testing or users who do not want an installer. Studio settings remain in the Windows per-user application-data directory, not beside the executable.
@@ -16,6 +18,8 @@ The ZIP artifact is a portable application directory for testing or users who do
 ## Twitch setup
 
 Create a **Public** application in the Twitch Developer Console and paste its Client ID into Twitch Gateway. Tempest Streaming Studio uses Device Code authorization and never needs the Twitch application client secret.
+
+Hype Train Takeover and Goal Overlay use broadcaster EventSub scopes. After upgrading from a build that predates Twitch Experiences, disconnect and reconnect the broadcaster once to authorize the added `channel:read:goals` permission.
 
 The Chatbot is optional and uses a second, separate Twitch user authorization. Its credentials are encrypted and stored separately from the broadcaster.
 

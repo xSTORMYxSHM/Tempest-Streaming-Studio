@@ -27,6 +27,8 @@ import { TempestVisualAlertOverlay } from './visual-alerts';
 import { TempestTwitchVisualAlertCatalog } from './twitch-visual-alerts';
 export { TempestTwitchVisualAlertCatalog, validateTwitchAlertDesign } from './twitch-visual-alerts';
 import { TempestChatOverlay } from './chat-overlay';
+import { TempestEmoteWall } from './emote-wall';
+import { TempestTwitchExperiences } from './twitch-experiences';
 import { TempestAlertQueue, TempestAlertQueueItem } from './alert-queue';
 import { TempestAlertHistory } from './alert-history';
 import {
@@ -52,6 +54,7 @@ export interface StartBridgeOptions {
   twitchCredentialStore?: TwitchCredentialStore;
   chatbotCredentialStore?: TwitchCredentialStore;
   chatbotFetchImplementation?: typeof fetch;
+  emoteProviderFetchImplementation?: typeof fetch;
   extensionRelay?: ExtensionRelayOptions;
   soundAlertPlayback?: (command: TempestSoundAlertPlaybackCommand) => void | Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
@@ -167,9 +170,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const startedAt = new Date().toISOString();
   const clients = new Map<string, BridgeClient>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumBodyBytes });
-  const twitchGateway = new TwitchIntegrationGateway({ dataDirectory: options.dataDirectory, credentialStore: options.twitchCredentialStore });
-  await twitchGateway.initialize();
   let ingestChatEvent: (event: TempestNormalizedTwitchEvent) => Promise<void> = async () => {};
+  const twitchGateway = new TwitchIntegrationGateway({ dataDirectory: options.dataDirectory, credentialStore: options.twitchCredentialStore, onEvent: (event) => ingestChatEvent(event) });
+  await twitchGateway.initialize();
   let dispatchChatCommand: (dispatch: ChatbotDispatch) => Promise<void> = async () => {};
   const chatbot = new TwitchChatbot({
     dataDirectory: options.dataDirectory,
@@ -190,6 +193,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await alertHistory.initialize();
   const chatOverlay = new TempestChatOverlay(options.dataDirectory);
   await chatOverlay.initialize();
+  const emoteWall = new TempestEmoteWall(options.dataDirectory, options.emoteProviderFetchImplementation);
+  await emoteWall.initialize();
+  const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory);
+  await twitchExperiences.initialize();
   let alertQueue: TempestAlertQueue | undefined;
   let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
@@ -378,6 +385,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     workflowEngine!.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
     broadcastSystemEvent(event.topic, event);
     chatOverlay.push(event);
+    emoteWall.push(event);
+    twitchExperiences.ingest(event);
+    if (event.topic === 'viewer.raid.received') {
+      const raidAutomation = await chatbot.processRaidEvent(event);
+      workflowEngine!.recordExternalEvent('chatbot.raid-automation', raidAutomation.error ? 'warning' : 'success', raidAutomation.error || `Raid automation handled ${event.payload.fromBroadcasterName}.`, { raidAutomation });
+    }
     const twitchVisual = twitchVisualAlerts.findForEvent(event);
     if (twitchVisual?.enabled) await queueTwitchAlert(twitchVisual, event, 'twitch.chat');
   };
@@ -401,7 +414,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const syncChatbotConnection = async (): Promise<void> => {
     const twitchStatus = twitchGateway.status();
     await chatbot.setClientId(twitchStatus.clientId || '');
-    await chatbot.connectChannel(twitchGateway.connectionAuthorization());
+    const authorization = twitchGateway.connectionAuthorization();
+    await chatbot.connectChannel(authorization);
+    await emoteWall.setChannel(authorization?.channelId || '');
   };
 
   const triggerSoundAlert = async (idOrCue: string, request: TempestSoundAlertTriggerRequest) => {
@@ -511,6 +526,42 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         chatOverlay.connect(response);
         return;
       }
+      if (request.method === 'GET' && requestUrl.pathname === '/emote-wall') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Emote Wall is available only on this computer.' });
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'text/html; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' https:;");
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        return response.end(emoteWall.page());
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/emote-wall/events') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Emote Wall is available only on this computer.' });
+        emoteWall.connect(response);
+        return;
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'text/html; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self';");
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        return response.end(twitchExperiences.page());
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences/events') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
+        twitchExperiences.connect(response);
+        return;
+      }
+      const emoteMediaMatch = requestUrl.pathname.match(/^\/emote-wall\/media\/([a-f0-9]{32})$/);
+      if (request.method === 'GET' && emoteMediaMatch) {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Emote Wall media is available only on this computer.' });
+        try {
+          if (!await emoteWall.serveMedia(emoteMediaMatch[1], response)) return sendJson(response, 404, { error: 'Emote media is unavailable.' });
+        } catch (error) { return sendJson(response, 502, { error: error instanceof Error ? error.message : 'Emote media could not be loaded.' }); }
+        return;
+      }
       const visualMediaMatch = requestUrl.pathname.match(/^\/visual-alerts\/media\/([^/]+)$/);
       if (request.method === 'GET' && visualMediaMatch) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Visual Alerts overlay is available only on this computer.' });
@@ -618,6 +669,39 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         chatOverlay.clear();
         return sendJson(response, 200, chatOverlay.status(`${runtime.baseUrl}/chat-overlay`));
       }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/emote-wall') {
+        return sendJson(response, 200, emoteWall.status(`${runtime.baseUrl}/emote-wall`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/settings') {
+        const settings = await emoteWall.update(await readJson(request));
+        return sendJson(response, 200, { settings });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/preview') {
+        return sendJson(response, 202, { items: emoteWall.preview() });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/pyramid/preview') {
+        return sendJson(response, 202, { pyramid: emoteWall.previewPyramid() });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/providers/refresh') {
+        await emoteWall.refreshProviders();
+        return sendJson(response, 200, emoteWall.status(`${runtime.baseUrl}/emote-wall`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/clear') {
+        emoteWall.clear();
+        return sendJson(response, 200, emoteWall.status(`${runtime.baseUrl}/emote-wall`));
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/twitch-experiences') return sendJson(response, 200, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`));
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/twitch-experiences/settings') {
+        const settings = await twitchExperiences.update(await readJson(request));
+        return sendJson(response, 200, { settings });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/twitch-experiences/preview') {
+        const body = await readJson(request) as { kind?: unknown };
+        if (!['hype-train','raid-portal','goal-overlay'].includes(String(body.kind || ''))) throw new Error('A valid Twitch Experience preview kind is required.');
+        twitchExperiences.preview(body.kind as 'hype-train'|'raid-portal'|'goal-overlay');
+        return sendJson(response, 202, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/twitch-experiences/clear') { twitchExperiences.clear(); return sendJson(response, 200, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`)); }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/visual-alerts/twitch') {
         return sendJson(response, 200, { alerts: twitchVisualAlerts.list() });
       }
@@ -850,6 +934,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/test') {
         return sendJson(response, 200, await chatbot.testCommand(await readJson(request)));
       }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/automod/test') {
+        return sendJson(response, 200, await chatbot.testAutoMod(await readJson(request)));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/raid/test') {
+        return sendJson(response, 200, await chatbot.testRaidAutomation(await readJson(request)));
+      }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/twitch/events') {
         const ingestion = twitchGateway.ingest(await readJson(request));
         const event = ingestion.event;
@@ -857,9 +947,19 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           workflowEngine.recordExternalEvent('integration.event.duplicate', 'info', `Duplicate Twitch event ${event.id} was ignored.`, { eventId: event.id, topic: event.topic });
           return sendJson(response, 200, { accepted: false, duplicate: true, eventId: event.id });
         }
+        if (event.topic === 'viewer.interaction.requested') {
+          const access = await chatbot.authorizeInteraction(event);
+          if (!access.allowed) {
+            workflowEngine.recordExternalEvent('viewer.interaction.denied', 'warning', access.reason || 'Viewer interaction access was denied.', { eventId: event.id, viewerId: event.viewer?.id, accessCode: access.code });
+            return sendJson(response, 403, { accepted: false, error: access.reason, code: access.code.replaceAll('-', '_'), eventId: event.id });
+          }
+        }
         workflowEngine.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
         broadcastSystemEvent(event.topic, event);
         chatOverlay.push(event);
+        emoteWall.push(event);
+        twitchExperiences.ingest(event);
+        const raidAutomation = event.topic === 'viewer.raid.received' ? await chatbot.processRaidEvent(event) : undefined;
 
         const action = typeof event.payload.action === 'string' ? event.payload.action : undefined;
         const configuredAlert = typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
@@ -882,7 +982,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           : event.topic === 'viewer.reward.redeemed' ? 'twitch.channel-points'
             : event.topic === 'viewer.cheer.received' && action ? 'twitch.cheer' : undefined;
         const workflow = triggerType && action ? registry.listWorkflows().find((entry) => entry.enabled && entry.trigger.type === triggerType && entry.trigger.action === action) : undefined;
-        if (!workflow) return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id });
+        if (!workflow) return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, ...(raidAutomation ? { raidAutomation } : {}) });
 
         const run = await workflowEngine.trigger(workflow.id, {
           source: event.topic === 'viewer.reward.redeemed' ? 'twitch.channel-points' : event.topic === 'viewer.cheer.received' ? 'twitch.cheer' : 'twitch.extension',
@@ -1045,6 +1145,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       visualAlerts.close();
       twitchAlertOverlay.close();
       chatOverlay.close();
+      emoteWall.close();
+      twitchExperiences.close();
+      twitchGateway.close();
       workflowEngine?.close();
       for (const client of clients.values()) client.socket.close(1001, 'Tempest Bridge shutting down');
       await new Promise<void>((resolve, reject) => webSockets.close((error) => error ? reject(error) : resolve()));

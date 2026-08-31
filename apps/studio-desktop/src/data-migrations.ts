@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const CURRENT_STUDIO_DATA_VERSION = 3;
+export const CURRENT_STUDIO_DATA_VERSION = 4;
 
 export interface StudioDataMigrationStatus {
   schemaVersion: 1;
@@ -29,6 +29,8 @@ const snapshotFiles = [
   ['twitch-integration', 'bridge', 'twitch-integration.json'],
   ['interaction-alerts', 'bridge', 'sound-alerts.json'],
   ['chat-overlay', 'bridge', 'chat-overlay.json'],
+  ['emote-wall', 'bridge', 'emote-wall.json'],
+  ['twitch-experiences', 'bridge', 'twitch-experiences.json'],
   ['panel-design', 'twitch-panel-design.json']
 ] as const;
 
@@ -130,6 +132,7 @@ export async function runStudioDataMigrations(input: { userDataDirectory: string
     await migrateTwitchAlertCatalog(input.userDataDirectory, 'runtime-fields');
     appliedMigrations.push('3: remove transient alert playback selections');
   }
+  if (startingVersion < 4) appliedMigrations.push('4: register Twitch Experiences settings');
   const updatedAt = new Date().toISOString();
   const next: StoredMigrationState = {
     schemaVersion: 1,

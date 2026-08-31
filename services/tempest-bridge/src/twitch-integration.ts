@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { WebSocket } from 'ws';
 import {
   normalizedTwitchEventTopics,
   TempestNormalizedTwitchEvent,
@@ -9,6 +10,7 @@ import {
 export const defaultTwitchScopes = [
   'bits:read',
   'channel:read:hype_train',
+  'channel:read:goals',
   'channel:read:polls',
   'channel:read:predictions',
   'channel:read:redemptions',
@@ -62,6 +64,7 @@ export interface TwitchIntegrationStatus {
     state: 'not-configured' | 'authorization-required' | 'authorization-pending' | 'authorized' | 'refreshing' | 'expired' | 'error';
     tokenExpiresAt?: string;
     scopes: string[];
+    missingScopes?: string[];
     storage: 'operating-system-credential-vault' | 'unavailable';
     account?: { userId: string; login: string };
   };
@@ -71,6 +74,7 @@ export interface TwitchIntegrationStatus {
     extensionRelay: 'not-configured' | 'disconnected' | 'connecting' | 'connected' | 'error';
   };
   normalizedTopics: readonly string[];
+  eventSubFeatures: { raidPortal: boolean; hypeTrain: boolean; goals: boolean };
   rewardMappings: Record<string, string>;
   lastEventAt?: string;
   acceptedEvents: number;
@@ -83,6 +87,7 @@ export interface TwitchIntegrationGatewayOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
+  onEvent?: (event: TempestNormalizedTwitchEvent) => void | Promise<void>;
 }
 
 const emptyConfiguration = (): TwitchConfigurationDocument => ({
@@ -99,6 +104,53 @@ function validClientId(value: unknown): value is string {
 
 function validAction(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(value);
+}
+
+function object(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+export function normalizeTwitchEventSubNotification(subscriptionType: string, event: Record<string, unknown>, messageId: string, occurredAt: string): TempestNormalizedTwitchEvent | undefined {
+  const channel = {
+    id: String(event.broadcaster_user_id || event.to_broadcaster_user_id || ''),
+    login: String(event.broadcaster_user_login || event.to_broadcaster_user_login || ''),
+    displayName: String(event.broadcaster_user_name || event.to_broadcaster_user_name || '')
+  };
+  if (subscriptionType === 'channel.raid') {
+    return {
+      schemaVersion: 1, id: messageId, topic: 'viewer.raid.received', occurredAt, source: 'twitch', channel,
+      viewer: { id: String(event.from_broadcaster_user_id || ''), login: String(event.from_broadcaster_user_login || ''), displayName: String(event.from_broadcaster_user_name || '') },
+      payload: { fromBroadcasterId: String(event.from_broadcaster_user_id || ''), fromBroadcasterName: String(event.from_broadcaster_user_name || 'A raider'), viewers: Math.max(0, Number(event.viewers) || 0) }
+    };
+  }
+  if (subscriptionType.startsWith('channel.hype_train.')) {
+    const phase = subscriptionType.split('.').at(-1) || 'progress';
+    const contributions = Array.isArray(event.top_contributions) ? event.top_contributions.flatMap((entry) => {
+      const item = object(entry); if (!item) return [];
+      return [{ userId: String(item.user_id || ''), userName: String(item.user_name || ''), type: String(item.type || 'other'), total: Math.max(0, Number(item.total) || 0) }];
+    }).slice(0, 10) : [];
+    return {
+      schemaVersion: 1, id: messageId, topic: 'channel.hype-train.updated', occurredAt, source: 'twitch', channel,
+      payload: {
+        phase, hypeTrainId: String(event.id || ''), level: Math.max(0, Number(event.level) || 0), total: Math.max(0, Number(event.total) || 0),
+        progress: Math.max(0, Number(event.progress) || 0), goal: Math.max(0, Number(event.goal) || 0), topContributions: contributions,
+        startedAt: String(event.started_at || ''), expiresAt: String(event.expires_at || ''), endedAt: String(event.ended_at || ''),
+        type: String(event.type || 'regular'), isSharedTrain: event.is_shared_train === true
+      }
+    };
+  }
+  if (subscriptionType.startsWith('channel.goal.')) {
+    const phase = subscriptionType.split('.').at(-1) || 'progress';
+    return {
+      schemaVersion: 1, id: messageId, topic: 'channel.goal.updated', occurredAt, source: 'twitch', channel,
+      payload: {
+        phase, goalId: String(event.id || ''), type: String(event.type || 'custom'), description: String(event.description || 'Channel Goal').slice(0, 300),
+        currentAmount: Math.max(0, Number(event.current_amount) || 0), targetAmount: Math.max(0, Number(event.target_amount) || 0),
+        startedAt: String(event.started_at || ''), endedAt: String(event.ended_at || ''), isAchieved: event.is_achieved === true
+      }
+    };
+  }
+  return undefined;
 }
 
 export function describeTwitchOAuthError(message: unknown, fallback: string): string {
@@ -124,6 +176,12 @@ export class TwitchIntegrationGateway {
   private extensionRelayError?: string;
   private eventSubState: TwitchIntegrationStatus['connections']['eventSub'] = 'disconnected';
   private chatState: TwitchIntegrationStatus['connections']['chat'] = 'disconnected';
+  private eventSubSocket: WebSocket | null = null;
+  private eventSubReconnectTimer?: NodeJS.Timeout;
+  private eventSubSilenceTimer?: NodeJS.Timeout;
+  private eventSubStopping = false;
+  private inheritedEventSubSockets = new Set<WebSocket>();
+  private activeEventSubTypes = new Set<string>();
   private readonly credentialStore?: TwitchCredentialStore;
   private readonly request: typeof fetch;
 
@@ -143,7 +201,7 @@ export class TwitchIntegrationGateway {
       this.configuration = {
         schemaVersion: 1,
         clientId: validClientId(parsed.clientId) ? parsed.clientId : '',
-        scopes: Array.isArray(parsed.scopes) && parsed.scopes.every((scope) => typeof scope === 'string') ? [...new Set(parsed.scopes)] : [...defaultTwitchScopes],
+        scopes: Array.isArray(parsed.scopes) && parsed.scopes.every((scope) => typeof scope === 'string') ? [...new Set([...parsed.scopes, ...defaultTwitchScopes])] : [...defaultTwitchScopes],
         rewardMappings: parsed.rewardMappings && typeof parsed.rewardMappings === 'object'
           ? Object.fromEntries(Object.entries(parsed.rewardMappings).filter(([rewardId, action]) => Boolean(rewardId) && validAction(action)))
           : {},
@@ -173,11 +231,17 @@ export class TwitchIntegrationGateway {
         state: this.oauthState,
         tokenExpiresAt: this.tokens?.expiresAt,
         scopes: this.tokens?.scopes || this.configuration.scopes,
+        missingScopes: this.tokens ? this.configuration.scopes.filter((scope) => !this.tokens?.scopes.includes(scope)) : undefined,
         storage: this.credentialStore?.available ? 'operating-system-credential-vault' : 'unavailable',
         account: this.identity ? { userId: this.identity.userId, login: this.identity.login } : undefined
       },
       connections: { eventSub: this.eventSubState, chat: this.chatState, extensionRelay: this.extensionRelayState },
       normalizedTopics: normalizedTwitchEventTopics,
+      eventSubFeatures: {
+        raidPortal: this.activeEventSubTypes.has('channel.raid'),
+        hypeTrain: this.activeEventSubTypes.has('channel.hype_train.progress'),
+        goals: this.activeEventSubTypes.has('channel.goal.progress')
+      },
       rewardMappings: { ...this.configuration.rewardMappings },
       lastEventAt: this.lastEventAt,
       acceptedEvents: this.acceptedEvents,
@@ -192,8 +256,7 @@ export class TwitchIntegrationGateway {
     this.extensionRelayError = error;
   }
 
-  setChatConnectionState(eventSub: TwitchIntegrationStatus['connections']['eventSub'], chat: TwitchIntegrationStatus['connections']['chat']): void {
-    this.eventSubState = eventSub;
+  setChatConnectionState(_eventSub: TwitchIntegrationStatus['connections']['eventSub'], chat: TwitchIntegrationStatus['connections']['chat']): void {
     this.chatState = chat;
   }
 
@@ -215,7 +278,7 @@ export class TwitchIntegrationGateway {
       return [rewardId.trim(), action];
     }));
     const clientChanged = this.configuration.clientId !== source.clientId;
-    this.configuration = { schemaVersion: 1, clientId: source.clientId, scopes: [...new Set(scopes)], rewardMappings, updatedAt: new Date().toISOString() };
+    this.configuration = { schemaVersion: 1, clientId: source.clientId, scopes: [...new Set([...scopes, ...defaultTwitchScopes])], rewardMappings, updatedAt: new Date().toISOString() };
     await this.persistConfiguration();
     if (clientChanged) await this.clearAuthorization(true);
     this.setOauthState(this.tokens ? 'authorized' : 'authorization-required');
@@ -305,10 +368,12 @@ export class TwitchIntegrationGateway {
     await this.credentialStore?.save(this.tokens);
     this.lastError = undefined;
     this.setOauthState('authorized');
+    await this.ensureEventSubConnection();
     return this.status();
   }
 
   async disconnect(): Promise<TwitchIntegrationStatus> {
+    this.stopEventSub();
     if (this.tokens && this.configuration.clientId) {
       const body = new URLSearchParams({ client_id: this.configuration.clientId, token: this.tokens.accessToken });
       await this.request('https://id.twitch.tv/oauth2/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }).catch(() => undefined);
@@ -336,6 +401,131 @@ export class TwitchIntegrationGateway {
     return { event, duplicate: false };
   }
 
+  close(): void { this.stopEventSub(); }
+
+  private async ensureEventSubConnection(): Promise<void> {
+    if (!this.options.onEvent || !this.tokens || !this.identity || !this.configuration.clientId || this.oauthState !== 'authorized' || this.eventSubSocket) return;
+    this.eventSubStopping = false;
+    this.eventSubState = 'connecting';
+    this.openEventSubSocket('wss://eventsub.wss.twitch.tv/ws');
+  }
+
+  private openEventSubSocket(url: string, inheritsSubscriptions = false): void {
+    const socket = new WebSocket(url);
+    if (inheritsSubscriptions) this.inheritedEventSubSockets.add(socket);
+    this.eventSubSocket = socket;
+    socket.on('message', (data) => void this.handleEventSubMessage(socket, data.toString()).catch((error) => {
+      if (this.eventSubSocket !== socket) return;
+      this.lastError = `Twitch EventSub: ${(error as Error).message}`;
+      this.eventSubState = 'error';
+      socket.close(1011, 'EventSub message handling failed');
+    }));
+    socket.on('error', (error) => {
+      if (this.eventSubSocket !== socket) return;
+      this.lastError = `Twitch EventSub connection error: ${error.message}`;
+      this.eventSubState = 'error';
+    });
+    socket.on('close', () => {
+      this.inheritedEventSubSockets.delete(socket);
+      if (this.eventSubSocket !== socket) return;
+      this.eventSubSocket = null;
+      this.clearEventSubSilenceTimer();
+      this.activeEventSubTypes.clear();
+      if (this.eventSubStopping) return;
+      this.eventSubState = 'disconnected';
+      clearTimeout(this.eventSubReconnectTimer);
+      this.eventSubReconnectTimer = setTimeout(() => void this.ensureEventSubConnection(), 5000);
+      this.eventSubReconnectTimer.unref?.();
+    });
+  }
+
+  private async handleEventSubMessage(socket: WebSocket, raw: string): Promise<void> {
+    if (this.eventSubSocket !== socket) return;
+    const message = JSON.parse(raw) as {
+      metadata?: { message_id?: string; message_type?: string; message_timestamp?: string; subscription_type?: string };
+      payload?: { session?: { id?: string; keepalive_timeout_seconds?: number; reconnect_url?: string }; event?: Record<string, unknown> };
+    };
+    const type = message.metadata?.message_type;
+    this.resetEventSubSilenceTimer(Number(message.payload?.session?.keepalive_timeout_seconds) || 30);
+    if (type === 'session_welcome') {
+      const sessionId = message.payload?.session?.id;
+      if (!sessionId) throw new Error('Welcome message did not include a session ID.');
+      if (!this.inheritedEventSubSockets.has(socket)) await this.subscribeEventSubFeatures(sessionId);
+      this.eventSubState = 'connected';
+      return;
+    }
+    if (type === 'session_reconnect' && message.payload?.session?.reconnect_url) {
+      const previous = this.eventSubSocket;
+      this.eventSubSocket = null;
+      this.openEventSubSocket(message.payload.session.reconnect_url, true);
+      previous?.close(1000, 'Twitch requested reconnect');
+      return;
+    }
+    if (type === 'revocation') {
+      this.lastError = `Twitch revoked ${message.metadata?.subscription_type || 'an EventSub subscription'}. Reconnect Twitch if authorization changed.`;
+      return;
+    }
+    if (type !== 'notification' || !message.metadata?.subscription_type || !message.payload?.event) return;
+    const normalized = normalizeTwitchEventSubNotification(
+      message.metadata.subscription_type,
+      message.payload.event,
+      String(message.metadata.message_id || globalThis.crypto.randomUUID()),
+      String(message.metadata.message_timestamp || new Date().toISOString())
+    );
+    if (normalized) await this.options.onEvent?.(normalized);
+  }
+
+  private async subscribeEventSubFeatures(sessionId: string): Promise<void> {
+    if (!this.tokens || !this.identity) return;
+    this.activeEventSubTypes.clear();
+    const definitions: Array<{ type: string; version: string; scope?: string; condition: Record<string, string> }> = [
+      { type: 'channel.raid', version: '1', condition: { to_broadcaster_user_id: this.identity.userId } },
+      ...['begin', 'progress', 'end'].map((phase) => ({ type: `channel.hype_train.${phase}`, version: '2', scope: 'channel:read:hype_train', condition: { broadcaster_user_id: this.identity!.userId } })),
+      ...['begin', 'progress', 'end'].map((phase) => ({ type: `channel.goal.${phase}`, version: '1', scope: 'channel:read:goals', condition: { broadcaster_user_id: this.identity!.userId } }))
+    ];
+    const failures: string[] = [];
+    for (const definition of definitions) {
+      if (definition.scope && !this.tokens.scopes.includes(definition.scope)) { failures.push(`${definition.type} needs ${definition.scope}`); continue; }
+      const response = await this.request('https://api.twitch.tv/helix/eventsub/subscriptions', {
+        method: 'POST',
+        headers: { 'Client-Id': this.configuration.clientId, Authorization: `Bearer ${this.tokens.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: definition.type, version: definition.version, condition: definition.condition, transport: { method: 'websocket', session_id: sessionId } })
+      });
+      if (response.status === 202) this.activeEventSubTypes.add(definition.type);
+      else {
+        const body = await response.json().catch(() => ({})) as { message?: string };
+        failures.push(`${definition.type}: ${body.message || response.status}`);
+      }
+    }
+    this.lastError = failures.length ? `Some Twitch experiences are unavailable: ${failures.join('; ')}`.slice(0, 800) : undefined;
+  }
+
+  private resetEventSubSilenceTimer(seconds: number): void {
+    this.clearEventSubSilenceTimer();
+    this.eventSubSilenceTimer = setTimeout(() => {
+      this.lastError = 'Twitch EventSub keepalive timed out; reconnecting.';
+      this.eventSubSocket?.close(4000, 'Keepalive timed out');
+    }, (Math.max(10, seconds) + 10) * 1000);
+    this.eventSubSilenceTimer.unref?.();
+  }
+
+  private clearEventSubSilenceTimer(): void {
+    if (this.eventSubSilenceTimer) clearTimeout(this.eventSubSilenceTimer);
+    this.eventSubSilenceTimer = undefined;
+  }
+
+  private stopEventSub(): void {
+    this.eventSubStopping = true;
+    clearTimeout(this.eventSubReconnectTimer);
+    this.eventSubReconnectTimer = undefined;
+    this.clearEventSubSilenceTimer();
+    this.activeEventSubTypes.clear();
+    const socket = this.eventSubSocket;
+    this.eventSubSocket = null;
+    socket?.close(1000, 'Twitch disconnected');
+    this.eventSubState = 'disconnected';
+  }
+
   private async refreshAuthorization(): Promise<void> {
     if (!this.tokens?.refreshToken) throw new Error('Twitch refresh token is unavailable.');
     this.setOauthState('refreshing');
@@ -353,6 +543,7 @@ export class TwitchIntegrationGateway {
   }
 
   private async clearAuthorization(clearError: boolean): Promise<void> {
+    this.stopEventSub();
     this.tokens = null;
     this.identity = null;
     this.pendingDevice = null;

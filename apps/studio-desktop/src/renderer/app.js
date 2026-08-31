@@ -7,7 +7,7 @@
     events: { title: 'Event Log', kicker: 'NORMALIZED SIGNALS' },
     soundalerts: { title: 'Interaction Alerts', kicker: 'PERFORMANCE + DANCE CATALOG' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
-    chatoverlay: { title: 'Chat Overlay', kicker: 'LOCAL STREAM CHAT' },
+    chatoverlay: { title: 'Chat + Emotes', kicker: 'LOCAL CHAT OVERLAYS' },
     twitch: { title: 'Twitch Gateway', kicker: 'STUDIO-OWNED INTEGRATION' },
     extensiondesigner: { title: 'Twitch Panel Designer', kicker: 'CHANNEL EXTENSION THEME' },
     chatbot: { title: 'Chatbot', kicker: 'STUDIO CHAT AUTOMATION' },
@@ -40,6 +40,8 @@
     twitchVisualAlerts: { alerts: [] },
     giphy: { configured: false, encryptionAvailable: false },
     chatOverlay: null,
+    emoteWall: null,
+    twitchExperiences: null,
     twitch: null,
     chatbot: null,
     radio: null,
@@ -48,6 +50,7 @@
     panelDesign: null,
     warudo: null,
     appInfo: null,
+    privacy: { streamerMode: true, captureProtection: true },
     twitchDeviceAuthorization: null,
     chatbotDeviceAuthorization: null
   };
@@ -69,7 +72,7 @@
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
     { title: 'Twitch Accounts', short: 'Broadcaster + bot' },
-    { title: 'Browser Sources', short: 'Three local URLs' },
+    { title: 'Browser Sources', short: 'Five local URLs' },
     { title: 'Canvas + Audio', short: 'OBS dimensions' },
     { title: 'Ready Check', short: 'Test before live' }
   ];
@@ -90,6 +93,48 @@
     element.classList.add('visible');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => element.classList.remove('visible'), 4200);
+  }
+
+  function renderPrivacySettings() {
+    const privacy = state.privacy || { streamerMode: true, captureProtection: true };
+    document.body.classList.toggle('streamer-privacy', privacy.streamerMode);
+    const quickToggle = $('#privacyModeButton');
+    quickToggle.textContent = privacy.streamerMode ? 'PRIVACY ON' : 'PRIVACY OFF';
+    quickToggle.setAttribute('aria-pressed', String(privacy.streamerMode));
+    quickToggle.classList.toggle('active', privacy.streamerMode);
+    $('#streamerPrivacyMode').checked = privacy.streamerMode;
+    $('#windowCaptureProtection').checked = privacy.captureProtection;
+    const fullyProtected = privacy.streamerMode && privacy.captureProtection;
+    $('#privacySettingsBadge').textContent = fullyProtected ? 'PROTECTED' : privacy.streamerMode ? 'MASKING ONLY' : privacy.captureProtection ? 'CAPTURE ONLY' : 'OFF';
+    $('#privacySettingsBadge').classList.toggle('offline', !fullyProtected);
+    $('#privacySettingsStatus').textContent = fullyProtected
+      ? 'Privacy Shield is active.'
+      : 'One or more privacy layers are disabled.';
+  }
+
+  async function persistPrivacySettings(next) {
+    state.privacy = await window.tempestStudio.savePrivacySettings({
+      streamerMode: Boolean(next.streamerMode),
+      captureProtection: Boolean(next.captureProtection)
+    });
+    renderPrivacySettings();
+  }
+
+  async function togglePrivacyMode() {
+    try {
+      await persistPrivacySettings({ ...state.privacy, streamerMode: !state.privacy.streamerMode });
+      toast(state.privacy.streamerMode ? 'Privacy masking enabled.' : 'Privacy masking disabled. Sensitive values may be visible.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function savePrivacyControls() {
+    try {
+      await persistPrivacySettings({
+        streamerMode: $('#streamerPrivacyMode').checked,
+        captureProtection: $('#windowCaptureProtection').checked
+      });
+      toast('Privacy settings saved.');
+    } catch (error) { toast(error.message, true); }
   }
 
   function showSection(name) {
@@ -247,12 +292,14 @@
     const twitchSourceReady = Boolean(state.visualAlerts?.twitch?.connectedClients) || flags.twitchSource === true;
     const interactionSourceReady = Boolean(state.visualAlerts?.interaction?.connectedClients) || flags.interactionSource === true;
     const chatSourceReady = Boolean(state.chatOverlay?.connectedClients) || flags.chatSource === true;
+    const emoteWallSourceReady = Boolean(state.emoteWall?.connectedClients) || flags.emoteWallSource === true;
+    const twitchExperienceSourceReady = Boolean(state.twitchExperiences?.connectedClients) || flags.twitchExperienceSource === true;
     const browserSourcesReady = twitchSourceReady && interactionSourceReady;
     const canvasReady = Boolean(broadcastCanvasProfile()) || flags.canvasConfigured === true;
     const liveTestReady = Number(state.chatbot?.commandsTriggered || 0) > 0 || flags.alertTested === true;
     const checks = [Boolean(state.health), broadcasterReady && chatbotReady, browserSourcesReady, canvasReady, liveTestReady];
     return {
-      preferences, flags, broadcasterReady, chatbotReady, twitchSourceReady, interactionSourceReady, chatSourceReady,
+      preferences, flags, broadcasterReady, chatbotReady, twitchSourceReady, interactionSourceReady, chatSourceReady, emoteWallSourceReady, twitchExperienceSourceReady,
       browserSourcesReady, canvasReady, liveTestReady, canvasProfile: activeCanvasProfile(), checks, readyCount: checks.filter(Boolean).length
     };
   }
@@ -275,7 +322,7 @@
   }
 
   function onboardingSourceCard(title, url, detail, label) {
-    return `<article class="onboarding-source-card"><div><strong>${escapeHtml(title)}</strong><code>${escapeHtml(url)}</code><small>${escapeHtml(detail)}</small></div>${copyButton(url, label)}</article>`;
+    return `<article class="onboarding-source-card"><div><strong>${escapeHtml(title)}</strong><code data-sensitive>${escapeHtml(url)}</code><small>${escapeHtml(detail)}</small></div>${copyButton(url, label)}</article>`;
   }
 
   function onboardingFlag(name, checked, title, detail) {
@@ -288,6 +335,8 @@
     const twitchUrl = state.visualAlerts?.twitch?.url || `${baseUrl}/visual-alerts/twitch`;
     const interactionUrl = state.visualAlerts?.interaction?.url || `${baseUrl}/visual-alerts/interactions`;
     const chatUrl = state.chatOverlay?.url || `${baseUrl}/chat-overlay`;
+    const emoteWallUrl = state.emoteWall?.url || `${baseUrl}/emote-wall`;
+    const twitchExperienceUrl = state.twitchExperiences?.url || `${baseUrl}/twitch-experiences`;
     const broadcasterLogin = state.twitch?.oauth?.account?.login;
     const botLogin = state.chatbot?.oauth?.account?.login;
     const canvas = setup.canvasProfile;
@@ -301,9 +350,9 @@
     } else if (onboardingStep === 1) {
       markup = `<div class="onboarding-intro"><p>Twitch uses two deliberately separate authorizations: the broadcaster owns channel events, while the bot account reads and replies in chat.</p><div class="onboarding-check-grid">${setupCheckCard(setup.broadcasterReady, 'Broadcaster account', setup.broadcasterReady ? `@${broadcasterLogin} is authorized.` : 'A Public Twitch application Client ID and broadcaster authorization are required.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot account', setup.chatbotReady ? `@${botLogin} is connected for EventSub and chat output.` : 'Connect a second Twitch user account in the isolated sign-in window.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="twitch">Open Twitch Gateway</button><button class="secondary-button" type="button" data-onboarding-go="chatbot">Open Chatbot Setup</button></div><div class="onboarding-note"><strong>Why two accounts?</strong> The broadcaster remains the channel owner. The secondary account gives chat automation its own visible identity and keeps those credentials isolated.</div></div>`;
     } else if (onboardingStep === 2) {
-      markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Twitch Experiences · optional', twitchExperienceUrl, 'Hype Train takeover, Raid Portal, and persistent goal progress.', 'Twitch Experiences browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}${onboardingSourceCard('Emote Wall · optional', emoteWallUrl, 'Twitch chat emotes bounce independently across the canvas.', 'Emote Wall browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('twitchExperienceSource', setup.twitchExperienceSourceReady, 'Twitch Experiences added · optional', 'Use the base canvas size so takeovers and portal effects can use the full scene.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}${onboardingFlag('emoteWallSource', setup.emoteWallSourceReady, 'Emote Wall added · optional', 'Keep it as its own source so the effect can be hidden per scene.')}</div></div>`;
     } else if (onboardingStep === 3) {
-      markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Twitch Alerts, Interaction Alerts, and Chat Overlay use ${canvas.baseWidth} × ${canvas.baseHeight} Browser Sources.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Twitch Alerts, Interaction Alerts, Chat Overlay, and Emote Wall use ${canvas.baseWidth} × ${canvas.baseHeight} Browser Sources.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
     } else {
       const allReady = setup.readyCount === onboardingSteps.length;
       markup = `<div class="onboarding-complete"><i>${allReady ? '✓' : `${setup.readyCount}/${onboardingSteps.length}`}</i><h3>${allReady ? 'Studio is ready for an on-air test' : 'Finish the remaining checks when ready'}</h3><p>${allReady ? 'Your broadcaster, bot, sources, canvas, and live route have all been confirmed.' : 'You can finish for now and reopen this guide from Studio Home. The status card will continue showing anything that needs attention.'}</p></div><div class="onboarding-check-grid">${setupCheckCard(setup.liveTestReady, 'Command or alert received', setup.liveTestReady ? `${state.chatbot?.commandsTriggered || 0} live chatbot command${Number(state.chatbot?.commandsTriggered || 0) === 1 ? '' : 's'} processed.` : 'Send !song in Twitch chat or preview an alert.')}${setupCheckCard(Boolean(state.safety?.armed), 'Interaction safety armed', state.safety?.armed ? 'Viewer triggers are allowed.' : 'Arm interactions before testing viewer-triggered actions.')}${setupCheckCard(Boolean(state.visualAlerts?.queue) && !state.visualAlerts?.queue?.active, 'Alert queue standing by', state.visualAlerts?.queue?.active ? `Currently playing ${state.visualAlerts.queue.active.name}.` : 'The shared queue is idle and ready.')}${setupCheckCard(Boolean(state.health), 'Bridge online', state.health ? 'Local services are responding.' : 'Bridge connection needs attention.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="chatbot">Test a Command</button><button class="secondary-button" type="button" data-onboarding-go="visualalerts">Preview Twitch Alert</button><button class="secondary-button" type="button" data-onboarding-go="soundalerts">Test Interaction Alert</button></div><div class="onboarding-confirm-list">${onboardingFlag('alertTested', setup.liveTestReady, 'I completed a real command or alert test', 'This may be detected automatically when Studio processes a live chatbot command.')}</div>`;
@@ -499,10 +548,10 @@
     $('#visualAlertStateBadge').textContent = twitch?.state === 'showing' ? 'ALERT ACTIVE' : 'TWITCH SOURCE READY';
     $('#visualAlertStateBadge').classList.toggle('offline', !twitch);
     $('#visualAlertOverlayStatus').innerHTML = twitch
-      ? `<strong>Twitch Alert source:</strong> <span class="copyable-value"><code>${escapeHtml(twitch.url)}</code>${copyButton(twitch.url, 'Twitch Alert browser-source URL')}</span> · ${twitch.connectedClients ? `${twitch.connectedClients} connected` : 'waiting for Broadcast'} <button class="inline-note-button" data-visual-alert-clear="true" ${outputs.state !== 'showing' ? 'disabled' : ''}>Clear Alerts</button>`
+      ? `<strong>Twitch Alert source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(twitch.url)}</code>${copyButton(twitch.url, 'Twitch Alert browser-source URL')}</span> · ${twitch.connectedClients ? `${twitch.connectedClients} connected` : 'waiting for Broadcast'} <button class="inline-note-button" data-visual-alert-clear="true" ${outputs.state !== 'showing' ? 'disabled' : ''}>Clear Alerts</button>`
       : '<strong>Twitch Alert source:</strong> Studio is preparing the local overlay.';
     $('#interactionAlertOverlayStatus').innerHTML = interaction
-      ? `<strong>Interaction Alert source:</strong> <span class="copyable-value"><code>${escapeHtml(interaction.url)}</code>${copyButton(interaction.url, 'Interaction Alert browser-source URL')}</span> · ${interaction.connectedClients ? `${interaction.connectedClients} connected` : 'waiting for Broadcast'} · route this source off the YouTube/VOD track`
+      ? `<strong>Interaction Alert source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(interaction.url)}</code>${copyButton(interaction.url, 'Interaction Alert browser-source URL')}</span> · ${interaction.connectedClients ? `${interaction.connectedClients} connected` : 'waiting for Broadcast'} · route this source off the YouTube/VOD track`
       : '<strong>Interaction Alert source:</strong> Studio is preparing the local overlay.';
   }
 
@@ -572,7 +621,7 @@
     $('#chatOverlayStateBadge').textContent = overlay ? 'OVERLAY READY' : 'CHECKING';
     $('#chatOverlayStateBadge').classList.toggle('offline', !overlay);
     $('#chatOverlayBrowserStatus').innerHTML = overlay
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Chat Overlay browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
+      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Chat Overlay browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local chat overlay.';
     const messages = overlay?.messages || [];
     const monitor = $('#chatOverlayMessages');
@@ -585,6 +634,72 @@
       $('#chatOverlayOpacity').value = Math.round((configuration.backgroundOpacity || 0.84) * 100);
       $('#chatOverlayAccent').value = configuration.accent || '#54f2eb';
       $('#chatOverlayShowRoles').checked = configuration.showRoles !== false;
+    }
+  }
+
+  function renderEmoteWall({ settings = false } = {}) {
+    const wall = state.emoteWall;
+    const configuration = wall?.settings || {};
+    $('#emoteWallStateBadge').textContent = !wall ? 'CHECKING' : configuration.enabled === false ? 'DISABLED' : 'WALL READY';
+    $('#emoteWallStateBadge').classList.toggle('offline', !wall || configuration.enabled === false);
+    $('#emoteWallActiveCount').textContent = `${wall?.activeCount || 0} ACTIVE`;
+    $('#emoteWallPyramidStatus').textContent = configuration.enablePyramids === false ? 'PYRAMIDS OFF' : wall?.pyramid?.building ? `BUILDING ${wall.pyramid.step}/5` : `${wall?.pyramid?.completed || 0} PYRAMIDS`;
+    $('#emoteWallPyramidStatus').classList.toggle('installed', configuration.enablePyramids !== false);
+    $('#emoteWallBrowserStatus').innerHTML = wall
+      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(wall.url)}</code>${copyButton(wall.url, 'Emote Wall browser-source URL')}</span> · ${wall.connectedClients ? `${wall.connectedClients} connected` : 'waiting for Broadcast'}`
+      : '<strong>Browser Source:</strong> Studio is preparing the local Emote Wall.';
+    const providerLabels = { seventv: '7TV', bttv: 'BetterTTV', ffz: 'FrankerFaceZ' };
+    $('#emoteProviderCatalogCount').textContent = `${wall?.providerCatalogCount || 0} CATALOGED`;
+    $('#emoteProviderStatusGrid').innerHTML = (wall?.providers || []).map((provider) => {
+      const stateLabel = provider.state === 'ready' ? 'READY' : provider.state === 'waiting' ? 'WAITING FOR TWITCH' : provider.state === 'error' ? 'ERROR' : 'OFF';
+      const detail = provider.state === 'ready' ? `${provider.emoteCount || 0} exact-name emotes loaded` : provider.state === 'error' ? escapeHtml(provider.error || 'Catalog refresh failed.') : provider.state === 'waiting' ? 'Connect Twitch, then refresh.' : 'Provider is opt-in.';
+      return `<div class="emote-provider-status-card"><div><strong>${providerLabels[provider.id] || escapeHtml(provider.id)}</strong><span class="state-chip ${provider.state === 'ready' ? 'installed' : provider.state === 'error' ? 'error' : ''}">${stateLabel}</span></div><p>${detail}</p></div>`;
+    }).join('') || '<div class="empty-state">Provider status will appear after Studio connects.</div>';
+    if (settings && wall) {
+      $('#emoteWallEnabled').checked = configuration.enabled !== false;
+      $('#emoteWallMaxActive').value = configuration.maxActive || 18;
+      $('#emoteWallLifetime').value = Math.round((configuration.lifetimeMs || 10000) / 1000);
+      $('#emoteWallSize').value = configuration.sizePx || 96;
+      $('#emoteWallSpeed').value = configuration.speed || 100;
+      $('#emoteWallAnimated').checked = configuration.includeAnimated !== false;
+      $('#emoteWallGifs').checked = configuration.includeGifs !== false;
+      $('#emoteWallPyramids').checked = configuration.enablePyramids !== false;
+      $('#emoteWallPyramidWindow').value = Math.round((configuration.pyramidWindowMs || 20000) / 1000);
+      $('#emoteWallPyramidCooldown').value = Math.round((configuration.pyramidCooldownMs || 30000) / 1000);
+      $('#emoteWallSevenTv').checked = configuration.enableSevenTv === true;
+      $('#emoteWallBttv').checked = configuration.enableBttv === true;
+      $('#emoteWallFfz').checked = configuration.enableFfz === true;
+      $('#emoteWallProviderOrder').value = configuration.providerOrder || 'seventv,bttv,ffz';
+    }
+  }
+
+  function renderTwitchExperiences({ settings = false } = {}) {
+    const experience = state.twitchExperiences;
+    const configuration = experience?.settings || {};
+    const active = experience?.active || {};
+    const features = state.twitch?.eventSubFeatures || {};
+    const missingScopes = state.twitch?.oauth?.missingScopes || [];
+    $('#twitchExperienceBadge').textContent = !experience ? 'CHECKING' : configuration.enabled === false ? 'DISABLED' : experience.connectedClients ? 'SOURCE CONNECTED' : 'READY';
+    $('#twitchExperienceBadge').classList.toggle('offline', !experience || configuration.enabled === false);
+    $('#twitchExperienceSourceStatus').innerHTML = experience
+      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(experience.url)}</code>${copyButton(experience.url, 'Twitch Experiences browser-source URL')}</span> · ${experience.connectedClients ? `${experience.connectedClients} connected` : 'waiting for Broadcast'}`
+      : '<strong>Browser Source:</strong> Studio is preparing the Twitch Experiences canvas.';
+    const needsGoals = missingScopes.includes('channel:read:goals');
+    $('#twitchExperienceAuthorizationNote').innerHTML = needsGoals
+      ? '<strong>Reauthorization required:</strong> Disconnect and reconnect the broadcaster once to grant <code>channel:read:goals</code>. Raid Portal and existing features remain available.'
+      : `<strong>EventSub:</strong> Raid Portal ${features.raidPortal ? 'ready' : 'waiting'} · Hype Train ${features.hypeTrain ? 'ready' : 'waiting'} · Goals ${features.goals ? 'ready' : 'waiting'}.`;
+    $('#twitchExperienceHypeState').textContent = active.hypeTrain ? 'LIVE' : features.hypeTrain ? 'STANDBY' : 'WAITING';
+    $('#twitchExperienceRaidState').textContent = active.raidPortal ? 'OPEN' : features.raidPortal ? 'STANDBY' : 'WAITING';
+    $('#twitchExperienceGoalState').textContent = active.goalOverlay ? 'TRACKING' : features.goals ? 'STANDBY' : needsGoals ? 'REAUTHORIZE' : 'WAITING';
+    if (settings && experience) {
+      $('#twitchExperienceEnabled').checked = configuration.enabled !== false;
+      $('#twitchExperienceHype').checked = configuration.hypeTrainEnabled !== false;
+      $('#twitchExperienceRaid').checked = configuration.raidPortalEnabled !== false;
+      $('#twitchExperienceGoal').checked = configuration.goalOverlayEnabled !== false;
+      $('#twitchExperienceRaidDuration').value = Math.round((configuration.raidDurationMs || 12000) / 1000);
+      $('#twitchExperienceHypeAccent').value = configuration.hypeAccent || '#FF4CCF';
+      $('#twitchExperienceRaidAccent').value = configuration.raidAccent || '#54F2EB';
+      $('#twitchExperienceGoalAccent').value = configuration.goalAccent || '#A7FF5C';
     }
   }
 
@@ -723,7 +838,7 @@
     $('#twitchDeviceAuthorization').classList.toggle('hidden', !device);
     if (device) $('#twitchDeviceCode').textContent = device.userCode;
     $('#twitchSetupMessage').textContent = twitch.extensionRelayError || twitch.lastError || (authorized
-      ? `Authorized as @${account?.login || 'Twitch user'}. Extension relay: ${label(twitch.connections?.extensionRelay)}.`
+      ? state.privacy.streamerMode ? `Broadcaster authorized. Extension relay: ${label(twitch.connections?.extensionRelay)}.` : `Authorized as @${account?.login || 'Twitch user'}. Extension relay: ${label(twitch.connections?.extensionRelay)}.`
       : oauthState === 'authorization-pending' ? 'Waiting for authorization on Twitch…'
         : twitch.configured ? 'Configuration saved. Connect Twitch to authorize interaction scopes.'
           : 'Save a public Twitch application client ID to begin.');
@@ -771,6 +886,74 @@
     const device = state.chatbotDeviceAuthorization;
     $('#chatbotDeviceAuthorization').classList.toggle('hidden', !device);
     if (device) $('#chatbotDeviceCode').textContent = device.userCode;
+    const raidAutomation = chatbot.raidAutomation || {};
+    if (!$('#chatbotRaidAutomationForm').contains(document.activeElement)) {
+      $('#chatbotRaidWelcomeEnabled').checked = raidAutomation.welcomeEnabled === true;
+      $('#chatbotRaidWelcomeMessage').value = raidAutomation.welcomeMessage || '';
+      $('#chatbotRaidShoutoutEnabled').checked = raidAutomation.shoutoutEnabled === true;
+    }
+    const shoutoutReady = authorized && raidAutomation.shoutoutAuthorized === true;
+    const raidEnabled = raidAutomation.welcomeEnabled || raidAutomation.shoutoutEnabled;
+    $('#chatbotRaidBadge').textContent = !raidEnabled ? 'OFF' : !raidAutomation.shoutoutEnabled ? 'WELCOME READY' : shoutoutReady ? (raidAutomation.queuedShoutouts ? `${raidAutomation.queuedShoutouts} QUEUED` : 'READY') : 'REAUTHORIZE BOT';
+    $('#chatbotRaidBadge').classList.toggle('offline', !raidEnabled || (raidAutomation.shoutoutEnabled && !shoutoutReady));
+    $('#chatbotRaidShoutoutStatus').textContent = shoutoutReady
+      ? `Shoutout permission is authorized for @${account?.login || 'the bot'}. That account must also be a moderator in @${chatbot.channel?.login || 'your channel'}.`
+      : authorized
+        ? `Reconnect @${account?.login || 'the bot'} to add moderator:manage:shoutouts, then make that account a moderator in your channel.`
+        : 'Connect the secondary bot account, then make it a moderator in your channel for official shoutouts.';
+    const firstChatShoutouts = chatbot.firstChatShoutouts || { enabled: false, channels: [] };
+    const interactionAccess = chatbot.interactionAccess || { mode: 'everyone', allowBroadcasterAndModerators: true, assignedCreators: 0, resolvedCreators: 0 };
+    if (!$('#chatbotFirstChatShoutoutForm').contains(document.activeElement)) {
+      $('#chatbotFirstChatEnabled').checked = firstChatShoutouts.enabled === true;
+      $('#chatbotFirstChatChannels').value = (firstChatShoutouts.channels || []).join('\n');
+      $('#chatbotInteractionAccessMode').value = interactionAccess.mode || 'everyone';
+      $('#chatbotInteractionAllowStaff').checked = interactionAccess.allowBroadcasterAndModerators !== false;
+    }
+    const assignedCount = (firstChatShoutouts.channels || []).length;
+    const restrictedInteractions = interactionAccess.mode === 'assigned-creators';
+    const resolvedCreators = Number(interactionAccess.resolvedCreators || 0);
+    $('#chatbotFirstChatCount').textContent = `${assignedCount} ASSIGNED`;
+    $('#chatbotFirstChatBadge').textContent = restrictedInteractions ? (!assignedCount ? 'ADD CREATORS' : `${resolvedCreators}/${assignedCount} VERIFIED`) : firstChatShoutouts.enabled ? (shoutoutReady ? 'SHOUTOUTS READY' : 'REAUTHORIZE BOT') : 'OPEN ACCESS';
+    $('#chatbotFirstChatBadge').classList.toggle('offline', (restrictedInteractions && (!assignedCount || resolvedCreators < assignedCount)) || (firstChatShoutouts.enabled && !shoutoutReady));
+    const accessSummary = restrictedInteractions
+      ? !assignedCount ? 'Add at least one assigned Twitch creator before restricting interactions.'
+        : `${resolvedCreators} of ${assignedCount} assigned ${assignedCount === 1 ? 'creator has' : 'creators have'} a verified Twitch identity. Only verified assigned creators${interactionAccess.allowBroadcasterAndModerators !== false ? ', the broadcaster, and moderators' : ''} can trigger panel interactions.`
+      : 'Everyone can currently use enabled panel interactions.';
+    const shoutoutSummary = !firstChatShoutouts.enabled ? ' First-chat shoutouts are off.'
+      : shoutoutReady ? ` First-chat shoutouts are ready; ${firstChatShoutouts.handledSessions || 0} stream ${firstChatShoutouts.handledSessions === 1 ? 'session is' : 'sessions are'} tracked.`
+        : ' Reconnect the moderator bot with shoutout permission to use first-chat shoutouts.';
+    $('#chatbotFirstChatStatus').textContent = accessSummary + shoutoutSummary;
+    const autoMod = chatbot.autoMod || { enabled: false, allowedDomains: [], blockedTerms: [], exemptRoles: [] };
+    if (!$('#chatbotAutoModForm').contains(document.activeElement)) {
+      $('#chatbotAutoModEnabled').checked = autoMod.enabled === true;
+      $('#chatbotAutoModLinks').checked = autoMod.linkProtectionEnabled !== false;
+      $('#chatbotAutoModDomains').value = (autoMod.allowedDomains || []).join('\n');
+      $('#chatbotAutoModTermsEnabled').checked = autoMod.blockedTermsEnabled === true;
+      $('#chatbotAutoModTerms').value = (autoMod.blockedTerms || []).join('\n');
+      $('#chatbotAutoModCaps').checked = autoMod.capsProtectionEnabled === true;
+      $('#chatbotAutoModCapsMinimum').value = autoMod.capsMinimumLetters || 12;
+      $('#chatbotAutoModCapsPercentage').value = autoMod.capsPercentage || 75;
+      $('#chatbotAutoModRepetition').checked = autoMod.repetitionProtectionEnabled !== false;
+      $('#chatbotAutoModRepetitionLimit').value = autoMod.repetitionLimit || 8;
+      $('#chatbotAutoModAction').value = autoMod.action || 'delete';
+      $('#chatbotAutoModTimeout').value = autoMod.timeoutSeconds || 60;
+      $('#chatbotAutoModExemptBroadcaster').checked = (autoMod.exemptRoles || []).includes('broadcaster');
+      $('#chatbotAutoModExemptModerator').checked = (autoMod.exemptRoles || []).includes('moderator');
+      $('#chatbotAutoModExemptVip').checked = (autoMod.exemptRoles || []).includes('vip');
+      $('#chatbotAutoModNotice').checked = autoMod.postNotice !== false;
+      $('#chatbotAutoModNoticeMessage').value = autoMod.noticeMessage || '@{user}, that message was removed by channel AutoMod ({reason}).';
+    }
+    const autoModAuthorized = autoMod.action === 'timeout' ? autoMod.timeoutAuthorized === true : autoMod.deleteAuthorized === true;
+    $('#chatbotAutoModBadge').textContent = !autoMod.enabled ? 'OFF' : autoModAuthorized ? `${autoMod.actionsTaken || 0} ACTIONS` : 'REAUTHORIZE BOT';
+    $('#chatbotAutoModBadge').classList.toggle('offline', !autoMod.enabled || !autoModAuthorized);
+    $('#chatbotAutoModTimeoutControl').hidden = $('#chatbotAutoModAction').value !== 'timeout';
+    $('#chatbotAutoModPermissionStatus').textContent = !authorized
+      ? 'Connect the secondary bot account and make it a moderator in your channel.'
+      : autoMod.action === 'timeout' && !autoMod.timeoutAuthorized
+        ? 'Reconnect the bot to grant moderator:manage:banned_users for timeouts.'
+        : autoMod.action !== 'timeout' && !autoMod.deleteAuthorized
+          ? 'Reconnect the bot to grant moderator:manage:chat_messages for message deletion.'
+          : `Moderation permission is authorized. The bot must remain a moderator in @${chatbot.channel?.login || 'your channel'}.`;
     if (document.activeElement !== $('#chatbotPrefix')) $('#chatbotPrefix').value = chatbot.prefix || '!';
     $('#chatbotPrefixLabel').textContent = chatbot.prefix || '!';
     const weather = chatbot.providers?.weather;
@@ -1028,6 +1211,86 @@
       renderChatbot();
       renderSoftware();
       toast('Optional response providers saved. Add or edit commands to use them.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveChatbotRaidAutomation(event) {
+    event.preventDefault();
+    const raidAutomation = {
+      welcomeEnabled: $('#chatbotRaidWelcomeEnabled').checked,
+      welcomeMessage: $('#chatbotRaidWelcomeMessage').value.trim(),
+      shoutoutEnabled: $('#chatbotRaidShoutoutEnabled').checked
+    };
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { raidAutomation } });
+      renderChatbot();
+      toast('Raid welcome and shoutout automation saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function autoModFormValue() {
+    const exemptRoles = [
+      $('#chatbotAutoModExemptBroadcaster').checked ? 'broadcaster' : '',
+      $('#chatbotAutoModExemptModerator').checked ? 'moderator' : '',
+      $('#chatbotAutoModExemptVip').checked ? 'vip' : ''
+    ].filter(Boolean);
+    return {
+      enabled: $('#chatbotAutoModEnabled').checked,
+      linkProtectionEnabled: $('#chatbotAutoModLinks').checked,
+      allowedDomains: $('#chatbotAutoModDomains').value.split(/[\s,]+/).map((entry) => entry.trim()).filter(Boolean),
+      blockedTermsEnabled: $('#chatbotAutoModTermsEnabled').checked,
+      blockedTerms: $('#chatbotAutoModTerms').value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+      capsProtectionEnabled: $('#chatbotAutoModCaps').checked,
+      capsMinimumLetters: Number($('#chatbotAutoModCapsMinimum').value),
+      capsPercentage: Number($('#chatbotAutoModCapsPercentage').value),
+      repetitionProtectionEnabled: $('#chatbotAutoModRepetition').checked,
+      repetitionLimit: Number($('#chatbotAutoModRepetitionLimit').value),
+      exemptRoles,
+      action: $('#chatbotAutoModAction').value,
+      timeoutSeconds: Number($('#chatbotAutoModTimeout').value),
+      postNotice: $('#chatbotAutoModNotice').checked,
+      noticeMessage: $('#chatbotAutoModNoticeMessage').value.trim()
+    };
+  }
+
+  async function saveChatbotAutoMod(event) {
+    event.preventDefault();
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { autoMod: autoModFormValue() } });
+      renderChatbot();
+      toast('Chatbot AutoMod settings saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function testChatbotAutoMod() {
+    try {
+      const pending = autoModFormValue();
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { autoMod: pending } });
+      const result = await api('/v1/chatbot/automod/test', { method: 'POST', body: { message: $('#chatbotAutoModTestMessage').value, roles: [] } });
+      $('#chatbotAutoModTestResult').textContent = result.blocked
+        ? `Matched ${result.rule}: AutoMod would ${result.action} this message (${result.reason}). Nothing was sent to Twitch.`
+        : 'No enabled AutoMod rule matched this message.';
+      renderChatbot();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function testChatbotRaidAutomation() {
+    try {
+      const result = await api('/v1/chatbot/raid/test', { method: 'POST', body: { raiderName: 'IncomingChannel', viewers: 42 } });
+      $('#chatbotRaidTestResult').textContent = `Preview: “${result.message}” · welcome ${result.welcome} · shoutout ${result.shoutout}. Nothing was posted to Twitch.`;
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveChatbotFirstChatShoutouts(event) {
+    event.preventDefault();
+    const channels = $('#chatbotFirstChatChannels').value.split(/[\s,]+/).map((entry) => entry.trim()).filter(Boolean);
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: {
+        firstChatShoutouts: { enabled: $('#chatbotFirstChatEnabled').checked, channels },
+        interactionAccess: { mode: $('#chatbotInteractionAccessMode').value, allowBroadcasterAndModerators: $('#chatbotInteractionAllowStaff').checked }
+      } });
+      renderChatbot();
+      toast(`Assigned Creators saved. Panel interactions are ${state.chatbot.interactionAccess.mode === 'assigned-creators' ? 'restricted' : 'open'}.`);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -1324,6 +1587,8 @@
     renderSoundAlerts();
     renderVisualAlerts();
     renderChatOverlay({ settings: true });
+    renderEmoteWall({ settings: true });
+    renderTwitchExperiences({ settings: true });
     renderWarudo();
     renderApi();
     renderTwitch();
@@ -1337,7 +1602,7 @@
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, warudo, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
       state.runs = runs.runs || [];
@@ -1346,6 +1611,8 @@
       state.chatbot = chatbot;
       state.visualAlerts = visualAlerts;
       state.chatOverlay = chatOverlay;
+      state.emoteWall = emoteWall;
+      state.twitchExperiences = twitchExperiences;
       state.warudo = warudo;
       state.localExtension = localExtension;
       state.hostedExtension = hostedExtension;
@@ -1359,6 +1626,8 @@
       renderAlertHistory();
       renderVisualAlertStatus();
       renderChatOverlay();
+      renderEmoteWall();
+      renderTwitchExperiences();
       renderWarudo();
       renderLocalExtension();
       renderHostedExtension();
@@ -1372,8 +1641,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, assets, connections, workflows, runs, events, safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/assets'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/now-playing'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], assets: assets.assets || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, radio, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -2555,6 +2824,97 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function saveEmoteWallSettings() {
+    try {
+      await api('/v1/emote-wall/settings', { method: 'POST', body: {
+        enabled: $('#emoteWallEnabled').checked,
+        maxActive: Number($('#emoteWallMaxActive').value),
+        lifetimeMs: Math.round(Number($('#emoteWallLifetime').value) * 1000),
+        sizePx: Number($('#emoteWallSize').value),
+        speed: Number($('#emoteWallSpeed').value),
+        includeAnimated: $('#emoteWallAnimated').checked,
+        includeGifs: $('#emoteWallGifs').checked,
+        enablePyramids: $('#emoteWallPyramids').checked,
+        pyramidWindowMs: Math.round(Number($('#emoteWallPyramidWindow').value) * 1000),
+        pyramidCooldownMs: Math.round(Number($('#emoteWallPyramidCooldown').value) * 1000),
+        enableSevenTv: $('#emoteWallSevenTv').checked,
+        enableBttv: $('#emoteWallBttv').checked,
+        enableFfz: $('#emoteWallFfz').checked,
+        providerOrder: $('#emoteWallProviderOrder').value
+      } });
+      state.emoteWall = await api('/v1/emote-wall');
+      renderEmoteWall({ settings: true });
+      toast('Emote Wall settings saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewEmoteWall() {
+    try {
+      await api('/v1/emote-wall/preview', { method: 'POST', body: {} });
+      state.emoteWall = await api('/v1/emote-wall');
+      renderEmoteWall();
+      toast(state.emoteWall.settings?.enabled === false ? 'Enable the Emote Wall before previewing.' : 'Emote Wall preview sent.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewEmotePyramid() {
+    try {
+      await api('/v1/emote-wall/pyramid/preview', { method: 'POST', body: {} });
+      toast('Emote pyramid celebration sent to the Browser Source.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearEmoteWall() {
+    try {
+      state.emoteWall = await api('/v1/emote-wall/clear', { method: 'POST', body: {} });
+      renderEmoteWall();
+      toast('Emote Wall cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function refreshEmoteProviders() {
+    try {
+      state.emoteWall = await api('/v1/emote-wall/providers/refresh', { method: 'POST', body: {} });
+      renderEmoteWall();
+      const loaded = Number(state.emoteWall.providerCatalogCount || 0);
+      toast(loaded ? `${loaded} third-party emotes cataloged.` : 'No enabled provider catalogs are available yet.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveTwitchExperiences() {
+    try {
+      await api('/v1/twitch-experiences/settings', { method: 'POST', body: {
+        enabled: $('#twitchExperienceEnabled').checked,
+        hypeTrainEnabled: $('#twitchExperienceHype').checked,
+        raidPortalEnabled: $('#twitchExperienceRaid').checked,
+        goalOverlayEnabled: $('#twitchExperienceGoal').checked,
+        raidDurationMs: Math.round(Number($('#twitchExperienceRaidDuration').value) * 1000),
+        hypeAccent: $('#twitchExperienceHypeAccent').value,
+        raidAccent: $('#twitchExperienceRaidAccent').value,
+        goalAccent: $('#twitchExperienceGoalAccent').value
+      } });
+      state.twitchExperiences = await api('/v1/twitch-experiences');
+      renderTwitchExperiences({ settings: true });
+      toast('Twitch Experiences saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewTwitchExperience(kind) {
+    try {
+      state.twitchExperiences = await api('/v1/twitch-experiences/preview', { method: 'POST', body: { kind } });
+      renderTwitchExperiences();
+      toast(`${String(kind).replaceAll('-', ' ')} preview sent.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearTwitchExperiences() {
+    try {
+      state.twitchExperiences = await api('/v1/twitch-experiences/clear', { method: 'POST', body: {} });
+      renderTwitchExperiences();
+      toast('Twitch Experiences canvas cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function saveSoundAlertSettings(id) {
     const selectorId = CSS.escape(id);
     const warudoEnabled = document.querySelector(`[data-alert-warudo-enabled="${selectorId}"]`).checked;
@@ -2714,6 +3074,14 @@
     if (button.dataset.chatOverlaySave) return saveChatOverlaySettings();
     if (button.dataset.chatOverlayPreview) return previewChatOverlay();
     if (button.dataset.chatOverlayClear) return clearChatOverlay();
+    if (button.dataset.emoteWallSave) return saveEmoteWallSettings();
+    if (button.dataset.emoteWallPreview) return previewEmoteWall();
+    if (button.dataset.emotePyramidPreview) return previewEmotePyramid();
+    if (button.dataset.emoteWallClear) return clearEmoteWall();
+    if (button.dataset.emoteProviderRefresh) return refreshEmoteProviders();
+    if (button.dataset.twitchExperienceSave) return saveTwitchExperiences();
+    if (button.dataset.twitchExperiencePreview) return previewTwitchExperience(button.dataset.twitchExperiencePreview);
+    if (button.dataset.twitchExperienceClear) return clearTwitchExperiences();
     if (button.dataset.twitchVisualToggle) {
       const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === button.dataset.twitchVisualToggle);
       if (alert) return updateTwitchVisualAlert(alert.id, { enabled: !alert.enabled }, `${alert.name} ${alert.enabled ? 'disabled' : 'enabled'}.`);
@@ -2747,6 +3115,8 @@
   }
 
   function bindEvents() {
+    $('#privacyModeButton').addEventListener('click', togglePrivacyMode);
+    $('#savePrivacySettings').addEventListener('click', savePrivacyControls);
     $('#refreshButton').addEventListener('click', () => refresh());
     $('#openOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#reviewOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
@@ -2835,6 +3205,12 @@
     $('#copyChatbotAuthorizationLink').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.verificationUri, event.currentTarget));
     $('#openChatbotAuthorization').addEventListener('click', () => state.chatbotDeviceAuthorization && window.tempestStudio.openExternal(state.chatbotDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     $('#chatbotCommandForm').addEventListener('submit', saveChatbotCommand);
+    $('#chatbotAutoModForm').addEventListener('submit', saveChatbotAutoMod);
+    $('#testChatbotAutoMod').addEventListener('click', testChatbotAutoMod);
+    $('#chatbotAutoModAction').addEventListener('change', () => { $('#chatbotAutoModTimeoutControl').hidden = $('#chatbotAutoModAction').value !== 'timeout'; });
+    $('#chatbotRaidAutomationForm').addEventListener('submit', saveChatbotRaidAutomation);
+    $('#testChatbotRaidAutomation').addEventListener('click', testChatbotRaidAutomation);
+    $('#chatbotFirstChatShoutoutForm').addEventListener('submit', saveChatbotFirstChatShoutouts);
     $('#chatbotProvidersForm').addEventListener('submit', saveChatbotProviders);
     $('#chatbotCommandPermission').addEventListener('change', protectSharedChatCommandPolicy);
     $('#chatbotCommandWorkflow').addEventListener('change', protectSharedChatCommandPolicy);
@@ -2900,7 +3276,8 @@
   async function initialize() {
     bindEvents();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
-    [state.config, state.panelDesign, state.appInfo] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo()]);
+    [state.config, state.panelDesign, state.appInfo, state.privacy] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings()]);
+    renderPrivacySettings();
     populatePanelDesign(state.panelDesign);
     $('#panelDesignStateBadge').textContent = 'SAVED LOCALLY';
     $('#panelDesignStateBadge').classList.remove('offline');

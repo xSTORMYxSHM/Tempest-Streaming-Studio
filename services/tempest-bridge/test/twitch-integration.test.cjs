@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { mkdtemp } = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { TwitchIntegrationGateway, describeTwitchOAuthError } = require('../dist/twitch-integration');
+const { TwitchIntegrationGateway, describeTwitchOAuthError, normalizeTwitchEventSubNotification } = require('../dist/twitch-integration');
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -25,6 +25,19 @@ test('turns Twitch confidential-client failures into public-client recovery guid
   assert.match(message, /Client Type to Public/);
   assert.match(message, /disconnect and reconnect Twitch/);
   assert.doesNotMatch(message, /^missing client secret$/);
+});
+
+test('normalizes raid, Hype Train, and goal EventSub notifications', () => {
+  const raid = normalizeTwitchEventSubNotification('channel.raid', { to_broadcaster_user_id: 'channel-1', from_broadcaster_user_id: 'raider-1', from_broadcaster_user_name: 'Raid Leader', viewers: 42 }, 'raid-message', '2026-08-28T00:00:00Z');
+  assert.equal(raid.topic, 'viewer.raid.received');
+  assert.equal(raid.payload.viewers, 42);
+  const hype = normalizeTwitchEventSubNotification('channel.hype_train.progress', { broadcaster_user_id: 'channel-1', id: 'train-1', level: 3, total: 4200, progress: 720, goal: 1000, top_contributions: [{ user_id: 'viewer', user_name: 'Viewer', type: 'bits', total: 500 }] }, 'hype-message', '2026-08-28T00:00:01Z');
+  assert.equal(hype.topic, 'channel.hype-train.updated');
+  assert.equal(hype.payload.phase, 'progress');
+  assert.equal(hype.payload.topContributions[0].userName, 'Viewer');
+  const goal = normalizeTwitchEventSubNotification('channel.goal.progress', { broadcaster_user_id: 'channel-1', id: 'goal-1', type: 'subscription', description: 'Signal Goal', current_amount: 72, target_amount: 100 }, 'goal-message', '2026-08-28T00:00:02Z');
+  assert.equal(goal.topic, 'channel.goal.updated');
+  assert.equal(goal.payload.currentAmount, 72);
 });
 
 test('clears stale OAuth errors and credentials when the Twitch client ID changes', async () => {

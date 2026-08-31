@@ -5,7 +5,8 @@ import { WebSocket } from 'ws';
 import type { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
 
-export const chatbotScopes = ['user:read:chat', 'user:write:chat'] as const;
+export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as const;
+export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
 export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing'] as const;
@@ -55,11 +56,50 @@ export interface ChatbotNowPlayingProvider {
   streamUrl?: string;
 }
 
+export interface ChatbotRaidAutomationConfiguration {
+  welcomeEnabled: boolean;
+  welcomeMessage: string;
+  shoutoutEnabled: boolean;
+}
+
+export interface ChatbotFirstChatShoutoutConfiguration {
+  enabled: boolean;
+  channels: string[];
+}
+
+export interface ChatbotInteractionAccessConfiguration {
+  mode: 'everyone' | 'assigned-creators';
+  allowBroadcasterAndModerators: boolean;
+}
+
+export interface ChatbotAutoModConfiguration {
+  enabled: boolean;
+  linkProtectionEnabled: boolean;
+  allowedDomains: string[];
+  blockedTermsEnabled: boolean;
+  blockedTerms: string[];
+  capsProtectionEnabled: boolean;
+  capsMinimumLetters: number;
+  capsPercentage: number;
+  repetitionProtectionEnabled: boolean;
+  repetitionLimit: number;
+  exemptRoles: Array<'broadcaster' | 'moderator' | 'vip'>;
+  action: 'delete' | 'timeout';
+  timeoutSeconds: number;
+  postNotice: boolean;
+  noticeMessage: string;
+}
+
 interface ChatbotConfiguration {
-  schemaVersion: 2;
+  schemaVersion: 6;
   displayName: string;
   prefix: string;
   commands: ChatbotCommand[];
+  raidAutomation: ChatbotRaidAutomationConfiguration;
+  firstChatShoutouts: ChatbotFirstChatShoutoutConfiguration;
+  interactionAccess: ChatbotInteractionAccessConfiguration;
+  assignedCreatorIds: Record<string, string>;
+  autoMod: ChatbotAutoModConfiguration;
   weatherProvider?: ChatbotWeatherProvider;
   nowPlayingProvider?: ChatbotNowPlayingProvider;
   updatedAt: string;
@@ -109,6 +149,24 @@ export interface ChatbotStatus {
   commandsTriggered: number;
   lastMessageAt?: string;
   lastError?: string;
+  raidAutomation: ChatbotRaidAutomationConfiguration & {
+    shoutoutAuthorized: boolean;
+    moderatorRequired: true;
+    queuedShoutouts: number;
+  };
+  firstChatShoutouts: ChatbotFirstChatShoutoutConfiguration & {
+    handledSessions: number;
+  };
+  interactionAccess: ChatbotInteractionAccessConfiguration & {
+    assignedCreators: number;
+    resolvedCreators: number;
+  };
+  autoMod: ChatbotAutoModConfiguration & {
+    deleteAuthorized: boolean;
+    timeoutAuthorized: boolean;
+    moderatorRequired: true;
+    actionsTaken: number;
+  };
   providers: {
     weather?: ChatbotWeatherProvider;
     nowPlaying?: ChatbotNowPlayingProvider;
@@ -135,6 +193,12 @@ export interface ChatbotDispatch {
   simulated: boolean;
 }
 
+export interface ChatbotInteractionAccessDecision {
+  allowed: boolean;
+  code: 'allowed' | 'identity-required' | 'not-assigned' | 'verification-unavailable';
+  reason?: string;
+}
+
 export interface TwitchChatbotOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
@@ -147,13 +211,121 @@ export interface TwitchChatbotOptions {
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const legacyStormHorizonProvider: ChatbotNowPlayingProvider = { provider: 'azuracast', stationName: 'Storm Horizon Radio', apiUrl: 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio', publicPlayerUrl: 'https://a12.asurahosting.com/public/storm_horizon_radio', streamUrl: 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3' };
 const legacySeattleProvider: ChatbotWeatherProvider = { provider: 'nws', locationName: 'Seattle', latitude: 47.6062, longitude: -122.3321, timeZone: 'America/Los_Angeles' };
+const defaultRaidWelcomeMessage = 'Welcome {raider} and your {viewers} raiders! Thank you for sharing your community with us!';
+const defaultAutoModNotice = '@{user}, that message was removed by channel AutoMod ({reason}).';
+
+function normalizeDomain(value: unknown): string {
+  const raw = String(value || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].replace(/\.+$/, '');
+  if (!raw) return '';
+  if (raw.length > 253 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(raw)) throw new Error(`${raw} is not a valid allowed domain.`);
+  return raw;
+}
+
+function validateAutoMod(value: unknown, fallback: ChatbotAutoModConfiguration = {
+  enabled: false,
+  linkProtectionEnabled: true,
+  allowedDomains: [],
+  blockedTermsEnabled: false,
+  blockedTerms: [],
+  capsProtectionEnabled: false,
+  capsMinimumLetters: 12,
+  capsPercentage: 75,
+  repetitionProtectionEnabled: true,
+  repetitionLimit: 8,
+  exemptRoles: ['broadcaster', 'moderator', 'vip'],
+  action: 'delete',
+  timeoutSeconds: 60,
+  postNotice: true,
+  noticeMessage: defaultAutoModNotice
+}): ChatbotAutoModConfiguration {
+  if (value === undefined) return { ...fallback, allowedDomains: [...fallback.allowedDomains], blockedTerms: [...fallback.blockedTerms], exemptRoles: [...fallback.exemptRoles] };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('AutoMod settings are invalid.');
+  const source = value as Partial<ChatbotAutoModConfiguration>;
+  const rawDomains = Array.isArray(source.allowedDomains) ? source.allowedDomains : typeof source.allowedDomains === 'string' ? String(source.allowedDomains).split(/[\s,]+/) : fallback.allowedDomains;
+  const allowedDomains = [...new Set(rawDomains.map(normalizeDomain).filter(Boolean))];
+  if (allowedDomains.length > 100) throw new Error('AutoMod supports up to 100 allowed domains.');
+  const rawTerms = Array.isArray(source.blockedTerms) ? source.blockedTerms : typeof source.blockedTerms === 'string' ? String(source.blockedTerms).split(/\r?\n/) : fallback.blockedTerms;
+  const blockedTerms = [...new Set(rawTerms.map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean))];
+  if (blockedTerms.length > 200 || blockedTerms.some((term) => term.length > 100)) throw new Error('AutoMod supports up to 200 blocked terms of 100 characters each.');
+  const capsMinimumLetters = Number(source.capsMinimumLetters ?? fallback.capsMinimumLetters);
+  const capsPercentage = Number(source.capsPercentage ?? fallback.capsPercentage);
+  const repetitionLimit = Number(source.repetitionLimit ?? fallback.repetitionLimit);
+  const timeoutSeconds = Number(source.timeoutSeconds ?? fallback.timeoutSeconds);
+  if (!Number.isInteger(capsMinimumLetters) || capsMinimumLetters < 5 || capsMinimumLetters > 100) throw new Error('Caps protection minimum letters must be between 5 and 100.');
+  if (!Number.isInteger(capsPercentage) || capsPercentage < 50 || capsPercentage > 100) throw new Error('Caps percentage must be between 50 and 100.');
+  if (!Number.isInteger(repetitionLimit) || repetitionLimit < 4 || repetitionLimit > 30) throw new Error('Repeated-character limit must be between 4 and 30.');
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 1_209_600) throw new Error('AutoMod timeout must be between 1 second and 14 days.');
+  const action = source.action === 'timeout' ? 'timeout' : source.action === 'delete' ? 'delete' : fallback.action;
+  const exemptRoles = [...new Set((Array.isArray(source.exemptRoles) ? source.exemptRoles : fallback.exemptRoles).filter((role): role is 'broadcaster' | 'moderator' | 'vip' => role === 'broadcaster' || role === 'moderator' || role === 'vip'))];
+  const noticeMessage = String(source.noticeMessage ?? fallback.noticeMessage).trim();
+  if (!noticeMessage || noticeMessage.length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(noticeMessage)) throw new Error('AutoMod notice must contain 1 to 500 safe characters.');
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled,
+    linkProtectionEnabled: typeof source.linkProtectionEnabled === 'boolean' ? source.linkProtectionEnabled : fallback.linkProtectionEnabled,
+    allowedDomains,
+    blockedTermsEnabled: typeof source.blockedTermsEnabled === 'boolean' ? source.blockedTermsEnabled : fallback.blockedTermsEnabled,
+    blockedTerms,
+    capsProtectionEnabled: typeof source.capsProtectionEnabled === 'boolean' ? source.capsProtectionEnabled : fallback.capsProtectionEnabled,
+    capsMinimumLetters,
+    capsPercentage,
+    repetitionProtectionEnabled: typeof source.repetitionProtectionEnabled === 'boolean' ? source.repetitionProtectionEnabled : fallback.repetitionProtectionEnabled,
+    repetitionLimit,
+    exemptRoles,
+    action,
+    timeoutSeconds,
+    postNotice: typeof source.postNotice === 'boolean' ? source.postNotice : fallback.postNotice,
+    noticeMessage
+  };
+}
+
+function validateRaidAutomation(value: unknown, fallback: ChatbotRaidAutomationConfiguration = { welcomeEnabled: true, welcomeMessage: defaultRaidWelcomeMessage, shoutoutEnabled: true }): ChatbotRaidAutomationConfiguration {
+  if (value === undefined) return { ...fallback };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Raid automation settings are invalid.');
+  const source = value as Partial<ChatbotRaidAutomationConfiguration>;
+  const welcomeMessage = String(source.welcomeMessage ?? fallback.welcomeMessage).trim();
+  if (!welcomeMessage || welcomeMessage.length > 500) throw new Error('Raid welcome message must contain 1 to 500 characters.');
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(welcomeMessage)) throw new Error('Raid welcome message cannot contain control characters.');
+  return {
+    welcomeEnabled: typeof source.welcomeEnabled === 'boolean' ? source.welcomeEnabled : fallback.welcomeEnabled,
+    welcomeMessage,
+    shoutoutEnabled: typeof source.shoutoutEnabled === 'boolean' ? source.shoutoutEnabled : fallback.shoutoutEnabled
+  };
+}
+
+function validateFirstChatShoutouts(value: unknown, fallback: ChatbotFirstChatShoutoutConfiguration = { enabled: false, channels: [] }): ChatbotFirstChatShoutoutConfiguration {
+  if (value === undefined) return { enabled: fallback.enabled, channels: [...fallback.channels] };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('First Chat Shoutout settings are invalid.');
+  const source = value as { enabled?: unknown; channels?: unknown };
+  const rawChannels = Array.isArray(source.channels) ? source.channels : typeof source.channels === 'string' ? source.channels.split(/[\s,]+/) : fallback.channels;
+  const channels = [...new Set(rawChannels.map((entry) => String(entry || '').trim().replace(/^@+/, '').toLowerCase()).filter(Boolean))];
+  if (channels.length > 50) throw new Error('First Chat Shoutouts support up to 50 assigned Twitch channels.');
+  const invalid = channels.find((channel) => !/^[a-z0-9_]{1,25}$/.test(channel));
+  if (invalid) throw new Error(`@${invalid} is not a valid Twitch channel login.`);
+  return { enabled: typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled, channels };
+}
+
+function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionAccessConfiguration = { mode: 'everyone', allowBroadcasterAndModerators: true }): ChatbotInteractionAccessConfiguration {
+  if (value === undefined) return { ...fallback };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Interaction access settings are invalid.');
+  const source = value as Partial<ChatbotInteractionAccessConfiguration>;
+  const mode = source.mode === 'assigned-creators' ? 'assigned-creators' : source.mode === 'everyone' ? 'everyone' : fallback.mode;
+  return {
+    mode,
+    allowBroadcasterAndModerators: typeof source.allowBroadcasterAndModerators === 'boolean' ? source.allowBroadcasterAndModerators : fallback.allowBroadcasterAndModerators
+  };
+}
 
 function defaultConfiguration(): ChatbotConfiguration {
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: 2,
+    schemaVersion: 6,
     displayName: '',
     prefix: '!',
+    raidAutomation: validateRaidAutomation(undefined),
+    firstChatShoutouts: validateFirstChatShoutouts(undefined),
+    interactionAccess: validateInteractionAccess(undefined),
+    assignedCreatorIds: {},
+    autoMod: validateAutoMod(undefined),
     commands: [{
       id: 'studio',
       name: 'studio',
@@ -393,6 +565,14 @@ export class TwitchChatbot {
   private lastGlobalUse = new Map<string, number>();
   private lastViewerUse = new Map<string, number>();
   private seenEventIds = new Map<string, number>();
+  private raidShoutoutQueue: Array<{ eventId: string; targetId: string; targetName: string }> = [];
+  private raidShoutoutTimer?: NodeJS.Timeout;
+  private raidShoutoutSending = false;
+  private lastShoutoutAt = 0;
+  private lastShoutoutByTarget = new Map<string, number>();
+  private firstChatShoutoutSessions = new Map<string, string>();
+  private firstChatShoutoutAttempts = new Set<string>();
+  private autoModActionsTaken = 0;
   private channelInfoCache?: { fetchedAt: number; title: string; gameName: string };
   private streamCache?: { fetchedAt: number; startedAt?: string; viewerCount?: number };
   private scheduleCache?: { fetchedAt: number; title?: string; startTime?: string };
@@ -407,6 +587,10 @@ export class TwitchChatbot {
 
   get configurationPath(): string {
     return path.join(this.options.dataDirectory, 'chatbot.json');
+  }
+
+  get firstChatShoutoutStatePath(): string {
+    return path.join(this.options.dataDirectory, 'chatbot-first-chat-shoutouts.json');
   }
 
   async initialize(clientId = ''): Promise<void> {
@@ -431,14 +615,32 @@ export class TwitchChatbot {
           installedDefaults = true;
         }
       }
-      const legacyConfiguration = parsed.schemaVersion !== 2;
-      const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
-      const nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? legacyStormHorizonProvider : undefined));
-      this.configuration = { schemaVersion: 2, displayName, prefix, commands, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      const legacyConfiguration = parsed.schemaVersion !== 6;
+      const legacyProviderConfiguration = !parsed.schemaVersion || parsed.schemaVersion < 2;
+      const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
+      const nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? legacyStormHorizonProvider : undefined));
+      const raidAutomation = validateRaidAutomation(parsed.raidAutomation);
+      const firstChatShoutouts = validateFirstChatShoutouts(parsed.firstChatShoutouts);
+      const interactionAccess = validateInteractionAccess(parsed.interactionAccess);
+      const assignedCreatorIds = Object.fromEntries(Object.entries(parsed.assignedCreatorIds || {})
+        .filter(([login, userId]) => firstChatShoutouts.channels.includes(login) && /^\d{1,30}$/.test(String(userId)))
+        .map(([login, userId]) => [login, String(userId)]));
+      const autoMod = validateAutoMod(parsed.autoMod);
+      this.configuration = { schemaVersion: 6, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
       if (installedDefaults || legacyConfiguration) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
       await this.persist();
+    }
+    try {
+      const parsed = JSON.parse(await readFile(this.firstChatShoutoutStatePath, 'utf8')) as { sessions?: unknown };
+      if (parsed.sessions && typeof parsed.sessions === 'object' && !Array.isArray(parsed.sessions)) {
+        for (const [login, session] of Object.entries(parsed.sessions as Record<string, unknown>)) {
+          if (/^[a-z0-9_]{1,25}$/.test(login) && typeof session === 'string' && session) this.firstChatShoutoutSessions.set(login, session);
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read First Chat Shoutout state: ${(error as Error).message}`);
     }
     await this.setClientId(clientId);
   }
@@ -488,6 +690,29 @@ export class TwitchChatbot {
       commandsTriggered: this.commandsTriggered,
       lastMessageAt: this.lastMessageAt,
       lastError: this.lastError,
+      raidAutomation: {
+        ...this.configuration.raidAutomation,
+        shoutoutAuthorized: Boolean(this.tokens?.scopes.includes('moderator:manage:shoutouts')),
+        moderatorRequired: true,
+        queuedShoutouts: this.raidShoutoutQueue.length
+      },
+      firstChatShoutouts: {
+        enabled: this.configuration.firstChatShoutouts.enabled,
+        channels: [...this.configuration.firstChatShoutouts.channels],
+        handledSessions: this.firstChatShoutoutSessions.size
+      },
+      interactionAccess: {
+        ...this.configuration.interactionAccess,
+        assignedCreators: this.configuration.firstChatShoutouts.channels.length,
+        resolvedCreators: Object.keys(this.configuration.assignedCreatorIds).length
+      },
+      autoMod: {
+        ...this.configuration.autoMod,
+        deleteAuthorized: Boolean(this.tokens?.scopes.includes('moderator:manage:chat_messages')),
+        timeoutAuthorized: Boolean(this.tokens?.scopes.includes('moderator:manage:banned_users')),
+        moderatorRequired: true,
+        actionsTaken: this.autoModActionsTaken
+      },
       providers: {
         weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
         nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
@@ -498,11 +723,38 @@ export class TwitchChatbot {
 
   async configure(input: unknown): Promise<ChatbotStatus> {
     if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
-    const source = input as { prefix?: unknown; displayName?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
+    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; autoMod?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
     const prefix = String(source.prefix ?? this.configuration.prefix);
     if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
+    const nextFirstChatShoutouts = Object.prototype.hasOwnProperty.call(source, 'firstChatShoutouts')
+      ? validateFirstChatShoutouts(source.firstChatShoutouts, this.configuration.firstChatShoutouts)
+      : this.configuration.firstChatShoutouts;
+    const nextInteractionAccess = Object.prototype.hasOwnProperty.call(source, 'interactionAccess')
+      ? validateInteractionAccess(source.interactionAccess, this.configuration.interactionAccess)
+      : this.configuration.interactionAccess;
+    if (nextInteractionAccess.mode === 'assigned-creators' && !nextFirstChatShoutouts.channels.length) throw new Error('Add at least one assigned Twitch creator before restricting panel interactions.');
     this.configuration.prefix = prefix;
     if (Object.prototype.hasOwnProperty.call(source, 'displayName')) this.configuration.displayName = normalizeDisplayName(source.displayName);
+    if (Object.prototype.hasOwnProperty.call(source, 'raidAutomation')) {
+      this.configuration.raidAutomation = validateRaidAutomation(source.raidAutomation, this.configuration.raidAutomation);
+      if (!this.configuration.raidAutomation.shoutoutEnabled) this.clearRaidShoutoutQueue();
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'firstChatShoutouts')) {
+      this.configuration.firstChatShoutouts = nextFirstChatShoutouts;
+      const assigned = new Set(this.configuration.firstChatShoutouts.channels);
+      this.configuration.assignedCreatorIds = Object.fromEntries(Object.entries(this.configuration.assignedCreatorIds).filter(([login]) => assigned.has(login)));
+      for (const login of this.firstChatShoutoutSessions.keys()) if (!assigned.has(login)) this.firstChatShoutoutSessions.delete(login);
+      await this.persistFirstChatShoutoutState();
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'interactionAccess')) {
+      this.configuration.interactionAccess = nextInteractionAccess;
+    }
+    if (this.configuration.interactionAccess.mode === 'assigned-creators') {
+      await this.refreshAssignedCreatorIds().catch(() => undefined);
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'autoMod')) {
+      this.configuration.autoMod = validateAutoMod(source.autoMod, this.configuration.autoMod);
+    }
     if (Object.prototype.hasOwnProperty.call(source, 'weatherProvider')) {
       this.configuration.weatherProvider = validateWeatherProvider(source.weatherProvider);
       this.weatherCache = undefined;
@@ -593,18 +845,20 @@ export class TwitchChatbot {
     if (!response.ok || !result.client_id || !result.login || !result.user_id) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token validation failed with ${response.status}.`));
     if (result.client_id !== this.clientId) throw new Error('Stored chatbot token belongs to a different Twitch client ID. Reconnect the bot account.');
     const scopes = Array.isArray(result.scopes) ? result.scopes : this.tokens.scopes;
-    const missing = chatbotScopes.filter((scope) => !scopes.includes(scope));
+    const missing = chatbotRequiredScopes.filter((scope) => !scopes.includes(scope));
     if (missing.length) throw new Error(`Reconnect the bot account to grant: ${missing.join(', ')}.`);
     this.identity = { clientId: result.client_id, login: result.login, userId: result.user_id };
     this.tokens.scopes = scopes;
     if (Number(result.expires_in) > 0) this.tokens.expiresAt = new Date(Date.now() + Number(result.expires_in) * 1000).toISOString();
     await this.options.credentialStore?.save(this.tokens);
     this.oauthState = 'authorized';
+    this.firstChatShoutoutAttempts.clear();
     this.lastError = undefined;
     return this.status();
   }
 
   async disconnect(): Promise<ChatbotStatus> {
+    this.clearRaidShoutoutQueue();
     await this.stopConnection();
     if (this.tokens && this.clientId) {
       const body = new URLSearchParams({ client_id: this.clientId, token: this.tokens.accessToken });
@@ -626,6 +880,24 @@ export class TwitchChatbot {
     await this.ensureConnection();
   }
 
+  async authorizeInteraction(event: TempestNormalizedTwitchEvent): Promise<ChatbotInteractionAccessDecision> {
+    const settings = this.configuration.interactionAccess;
+    if (settings.mode === 'everyone') return { allowed: true, code: 'allowed' };
+    const roles = new Set(event.viewer?.roles || []);
+    if (settings.allowBroadcasterAndModerators && (roles.has('broadcaster') || roles.has('moderator'))) return { allowed: true, code: 'allowed' };
+    const viewerId = String(event.viewer?.id || '');
+    if (!/^\d{1,30}$/.test(viewerId)) {
+      return { allowed: false, code: 'identity-required', reason: 'Share your Twitch identity with this Extension to use restricted interactions.' };
+    }
+    try {
+      await this.refreshAssignedCreatorIds();
+    } catch (error) {
+      return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator list: ${(error as Error).message}` };
+    }
+    if (Object.values(this.configuration.assignedCreatorIds).includes(viewerId)) return { allowed: true, code: 'allowed' };
+    return { allowed: false, code: 'not-assigned', reason: 'This channel has limited interactions to its assigned creators.' };
+  }
+
   async processChatEvent(event: TempestNormalizedTwitchEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
     if (!simulated) {
       const cutoff = Date.now() - 10 * 60 * 1000;
@@ -641,6 +913,9 @@ export class TwitchChatbot {
     if (!simulated) await this.options.onEvent?.(event);
     if (event.topic !== 'viewer.chat.message') return { matched: false, accepted: false };
     if (event.viewer?.id && event.viewer.id === this.identity?.userId) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
+    const autoModResult = await this.processAutoMod(event, simulated);
+    if (autoModResult) return autoModResult;
+    if (!simulated) await this.processFirstChatShoutout(event);
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
     const [rawName, ...args] = text.slice(this.configuration.prefix.length).trim().split(/\s+/);
@@ -708,6 +983,106 @@ export class TwitchChatbot {
     }, true, true);
   }
 
+  async testAutoMod(input: unknown): Promise<{ blocked: boolean; rule?: string; action?: 'delete' | 'timeout'; reason?: string }> {
+    const source = input && typeof input === 'object' ? input as { message?: unknown; roles?: unknown } : {};
+    const roles = Array.isArray(source.roles) ? source.roles.filter((role): role is string => typeof role === 'string') : [];
+    const event: TempestNormalizedTwitchEvent = {
+      schemaVersion: 1,
+      id: `automod-test-${randomUUID()}`,
+      topic: 'viewer.chat.message',
+      occurredAt: new Date().toISOString(),
+      source: 'twitch',
+      channel: { id: this.channel?.channelId || 'studio-test', login: this.channel?.channelLogin || 'studio-test' },
+      viewer: { id: 'automod-preview-viewer', login: 'automod_preview', displayName: 'AutoModPreview', roles },
+      payload: { messageId: `automod-preview-${randomUUID()}`, text: String(source.message || '') }
+    };
+    const violation = this.autoModViolation(event);
+    return violation ? { blocked: true, rule: violation.rule, action: this.configuration.autoMod.action, reason: violation.reason } : { blocked: false };
+  }
+
+  async processRaidEvent(event: TempestNormalizedTwitchEvent, simulated = false): Promise<{ accepted: boolean; welcome: 'disabled' | 'preview' | 'sent' | 'error'; shoutout: 'disabled' | 'preview' | 'queued' | 'authorization-required'; message: string; error?: string }> {
+    if (event.topic !== 'viewer.raid.received') throw new Error('Raid automation requires a viewer.raid.received event.');
+    const raiderId = String(event.payload.fromBroadcasterId || '').trim();
+    const raiderName = String(event.payload.fromBroadcasterName || 'Incoming channel').trim() || 'Incoming channel';
+    const viewers = Math.max(0, Math.round(Number(event.payload.viewers) || 0));
+    const message = this.configuration.raidAutomation.welcomeMessage
+      .replaceAll('{raider}', raiderName)
+      .replaceAll('{viewers}', viewers.toLocaleString('en-US'))
+      .replaceAll('{channel}', this.channel?.channelLogin || event.channel.login || 'the channel')
+      .replaceAll('{bot}', this.status().botName)
+      .slice(0, 500);
+    let welcome: 'disabled' | 'preview' | 'sent' | 'error' = this.configuration.raidAutomation.welcomeEnabled ? (simulated ? 'preview' : 'sent') : 'disabled';
+    let error: string | undefined;
+    if (this.configuration.raidAutomation.welcomeEnabled && !simulated) {
+      try {
+        await this.sendMessage(message);
+        this.record({ viewerName: raiderName, state: 'accepted', message: `Welcomed raid from ${raiderName} (${viewers.toLocaleString('en-US')} viewers).` });
+      } catch (caught) {
+        welcome = 'error';
+        error = (caught as Error).message;
+        this.record({ viewerName: raiderName, state: 'error', message: `Raid welcome failed for ${raiderName}: ${error}` });
+      }
+    }
+    let shoutout: 'disabled' | 'preview' | 'queued' | 'authorization-required' = 'disabled';
+    if (this.configuration.raidAutomation.shoutoutEnabled) {
+      if (simulated) shoutout = 'preview';
+      else if (!this.tokens?.scopes.includes('moderator:manage:shoutouts')) {
+        shoutout = 'authorization-required';
+        this.record({ viewerName: raiderName, state: 'error', message: `Official shoutout for ${raiderName} needs a reconnected bot account with moderator:manage:shoutouts.` });
+      } else {
+        shoutout = this.enqueueOfficialShoutout(event.id, raiderId, raiderName) ? 'queued' : 'disabled';
+      }
+    }
+    return { accepted: welcome === 'sent' || welcome === 'preview' || shoutout === 'queued' || shoutout === 'preview', welcome, shoutout, message, ...(error ? { error } : {}) };
+  }
+
+  async testRaidAutomation(input: unknown = {}): Promise<Awaited<ReturnType<TwitchChatbot['processRaidEvent']>>> {
+    const source = input && typeof input === 'object' ? input as { raiderName?: unknown; viewers?: unknown } : {};
+    const raiderName = String(source.raiderName || 'IncomingChannel').trim().slice(0, 40) || 'IncomingChannel';
+    const viewers = Math.max(0, Math.min(1_000_000, Math.round(Number(source.viewers) || 42)));
+    return this.processRaidEvent({
+      schemaVersion: 1,
+      id: `chatbot-raid-test-${randomUUID()}`,
+      topic: 'viewer.raid.received',
+      occurredAt: new Date().toISOString(),
+      source: 'twitch',
+      channel: { id: this.channel?.channelId || 'studio-test', login: this.channel?.channelLogin || 'studio-test' },
+      payload: { fromBroadcasterId: 'studio-raid-test', fromBroadcasterName: raiderName, viewers }
+    }, true);
+  }
+
+  private async processFirstChatShoutout(event: TempestNormalizedTwitchEvent): Promise<void> {
+    const settings = this.configuration.firstChatShoutouts;
+    const login = String(event.viewer?.login || '').trim().toLowerCase();
+    const targetId = String(event.viewer?.id || '').trim();
+    const targetName = String(event.viewer?.displayName || event.viewer?.login || '').trim() || login;
+    if (settings.channels.includes(login) && /^\d{1,30}$/.test(targetId) && this.configuration.assignedCreatorIds[login] !== targetId) {
+      this.configuration.assignedCreatorIds[login] = targetId;
+      await this.persist();
+    }
+    if (!settings.enabled || !login || !targetId || !settings.channels.includes(login) || targetId === this.channel?.channelId) return;
+    let stream: NonNullable<TwitchChatbot['streamCache']>;
+    try {
+      stream = await this.loadStreamStatus();
+    } catch (caught) {
+      this.record({ viewerName: targetName, state: 'error', message: `First Chat Shoutout could not verify the live stream for ${targetName}: ${(caught as Error).message}` });
+      return;
+    }
+    if (!stream.startedAt || this.firstChatShoutoutSessions.get(login) === stream.startedAt) return;
+    const attemptKey = `${login}:${stream.startedAt}`;
+    if (!this.tokens?.scopes.includes('moderator:manage:shoutouts')) {
+      if (!this.firstChatShoutoutAttempts.has(attemptKey)) {
+        this.firstChatShoutoutAttempts.add(attemptKey);
+        this.record({ viewerName: targetName, state: 'error', message: `First Chat Shoutout for ${targetName} needs a reconnected moderator bot with moderator:manage:shoutouts.` });
+      }
+      return;
+    }
+    if (!this.enqueueOfficialShoutout(`first-chat:${stream.startedAt}:${targetId}`, targetId, targetName)) return;
+    this.firstChatShoutoutSessions.set(login, stream.startedAt);
+    await this.persistFirstChatShoutoutState();
+    this.record({ viewerName: targetName, state: 'accepted', message: `First chat from assigned channel ${targetName} detected for this stream.` });
+  }
+
   async radioStatus(): Promise<NowPlayingProviderStatus | null> {
     const provider = this.configuration.nowPlayingProvider;
     if (!provider) return null;
@@ -740,12 +1115,101 @@ export class TwitchChatbot {
   }
 
   async close(): Promise<void> {
+    this.clearRaidShoutoutQueue();
     await this.stopConnection();
   }
 
   private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin'> = {}) {
     this.record({ command: command.name, viewerName, ...activityContext, state: 'blocked', message: `${viewerName}: ${reason}` });
     return { matched: true, accepted: false, command: copyCommand(command), reason };
+  }
+
+  private autoModViolation(event: TempestNormalizedTwitchEvent): { rule: string; reason: string } | undefined {
+    const settings = this.configuration.autoMod;
+    if (!settings.enabled || event.topic !== 'viewer.chat.message') return undefined;
+    const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
+    if (event.payload.sharedChat === true || (sourceChannelId && sourceChannelId !== event.channel.id)) return undefined;
+    const roles = event.viewer?.roles || [];
+    if (settings.exemptRoles.some((role) => roles.includes(role))) return undefined;
+    const text = String(event.payload.text || '').trim();
+    if (!text) return undefined;
+    if (settings.blockedTermsEnabled) {
+      const normalized = text.toLocaleLowerCase();
+      const term = settings.blockedTerms.find((entry) => normalized.includes(entry));
+      if (term) return { rule: 'blocked-term', reason: 'blocked term' };
+    }
+    if (settings.linkProtectionEnabled) {
+      const candidates = text.match(/(?:https?:\/\/|www\.)[^\s<>]+|\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:\/[^\s<>]*)?/gi) || [];
+      const blockedDomain = candidates.map((candidate) => {
+        try {
+          return new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`).hostname.toLowerCase().replace(/^www\./, '');
+        } catch { return ''; }
+      }).find((hostname) => hostname && !settings.allowedDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`)));
+      if (blockedDomain) return { rule: 'link', reason: 'unapproved link' };
+    }
+    if (settings.capsProtectionEnabled) {
+      const letters = [...text].filter((character) => /[a-z]/i.test(character));
+      const uppercase = letters.filter((character) => character === character.toLocaleUpperCase() && character !== character.toLocaleLowerCase()).length;
+      if (letters.length >= settings.capsMinimumLetters && (uppercase / letters.length) * 100 >= settings.capsPercentage) return { rule: 'caps', reason: 'excessive capital letters' };
+    }
+    if (settings.repetitionProtectionEnabled) {
+      const repeated = new RegExp(`([^\\s])\\1{${settings.repetitionLimit - 1},}`, 'i');
+      if (repeated.test(text)) return { rule: 'repetition', reason: 'repeated-character spam' };
+    }
+    return undefined;
+  }
+
+  private async processAutoMod(event: TempestNormalizedTwitchEvent, simulated: boolean): Promise<{ matched: boolean; accepted: false; reason: string } | undefined> {
+    const violation = this.autoModViolation(event);
+    if (!violation) return undefined;
+    const settings = this.configuration.autoMod;
+    const viewerName = event.viewer?.displayName || event.viewer?.login || 'viewer';
+    if (simulated) return { matched: true, accepted: false, reason: `AutoMod would ${settings.action} this message: ${violation.reason}.` };
+    if (!this.tokens || !this.identity || !this.channel) {
+      const reason = 'AutoMod matched, but the moderator bot is not connected.';
+      this.record({ viewerName, state: 'error', message: `${viewerName}: ${reason}` });
+      return { matched: true, accepted: false, reason };
+    }
+    const messageId = String(event.payload.messageId || '');
+    const viewerId = String(event.viewer?.id || '');
+    const requiredScope = settings.action === 'timeout' ? 'moderator:manage:banned_users' : 'moderator:manage:chat_messages';
+    if (!this.tokens.scopes.includes(requiredScope) || !messageId || (settings.action === 'timeout' && !viewerId)) {
+      const reason = `AutoMod matched, but ${requiredScope} authorization is required.`;
+      this.record({ viewerName, state: 'error', message: `${viewerName}: ${reason}` });
+      return { matched: true, accepted: false, reason };
+    }
+    try {
+      if (settings.action === 'timeout') {
+        const query = new URLSearchParams({ broadcaster_id: this.channel.channelId, moderator_id: this.identity.userId });
+        const response = await this.request(`https://api.twitch.tv/helix/moderation/bans?${query}`, {
+          method: 'POST',
+          headers: { ...this.twitchHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { user_id: viewerId, duration: settings.timeoutSeconds, reason: `Tempest AutoMod: ${violation.reason}` } })
+        });
+        if (response.status !== 200) {
+          const result = await response.json().catch(() => ({})) as { message?: string };
+          throw new Error(result.message || `Twitch timeout failed with ${response.status}.`);
+        }
+      } else {
+        const query = new URLSearchParams({ broadcaster_id: this.channel.channelId, moderator_id: this.identity.userId, message_id: messageId });
+        const response = await this.request(`https://api.twitch.tv/helix/moderation/chat?${query}`, { method: 'DELETE', headers: this.twitchHeaders() });
+        if (response.status !== 204) {
+          const result = await response.json().catch(() => ({})) as { message?: string };
+          throw new Error(result.message || `Twitch message deletion failed with ${response.status}.`);
+        }
+      }
+      this.autoModActionsTaken += 1;
+      this.record({ viewerName, state: 'blocked', message: `AutoMod ${settings.action === 'timeout' ? `timed out ${viewerName} for ${settings.timeoutSeconds}s` : `deleted a message from ${viewerName}`} · ${violation.reason}.` });
+      if (settings.postNotice) {
+        const notice = settings.noticeMessage.replaceAll('{user}', viewerName).replaceAll('{reason}', violation.reason).replaceAll('{action}', settings.action);
+        await this.sendMessage(notice).catch((error) => this.record({ viewerName, state: 'error', message: `AutoMod acted, but its chat notice failed: ${(error as Error).message}` }));
+      }
+      return { matched: true, accepted: false, reason: `AutoMod ${settings.action}: ${violation.reason}.` };
+    } catch (error) {
+      const reason = `AutoMod could not ${settings.action} ${viewerName}: ${(error as Error).message}`;
+      this.record({ viewerName, state: 'error', message: reason });
+      return { matched: true, accepted: false, reason };
+    }
   }
 
   private record(input: Omit<ChatbotActivity, 'id' | 'timestamp'>): void {
@@ -762,6 +1226,74 @@ export class TwitchChatbot {
     });
     const result = await response.json().catch(() => ({})) as { message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> };
     if (!response.ok || result.data?.[0]?.is_sent === false) throw new Error(result.data?.[0]?.drop_reason?.message || result.message || `Twitch chat send failed with ${response.status}.`);
+  }
+
+  private enqueueOfficialShoutout(eventId: string, targetId: string, targetName: string): boolean {
+    if (!targetId) {
+      this.record({ viewerName: targetName, state: 'error', message: `Official shoutout for ${targetName} could not be queued because Twitch did not provide the channel ID.` });
+      return false;
+    }
+    if (this.raidShoutoutQueue.some((entry) => entry.eventId === eventId || entry.targetId === targetId)) return false;
+    if ((this.lastShoutoutByTarget.get(targetId) || 0) + 3_600_000 > Date.now()) return false;
+    this.raidShoutoutQueue.push({ eventId, targetId, targetName });
+    this.record({ viewerName: targetName, state: 'accepted', message: `Official shoutout for ${targetName} queued.` });
+    this.scheduleRaidShoutout();
+    return true;
+  }
+
+  private clearRaidShoutoutQueue(): void {
+    clearTimeout(this.raidShoutoutTimer);
+    this.raidShoutoutTimer = undefined;
+    this.raidShoutoutQueue = [];
+  }
+
+  private nextRaidShoutout(): { index: number; readyAt: number } | undefined {
+    if (!this.raidShoutoutQueue.length) return undefined;
+    const globalReadyAt = this.lastShoutoutAt + 120_000;
+    let selected = { index: 0, readyAt: Number.POSITIVE_INFINITY };
+    this.raidShoutoutQueue.forEach((entry, index) => {
+      const readyAt = Math.max(globalReadyAt, (this.lastShoutoutByTarget.get(entry.targetId) || 0) + 3_600_000);
+      if (readyAt < selected.readyAt) selected = { index, readyAt };
+    });
+    return selected;
+  }
+
+  private scheduleRaidShoutout(): void {
+    if (this.raidShoutoutSending || this.raidShoutoutTimer) return;
+    const next = this.nextRaidShoutout();
+    if (!next) return;
+    const waitMs = Math.max(0, next.readyAt - Date.now());
+    this.raidShoutoutTimer = setTimeout(() => {
+      this.raidShoutoutTimer = undefined;
+      void this.sendNextRaidShoutout();
+    }, waitMs);
+    this.raidShoutoutTimer.unref?.();
+  }
+
+  private async sendNextRaidShoutout(): Promise<void> {
+    if (this.raidShoutoutSending) return;
+    const next = this.nextRaidShoutout();
+    if (!next || next.readyAt > Date.now()) return this.scheduleRaidShoutout();
+    const entry = this.raidShoutoutQueue.splice(next.index, 1)[0];
+    this.raidShoutoutSending = true;
+    try {
+      if (!this.tokens || !this.identity || !this.channel) throw new Error('Chatbot output is not connected.');
+      const query = new URLSearchParams({ from_broadcaster_id: this.channel.channelId, to_broadcaster_id: entry.targetId, moderator_id: this.identity.userId });
+      const response = await this.request(`https://api.twitch.tv/helix/chat/shoutouts?${query}`, { method: 'POST', headers: this.twitchHeaders() });
+      if (response.status !== 204) {
+        const result = await response.json().catch(() => ({})) as { message?: string };
+        throw new Error(result.message || `Twitch shoutout failed with ${response.status}.`);
+      }
+      const now = Date.now();
+      this.lastShoutoutAt = now;
+      this.lastShoutoutByTarget.set(entry.targetId, now);
+      this.record({ viewerName: entry.targetName, state: 'accepted', message: `Official Twitch shoutout sent to ${entry.targetName}.` });
+    } catch (caught) {
+      this.record({ viewerName: entry.targetName, state: 'error', message: `Official shoutout failed for ${entry.targetName}: ${(caught as Error).message}` });
+    } finally {
+      this.raidShoutoutSending = false;
+      this.scheduleRaidShoutout();
+    }
   }
 
   private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedTwitchEvent): Promise<string> {
@@ -838,6 +1370,23 @@ export class TwitchChatbot {
     return { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId };
   }
 
+  private async refreshAssignedCreatorIds(): Promise<void> {
+    const channels = this.configuration.firstChatShoutouts.channels;
+    const missing = channels.filter((login) => !this.configuration.assignedCreatorIds[login]);
+    if (!missing.length) return;
+    const query = new URLSearchParams();
+    for (const login of missing) query.append('login', login);
+    const response = await this.request(`https://api.twitch.tv/helix/users?${query}`, { headers: this.twitchHeaders() });
+    const result = await response.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string }>; message?: string };
+    if (!response.ok) throw new Error(result.message || `Twitch user lookup failed with ${response.status}.`);
+    for (const user of result.data || []) {
+      const login = String(user.login || '').toLowerCase();
+      const userId = String(user.id || '');
+      if (channels.includes(login) && /^\d{1,30}$/.test(userId)) this.configuration.assignedCreatorIds[login] = userId;
+    }
+    await this.persist();
+  }
+
   private async loadStreamStatus(): Promise<NonNullable<TwitchChatbot['streamCache']>> {
     if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
@@ -896,7 +1445,7 @@ export class TwitchChatbot {
     if (!provider) throw new Error('Now Playing is not configured.');
     if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
     const response = await this.request(provider.apiUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/0.21.0' },
+      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.0' },
       signal: AbortSignal.timeout(5_000)
     });
     const result = await response.json().catch(() => ({})) as {
@@ -950,7 +1499,7 @@ export class TwitchChatbot {
     const now = Date.now();
     if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
     try {
-      const headers = { 'User-Agent': 'TempestStreamingStudio/0.21.0', Accept: 'application/geo+json' };
+      const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.0', Accept: 'application/geo+json' };
       if (!this.weatherForecastUrl) {
         const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
         const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
@@ -1047,6 +1596,30 @@ export class TwitchChatbot {
     if (type !== 'notification' || message.metadata?.subscription_type !== 'channel.chat.message' || !message.payload?.event) return;
     const event = message.payload.event;
     const chatterId = String(event.chatter_user_id || '');
+    const chatMessage = event.message && typeof event.message === 'object' && !Array.isArray(event.message)
+      ? event.message as { text?: unknown; fragments?: unknown }
+      : {};
+    const fragments = Array.isArray(chatMessage.fragments) ? chatMessage.fragments.flatMap((entry): Array<Record<string, unknown>> => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+      const fragment = entry as Record<string, unknown>;
+      const type = String(fragment.type || '');
+      const text = String(fragment.text || '').slice(0, 500);
+      if (type === 'text' && text) return [{ type, text }];
+      if (type === 'emote' && fragment.emote && typeof fragment.emote === 'object' && !Array.isArray(fragment.emote)) {
+        const emote = fragment.emote as Record<string, unknown>;
+        const id = String(emote.id || '');
+        if (!/^[A-Za-z0-9_]+$/.test(id)) return [];
+        const format = Array.isArray(emote.format) ? emote.format.map(String).filter((value) => value === 'static' || value === 'animated').slice(0, 2) : ['static'];
+        return [{ type, text, emote: { id, format } }];
+      }
+      if (type === 'gif' && fragment.gif && typeof fragment.gif === 'object' && !Array.isArray(fragment.gif)) {
+        try {
+          const url = new URL(String((fragment.gif as Record<string, unknown>).url || ''));
+          if (url.protocol === 'https:') return [{ type, text, gif: { url: url.href } }];
+        } catch { /* Ignore malformed GIF fragments supplied by the upstream event. */ }
+      }
+      return [];
+    }) : [];
     const badges = Array.isArray(event.badges) ? event.badges as Array<{ set_id?: string }> : [];
     const roles = [
       ...(chatterId === String(event.broadcaster_user_id || '') ? ['broadcaster'] : []),
@@ -1064,7 +1637,8 @@ export class TwitchChatbot {
       viewer: { id: chatterId, login: String(event.chatter_user_login || ''), displayName: String(event.chatter_user_name || ''), roles },
       payload: {
         messageId: String(event.message_id || ''),
-        text: String((event.message as { text?: unknown } | undefined)?.text || ''),
+        text: String(chatMessage.text || ''),
+        ...(fragments.length ? { fragments } : {}),
         ...(event.source_broadcaster_user_id ? {
           sharedChat: true,
           sourceChannelId: String(event.source_broadcaster_user_id),
@@ -1132,5 +1706,9 @@ export class TwitchChatbot {
   private async persist(): Promise<void> {
     this.configuration.updatedAt = new Date().toISOString();
     await writeFile(this.configurationPath, `${JSON.stringify(this.configuration, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  }
+
+  private async persistFirstChatShoutoutState(): Promise<void> {
+    await writeFile(this.firstChatShoutoutStatePath, `${JSON.stringify({ schemaVersion: 1, sessions: Object.fromEntries(this.firstChatShoutoutSessions) }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   }
 }

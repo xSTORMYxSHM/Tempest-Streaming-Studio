@@ -59,6 +59,8 @@ The runtime still verifies every Twitch JWT, restricts requests to that one chan
 
 Studio 0.10.1 adds the hosted Extension Backend Service and the channel-bound outbound Studio relay. The EBS verifies Twitch Extension JWTs, allowlists channels and actions, applies anonymous-viewer policy, rate-limits and deduplicates requests, then hands normalized interactions to Studio without exposing the localhost Bridge. The Video Component receives its public EBS origin at build time and never embeds the Extension shared secret or Studio relay token.
 
+When a channel restricts interactions to **Assigned Creators**, the Extension requests Twitch identity sharing only after a restricted interaction needs it. The signed JWT then includes the viewer's numeric Twitch user ID, which Studio compares against locally resolved assigned-creator IDs before queuing anything. Enable **Request Identity Link** for the Extension in the Twitch Developer Console; an opaque viewer ID cannot be matched safely to a configured Twitch login.
+
 ## 0.10.0 boundary
 
 Tempest Streaming Studio 0.10.0 establishes the authorization and configuration layer required by the live Twitch connector. It uses Twitch's Device Code Grant as a public client, which is appropriate for a locally installed Electron application and does not require embedding a client secret.

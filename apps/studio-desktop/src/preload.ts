@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('tempestStudio', {
+  getPrivacySettings: () => ipcRenderer.invoke('studio:get-privacy-settings'),
+  savePrivacySettings: (settings: { streamerMode: boolean; captureProtection: boolean }) => ipcRenderer.invoke('studio:save-privacy-settings', settings),
   copyText: (value: string) => ipcRenderer.invoke('studio:copy-text', value),
   getBridgeConfig: () => ipcRenderer.invoke('studio:get-bridge-config'),
   getWarudoStatus: () => ipcRenderer.invoke('studio:get-warudo-status'),

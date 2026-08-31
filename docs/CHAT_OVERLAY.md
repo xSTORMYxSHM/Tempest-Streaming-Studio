@@ -15,3 +15,5 @@ The Chat Overlay tab controls:
 - Browser Source connection and local-buffer monitoring.
 
 Settings persist in Studio's Bridge data directory. Chat messages remain an in-memory display buffer and are discarded as their display leases expire or when Studio closes.
+
+The Chat Overlay Browser Source URL is concealed on the Chat Overlay page and in Guided Setup while Privacy Shield is active. Its copy button remains available so the source can be configured without displaying the address on stream.

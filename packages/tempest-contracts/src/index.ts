@@ -1,5 +1,5 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '0.21.0';
+export const TEMPEST_STUDIO_VERSION = '1.0.0';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 
@@ -22,7 +22,8 @@ export const normalizedTwitchEventTopics = [
   'channel.moderation.action',
   'channel.poll.updated',
   'channel.prediction.updated',
-  'channel.hype-train.updated'
+  'channel.hype-train.updated',
+  'channel.goal.updated'
 ] as const;
 
 export type ApplicationState = typeof applicationStates[number];
@@ -597,6 +598,28 @@ export function validateNormalizedTwitchEvent(input: unknown): ValidationResult<
     } else if (source.topic === 'viewer.chat.message') {
       requiredString(payload, 'messageId', errors);
       requiredString(payload, 'text', errors);
+      if (payload.fragments !== undefined) {
+        if (!Array.isArray(payload.fragments)) errors.push('payload.fragments must be an array when supplied.');
+        else for (const [index, entry] of payload.fragments.entries()) {
+          if (!isObject(entry)) { errors.push(`payload.fragments[${index}] must be an object.`); continue; }
+          if (!['text', 'emote', 'gif'].includes(String(entry.type || ''))) errors.push(`payload.fragments[${index}].type must be text, emote, or gif.`);
+          if (typeof entry.text !== 'string') errors.push(`payload.fragments[${index}].text must be a string.`);
+          if (entry.type === 'emote') {
+            if (!isObject(entry.emote)) errors.push(`payload.fragments[${index}].emote must be an object.`);
+            else {
+              if (typeof entry.emote.id !== 'string' || !/^[A-Za-z0-9_]+$/.test(entry.emote.id)) errors.push(`payload.fragments[${index}].emote.id is invalid.`);
+              if (!Array.isArray(entry.emote.format) || entry.emote.format.some((format) => !['static', 'animated'].includes(String(format)))) errors.push(`payload.fragments[${index}].emote.format must contain only static or animated.`);
+            }
+          }
+          if (entry.type === 'gif') {
+            if (!isObject(entry.gif) || typeof entry.gif.url !== 'string') errors.push(`payload.fragments[${index}].gif.url must be an HTTPS URL.`);
+            else {
+              try { if (new URL(entry.gif.url).protocol !== 'https:') errors.push(`payload.fragments[${index}].gif.url must be an HTTPS URL.`); }
+              catch { errors.push(`payload.fragments[${index}].gif.url must be an HTTPS URL.`); }
+            }
+          }
+        }
+      }
     } else if (source.topic === 'viewer.reward.redeemed') {
       requiredString(payload, 'redemptionId', errors);
       requiredString(payload, 'rewardId', errors);

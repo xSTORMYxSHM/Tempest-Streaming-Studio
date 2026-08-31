@@ -101,6 +101,60 @@ test('applies explicit Shared Chat command policy while keeping permissions home
   assert.equal(activity[0].sourceChannelLogin, 'partner');
 });
 
+test('filters links and spam with moderator-safe deletes, exemptions, previews, and timeouts', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-automod-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url, options) => {
+      requests.push({ url: String(url), options });
+      return String(url).includes('/moderation/chat') ? new Response(null, { status: 204 }) : jsonResponse({ data: [{}] });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  await chatbot.configure({ autoMod: {
+    enabled: true, linkProtectionEnabled: true, allowedDomains: ['twitch.tv'], blockedTermsEnabled: true, blockedTerms: ['spoiler phrase'],
+    capsProtectionEnabled: true, capsMinimumLetters: 8, capsPercentage: 75, repetitionProtectionEnabled: true, repetitionLimit: 6,
+    exemptRoles: ['broadcaster', 'moderator', 'vip'], action: 'delete', timeoutSeconds: 60, postNotice: false,
+    noticeMessage: '@{user}: {reason}'
+  } });
+  const chatEvent = (id, text, roles = [], viewerId = 'viewer-1') => ({
+    schemaVersion: 1, id, topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch',
+    channel: { id: 'channel-1', login: 'tempest' }, viewer: { id: viewerId, login: 'viewer', displayName: 'Viewer', roles },
+    payload: { messageId: `message-${id}`, text }
+  });
+
+  await chatbot.processChatEvent(chatEvent('allowed-link', 'watch https://clips.twitch.tv/example'));
+  await chatbot.processChatEvent(chatEvent('mod-link', 'visit suspicious.example', ['moderator']));
+  assert.equal(requests.length, 0);
+
+  const deleted = await chatbot.processChatEvent(chatEvent('blocked-link', 'visit suspicious.example now'));
+  assert.equal(deleted.accepted, false);
+  assert.match(deleted.reason, /unapproved link/);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /helix\/moderation\/chat/);
+  assert.match(requests[0].url, /message_id=message-blocked-link/);
+  assert.equal(requests[0].options.method, 'DELETE');
+
+  const capsPreview = await chatbot.testAutoMod({ message: 'THIS MESSAGE IS TOO LOUD' });
+  assert.equal(capsPreview.blocked, true);
+  assert.equal(capsPreview.rule, 'caps');
+  assert.equal(requests.length, 1);
+
+  await chatbot.configure({ autoMod: { ...chatbot.status().autoMod, action: 'timeout', timeoutSeconds: 90 } });
+  const timedOut = await chatbot.processChatEvent(chatEvent('blocked-term', 'that contains a spoiler phrase', [], 'viewer-2'));
+  assert.match(timedOut.reason, /timeout/);
+  assert.equal(requests.length, 2);
+  assert.match(requests[1].url, /helix\/moderation\/bans/);
+  assert.equal(JSON.parse(requests[1].options.body).data.duration, 90);
+  assert.equal(chatbot.status().autoMod.actionsTaken, 2);
+  await chatbot.close();
+});
+
 test('authorizes any secondary Twitch identity and derives or customizes its bot name', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-oauth-'));
   const credentials = memoryCredentialStore();
@@ -119,6 +173,158 @@ test('authorizes any secondary Twitch identity and derives or customizes its bot
   assert.equal((await chatbot.configure({ displayName: 'StormBot' })).botName, 'StormBot');
   assert.equal((await chatbot.configure({ displayName: '' })).botName, 'studio_helper');
   assert.equal(credentials.current().refreshToken, 'bot-refresh');
+});
+
+test('welcomes raiders in chat and sends official shoutouts through a moderator bot token', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-raids-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url, options) => {
+      requests.push({ url: String(url), options });
+      return String(url).includes('/helix/chat/shoutouts')
+        ? new Response(null, { status: 204 })
+        : jsonResponse({ data: [{ is_sent: true }] });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat', 'moderator:manage:shoutouts'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  await chatbot.configure({ raidAutomation: { welcomeEnabled: true, welcomeMessage: 'Welcome {raider}! Thanks for the {viewers}-viewer raid to {channel}.', shoutoutEnabled: true } });
+
+  const result = await chatbot.processRaidEvent({
+    schemaVersion: 1, id: 'raid-event-1', topic: 'viewer.raid.received', occurredAt: new Date().toISOString(), source: 'twitch',
+    channel: { id: 'channel-1', login: 'tempest' }, payload: { fromBroadcasterId: 'raider-1', fromBroadcasterName: 'OrbitCaster', viewers: 73 }
+  });
+  assert.equal(result.welcome, 'sent');
+  assert.equal(result.shoutout, 'queued');
+  assert.equal(result.message, 'Welcome OrbitCaster! Thanks for the 73-viewer raid to tempest.');
+  for (let attempt = 0; attempt < 20 && requests.length < 2; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].url, /helix\/chat\/messages/);
+  assert.equal(JSON.parse(requests[0].options.body).message, result.message);
+  assert.match(requests[1].url, /helix\/chat\/shoutouts/);
+  assert.match(requests[1].url, /from_broadcaster_id=channel-1/);
+  assert.match(requests[1].url, /to_broadcaster_id=raider-1/);
+  assert.match(requests[1].url, /moderator_id=bot-1/);
+  assert.match(chatbot.status().activity.map((entry) => entry.message).join('\n'), /Official Twitch shoutout sent to OrbitCaster/);
+  await chatbot.close();
+});
+
+test('previews raid automation without posting and reports when shoutout authorization is missing', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-raid-preview-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async (...args) => { requests.push(args); return jsonResponse({}); } });
+  await chatbot.initialize('client123');
+  const preview = await chatbot.testRaidAutomation({ raiderName: 'PreviewCaster', viewers: 18 });
+  assert.equal(preview.welcome, 'preview');
+  assert.equal(preview.shoutout, 'preview');
+  assert.match(preview.message, /PreviewCaster/);
+  assert.match(preview.message, /18/);
+  assert.equal(requests.length, 0);
+
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  const live = await chatbot.processRaidEvent({ schemaVersion: 1, id: 'raid-no-scope', topic: 'viewer.raid.received', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1' }, payload: { fromBroadcasterId: 'raider-2', fromBroadcasterName: 'NoScopeCaster', viewers: 5 } });
+  assert.equal(live.welcome, 'sent');
+  assert.equal(live.shoutout, 'authorization-required');
+  assert.equal(requests.length, 1);
+  await chatbot.close();
+});
+
+test('shouts out assigned creators on their first chat once per live stream and persists the handled session', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-first-chat-'));
+  const startedAt = '2030-05-01T20:00:00Z';
+  const requests = [];
+  const fetchImplementation = async (url, options) => {
+    requests.push({ url: String(url), options });
+    if (String(url).includes('/helix/streams')) return jsonResponse({ data: [{ started_at: startedAt, viewer_count: 20 }] });
+    if (String(url).includes('/helix/chat/shoutouts')) return new Response(null, { status: 204 });
+    return jsonResponse({});
+  };
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat', 'moderator:manage:shoutouts'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  await chatbot.configure({ firstChatShoutouts: { enabled: true, channels: ['@Creator_One', 'creator_two'] } });
+  const chatEvent = (id, text = 'hello') => ({
+    schemaVersion: 1, id, topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1', login: 'tempest' },
+    viewer: { id: 'creator-1', login: 'creator_one', displayName: 'Creator_One', roles: [] }, payload: { messageId: id, text }
+  });
+
+  await chatbot.processChatEvent(chatEvent('first-message'));
+  for (let attempt = 0; attempt < 20 && requests.length < 2; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].url, /helix\/streams/);
+  assert.match(requests[1].url, /to_broadcaster_id=creator-1/);
+  assert.deepEqual(chatbot.status().firstChatShoutouts.channels, ['creator_one', 'creator_two']);
+  assert.equal(chatbot.status().firstChatShoutouts.handledSessions, 1);
+
+  await chatbot.processChatEvent(chatEvent('second-message', 'still here'));
+  assert.equal(requests.length, 2);
+  await chatbot.close();
+
+  const restoredRequests = [];
+  const restored = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async (url) => {
+    restoredRequests.push(String(url));
+    return jsonResponse({ data: [{ started_at: startedAt, viewer_count: 22 }] });
+  } });
+  await restored.initialize('client123');
+  restored.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat', 'moderator:manage:shoutouts'] };
+  restored.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await restored.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  await restored.processChatEvent(chatEvent('after-restart'));
+  assert.deepEqual(restoredRequests, ['https://api.twitch.tv/helix/streams?user_id=channel-1']);
+  assert.equal(restored.status().raidAutomation.queuedShoutouts, 0);
+  await restored.close();
+});
+
+test('does not trigger assigned first-chat shoutouts while the channel is offline', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-first-chat-offline-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async (url) => { requests.push(String(url)); return jsonResponse({ data: [] }); } });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat', 'moderator:manage:shoutouts'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' });
+  await chatbot.configure({ firstChatShoutouts: { enabled: true, channels: ['creator_one'] } });
+  await chatbot.processChatEvent({ schemaVersion: 1, id: 'offline-message', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1' }, viewer: { id: 'creator-1', login: 'creator_one', displayName: 'Creator One', roles: [] }, payload: { messageId: 'offline-message', text: 'hello' } });
+  assert.deepEqual(requests, ['https://api.twitch.tv/helix/streams?user_id=channel-1']);
+  assert.equal(chatbot.status().firstChatShoutouts.handledSessions, 0);
+  await chatbot.close();
+});
+
+test('restricts Extension interactions to Twitch-verified assigned creators with staff override', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-interaction-access-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url) => {
+      requests.push(String(url));
+      if (String(url).includes('/helix/users?')) return jsonResponse({ data: [{ id: '101', login: 'creator_one' }, { id: '202', login: 'creator_two' }] });
+      return jsonResponse({});
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: '900' };
+  await chatbot.configure({
+    firstChatShoutouts: { enabled: false, channels: ['creator_one', 'creator_two'] },
+    interactionAccess: { mode: 'assigned-creators', allowBroadcasterAndModerators: true }
+  });
+  assert.equal(requests.length, 1);
+  assert.equal(chatbot.status().interactionAccess.resolvedCreators, 2);
+  const interaction = (viewer) => ({ schemaVersion: 1, id: `interaction-${viewer.id}`, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1' }, viewer, payload: { action: 'tempest.dance' } });
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '101', roles: ['viewer'] }))).allowed, true);
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '303', roles: ['viewer'] }))).code, 'not-assigned');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: 'Uopaqueviewer', roles: ['viewer'] }))).code, 'identity-required');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '303', roles: ['moderator'] }))).allowed, true);
+  await chatbot.close();
 });
 
 test('serves optional local weather from the National Weather Service without an API key', async () => {
