@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Made Twitch onboarding a normal sign-in experience by bundling the official Public Tempest application Client ID; streamers no longer need a developer account, while self-hosters retain an Advanced custom Client ID override.
+
 ## 1.0.0 — Stream experiences, emotes, privacy, and moderation
 
 - Added a native broadcaster EventSub connection and a shared Twitch Experiences Browser Source for Hype Train Takeover, Raid Portal, and channel-goal progress, with independent enablement, previews, colors, connection health, persistence, backup support, and safe raid coexistence.

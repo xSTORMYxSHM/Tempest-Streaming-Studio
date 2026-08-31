@@ -63,11 +63,11 @@ When a channel restricts interactions to **Assigned Creators**, the Extension re
 
 ## 0.10.0 boundary
 
-Tempest Streaming Studio 0.10.0 establishes the authorization and configuration layer required by the live Twitch connector. It uses Twitch's Device Code Grant as a public client, which is appropriate for a locally installed Electron application and does not require embedding a client secret.
+Tempest Streaming Studio uses Twitch's Device Code Grant through its built-in Public application, which is appropriate for a locally installed Electron application and does not require a client secret. Streamers authorize their normal Twitch account without creating a developer application.
 
 The release includes:
 
-- Public Twitch application client-ID configuration.
+- Built-in official Public Twitch application identification, with an Advanced custom Client ID override for self-hosters and developers.
 - A curated interaction-scope set for chat, follows, subscriptions, Bits observations, rewards, polls, predictions, and Hype Trains.
 - Device activation with Twitch-hosted login and consent.
 - Access and rotating refresh tokens encrypted through Electron `safeStorage`.
@@ -80,12 +80,10 @@ EventSub and chat were intentionally left disconnected in 0.10.0; the 0.11.0 Cha
 
 ## Setup
 
-1. Register a public application in the Twitch Developer Console and copy its client ID.
-2. Open Studio's Twitch Gateway page.
-3. Paste the public client ID and optionally map channel-point reward IDs to namespaced Tempest actions.
-4. Save the configuration and select **Connect Twitch**.
-5. Complete Twitch's activation page using the code displayed by Studio.
-6. Studio validates the resulting token and shows the authorized Twitch account.
+1. Open Studio's Twitch Gateway page and select **Connect Twitch**.
+2. Sign into the Twitch account that owns the channel and approve the requested permissions on Twitch's activation page.
+3. Studio validates the resulting token and shows the authorized Twitch account.
+4. Optionally open **Advanced** to map channel-point reward IDs to namespaced Tempest actions or use a custom Public Client ID for self-hosting.
 
 No Twitch password enters Studio. No client secret is required or accepted. Non-secret settings are stored in `twitch-integration.json`; tokens are stored separately as operating-system-encrypted bytes.
 

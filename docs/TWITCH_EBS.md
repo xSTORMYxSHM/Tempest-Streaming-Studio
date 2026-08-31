@@ -24,7 +24,7 @@ Configure these secret/environment values on the host:
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
 DATABASE_URL=<PostgreSQL connection URL>
-TEMPEST_EBS_TWITCH_CLIENT_IDS=<Studio Twitch application client ID>
+TEMPEST_EBS_TWITCH_CLIENT_IDS=n04l25zbygbsnq6nj7gupboyeji820
 ```
 
 ### Railway
@@ -38,7 +38,7 @@ In the service's **Variables** tab, add:
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-TEMPEST_EBS_TWITCH_CLIENT_IDS=<Studio Twitch application client ID>
+TEMPEST_EBS_TWITCH_CLIENT_IDS=n04l25zbygbsnq6nj7gupboyeji820
 ```
 
 Do not add `PORT`, TLS certificate, or TLS password variables on Railway. Railway supplies the port and terminates public HTTPS. Twitch Extension origins matching `https://<extension-id>.ext-twitch.tv` are accepted automatically, so `TEMPEST_EBS_ALLOWED_ORIGINS` is not needed for the hosted Extension.

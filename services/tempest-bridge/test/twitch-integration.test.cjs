@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { mkdtemp } = require('node:fs/promises');
+const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { TwitchIntegrationGateway, describeTwitchOAuthError, normalizeTwitchEventSubNotification } = require('../dist/twitch-integration');
+const { OFFICIAL_TWITCH_CLIENT_ID, TwitchIntegrationGateway, describeTwitchOAuthError, normalizeTwitchEventSubNotification } = require('../dist/twitch-integration');
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -22,9 +22,37 @@ function memoryCredentialStore(initial = null) {
 
 test('turns Twitch confidential-client failures into public-client recovery guidance', () => {
   const message = describeTwitchOAuthError('missing client secret', 'OAuth failed.');
-  assert.match(message, /Client Type to Public/);
+  assert.match(message, /Advanced custom Twitch application/);
+  assert.match(message, /Client Type Public/);
   assert.match(message, /disconnect and reconnect Twitch/);
   assert.doesNotMatch(message, /^missing client secret$/);
+});
+
+test('uses the official public Twitch application on a clean installation', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-twitch-official-client-'));
+  const gateway = new TwitchIntegrationGateway({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async () => jsonResponse({}) });
+  await gateway.initialize();
+
+  assert.equal(gateway.status().configured, true);
+  assert.equal(gateway.status().clientId, OFFICIAL_TWITCH_CLIENT_ID);
+  assert.equal(gateway.status().clientIdMode, 'official');
+  assert.equal(gateway.status().oauth.state, 'authorization-required');
+
+  const configured = await gateway.configure({ scopes: ['user:read:chat'], rewardMappings: {} });
+  assert.equal(configured.clientId, OFFICIAL_TWITCH_CLIENT_ID);
+  assert.equal(configured.clientIdMode, 'official');
+});
+
+test('migrates an empty 1.0.0 Twitch configuration to the official application', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-twitch-official-migration-'));
+  const configurationPath = path.join(dataDirectory, 'twitch-integration.json');
+  await writeFile(configurationPath, JSON.stringify({ schemaVersion: 1, clientId: '', scopes: ['user:read:chat'], rewardMappings: {}, updatedAt: new Date().toISOString() }));
+  const gateway = new TwitchIntegrationGateway({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async () => jsonResponse({}) });
+  await gateway.initialize();
+
+  assert.equal(gateway.status().clientId, OFFICIAL_TWITCH_CLIENT_ID);
+  assert.equal(gateway.status().clientIdMode, 'official');
+  assert.equal(JSON.parse(await readFile(configurationPath, 'utf8')).clientId, OFFICIAL_TWITCH_CLIENT_ID);
 });
 
 test('normalizes raid, Hype Train, and goal EventSub notifications', () => {
@@ -52,7 +80,7 @@ test('clears stale OAuth errors and credentials when the Twitch client ID change
   const gateway = new TwitchIntegrationGateway({ dataDirectory, credentialStore: credentials, fetchImplementation: async () => responses.shift() });
   await gateway.initialize();
   assert.equal(gateway.status().oauth.state, 'error');
-  assert.match(gateway.status().lastError, /Client Type to Public/);
+  assert.match(gateway.status().lastError, /Client Type Public/);
 
   const changed = await gateway.configure({ clientId: 'client456', scopes: ['user:read:chat'], rewardMappings: {} });
   assert.equal(changed.oauth.state, 'authorization-required');

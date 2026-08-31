@@ -19,6 +19,10 @@ export const defaultTwitchScopes = [
   'user:read:chat'
 ] as const;
 
+// Twitch Client IDs are public application identifiers. This Public client uses
+// Device Code authorization, so no client secret is embedded or accepted.
+export const OFFICIAL_TWITCH_CLIENT_ID = 'n04l25zbygbsnq6nj7gupboyeji820';
+
 export interface TwitchTokenSet {
   accessToken: string;
   refreshToken: string;
@@ -60,6 +64,7 @@ export interface TwitchIntegrationStatus {
   owner: 'tempest-mainframe-studio';
   configured: boolean;
   clientId?: string;
+  clientIdMode: 'official' | 'custom';
   oauth: {
     state: 'not-configured' | 'authorization-required' | 'authorization-pending' | 'authorized' | 'refreshing' | 'expired' | 'error';
     tokenExpiresAt?: string;
@@ -92,7 +97,7 @@ export interface TwitchIntegrationGatewayOptions {
 
 const emptyConfiguration = (): TwitchConfigurationDocument => ({
   schemaVersion: 1,
-  clientId: '',
+  clientId: OFFICIAL_TWITCH_CLIENT_ID,
   scopes: [...defaultTwitchScopes],
   rewardMappings: {},
   updatedAt: new Date().toISOString()
@@ -156,7 +161,7 @@ export function normalizeTwitchEventSubNotification(subscriptionType: string, ev
 export function describeTwitchOAuthError(message: unknown, fallback: string): string {
   const detail = String(message || '').trim();
   if (/missing client secret/i.test(detail)) {
-    return 'Twitch is requiring a client secret for this application. Tempest Streaming Studio uses Device Code Flow on Windows: set the application Client Type to Public in the Twitch Developer Console, save it, then disconnect and reconnect Twitch.';
+    return 'Twitch rejected Device Code authorization because the selected application expects a client secret. Update Tempest Streaming Studio, or set an Advanced custom Twitch application to Client Type Public, then disconnect and reconnect Twitch.';
   }
   return detail || fallback;
 }
@@ -198,15 +203,18 @@ export class TwitchIntegrationGateway {
     await mkdir(this.options.dataDirectory, { recursive: true });
     try {
       const parsed = JSON.parse(await readFile(this.configurationPath, 'utf8')) as Partial<TwitchConfigurationDocument>;
+      const useOfficialClientId = !validClientId(parsed.clientId);
+      const clientId = validClientId(parsed.clientId) ? parsed.clientId : OFFICIAL_TWITCH_CLIENT_ID;
       this.configuration = {
         schemaVersion: 1,
-        clientId: validClientId(parsed.clientId) ? parsed.clientId : '',
+        clientId,
         scopes: Array.isArray(parsed.scopes) && parsed.scopes.every((scope) => typeof scope === 'string') ? [...new Set([...parsed.scopes, ...defaultTwitchScopes])] : [...defaultTwitchScopes],
         rewardMappings: parsed.rewardMappings && typeof parsed.rewardMappings === 'object'
           ? Object.fromEntries(Object.entries(parsed.rewardMappings).filter(([rewardId, action]) => Boolean(rewardId) && validAction(action)))
           : {},
         updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString()
       };
+      if (useOfficialClientId) await this.persistConfiguration();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Twitch integration settings: ${(error as Error).message}`);
       await this.persistConfiguration();
@@ -227,6 +235,7 @@ export class TwitchIntegrationGateway {
       owner: 'tempest-mainframe-studio',
       configured: Boolean(this.configuration.clientId),
       clientId: this.configuration.clientId || undefined,
+      clientIdMode: this.configuration.clientId === OFFICIAL_TWITCH_CLIENT_ID ? 'official' : 'custom',
       oauth: {
         state: this.oauthState,
         tokenExpiresAt: this.tokens?.expiresAt,
@@ -268,7 +277,8 @@ export class TwitchIntegrationGateway {
   async configure(input: unknown): Promise<TwitchIntegrationStatus> {
     if (!input || typeof input !== 'object') throw new Error('Twitch configuration must be an object.');
     const source = input as { clientId?: unknown; scopes?: unknown; rewardMappings?: unknown };
-    if (!validClientId(source.clientId)) throw new Error('Twitch clientId must contain 8 to 80 letters or numbers.');
+    const clientId = source.clientId === undefined || source.clientId === '' ? OFFICIAL_TWITCH_CLIENT_ID : source.clientId;
+    if (!validClientId(clientId)) throw new Error('A custom Twitch clientId must contain 8 to 80 letters or numbers.');
     const scopes = source.scopes === undefined ? [...defaultTwitchScopes] : source.scopes;
     if (!Array.isArray(scopes) || !scopes.length || scopes.some((scope) => typeof scope !== 'string' || !/^[a-z]+(?::[a-z_]+)+$/.test(scope))) throw new Error('Twitch scopes must be a non-empty array of scope names.');
     const mappings = source.rewardMappings === undefined ? this.configuration.rewardMappings : source.rewardMappings;
@@ -277,8 +287,8 @@ export class TwitchIntegrationGateway {
       if (!rewardId.trim() || !validAction(action)) throw new Error(`Reward mapping ${rewardId || '(empty)'} must target a namespaced Tempest action.`);
       return [rewardId.trim(), action];
     }));
-    const clientChanged = this.configuration.clientId !== source.clientId;
-    this.configuration = { schemaVersion: 1, clientId: source.clientId, scopes: [...new Set([...scopes, ...defaultTwitchScopes])], rewardMappings, updatedAt: new Date().toISOString() };
+    const clientChanged = this.configuration.clientId !== clientId;
+    this.configuration = { schemaVersion: 1, clientId, scopes: [...new Set([...scopes, ...defaultTwitchScopes])], rewardMappings, updatedAt: new Date().toISOString() };
     await this.persistConfiguration();
     if (clientChanged) await this.clearAuthorization(true);
     this.setOauthState(this.tokens ? 'authorized' : 'authorization-required');
@@ -286,7 +296,7 @@ export class TwitchIntegrationGateway {
   }
 
   async startDeviceAuthorization(): Promise<{ userCode: string; verificationUri: string; expiresAt: string; intervalSeconds: number }> {
-    if (!this.configuration.clientId) throw new Error('Configure a Twitch application client ID first.');
+    if (!this.configuration.clientId) throw new Error('Twitch sign-in is not configured.');
     if (!this.credentialStore?.available) throw new Error('Secure operating-system credential storage is unavailable.');
     const body = new URLSearchParams({ client_id: this.configuration.clientId, scopes: this.configuration.scopes.join(' ') });
     const response = await this.request('https://id.twitch.tv/oauth2/device', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });

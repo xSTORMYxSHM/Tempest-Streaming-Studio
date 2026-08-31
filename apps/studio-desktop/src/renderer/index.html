@@ -270,14 +270,21 @@
             <div class="panel-header"><div><span>DEVICE AUTHORIZATION</span><h3>Connect interaction services</h3></div><span id="twitchAccountBadge" class="status-badge offline" data-sensitive>NOT CONNECTED</span></div>
             <div class="twitch-setup-grid">
               <div class="twitch-form-stack">
-                <label>Twitch application client ID<input id="twitchClientId" data-sensitive autocomplete="off" spellcheck="false" placeholder="Public client ID from dev.twitch.tv" /></label>
-                <label>Channel-point reward mappings<textarea id="twitchRewardMappings" data-sensitive rows="4" spellcheck="false" placeholder="reward-id = tempest.blackhole"></textarea><small>One mapping per line. Rewards without a mapping remain observations.</small></label>
-                <div class="twitch-setup-actions"><button id="saveTwitchConfiguration" class="secondary-button">Save Configuration</button><button id="connectTwitchButton" class="primary-button">Connect Twitch</button><button id="validateTwitchButton" class="secondary-button">Validate Token</button><button id="disconnectTwitchButton" class="secondary-button danger-outline">Disconnect</button></div>
+                <div class="sound-alert-note"><strong>Just sign in with Twitch.</strong> The official Tempest application is built in, so streamers do not need a developer account, Client ID, or Client Secret.</div>
+                <div class="twitch-setup-actions"><button id="connectTwitchButton" class="primary-button">Connect Twitch</button><button id="validateTwitchButton" class="secondary-button">Validate Connection</button><button id="disconnectTwitchButton" class="secondary-button danger-outline">Disconnect</button></div>
+                <details class="setup-guidance">
+                  <summary><span><b>ADVANCED</b><strong>Custom Twitch application and reward mappings</strong></span><em>Show details</em></summary>
+                  <div class="setup-guidance-body">
+                    <label>Custom public Client ID<input id="twitchClientId" data-sensitive autocomplete="off" spellcheck="false" placeholder="Leave blank to use the official Tempest application" /><small>Only for self-hosting or development. The application must use Twitch Client Type Public.</small></label>
+                    <label>Channel-point reward mappings<textarea id="twitchRewardMappings" data-sensitive rows="4" spellcheck="false" placeholder="reward-id = tempest.blackhole"></textarea><small>One mapping per line. Rewards without a mapping remain observations.</small></label>
+                    <div class="twitch-setup-actions"><button id="saveTwitchConfiguration" class="secondary-button">Save Advanced Settings</button></div>
+                  </div>
+                </details>
               </div>
               <div class="twitch-auth-summary">
                 <span>REQUESTED SCOPES</span><div id="twitchScopeList" class="scope-list"></div>
                 <div id="twitchDeviceAuthorization" class="device-authorization hidden"><span>ACTIVATION CODE</span><strong id="twitchDeviceCode" data-sensitive>—</strong><p>Enter this code on Twitch. Studio checks authorization without receiving your password.</p><button id="openTwitchAuthorization" class="primary-button">Open Twitch Activation</button></div>
-                <p id="twitchSetupMessage">Save a public Twitch application client ID to begin.</p>
+                <p id="twitchSetupMessage">Connect your broadcaster account with Twitch. Your password is entered only on Twitch.</p>
               </div>
             </div>
           </article>

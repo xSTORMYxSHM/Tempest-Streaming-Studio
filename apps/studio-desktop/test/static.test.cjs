@@ -45,6 +45,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Interaction Workflows/);
   assert.match(html, /Event Log/);
   assert.match(html, /Twitch Gateway/);
+  assert.match(html, /streamers do not need a developer account, Client ID, or Client Secret/);
+  assert.match(html, /Leave blank to use the official Tempest application/);
+  assert.match(renderer, /No developer account is needed/);
   assert.match(html, /id="extensiondesignerSection"/);
   assert.match(html, /Twitch Panel Designer/);
   assert.match(html, /318 × 496 Twitch Panel/);

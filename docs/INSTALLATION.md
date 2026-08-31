@@ -17,7 +17,9 @@ The ZIP artifact is a portable application directory for testing or users who do
 
 ## Twitch setup
 
-Create a **Public** application in the Twitch Developer Console and paste its Client ID into Twitch Gateway. Tempest Streaming Studio uses Device Code authorization and never needs the Twitch application client secret.
+Open **Twitch Gateway** and select **Connect Twitch**, then sign in with the Twitch account that owns the channel and approve the requested permissions. The official Public Tempest application is built in, so streamers do not need a Twitch developer account, Client ID, or Client Secret.
+
+Self-hosters and developers can expand **Advanced → Custom Twitch application and reward mappings** to supply a different Public Client ID. Tempest uses Device Code authorization and never accepts a Twitch application Client Secret.
 
 Hype Train Takeover and Goal Overlay use broadcaster EventSub scopes. After upgrading from a build that predates Twitch Experiences, disconnect and reconnect the broadcaster once to authorize the added `channel:read:goals` permission.
 
