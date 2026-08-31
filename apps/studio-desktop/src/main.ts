@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet } from '@tempest/bridge';
 import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
 import { validateTwitchAlertDesign } from '@tempest/bridge';
@@ -45,6 +46,114 @@ let broadcasterCredentialStore: TwitchCredentialStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
+
+type StudioUpdateState = 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'error';
+
+interface StudioUpdateStatus {
+  state: StudioUpdateState;
+  currentVersion: string;
+  version?: string;
+  releaseName?: string;
+  releaseDate?: string;
+  percent?: number;
+  transferred?: number;
+  total?: number;
+  message: string;
+}
+
+let studioUpdaterConfigured = false;
+let studioUpdateCheck: Promise<unknown> | null = null;
+let studioUpdateStatus: StudioUpdateStatus = {
+  state: app.isPackaged ? 'idle' : 'disabled',
+  currentVersion: TEMPEST_STUDIO_VERSION,
+  message: app.isPackaged ? 'Ready to check for updates.' : 'Automatic updates are available in installed builds.'
+};
+
+function updateStudioUpdateStatus(update: Partial<StudioUpdateStatus>): StudioUpdateStatus {
+  studioUpdateStatus = { ...studioUpdateStatus, ...update, currentVersion: TEMPEST_STUDIO_VERSION };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('studio:update-status', studioUpdateStatus);
+  return { ...studioUpdateStatus };
+}
+
+function configureStudioUpdater(): void {
+  if (studioUpdaterConfigured || !app.isPackaged) return;
+  studioUpdaterConfigured = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.autoRunAppAfterInstall = true;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.fullChangelog = false;
+  autoUpdater.disableWebInstaller = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    updateStudioUpdateStatus({ state: 'checking', percent: undefined, transferred: undefined, total: undefined, message: 'Checking the signed stable release channel…' });
+  });
+  autoUpdater.on('update-available', (info) => {
+    updateStudioUpdateStatus({
+      state: 'available',
+      version: info.version,
+      releaseName: typeof info.releaseName === 'string' ? info.releaseName : undefined,
+      releaseDate: info.releaseDate,
+      percent: 0,
+      transferred: 0,
+      total: undefined,
+      message: `Tempest Streaming Studio ${info.version} is ready to download.`
+    });
+  });
+  autoUpdater.on('update-not-available', () => {
+    updateStudioUpdateStatus({ state: 'current', version: undefined, releaseName: undefined, releaseDate: undefined, percent: undefined, transferred: undefined, total: undefined, message: `Version ${TEMPEST_STUDIO_VERSION} is up to date.` });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    updateStudioUpdateStatus({
+      state: 'downloading',
+      percent: Math.max(0, Math.min(100, progress.percent)),
+      transferred: progress.transferred,
+      total: progress.total,
+      message: `Downloading signed update ${studioUpdateStatus.version || ''}…`
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    updateStudioUpdateStatus({ state: 'downloaded', version: info.version, percent: 100, message: `Version ${info.version} is verified and ready to install.` });
+  });
+  autoUpdater.on('error', () => {
+    updateStudioUpdateStatus({ state: 'error', percent: undefined, transferred: undefined, total: undefined, message: 'The update service could not be reached. Your current installation was not changed.' });
+  });
+}
+
+async function checkForStudioUpdates(): Promise<StudioUpdateStatus> {
+  if (!app.isPackaged) return { ...studioUpdateStatus };
+  if (studioUpdateStatus.state === 'downloading' || studioUpdateStatus.state === 'downloaded' || studioUpdateStatus.state === 'installing') return { ...studioUpdateStatus };
+  configureStudioUpdater();
+  if (!studioUpdateCheck) {
+    studioUpdateCheck = autoUpdater.checkForUpdates()
+      .catch(() => {
+        if (studioUpdateStatus.state !== 'error') updateStudioUpdateStatus({ state: 'error', message: 'The update service could not be reached. Your current installation was not changed.' });
+      })
+      .finally(() => { studioUpdateCheck = null; });
+  }
+  await studioUpdateCheck;
+  return { ...studioUpdateStatus };
+}
+
+async function downloadStudioUpdate(): Promise<StudioUpdateStatus> {
+  if (!app.isPackaged) return { ...studioUpdateStatus };
+  if (studioUpdateStatus.state !== 'available') throw new Error('Check for an available update before downloading.');
+  updateStudioUpdateStatus({ state: 'downloading', percent: 0, transferred: 0, message: `Starting signed update ${studioUpdateStatus.version || ''}…` });
+  try {
+    await autoUpdater.downloadUpdate();
+  } catch {
+    updateStudioUpdateStatus({ state: 'error', message: 'The update could not be downloaded. Your current installation was not changed.' });
+  }
+  return { ...studioUpdateStatus };
+}
+
+function installStudioUpdate(): StudioUpdateStatus {
+  if (!app.isPackaged) return { ...studioUpdateStatus };
+  if (studioUpdateStatus.state !== 'downloaded') throw new Error('Download and verify the update before installing.');
+  const status = updateStudioUpdateStatus({ state: 'installing', percent: 100, message: 'Restarting Studio to install the signed update…' });
+  setTimeout(() => autoUpdater.quitAndInstall(false, true), 250).unref();
+  return status;
+}
 
 interface StudioPrivacySettings {
   streamerMode: boolean;
@@ -392,6 +501,10 @@ function registerDesktopHandlers(): void {
   });
 
   ipcMain.handle('studio:get-app-info', () => ({ productName, version: TEMPEST_STUDIO_VERSION, dataDirectory: app.getPath('userData'), dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }));
+  ipcMain.handle('studio:get-update-status', () => ({ ...studioUpdateStatus }));
+  ipcMain.handle('studio:check-for-updates', () => checkForStudioUpdates());
+  ipcMain.handle('studio:download-update', () => downloadStudioUpdate());
+  ipcMain.handle('studio:install-update', () => installStudioUpdate());
 
   ipcMain.handle('studio:open-data-directory', async () => {
     await mkdir(app.getPath('userData'), { recursive: true });
@@ -897,6 +1010,14 @@ app.whenReady().then(async () => {
   });
   registerDesktopHandlers();
   mainWindow = createWindow();
+
+  if (app.isPackaged && !process.argv.includes('--smoke-test') && !captureArgument) {
+    configureStudioUpdater();
+    const initialUpdateCheck = setTimeout(() => { void checkForStudioUpdates(); }, 15_000);
+    initialUpdateCheck.unref();
+    const recurringUpdateCheck = setInterval(() => { void checkForStudioUpdates(); }, 6 * 60 * 60 * 1000);
+    recurringUpdateCheck.unref();
+  }
 
   if (process.argv.includes('--smoke-test')) {
     mainWindow.webContents.once('did-finish-load', async () => {

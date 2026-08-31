@@ -27,3 +27,11 @@
 - [x] Code-sign and timestamp the installer, uninstaller, elevation helper, desktop executable, and native DLL payload with the expected Azure Artifact Signing publisher.
 - [ ] Publish checksums, changelog, privacy notice, installation guide, and third-party notices with the release.
 - [ ] Verify the public Twitch Extension and hosted EBS separately before advertising viewer-panel availability.
+
+## Updater-enabled release gates
+
+- [ ] Build and Azure-sign the versioned NSIS installer before creating the GitHub release.
+- [ ] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
+- [ ] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
+- [ ] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
+- [ ] From the previous installed version, check, download, verify, restart, migrate data, and confirm the new version in **Settings + About**.

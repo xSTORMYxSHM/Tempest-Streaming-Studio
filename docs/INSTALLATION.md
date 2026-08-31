@@ -29,7 +29,9 @@ The Twitch Extension/Panel is a universal Extension whose appearance is configur
 
 ## Upgrading
 
-Create a Studio backup before installing a newer build. The NSIS installer preserves per-user data. On first launch, Studio snapshots known configuration files, applies versioned data migrations, and refuses unsafe downgrades from a newer data version.
+Version 1.0.0 predates the in-app updater. Install the first updater-enabled release manually from the official GitHub release. After that one-time upgrade, Studio checks the stable release channel shortly after launch and every six hours while running. Open **Settings + About → Automatic updates** to check at any time.
+
+Studio never downloads or restarts for an update without the user's approval. The downloaded Windows installer is verified against the expected Tempest publisher signature before Studio offers **Restart and Install**. The NSIS installer preserves per-user data. On first launch, Studio snapshots known configuration files, applies versioned data migrations, and refuses unsafe downgrades from a newer data version. Creating a Studio backup before a major upgrade remains recommended.
 
 ## Uninstalling
 

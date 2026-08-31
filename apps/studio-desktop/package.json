@@ -16,7 +16,8 @@
     "@tempest/bridge": "workspace:*",
     "@tempest/contracts": "workspace:*",
     "@tempest/twitch-ebs": "workspace:*",
-    "@tempest/warudo-adapter": "workspace:*"
+    "@tempest/warudo-adapter": "workspace:*",
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "electron": "^37.2.6",
@@ -54,6 +55,13 @@
       { "from": "../../docs/INSTALLATION.md", "to": "docs/INSTALLATION.md" },
       { "from": "../../docs/PRIVACY.md", "to": "docs/PRIVACY.md" },
       { "from": "../../docs/THIRD_PARTY_NOTICES.md", "to": "docs/THIRD_PARTY_NOTICES.md" }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "xSTORMYxSHM",
+        "repo": "Tempest-Streaming-Studio"
+      }
     ],
     "win": {
       "icon": "src/renderer/assets/app-icon.ico",

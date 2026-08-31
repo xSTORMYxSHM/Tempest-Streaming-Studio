@@ -8,7 +8,8 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - GIPHY requests occur only after an API key is saved with Windows encryption and the user performs a search. Selected results are downloaded into local Studio media storage.
 - National Weather Service requests occur only when a U.S. weather location is configured and a command using Local Weather is invoked.
 - AzuraCast requests occur only when a Now Playing provider is configured and its status or command is used.
-- Studio 1.0.0 has no crash-reporting or analytics service and does not automatically upload diagnostics.
+- Updater-enabled Studio releases request public release metadata from the official GitHub repository shortly after launch, every six hours while running, and when the user selects **Check for Updates**. No Twitch credentials, Studio settings, diagnostics, or streamer data are included. Update installers download only after the user approves them.
+- Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 
 ## Public Twitch Extension service
 

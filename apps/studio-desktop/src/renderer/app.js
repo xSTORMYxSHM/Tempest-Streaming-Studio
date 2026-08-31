@@ -50,6 +50,7 @@
     panelDesign: null,
     warudo: null,
     appInfo: null,
+    update: null,
     privacy: { streamerMode: true, captureProtection: true },
     twitchDeviceAuthorization: null,
     chatbotDeviceAuthorization: null
@@ -1578,6 +1579,56 @@
     $('#aboutBuildType').textContent = info.packaged ? `${info.platform} ${info.arch} · installed` : `${info.platform} ${info.arch} · development`;
   }
 
+  function renderUpdateStatus() {
+    const update = state.update;
+    if (!update) return;
+    const labels = {
+      disabled: 'DEV BUILD',
+      idle: 'READY',
+      checking: 'CHECKING',
+      available: 'AVAILABLE',
+      downloading: `DOWNLOADING ${Math.round(update.percent || 0)}%`,
+      downloaded: 'READY TO INSTALL',
+      installing: 'INSTALLING',
+      current: 'UP TO DATE',
+      error: 'RETRY AVAILABLE'
+    };
+    const badge = $('#updateStatusBadge');
+    badge.textContent = labels[update.state] || 'READY';
+    badge.classList.toggle('offline', update.state === 'error' || update.state === 'disabled');
+    $('#updateStatusMessage').textContent = update.message || 'Ready to check for updates.';
+    const progress = $('#updateProgress');
+    progress.hidden = update.state !== 'downloading' && update.state !== 'downloaded' && update.state !== 'installing';
+    $('#updateProgressBar').style.width = `${Math.max(0, Math.min(100, update.percent || 0))}%`;
+    $('#checkForStudioUpdates').disabled = update.state === 'checking' || update.state === 'downloading' || update.state === 'installing' || update.state === 'disabled';
+    $('#downloadStudioUpdate').hidden = update.state !== 'available';
+    $('#downloadStudioUpdate').disabled = update.state !== 'available';
+    $('#installStudioUpdate').hidden = update.state !== 'downloaded';
+    $('#installStudioUpdate').disabled = update.state !== 'downloaded';
+  }
+
+  async function checkForStudioUpdates() {
+    try {
+      state.update = await window.tempestStudio.checkForUpdates();
+      renderUpdateStatus();
+      if (state.update.state === 'current') toast('Tempest Streaming Studio is up to date.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function downloadStudioUpdate() {
+    try {
+      state.update = await window.tempestStudio.downloadUpdate();
+      renderUpdateStatus();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function installStudioUpdate() {
+    try {
+      state.update = await window.tempestStudio.installUpdate();
+      renderUpdateStatus();
+    } catch (error) { toast(error.message, true); }
+  }
+
   function renderAll() {
     renderSafety();
     renderOverview();
@@ -1596,6 +1647,7 @@
     renderSoftware();
     renderAssets();
     renderAbout();
+    renderUpdateStatus();
   }
 
   async function refreshRuntime({ quiet = true } = {}) {
@@ -3231,6 +3283,9 @@
     $('#resetPanelDesign').addEventListener('click', () => populatePanelDesign(defaultPanelDesign()));
     $('#openDesignedPanel').addEventListener('click', openDesignedPanel);
     $('#openStudioDataDirectory').addEventListener('click', () => window.tempestStudio.openDataDirectory().catch((error) => toast(error.message, true)));
+    $('#checkForStudioUpdates').addEventListener('click', checkForStudioUpdates);
+    $('#downloadStudioUpdate').addEventListener('click', downloadStudioUpdate);
+    $('#installStudioUpdate').addEventListener('click', installStudioUpdate);
     $('#exportStudioDiagnostics').addEventListener('click', async () => {
       try {
         const result = await window.tempestStudio.exportDiagnostics();
@@ -3276,7 +3331,8 @@
   async function initialize() {
     bindEvents();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
-    [state.config, state.panelDesign, state.appInfo, state.privacy] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings()]);
+    window.tempestStudio.onUpdateStatus((update) => { state.update = update; renderUpdateStatus(); });
+    [state.config, state.panelDesign, state.appInfo, state.privacy, state.update] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus()]);
     renderPrivacySettings();
     populatePanelDesign(state.panelDesign);
     $('#panelDesignStateBadge').textContent = 'SAVED LOCALLY';
@@ -3286,6 +3342,7 @@
     $('#httpEndpoint').textContent = state.config.baseUrl;
     $('#socketEndpoint').textContent = `${state.config.baseUrl.replace('http', 'ws')}/v1/socket`;
     renderAbout();
+    renderUpdateStatus();
     await refresh();
     if (!onboardingAutoOpened && readOnboardingPreferences().completed !== true) {
       onboardingAutoOpened = true;

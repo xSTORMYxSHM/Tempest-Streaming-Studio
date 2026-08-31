@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedVersion = '1.0.0';
+const expectedVersion = JSON.parse(await readFile(path.join(workspace, 'package.json'), 'utf8')).version;
 const expectedPublisher = 'CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US';
 const packageFiles = [
   'package.json', 'apps/studio-desktop/package.json', 'apps/twitch-extension/package.json',
@@ -26,8 +26,14 @@ for (const relativePath of ['LICENSE', 'TRADEMARKS.md', 'CHANGELOG.md', 'docs/IN
 const releaseDirectory = path.join(workspace, 'release');
 const names = await readdir(releaseDirectory);
 const setupName = `Tempest-Streaming-Studio-Setup-${expectedVersion}-x64.exe`;
+const blockmapName = `${setupName}.blockmap`;
+const updateMetadataName = 'latest.yml';
 const zipName = `Tempest-Streaming-Studio-${expectedVersion}-x64.zip`;
-for (const name of [setupName, zipName]) if (!names.includes(name)) throw new Error(`${name} is missing from release/.`);
+for (const name of [setupName, blockmapName, updateMetadataName, zipName]) if (!names.includes(name)) throw new Error(`${name} is missing from release/.`);
+
+const updateMetadata = await readFile(path.join(releaseDirectory, updateMetadataName), 'utf8');
+if (!new RegExp(`^version: ['\"]?${expectedVersion.replaceAll('.', '\\.')}['\"]?$`, 'm').test(updateMetadata)) throw new Error(`${updateMetadataName} does not advertise ${expectedVersion}.`);
+if (!updateMetadata.includes(setupName) || !/^sha512:\s*\S+/m.test(updateMetadata) || !/^\s*size:\s*\d+/m.test(updateMetadata)) throw new Error(`${updateMetadataName} is missing signed installer update metadata.`);
 
 const unpackedResources = path.join(releaseDirectory, 'win-unpacked', 'resources');
 for (const relativePath of ['app.asar', 'twitch-extension/panel.html', 'tools/create-extension-certificate.ps1']) {
@@ -45,7 +51,7 @@ await walk(path.join(releaseDirectory, 'win-unpacked'));
 if (forbidden.length) throw new Error(`Release contains forbidden secret/certificate files: ${forbidden.join(', ')}`);
 
 const artifacts = [];
-for (const name of [setupName, zipName]) {
+for (const name of [setupName, blockmapName, updateMetadataName, zipName]) {
   const filePath = path.join(releaseDirectory, name);
   const bytes = await readFile(filePath);
   artifacts.push({ name, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });

@@ -201,6 +201,17 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(main, /privacy-settings\.json/);
   assert.match(main, /studio:get-privacy-settings/);
   assert.match(preload, /studio:save-privacy-settings/);
+  assert.match(html, /Automatic updates/);
+  assert.match(html, /id="checkForStudioUpdates"/);
+  assert.match(html, /id="downloadStudioUpdate"/);
+  assert.match(html, /id="installStudioUpdate"/);
+  assert.match(renderer, /renderUpdateStatus/);
+  assert.match(main, /autoDownload\s*=\s*false/);
+  assert.match(main, /autoInstallOnAppQuit\s*=\s*false/);
+  assert.match(main, /disableWebInstaller\s*=\s*true/);
+  assert.match(main, /studio:check-for-updates/);
+  assert.match(main, /quitAndInstall/);
+  assert.match(preload, /studio:update-status/);
   assert.match(styles, /body\.streamer-privacy \[data-sensitive\]/);
   assert.match(renderer, /getAppInfo/);
   assert.match(renderer, /exportStudioDiagnostics/);

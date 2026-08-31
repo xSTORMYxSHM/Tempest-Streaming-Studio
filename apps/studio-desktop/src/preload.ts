@@ -31,6 +31,15 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   restoreBackup: () => ipcRenderer.invoke('studio:restore-backup'),
   restartApp: () => ipcRenderer.invoke('studio:restart-app'),
   getAppInfo: () => ipcRenderer.invoke('studio:get-app-info'),
+  getUpdateStatus: () => ipcRenderer.invoke('studio:get-update-status'),
+  checkForUpdates: () => ipcRenderer.invoke('studio:check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('studio:download-update'),
+  installUpdate: () => ipcRenderer.invoke('studio:install-update'),
+  onUpdateStatus: (listener: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => listener(status);
+    ipcRenderer.on('studio:update-status', handler);
+    return () => ipcRenderer.removeListener('studio:update-status', handler);
+  },
   openDataDirectory: () => ipcRenderer.invoke('studio:open-data-directory'),
   exportDiagnostics: () => ipcRenderer.invoke('studio:export-diagnostics'),
   getGiphyStatus: () => ipcRenderer.invoke('studio:get-giphy-status'),
