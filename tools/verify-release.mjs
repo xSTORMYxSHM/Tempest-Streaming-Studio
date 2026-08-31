@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expectedVersion = '1.0.0';
+const expectedPublisher = 'CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US';
 const packageFiles = [
   'package.json', 'apps/studio-desktop/package.json', 'apps/twitch-extension/package.json',
   'services/tempest-bridge/package.json', 'services/twitch-ebs/package.json',
@@ -50,13 +52,13 @@ for (const name of [setupName, zipName]) {
 }
 
 const readAuthenticodeSignature = (filePath) => {
-  if (process.platform !== 'win32') return { status: 'Unavailable', subject: '', thumbprint: '' };
+  if (process.platform !== 'win32') return { status: 'Unavailable', subject: '', thumbprint: '', timestamped: false };
   const script = [
     '$ErrorActionPreference = "Stop"',
     '$securityModule = Join-Path $env:SystemRoot "System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1"',
     'Import-Module $securityModule',
     '$signature = Get-AuthenticodeSignature -LiteralPath $env:TEMPEST_SIGNATURE_TARGET',
-    '$result = [pscustomobject]@{ status = [string]$signature.Status; subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }; thumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { "" } }',
+    '$result = [pscustomobject]@{ status = [string]$signature.Status; subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }; thumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { "" }; timestamped = $null -ne $signature.TimeStamperCertificate }',
     '$result | ConvertTo-Json -Compress'
   ].join('; ');
   const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
@@ -66,12 +68,50 @@ const readAuthenticodeSignature = (filePath) => {
   }));
 };
 
+const collectCodeFiles = async (directory) => {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const itemPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await collectCodeFiles(itemPath));
+    else if (/\.(?:exe|dll|pyd)$/i.test(entry.name)) files.push(itemPath);
+  }
+  return files;
+};
+
+const signatureRecord = (filePath, baseDirectory) => ({
+  path: path.relative(baseDirectory, filePath).replaceAll(path.sep, '/'),
+  ...readAuthenticodeSignature(filePath)
+});
+
+const unpackedDirectory = path.join(releaseDirectory, 'win-unpacked');
+const unpackedSignatures = [];
+for (const filePath of (await collectCodeFiles(unpackedDirectory)).sort()) {
+  unpackedSignatures.push(signatureRecord(filePath, unpackedDirectory));
+}
+
+const zipVerificationDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-verify-'));
+let zipSignatures;
+try {
+  execFileSync('tar.exe', ['-xf', path.join(releaseDirectory, zipName), '-C', zipVerificationDirectory], { stdio: 'pipe' });
+  zipSignatures = [];
+  for (const filePath of (await collectCodeFiles(zipVerificationDirectory)).sort()) {
+    zipSignatures.push(signatureRecord(filePath, zipVerificationDirectory));
+  }
+} finally {
+  await rm(zipVerificationDirectory, { recursive: true, force: true });
+}
+
 const signatures = {
   installer: readAuthenticodeSignature(path.join(releaseDirectory, setupName)),
-  executable: readAuthenticodeSignature(path.join(releaseDirectory, 'win-unpacked', 'Tempest Streaming Studio.exe'))
+  unpackedPayload: unpackedSignatures,
+  zipPayload: zipSignatures
 };
-const signed = signatures.installer.status === 'Valid' && signatures.executable.status === 'Valid';
+const allSignatures = [signatures.installer, ...signatures.unpackedPayload, ...signatures.zipPayload];
+const signed = allSignatures.length > 1 && allSignatures.every((signature) =>
+  signature.status === 'Valid' && signature.timestamped && signature.subject === expectedPublisher
+);
 
 await writeFile(path.join(releaseDirectory, 'SHA256SUMS.txt'), `${artifacts.map((entry) => `${entry.sha256}  ${entry.name}`).join('\n')}\n`);
 await writeFile(path.join(releaseDirectory, 'release-manifest.json'), `${JSON.stringify({ schemaVersion: 1, product: 'Tempest Streaming Studio', version: expectedVersion, platform: 'win32', arch: 'x64', generatedAt: new Date().toISOString(), signed, signatures, artifacts }, null, 2)}\n`);
+if (!signed) throw new Error('Every installer and portable payload executable must have a valid, timestamped Tempest publisher signature.');
 console.log(`TEMPEST_RELEASE_VERIFIED ${expectedVersion} signed=${signed} ${artifacts.map((entry) => `${entry.name}:${entry.size}`).join(' ')}`);

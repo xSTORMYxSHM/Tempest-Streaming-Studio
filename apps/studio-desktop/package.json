@@ -28,6 +28,7 @@
     "copyright": "Copyright © 2026 Storm Horizon Media",
     "asar": true,
     "npmRebuild": false,
+    "afterSign": "./tools/azure-sign.cjs",
     "directories": {
       "output": "../../release",
       "buildResources": "src/renderer/assets"
@@ -57,7 +58,12 @@
     "win": {
       "icon": "src/renderer/assets/app-icon.ico",
       "executableName": "Tempest Streaming Studio",
-      "target": ["nsis", "zip"]
+      "target": ["nsis", "zip"],
+      "signtoolOptions": {
+        "publisherName": "CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US",
+        "signingHashAlgorithms": ["sha256"],
+        "sign": "./tools/azure-sign.cjs"
+      }
     },
     "nsis": {
       "oneClick": false,

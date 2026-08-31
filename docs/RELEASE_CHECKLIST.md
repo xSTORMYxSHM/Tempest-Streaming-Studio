@@ -1,4 +1,4 @@
-# 0.20.0 release checklist
+# 1.0.0 release checklist
 
 ## Automated gates
 
@@ -24,6 +24,6 @@
 ## Publication gates
 
 - [x] Confirm publisher and license choice: Storm Horizon Media, GPLv3 software, separate trademark policy.
-- [ ] Code-sign installer and executable, or disclose that the build is unsigned and may trigger SmartScreen.
+- [x] Code-sign and timestamp the installer, uninstaller, elevation helper, desktop executable, and native DLL payload with the expected Azure Artifact Signing publisher.
 - [ ] Publish checksums, changelog, privacy notice, installation guide, and third-party notices with the release.
 - [ ] Verify the public Twitch Extension and hosted EBS separately before advertising viewer-panel availability.
