@@ -1210,24 +1210,21 @@
     const hosted = state.hostedExtension || {};
     const paired = Boolean(hosted.paired);
     const authorized = state.twitch?.oauth?.state === 'authorized';
+    const officialTwitchAuthorization = state.twitch?.clientIdMode === 'official';
     const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
-    const urlInput = $('#hostedExtensionUrl');
-    if (document.activeElement !== urlInput) {
-      if (paired && hosted.ebsBaseUrl) urlInput.value = hosted.ebsBaseUrl;
-      else if (!urlInput.value) urlInput.value = hosted.defaultEbsBaseUrl || 'https://signal.tempestmainframe.com';
-    }
     $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
     $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
     $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
     $('#hostedExtensionChannelState').textContent = hosted.channel?.login ? `@${hosted.channel.login}` : hosted.channel?.id || '—';
     $('#hostedExtensionRelayState').textContent = relayState;
-    $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired;
+    $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired || !officialTwitchAuthorization;
+    $('#switchHostedExtensionToOfficialTwitch').hidden = paired || officialTwitchAuthorization;
     $('#revokeHostedExtension').disabled = !paired;
-    $('#hostedExtensionUrl').disabled = paired;
-    $('#hostedExtensionMessage').textContent = hosted.lastError || (paired
+    $('#hostedExtensionMessage').textContent = paired
       ? relayState === 'CONNECTED' ? 'This channel is paired. Studio publishes its enabled signal catalog to the public Twitch panel automatically.' : 'The installation is paired. Studio will keep retrying the hosted relay connection.'
-      : !authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
-        : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
+      : !officialTwitchAuthorization ? 'The public Extension requires the built-in Tempest Twitch application. Switch sign-in once, reconnect Twitch, then connect your channel.'
+        : hosted.lastError || (!authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
+          : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
   }
 
   function renderLocalExtension() {
@@ -1607,10 +1604,9 @@
 
   async function pairHostedExtension() {
     try {
-      const ebsBaseUrl = $('#hostedExtensionUrl').value.trim();
-      state.hostedExtension = await window.tempestStudio.pairHostedExtension({ ebsBaseUrl });
+      state.hostedExtension = await window.tempestStudio.pairHostedExtension({});
       await refresh({ quiet: true });
-      toast(`Hosted Extension paired with @${state.hostedExtension.channel?.login || 'your channel'}.`);
+      toast(`Public Extension connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
     } catch (error) {
       state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
       renderHostedExtension();
@@ -1618,13 +1614,26 @@
     }
   }
 
+  async function switchHostedExtensionToOfficialTwitch() {
+    if (!confirm('Switch to the official Tempest Twitch application? The current custom Twitch authorization will be removed, and you will need to reconnect your broadcaster account.')) return;
+    try {
+      $('#twitchClientId').value = '';
+      state.twitch = await api('/v1/integrations/twitch/configuration', { method: 'POST', body: {
+        scopes: state.twitch?.oauth?.scopes || [],
+        rewardMappings: parseRewardMappings()
+      } });
+      state.twitchDeviceAuthorization = null;
+      renderTwitch();
+      toast('Official Tempest Twitch sign-in selected. Choose Connect Twitch, authorize your broadcaster account, then choose Connect My Channel.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function revokeHostedExtension() {
     if (!confirm('Revoke this Studio installation? The public Twitch panel will stop routing signals until it is paired again.')) return;
     try {
       state.hostedExtension = await window.tempestStudio.revokeHostedExtension();
-      $('#hostedExtensionUrl').value = '';
       await refresh({ quiet: true });
-      toast('Hosted Extension installation revoked.');
+      toast('Public Extension disconnected.');
     } catch (error) {
       state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
       renderHostedExtension();
@@ -3999,6 +4008,7 @@
     $('#testChatbotCommand').addEventListener('click', testChatbotCommand);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
     $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
+    $('#switchHostedExtensionToOfficialTwitch').addEventListener('click', switchHostedExtensionToOfficialTwitch);
     $('#revokeHostedExtension').addEventListener('click', revokeHostedExtension);
     $('#stopLocalExtension').addEventListener('click', stopLocalExtension);
     $('#openLocalExtensionPanel').addEventListener('click', () => window.tempestStudio.openLocalExtensionPanel().catch((error) => toast(error.message, true)));

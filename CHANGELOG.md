@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.2.6 — Public connection hardening
+
+- Hardened public Twitch Extension pairing for upgraded installations that retain a custom or legacy Twitch application. Studio now blocks incompatible official-service pairing locally, offers a one-click switch back to the built-in Twitch sign-in, and preserves custom applications for self-hosted services.
+- Hosted pairing failures now carry a stable machine-readable code and distinguish account recovery from a Tempest Signal service-configuration problem instead of blaming the broadcaster.
+- Desktop actions now remove Electron's internal remote-method wrapper from errors before presenting them to end users.
+- Discord connection errors now explain when an account is outside the application's accepted tester list or public RPC approval. Studio retains the required `rpc.voice.read` permission for mute, deafen, and speaking events.
+
 ## 1.2.5 — Discord connection compatibility
 
 - Fixed Discord Desktop connections on Windows systems that expose RPC through the standard named-pipe path but reject the extended path. Studio now tries both supported Windows pipe forms across all ten Discord IPC slots.

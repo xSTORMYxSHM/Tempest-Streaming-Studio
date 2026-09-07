@@ -49,6 +49,19 @@ export function validateHostedExtensionCredentials(value: unknown): HostedExtens
   return { schemaVersion: 1, ebsBaseUrl, installationId, channelId, channelLogin, relayToken, pairedAt };
 }
 
+export function describeHostedExtensionPairingFailure(status: number, result: { error?: unknown; code?: unknown }, officialService: boolean, officialTwitchAuthorization: boolean): string {
+  const error = typeof result.error === 'string' ? result.error.trim() : '';
+  if (status === 403 && result.code === 'TWITCH_CLIENT_NOT_ALLOWED') {
+    if (officialService && officialTwitchAuthorization) {
+      return 'Tempest Signal could not accept the official Twitch sign-in because its application allowlist is temporarily out of sync. This is a service issue, not an account problem. Please try again later.';
+    }
+    if (officialService) {
+      return 'The public Extension requires the built-in Tempest Twitch application. Use the official Twitch sign-in, reconnect your broadcaster account, then connect your channel again.';
+    }
+  }
+  return error || `Hosted Extension pairing failed with ${status}.`;
+}
+
 export function hostedExtensionRelayOptions(credentials: HostedExtensionCredentials): ExtensionRelayOptions {
   const url = new URL(credentials.ebsBaseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';

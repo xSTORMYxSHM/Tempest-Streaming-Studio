@@ -213,6 +213,28 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   assert.equal((await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } })).status, 403);
 });
 
+test('returns a machine-readable recovery code for an unsupported Twitch application', async (context) => {
+  const runtime = await startTwitchEbs({
+    port: 0,
+    twitchExtensionSecrets: [randomBytes(32).toString('base64')],
+    installationStore: new MemoryTwitchEbsInstallationStore(),
+    allowedTwitchClientIds: ['officialclient123'],
+    validateTwitchOAuthToken: async () => ({ clientId: 'legacyclient123', userId: '123456', login: 'creator', scopes: [], expiresIn: 3600 }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+
+  const response = await fetch(`${runtime.baseUrl}/v1/installations/pair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': 'legacy-token' },
+    body: JSON.stringify({ product: 'Tempest Streaming Studio' })
+  });
+  assert.equal(response.status, 403);
+  const failure = await response.json();
+  assert.equal(failure.code, 'TWITCH_CLIENT_NOT_ALLOWED');
+  assert.match(failure.error, /application this Extension service does not accept/);
+});
+
 test('exchanges Discord RPC authorization codes without exposing the client secret', async (context) => {
   let submitted;
   const runtime = await startTwitchEbs({

@@ -373,7 +373,9 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const retryAfterMs = limiter.consume(`pair:${remoteAddress}`, 10);
         if (retryAfterMs) throw new HttpError(429, 'Too many pairing attempts. Please wait and try again.', { retryAfterMs });
         const identity = await oauthValidator(twitchOAuthToken(request));
-        if (allowedTwitchClientIds.size && !allowedTwitchClientIds.has(identity.clientId)) throw new HttpError(403, 'This Twitch authorization was not issued to Tempest Streaming Studio.');
+        if (allowedTwitchClientIds.size && !allowedTwitchClientIds.has(identity.clientId)) {
+          throw new HttpError(403, 'This Twitch sign-in was created by an application this Extension service does not accept. Reconnect through the Twitch application required by this service.', { code: 'TWITCH_CLIENT_NOT_ALLOWED' });
+        }
         const relayToken = randomBytes(32).toString('base64url');
         const installation = await installationStore.install(identity.userId, identity.login, relayTokenHash(relayToken));
         studioSockets.get(installation.channelId)?.close(4001, 'Installation paired again');

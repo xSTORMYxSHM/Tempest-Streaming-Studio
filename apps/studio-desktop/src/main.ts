@@ -25,6 +25,7 @@ import {
   HostedExtensionCredentials,
   HostedExtensionStatus,
   OFFICIAL_HOSTED_EBS_URL,
+  describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
   validateHostedEbsUrl,
   validateHostedExtensionCredentials
@@ -664,23 +665,26 @@ function registerDesktopHandlers(): void {
   ipcMain.handle('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     if (!broadcasterCredentialStore?.available) throw new Error('Windows credential encryption is unavailable.');
+    hostedExtensionLastError = undefined;
+    const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl || OFFICIAL_HOSTED_EBS_URL);
+    const officialService = ebsBaseUrl === OFFICIAL_HOSTED_EBS_URL;
     const validation = await fetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
+    const validationResult = await validation.json().catch(() => ({})) as { error?: string; clientIdMode?: 'official' | 'custom' };
     if (!validation.ok) {
-      const result = await validation.json().catch(() => ({})) as { error?: string };
-      throw new Error(result.error || 'Validate the broadcaster authorization before pairing the hosted Extension.');
+      throw new Error(validationResult.error || 'Validate the broadcaster authorization before pairing the hosted Extension.');
     }
+    const officialTwitchAuthorization = validationResult.clientIdMode === 'official';
+    if (officialService && !officialTwitchAuthorization) throw new Error('The public Extension requires the built-in Tempest Twitch application. Choose Use Official Twitch Sign-In, reconnect your broadcaster account, then connect your channel again.');
     const tokens = await broadcasterCredentialStore.load();
     if (!tokens?.accessToken) throw new Error('Authorize your broadcaster account in Twitch Gateway before pairing the hosted Extension.');
-    const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl || OFFICIAL_HOSTED_EBS_URL);
-    hostedExtensionLastError = undefined;
     try {
       const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': tokens.accessToken },
         body: JSON.stringify({ product: productName, productVersion: TEMPEST_STUDIO_VERSION })
       });
-      const result = await response.json().catch(() => ({})) as { error?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } };
-      if (!response.ok) throw new Error(result.error || `Hosted Extension pairing failed with ${response.status}.`);
+      const result = await response.json().catch(() => ({})) as { error?: string; code?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } };
+      if (!response.ok) throw new Error(describeHostedExtensionPairingFailure(response.status, result, officialService, officialTwitchAuthorization));
       const credentials = validateHostedExtensionCredentials({
         schemaVersion: 1,
         ebsBaseUrl,

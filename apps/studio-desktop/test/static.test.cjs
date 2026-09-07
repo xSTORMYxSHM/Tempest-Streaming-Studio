@@ -246,6 +246,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /EXTENSION RELAY/);
   assert.match(html, /SINGLE-CHANNEL EXTENSION/);
   assert.match(html, /Start Local Panel/);
+  assert.match(html, /Use Official Twitch Sign-In/);
+  assert.match(html, /Connect My Channel/);
+  assert.match(html, /public Extension connects through Tempest's hosted Railway service automatically/);
+  assert.doesNotMatch(html, /id="hostedExtensionUrl"/);
+  assert.match(renderer, /switchHostedExtensionToOfficialTwitch/);
+  assert.match(main, /clientIdMode === 'official'/);
   assert.match(html, /type="password"/);
   assert.match(html, /Windows encryption/);
   assert.match(html, /BUILD 1\.0\.1/);

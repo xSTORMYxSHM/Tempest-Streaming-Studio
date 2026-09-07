@@ -1,6 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { discordIpcPaths, encodeDiscordRpcFrame, readDiscordRpcFrames } = require('../dist/discord-rpc');
+const { DISCORD_RPC_AUTHORIZATION_SCOPES, describeDiscordRpcFailure, discordIpcPaths, encodeDiscordRpcFrame, readDiscordRpcFrames } = require('../dist/discord-rpc');
+
+test('requests Discord voice RPC permissions and explains approval failures', () => {
+  assert.deepEqual(DISCORD_RPC_AUTHORIZATION_SCOPES, ['rpc', 'identify', 'rpc.voice.read']);
+  assert.match(describeDiscordRpcFailure(new Error('OAuth2 Error: invalid_scope')).message, /App Tester/);
+  assert.match(describeDiscordRpcFailure(new Error('Application is not approved for RPC')).message, /App Tester/);
+});
 
 test('tries both Windows Discord named-pipe forms across all ten IPC slots', () => {
   const paths = discordIpcPaths('win32');

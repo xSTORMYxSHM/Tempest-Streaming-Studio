@@ -3,6 +3,18 @@ import net, { Socket } from 'node:net';
 
 export const OFFICIAL_DISCORD_CLIENT_ID = '1546349623701151854';
 export const OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL = 'https://signal.tempestmainframe.com/v1/discord/oauth/exchange';
+export const DISCORD_RPC_AUTHORIZATION_SCOPES = ['rpc', 'identify', 'rpc.voice.read'] as const;
+
+export function describeDiscordRpcFailure(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error || 'Discord could not be connected.');
+  if (/invalid_scope/i.test(message)) {
+    return new Error('Discord has not granted this account access to the Tempest voice integration. During testing, add this Discord account as an App Tester and have them accept the invitation. Public access requires Discord approval for local RPC voice permissions.');
+  }
+  if (/not approved|not whitelisted|tester|access.*rpc/i.test(message)) {
+    return new Error('Discord has not granted this account access to the Tempest voice integration. During testing, add this Discord account as an App Tester and have them accept the invitation. Public access requires Discord approval for local RPC voice permissions.');
+  }
+  return error instanceof Error ? error : new Error(message);
+}
 
 export interface DiscordRpcTokenSet {
   accessToken: string;
@@ -176,11 +188,12 @@ export class TempestDiscordRpcClient {
       await this.refreshSelectedChannel();
       return this.status();
     } catch (error) {
-      this.lastError = error instanceof Error ? error.message : 'Discord could not be connected.';
+      const describedError = describeDiscordRpcFailure(error);
+      this.lastError = describedError.message;
       this.phase = 'error';
       this.destroySocket();
       await this.options.publishState({ connected: false, participants: [], error: this.lastError }).catch(() => {});
-      throw error;
+      throw describedError;
     }
   }
 
@@ -206,7 +219,7 @@ export class TempestDiscordRpcClient {
   async close(): Promise<void> { await this.disconnect().catch(() => {}); }
 
   private async authorize(): Promise<DiscordRpcTokenSet> {
-    const response = await this.command('AUTHORIZE', { client_id: this.clientId, scopes: ['rpc', 'identify', 'rpc.voice.read'] }) as { code?: unknown };
+    const response = await this.command('AUTHORIZE', { client_id: this.clientId, scopes: [...DISCORD_RPC_AUTHORIZATION_SCOPES] }) as { code?: unknown };
     const code = string(response?.code);
     if (!code) throw new Error('Discord did not return an authorization code.');
     return this.exchangeTokens({ grantType: 'authorization_code', code, clientId: this.clientId });

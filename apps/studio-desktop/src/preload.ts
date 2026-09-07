@@ -1,4 +1,13 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer as electronIpcRenderer } from 'electron';
+import { userFacingIpcErrorMessage } from './ipc-errors';
+
+const ipcRenderer = {
+  invoke: (channel: string, ...args: unknown[]) => electronIpcRenderer.invoke(channel, ...args).catch((error) => {
+    throw new Error(userFacingIpcErrorMessage(error));
+  }),
+  on: electronIpcRenderer.on.bind(electronIpcRenderer),
+  removeListener: electronIpcRenderer.removeListener.bind(electronIpcRenderer)
+};
 
 contextBridge.exposeInMainWorld('tempestStudio', {
   getPrivacySettings: () => ipcRenderer.invoke('studio:get-privacy-settings'),

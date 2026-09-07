@@ -351,11 +351,11 @@
             </div>
           </article>
           <article class="panel twitch-local-panel">
-            <div class="panel-header"><div><span>PUBLIC EXTENSION SERVICE</span><h3>Pair this Studio installation</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT PAIRED</span></div>
+            <div class="panel-header"><div><span>PUBLIC EXTENSION SERVICE</span><h3>Connect your channel</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT CONNECTED</span></div>
             <div class="local-extension-grid">
               <div class="twitch-form-stack">
-                <label>Tempest Signal service<input id="hostedExtensionUrl" type="url" autocomplete="off" spellcheck="false" value="https://signal.tempestmainframe.com" /><small>The official public service is built in. Change this only for development or a self-hosted EBS.</small></label>
-                <div class="twitch-setup-actions"><button id="pairHostedExtension" class="primary-button">Pair Hosted Extension</button><button id="revokeHostedExtension" class="secondary-button danger-outline">Revoke Installation</button></div>
+                <div class="sound-alert-note"><strong>TEMPEST SIGNAL</strong><br />The public Extension connects through Tempest's hosted Railway service automatically.</div>
+                <div class="twitch-setup-actions"><button id="pairHostedExtension" class="primary-button">Connect My Channel</button><button id="switchHostedExtensionToOfficialTwitch" class="secondary-button" hidden>Use Official Twitch Sign-In</button><button id="revokeHostedExtension" class="secondary-button danger-outline">Disconnect</button></div>
               </div>
               <div class="twitch-auth-summary">
                 <span>PER-INSTALLATION TRUST</span>
