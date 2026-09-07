@@ -9,7 +9,7 @@ const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const expectedVersion = JSON.parse(await readFile(path.join(workspace, 'package.json'), 'utf8')).version;
 const expectedPublisher = 'CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US';
 const packageFiles = [
-  'package.json', 'apps/studio-desktop/package.json', 'apps/twitch-extension/package.json',
+  'package.json', 'apps/studio-desktop/package.json',
   'services/tempest-bridge/package.json', 'services/twitch-ebs/package.json',
   'services/warudo-adapter/package.json', 'services/vtube-studio-adapter/package.json',
   'packages/tempest-contracts/package.json'
@@ -19,6 +19,9 @@ for (const relativePath of packageFiles) {
   const value = JSON.parse(await readFile(path.join(workspace, relativePath), 'utf8'));
   if (value.version !== expectedVersion) throw new Error(`${relativePath} is ${value.version}; expected ${expectedVersion}.`);
 }
+
+const extensionPackage = JSON.parse(await readFile(path.join(workspace, 'apps/twitch-extension/package.json'), 'utf8'));
+if (extensionPackage.version !== '0.1.0') throw new Error(`apps/twitch-extension/package.json is ${extensionPackage.version}; expected its independent public version 0.1.0.`);
 
 for (const relativePath of ['LICENSE', 'TRADEMARKS.md', 'CHANGELOG.md', 'docs/INSTALLATION.md', 'docs/PRIVACY.md', 'docs/THIRD_PARTY_NOTICES.md']) {
   if (!(await stat(path.join(workspace, relativePath))).isFile()) throw new Error(`${relativePath} is missing.`);

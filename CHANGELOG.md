@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## 1.3.0 — Streamer Mode and synced Twitch panels
+
 - Fixed the Twitch Panel Designer so a paired Studio securely publishes its validated channel theme to Tempest Signal instead of saving it only on the local computer. The live Twitch panel now refreshes the hosted theme automatically while visible.
 - Added Streamer Mode as the default interface. Everyday alert, overlay, chatbot, Twitch, panel, and avatar tasks use simpler language while technical status, self-hosting, custom code, routing, provider configuration, and diagnostics remain available through an opt-in Advanced Mode in Settings.
+- Separated the public Twitch extension's `0.1.0` version line from Studio desktop releases so each product can be reviewed and published independently.
 
 ## 1.2.6 — Public connection hardening
 
