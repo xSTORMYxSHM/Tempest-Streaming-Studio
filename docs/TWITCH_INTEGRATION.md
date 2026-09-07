@@ -6,6 +6,8 @@ The hosted EBS supports public multi-channel installations backed by PostgreSQL.
 
 Each connected Studio publishes a bounded viewer-safe catalog containing signal IDs, labels, durations, cooldown display values, colors, and glyphs. Local media, machine paths, application credentials, and high-bandwidth output remain on the broadcaster's computer. Twitch viewer JWTs select the installation by their signed `channel_id`; rate limiting, dedupe, Studio cooldowns, adapter leases, and Emergency Restore remain in force.
 
+Panel Designer saves are validated locally, then synchronized with the paired installation's encrypted relay credential. Tempest Signal stores the safe theme fields in that channel's catalog and returns them only to viewers whose Twitch-signed JWT names the same channel. A visible panel refreshes the hosted catalog periodically, so saved appearance changes apply without editing Twitch configuration or exposing Studio's local files.
+
 ## 0.11.6 Authorization completion handoff
 
 When the Chatbot Device Code poll reports success, expiry, or another terminal result, Studio automatically closes every outstanding isolated Twitch authorization window. Closing the window triggers the same temporary-session cookie and storage cleanup as the normal window close button. Disconnecting the Chatbot also closes any pending isolated authorization window.

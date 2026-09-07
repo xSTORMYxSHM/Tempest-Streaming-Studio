@@ -11,10 +11,34 @@ export interface PublicExtensionCatalogItem {
   kind: 'sound-alert' | 'interaction';
 }
 
+export interface PublicExtensionPanelDesign {
+  schemaVersion: 1;
+  preset: 'tempest' | 'minimal' | 'neon' | 'soft';
+  brandName: string;
+  eyebrow: string;
+  title: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text: string;
+  muted: string;
+  font: 'inter' | 'system' | 'condensed' | 'serif';
+  cardLayout: 'grid' | 'list';
+  density: 'comfortable' | 'compact';
+  cornerRadius: number;
+  showLogo: boolean;
+  showStatus: boolean;
+  showSearch: boolean;
+  showFilters: boolean;
+  showPattern: boolean;
+  uppercaseLabels: boolean;
+}
+
 export interface PublicExtensionCatalog {
   schemaVersion: 1;
   updatedAt: string;
   items: PublicExtensionCatalogItem[];
+  panelDesign?: PublicExtensionPanelDesign;
 }
 
 export interface TwitchEbsInstallation {
@@ -34,6 +58,7 @@ export interface TwitchEbsInstallationStore {
   findActiveByChannelId(channelId: string): Promise<TwitchEbsInstallation | null>;
   findActiveByRelayTokenHash(relayTokenHash: string): Promise<TwitchEbsInstallation | null>;
   updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void>;
+  updatePanelDesign(installationId: string, panelDesign: PublicExtensionPanelDesign): Promise<void>;
   revoke(installationId: string): Promise<void>;
   countActive(): Promise<number>;
   close(): Promise<void>;
@@ -84,8 +109,19 @@ export class MemoryTwitchEbsInstallationStore implements TwitchEbsInstallationSt
   async updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void> {
     const installation = this.installations.get(installationId);
     if (!installation || !installation.active) throw new Error('Installation is not active.');
-    installation.catalog = copy(catalog);
+    installation.catalog = copy({
+      ...catalog,
+      ...(catalog.panelDesign ? {} : { panelDesign: installation.catalog.panelDesign })
+    });
     installation.updatedAt = new Date().toISOString();
+  }
+
+  async updatePanelDesign(installationId: string, panelDesign: PublicExtensionPanelDesign): Promise<void> {
+    const installation = this.installations.get(installationId);
+    if (!installation || !installation.active) throw new Error('Installation is not active.');
+    installation.catalog.panelDesign = copy(panelDesign);
+    installation.catalog.updatedAt = new Date().toISOString();
+    installation.updatedAt = installation.catalog.updatedAt;
   }
 
   async revoke(installationId: string): Promise<void> {
@@ -171,7 +207,25 @@ export class PostgresTwitchEbsInstallationStore implements TwitchEbsInstallation
   }
 
   async updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void> {
-    const result = await this.pool.query('UPDATE tempest_extension_installations SET catalog = $2::jsonb, updated_at = now() WHERE id = $1 AND active = true', [installationId, JSON.stringify(catalog)]);
+    const result = await this.pool.query(`
+      UPDATE tempest_extension_installations
+      SET catalog = CASE
+        WHEN catalog ? 'panelDesign' AND NOT ($2::jsonb ? 'panelDesign')
+          THEN $2::jsonb || jsonb_build_object('panelDesign', catalog->'panelDesign')
+        ELSE $2::jsonb
+      END,
+      updated_at = now()
+      WHERE id = $1 AND active = true
+    `, [installationId, JSON.stringify(catalog)]);
+    if (!result.rowCount) throw new Error('Installation is not active.');
+  }
+
+  async updatePanelDesign(installationId: string, panelDesign: PublicExtensionPanelDesign): Promise<void> {
+    const result = await this.pool.query(`
+      UPDATE tempest_extension_installations
+      SET catalog = jsonb_set(catalog, '{panelDesign}', $2::jsonb, true), updated_at = now()
+      WHERE id = $1 AND active = true
+    `, [installationId, JSON.stringify(panelDesign)]);
     if (!result.rowCount) throw new Error('Installation is not active.');
   }
 

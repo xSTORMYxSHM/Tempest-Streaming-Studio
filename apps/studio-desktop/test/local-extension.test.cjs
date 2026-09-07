@@ -5,7 +5,7 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
-const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -63,4 +63,25 @@ test('turns hosted pairing allowlist failures into account-safe recovery guidanc
   assert.match(describeHostedExtensionPairingFailure(403, rejected, true, false), /built-in Tempest Twitch application/);
   assert.match(describeHostedExtensionPairingFailure(403, rejected, true, true), /service issue, not an account problem/);
   assert.equal(describeHostedExtensionPairingFailure(502, { error: 'Service unavailable' }, true, true), 'Service unavailable');
+});
+
+test('syncs Panel Designer data with the paired hosted installation credential', async () => {
+  const credentials = validateHostedExtensionCredentials({
+    schemaVersion: 1,
+    ebsBaseUrl: 'https://signal.example.com',
+    installationId: '9cc1df18-d88a-4e32-aed3-cc192e751d4e',
+    channelId: '123456',
+    channelLogin: 'creator',
+    relayToken: randomBytes(32).toString('base64url'),
+    pairedAt: new Date().toISOString()
+  });
+  let request;
+  await syncHostedExtensionPanelDesign(credentials, { preset: 'neon', title: 'Creator deck' }, async (url, options) => {
+    request = { url, options };
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  assert.equal(request.url, 'https://signal.example.com/v1/installations/current/panel-design');
+  assert.equal(request.options.method, 'PUT');
+  assert.equal(request.options.headers.Authorization, `Bearer ${credentials.relayToken}`);
+  assert.deepEqual(JSON.parse(request.options.body), { panelDesign: { preset: 'neon', title: 'Creator deck' } });
 });

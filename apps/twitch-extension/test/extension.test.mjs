@@ -69,6 +69,9 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /kind === 'sound-alert'/);
   assert.match(viewerScript, /class="card-meta"/);
   assert.match(viewerScript, /applyPanelDesign/);
+  assert.match(viewerScript, /body\.panelDesign/);
+  assert.match(viewerScript, /hostedPanelDesign/);
+  assert.match(viewerScript, /15000/);
   assert.match(viewerScript, /configuration\.broadcaster/);
   assert.match(viewerScript, /requestIdShare/);
   assert.match(viewerScript, /identity_required/);

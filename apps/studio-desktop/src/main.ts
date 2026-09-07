@@ -27,6 +27,7 @@ import {
   OFFICIAL_HOSTED_EBS_URL,
   describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
+  syncHostedExtensionPanelDesign,
   validateHostedEbsUrl,
   validateHostedExtensionCredentials
 } from './hosted-extension';
@@ -379,6 +380,11 @@ async function saveTwitchPanelDesign(input: unknown): Promise<TwitchPanelDesign>
   const design = validateTwitchPanelDesign(input);
   await mkdir(path.dirname(twitchPanelDesignPath()), { recursive: true });
   await writeFile(twitchPanelDesignPath(), `${JSON.stringify(design, null, 2)}\n`, { mode: 0o600 });
+  const hostedCredentials = await loadHostedExtensionCredentials();
+  if (hostedCredentials) {
+    try { await syncHostedExtensionPanelDesign(hostedCredentials, design); }
+    catch (error) { throw new Error(`The Panel design was saved locally, but could not sync to Twitch: ${(error as Error).message}`); }
+  }
   return design;
 }
 
@@ -696,6 +702,7 @@ function registerDesktopHandlers(): void {
       });
       await stopLocalExtension();
       await saveHostedExtensionCredentials(credentials);
+      await syncHostedExtensionPanelDesign(credentials, await loadTwitchPanelDesign());
       await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials));
       return getHostedExtensionStatus();
     } catch (error) {

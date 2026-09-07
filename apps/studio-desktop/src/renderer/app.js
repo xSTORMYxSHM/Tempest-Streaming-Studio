@@ -3,16 +3,16 @@
 
   const sections = {
     overview: { title: 'Studio Home', kicker: 'START HERE' },
-    events: { title: 'Event Log', kicker: 'NORMALIZED SIGNALS' },
-    soundalerts: { title: 'Interaction Alerts', kicker: 'PERFORMANCE + DANCE CATALOG' },
+    events: { title: 'Activity & Diagnostics', kicker: 'ADVANCED TOOLS' },
+    soundalerts: { title: 'Viewer Interactions', kicker: 'ALERTS VIEWERS CAN TRIGGER' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
-    chatoverlay: { title: 'Chat + Emotes', kicker: 'LOCAL CHAT OVERLAYS' },
+    chatoverlay: { title: 'Chat Overlay', kicker: 'CHAT + EMOTES' },
     discordvoice: { title: 'Discord Guests', kicker: 'LOCAL VOICE OVERLAY' },
-    twitch: { title: 'Twitch Gateway', kicker: 'STUDIO-OWNED INTEGRATION' },
-    extensiondesigner: { title: 'Twitch Panel Designer', kicker: 'CHANNEL EXTENSION THEME' },
-    chatbot: { title: 'Chatbot', kicker: 'STUDIO CHAT AUTOMATION' },
-    api: { title: 'Connections', kicker: 'LOCAL CONTROL PLANE' },
-    settings: { title: 'Settings + About', kicker: 'STUDIO INFORMATION' }
+    twitch: { title: 'Twitch Setup', kicker: 'CONNECT YOUR CHANNEL' },
+    extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
+    chatbot: { title: 'Chatbot', kicker: 'TWITCH CHAT' },
+    api: { title: 'Avatar Apps', kicker: 'OPTIONAL CONNECTIONS' },
+    settings: { title: 'Settings', kicker: 'STUDIO SETTINGS' }
   };
   const targetNames = {
     'com.tempestmainframe.warudo': 'Warudo',
@@ -109,7 +109,7 @@
     const privacy = state.privacy || { streamerMode: true, captureProtection: true };
     document.body.classList.toggle('streamer-privacy', privacy.streamerMode);
     const quickToggle = $('#privacyModeButton');
-    quickToggle.textContent = privacy.streamerMode ? 'PRIVACY ON' : 'PRIVACY OFF';
+    quickToggle.textContent = privacy.streamerMode ? 'PRIVATE INFO HIDDEN' : 'SHOWING PRIVATE INFO';
     quickToggle.setAttribute('aria-pressed', String(privacy.streamerMode));
     quickToggle.classList.toggle('active', privacy.streamerMode);
     $('#streamerPrivacyMode').checked = privacy.streamerMode;
@@ -148,6 +148,7 @@
   }
 
   function showSection(name) {
+    if (name === 'events' && readOnboardingPreferences().advancedMode !== true) name = 'overview';
     const definition = sections[name] || sections.overview;
     document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `${name}Section`));
     document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.section === name));
@@ -180,15 +181,15 @@
   function renderSafety() {
     const armed = Boolean(state.safety.armed);
     const active = state.runs.filter(activeRun).length;
-    $('#railSafetyState').textContent = armed ? 'ARMED' : 'DISARMED';
+    $('#railSafetyState').textContent = armed ? 'READY' : 'PAUSED';
     $('#railSafetyState').classList.toggle('armed', armed);
     $('#safetyBadge').textContent = armed ? 'INTERACTIONS ARMED' : 'INTERACTIONS DISARMED';
     $('#safetyBadge').classList.toggle('offline', !armed);
-    $('#emergencyStopButton').textContent = armed ? (active ? `Restore ${active} Active` : 'Emergency Restore') : 'Arm Interactions';
+    $('#emergencyStopButton').textContent = armed ? (active ? `Stop ${active} Active` : 'Pause Viewer Effects') : 'Enable Viewer Effects';
     $('#emergencyStopButton').classList.toggle('arm-button', !armed);
-    $('#safetyMetric').textContent = armed ? 'ARMED' : 'SAFE';
+    $('#safetyMetric').textContent = armed ? 'ON' : 'PAUSED';
     $('#safetyMetric').classList.toggle('danger-text', !armed);
-    $('#safetyMetricNote').textContent = armed ? 'Viewer triggers accepted' : 'Triggers blocked; overrides released';
+    $('#safetyMetricNote').textContent = armed ? 'Viewers can trigger enabled alerts' : 'Viewer-triggered alerts are paused';
     document.querySelectorAll('[data-sound-alert-trigger]').forEach((button) => { button.disabled = !armed; });
   }
 
@@ -232,6 +233,25 @@
     const next = { ...current, ...patch, flags: { ...(current.flags || {}), ...(patch.flags || {}) } };
     localStorage.setItem(onboardingStorageKey, JSON.stringify(next));
     return next;
+  }
+
+  function renderInterfaceMode() {
+    const advanced = readOnboardingPreferences().advancedMode === true;
+    document.body.classList.toggle('advanced-mode', advanced);
+    $('#advancedInterfaceMode').checked = advanced;
+    $('#interfaceModeBadge').textContent = advanced ? 'ADVANCED' : 'SIMPLE';
+    $('#interfaceModeBadge').classList.toggle('offline', advanced);
+    $('#interfaceModeStatus').textContent = advanced
+      ? 'Advanced Mode is showing technical and developer controls.'
+      : 'Streamer Mode is active.';
+  }
+
+  function saveInterfaceMode() {
+    const advancedMode = $('#advancedInterfaceMode').checked;
+    writeOnboardingPreferences({ advancedMode });
+    renderInterfaceMode();
+    if (!advancedMode && $('#eventsSection').classList.contains('active')) showSection('overview');
+    toast(advancedMode ? 'Advanced Mode enabled.' : 'Streamer Mode enabled.');
   }
 
   function validCanvasDimension(value) {
@@ -1769,10 +1789,12 @@
     try {
       state.panelDesign = await window.tempestStudio.saveTwitchPanelDesign(readPanelDesign());
       populatePanelDesign(state.panelDesign);
-      $('#panelDesignStateBadge').textContent = 'SAVED LOCALLY';
+      $('#panelDesignStateBadge').textContent = state.hostedExtension?.paired ? 'SYNCED TO TWITCH' : 'SAVED LOCALLY';
       $('#panelDesignStateBadge').classList.remove('offline');
-      $('#panelDesignSaveState').textContent = state.localExtension?.running ? 'Saved. Refresh the real Panel to apply it.' : 'Saved for local and future hosted Panel sync.';
-      toast('Twitch Panel design saved.');
+      $('#panelDesignSaveState').textContent = state.hostedExtension?.paired
+        ? 'Saved. The Twitch panel updates automatically within 15 seconds.'
+        : state.localExtension?.running ? 'Saved. Refresh the real Panel to apply it.' : 'Saved locally. Pair the public Extension to sync it to Twitch.';
+      toast(state.hostedExtension?.paired ? 'Twitch Panel design saved and synced.' : 'Twitch Panel design saved locally.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -4019,6 +4041,7 @@
     $('#panelDesignPreset').addEventListener('change', applyPanelPreset);
     $('#resetPanelDesign').addEventListener('click', () => populatePanelDesign(defaultPanelDesign()));
     $('#openDesignedPanel').addEventListener('click', openDesignedPanel);
+    $('#saveInterfaceMode').addEventListener('click', saveInterfaceMode);
     $('#openStudioDataDirectory').addEventListener('click', () => window.tempestStudio.openDataDirectory().catch((error) => toast(error.message, true)));
     $('#checkForStudioUpdates').addEventListener('click', checkForStudioUpdates);
     $('#downloadStudioUpdate').addEventListener('click', downloadStudioUpdate);
@@ -4074,6 +4097,7 @@
 
   async function initialize() {
     bindEvents();
+    renderInterfaceMode();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
     window.tempestStudio.onUpdateStatus((update) => { state.update = update; renderUpdateStatus(); });
     [state.config, state.panelDesign, state.appInfo, state.privacy, state.update] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus()]);

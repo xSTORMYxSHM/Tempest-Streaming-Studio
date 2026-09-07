@@ -73,3 +73,23 @@ export function hostedExtensionRelayOptions(credentials: HostedExtensionCredenti
     allowUnauthorizedLocalTls: false
   };
 }
+
+export async function syncHostedExtensionPanelDesign(
+  credentialsValue: HostedExtensionCredentials,
+  panelDesign: unknown,
+  fetchImplementation: typeof fetch = fetch
+): Promise<void> {
+  const credentials = validateHostedExtensionCredentials(credentialsValue);
+  const response = await fetchImplementation(`${credentials.ebsBaseUrl}/v1/installations/current/panel-design`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${credentials.relayToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ panelDesign })
+  });
+  if (response.ok) return;
+  const result = await response.json().catch(() => ({})) as { error?: unknown };
+  const detail = typeof result.error === 'string' ? result.error.trim() : '';
+  throw new Error(detail || `Hosted Panel design sync failed with ${response.status}.`);
+}

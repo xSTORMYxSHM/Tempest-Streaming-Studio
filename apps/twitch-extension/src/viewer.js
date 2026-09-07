@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, busy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -128,6 +128,10 @@
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Signal catalog unavailable (${response.status}).`);
     if (!Array.isArray(body.items)) throw new Error('The hosted signal catalog is invalid.');
+    if (body.panelDesign && typeof body.panelDesign === 'object') {
+      state.hostedPanelDesign = true;
+      applyPanelDesign(body.panelDesign);
+    }
     state.alerts = body.items;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
     render();
@@ -210,7 +214,7 @@
         const content = window.Twitch.ext.configuration.broadcaster?.content;
         if (!content) return;
         const configuration = JSON.parse(content);
-        applyPanelDesign(configuration.panelDesign || configuration);
+        if (!state.hostedPanelDesign) applyPanelDesign(configuration.panelDesign || configuration);
       } catch { /* Invalid channel configuration leaves the last safe design active. */ }
     });
     setTimeout(() => {
@@ -242,6 +246,12 @@
       $('#collapseButton').setAttribute('aria-expanded', String(!state.collapsed));
     });
     setInterval(() => { if ([...cooldowns.keys()].some((id) => remaining(id) > 0)) render(); }, 1000);
+    setInterval(() => {
+      if (!document.hidden) void refreshHostedCatalog().catch(() => {});
+    }, 15000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) void refreshHostedCatalog().catch(() => {});
+    });
   }
 
   async function initialize() {

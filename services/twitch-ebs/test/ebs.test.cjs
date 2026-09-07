@@ -200,6 +200,41 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   assert.equal(catalog.items[0].id, 'sound-alert.creator-dance');
   assert.equal(catalog.studioConnected, true);
 
+  const designUpdate = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${installation.relayToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ panelDesign: { preset: 'neon', title: 'Creator deck', accent: '#a66bff', showSearch: false } })
+  });
+  assert.equal(designUpdate.status, 200);
+  const savedDesign = (await designUpdate.json()).panelDesign;
+  assert.equal(savedDesign.title, 'Creator deck');
+  assert.equal(savedDesign.accent, '#A66BFF');
+  assert.equal(savedDesign.showSearch, false);
+
+  studio.send(JSON.stringify({
+    protocolVersion: 1,
+    type: 'catalog.sync',
+    catalog: {
+      schemaVersion: 1,
+      items: [{ id: 'sound-alert.creator-dance', name: 'Updated Creator Dance', durationMs: 12000, cooldownMs: 60000, accent: '#54F2EB', glyph: 'CD', kind: 'sound-alert' }]
+    }
+  }));
+  const designDeadline = Date.now() + 2000;
+  while (Date.now() < designDeadline) {
+    const response = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } });
+    catalog = await response.json();
+    if (catalog.items?.[0]?.name === 'Updated Creator Dance') break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(catalog.panelDesign.title, 'Creator deck');
+  assert.equal(catalog.panelDesign.accent, '#A66BFF');
+  assert.equal(catalog.panelDesign.showSearch, false);
+
+  const unauthorizedDesign = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
+    method: 'PUT', headers: { Authorization: 'Bearer invalid', 'Content-Type': 'application/json' }, body: JSON.stringify({ panelDesign: {} })
+  });
+  assert.equal(unauthorizedDesign.status, 401);
+
   const unknownAlert = await postAlert(runtime, jwt(secret), randomUUID(), 'sound-alert.not-published');
   assert.equal(unknownAlert.status, 404);
   assert.equal((await postAlert(runtime, jwt(secret, { channel_id: '999999' }))).status, 403);

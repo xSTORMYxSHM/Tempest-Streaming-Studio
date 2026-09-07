@@ -10,6 +10,7 @@ import {
   MemoryTwitchEbsInstallationStore,
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
+  PublicExtensionPanelDesign,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
@@ -22,6 +23,7 @@ export {
 export type {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
+  PublicExtensionPanelDesign,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
@@ -173,6 +175,62 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     return { id, name, kind, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), accent, glyph };
   });
   return { schemaVersion: 1, updatedAt: new Date().toISOString(), items };
+}
+
+const defaultPublicPanelDesign: PublicExtensionPanelDesign = {
+  schemaVersion: 1,
+  preset: 'tempest',
+  brandName: 'TEMPEST STREAMING STUDIO',
+  eyebrow: 'VIEWER CONTROL NODE',
+  title: 'Signal deck',
+  accent: '#54F2EB',
+  background: '#05090E',
+  surface: '#09131B',
+  text: '#ECF9FF',
+  muted: '#79919D',
+  font: 'inter',
+  cardLayout: 'grid',
+  density: 'comfortable',
+  cornerRadius: 10,
+  showLogo: true,
+  showStatus: true,
+  showSearch: true,
+  showFilters: true,
+  showPattern: true,
+  uppercaseLabels: true
+};
+
+function validatePublicPanelDesign(value: unknown): PublicExtensionPanelDesign {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const choice = <T extends string>(candidate: unknown, choices: readonly T[], fallback: T): T => choices.includes(candidate as T) ? candidate as T : fallback;
+  const text = (candidate: unknown, fallback: string, maximum: number): string => String(candidate ?? '').trim().replace(/[\r\n\0]+/g, ' ').slice(0, maximum) || fallback;
+  const color = (candidate: unknown, fallback: string): string => {
+    const normalized = String(candidate || '').trim().toUpperCase();
+    return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
+  };
+  const requestedRadius = Number(source.cornerRadius);
+  return {
+    schemaVersion: 1,
+    preset: choice(source.preset, ['tempest', 'minimal', 'neon', 'soft'] as const, defaultPublicPanelDesign.preset),
+    brandName: text(source.brandName, defaultPublicPanelDesign.brandName, 36),
+    eyebrow: text(source.eyebrow, defaultPublicPanelDesign.eyebrow, 48),
+    title: text(source.title, defaultPublicPanelDesign.title, 48),
+    accent: color(source.accent, defaultPublicPanelDesign.accent),
+    background: color(source.background, defaultPublicPanelDesign.background),
+    surface: color(source.surface, defaultPublicPanelDesign.surface),
+    text: color(source.text, defaultPublicPanelDesign.text),
+    muted: color(source.muted, defaultPublicPanelDesign.muted),
+    font: choice(source.font, ['inter', 'system', 'condensed', 'serif'] as const, defaultPublicPanelDesign.font),
+    cardLayout: choice(source.cardLayout, ['grid', 'list'] as const, defaultPublicPanelDesign.cardLayout),
+    density: choice(source.density, ['comfortable', 'compact'] as const, defaultPublicPanelDesign.density),
+    cornerRadius: Number.isFinite(requestedRadius) ? Math.min(24, Math.max(0, Math.round(requestedRadius))) : defaultPublicPanelDesign.cornerRadius,
+    showLogo: source.showLogo !== false,
+    showStatus: source.showStatus !== false,
+    showSearch: source.showSearch !== false,
+    showFilters: source.showFilters !== false,
+    showPattern: source.showPattern !== false,
+    uppercaseLabels: source.uppercaseLabels !== false
+  };
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -340,7 +398,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'OPTIONS') {
         response.statusCode = 204;
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
-        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, Authorization');
         response.setHeader('Access-Control-Max-Age', '600');
         response.setHeader('Vary', 'Origin');
@@ -392,6 +450,14 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
         if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
         return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, channel: { id: installation.channelId, login: installation.channelLogin }, updatedAt: installation.updatedAt }, origin);
+      }
+      if (request.method === 'PUT' && requestUrl.pathname === '/v1/installations/current/panel-design') {
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
+        const body = await readJson(request);
+        const panelDesign = validatePublicPanelDesign(body.panelDesign);
+        await installationStore.updatePanelDesign(installation.id, panelDesign);
+        return sendJson(response, 200, { schemaVersion: 1, panelDesign }, origin);
       }
       if (request.method === 'DELETE' && requestUrl.pathname === '/v1/installations/current') {
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
