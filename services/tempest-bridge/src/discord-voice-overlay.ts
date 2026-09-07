@@ -18,12 +18,22 @@ export interface DiscordVoiceParticipant {
 
 export interface DiscordVoiceProfile {
   userId: string;
+  username?: string;
+  discordDisplayName?: string;
+  avatarUrl?: string;
+  bot?: boolean;
+  self?: boolean;
   displayName?: string;
   idleUri?: string;
   speakingUri?: string;
   visible: boolean;
   order: number;
   accent?: string;
+  createdAt?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  lastChannelName?: string;
+  lastGuildName?: string;
   updatedAt?: string;
 }
 
@@ -112,6 +122,21 @@ function optionalUri(value: unknown, name: string): string | undefined {
   return value;
 }
 
+function optionalText(value: unknown, name: string, maximum = 100): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return cleanText(value, name, maximum);
+}
+
+function optionalTimestamp(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) throw new Error(`${name} must be an ISO timestamp.`);
+  return new Date(value).toISOString();
+}
+
+function discordAvatarUrl(value: unknown): string | undefined {
+  return typeof value === 'string' && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\//i.test(value) ? value : undefined;
+}
+
 function validateSettings(input: DiscordVoiceOverlaySettings): DiscordVoiceOverlaySettings {
   if (typeof input.enabled !== 'boolean' || typeof input.showNames !== 'boolean' || typeof input.showStatusIcons !== 'boolean' || typeof input.hideSelf !== 'boolean' || typeof input.hideBots !== 'boolean') throw new Error('Discord Voice boolean settings are invalid.');
   if (!['horizontal', 'vertical', 'grid'].includes(input.layout)) throw new Error('layout must be horizontal, vertical, or grid.');
@@ -134,7 +159,7 @@ function validateParticipant(input: unknown): DiscordVoiceParticipant {
   const id = cleanText(source.id, 'participant id', 128);
   const username = cleanText(source.username || source.displayName, 'participant username', 100);
   const displayName = cleanText(source.displayName || username, 'participant display name', 100);
-  const avatarUrl = typeof source.avatarUrl === 'string' && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\//i.test(source.avatarUrl) ? source.avatarUrl : undefined;
+  const avatarUrl = discordAvatarUrl(source.avatarUrl);
   return { id, username, displayName, ...(avatarUrl ? { avatarUrl } : {}), bot: source.bot === true, self: source.self === true, mute: source.mute === true, deaf: source.deaf === true, speaking: source.speaking === true };
 }
 
@@ -190,12 +215,39 @@ export class TempestDiscordVoiceOverlay {
     const source = patch as Record<string, unknown>;
     const allowed = new Set(['displayName', 'idleUri', 'speakingUri', 'visible', 'order', 'accent']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} is not a Discord participant design setting.`);
-    const previous = this.profiles.get(userId) || { userId, visible: true, order: this.profiles.size };
-    const profile = this.validateProfile(userId, { ...previous, ...source, updatedAt: new Date().toISOString() });
+    const now = new Date().toISOString();
+    const previous = this.profiles.get(userId) || { userId, visible: true, order: this.profiles.size, createdAt: now };
+    const profile = this.validateProfile(userId, { ...previous, ...source, updatedAt: now });
     this.profiles.set(userId, profile);
     await this.persist();
     this.broadcastState();
     return structuredClone(profile);
+  }
+
+  async resetProfile(userIdValue: unknown): Promise<boolean> {
+    const userId = cleanText(userIdValue, 'Discord user id', 128);
+    const previous = this.profiles.get(userId);
+    if (!previous) return false;
+    const profile = this.validateProfile(userId, {
+      userId,
+      username: previous.username,
+      discordDisplayName: previous.discordDisplayName,
+      avatarUrl: previous.avatarUrl,
+      bot: previous.bot,
+      self: previous.self,
+      visible: true,
+      order: previous.order,
+      createdAt: previous.createdAt,
+      firstSeenAt: previous.firstSeenAt,
+      lastSeenAt: previous.lastSeenAt,
+      lastChannelName: previous.lastChannelName,
+      lastGuildName: previous.lastGuildName,
+      updatedAt: new Date().toISOString()
+    });
+    this.profiles.set(userId, profile);
+    await this.persist();
+    this.broadcastState();
+    return true;
   }
 
   async removeProfile(userIdValue: unknown): Promise<boolean> {
@@ -204,7 +256,7 @@ export class TempestDiscordVoiceOverlay {
     return removed;
   }
 
-  setState(input: DiscordVoiceStateInput): void {
+  async setState(input: DiscordVoiceStateInput): Promise<void> {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Discord Voice state must be an object.');
     if (input.participants !== undefined && !Array.isArray(input.participants)) throw new Error('Discord Voice participants must be an array.');
     this.previewing = false;
@@ -216,7 +268,25 @@ export class TempestDiscordVoiceOverlay {
       error: typeof input.error === 'string' ? input.error.slice(0, 500) : ''
     };
     this.participants.clear();
-    for (const item of input.participants || []) { const participant = validateParticipant(item); this.participants.set(participant.id, participant); }
+    const now = new Date().toISOString();
+    for (const item of input.participants || []) {
+      const participant = validateParticipant(item);
+      this.participants.set(participant.id, participant);
+      const previous = this.profiles.get(participant.id);
+      this.profiles.set(participant.id, this.validateProfile(participant.id, {
+        ...(previous || { userId: participant.id, visible: true, order: this.profiles.size, createdAt: now }),
+        username: participant.username,
+        discordDisplayName: participant.displayName,
+        avatarUrl: participant.avatarUrl,
+        bot: participant.bot,
+        self: participant.self,
+        firstSeenAt: previous?.firstSeenAt || now,
+        lastSeenAt: now,
+        lastChannelName: this.connection.channelName || previous?.lastChannelName,
+        lastGuildName: this.connection.guildName || previous?.lastGuildName
+      }));
+    }
+    if (this.participants.size) await this.persist();
     this.broadcastState();
   }
 
@@ -269,16 +339,44 @@ export class TempestDiscordVoiceOverlay {
   }
 
   status(url: string): Record<string, unknown> {
-    return { state: this.previewing ? 'preview' : this.connection.connected ? 'connected' : 'ready', url, connectedClients: this.clients.size, previewing: this.previewing, connection: { ...this.connection }, settings: structuredClone(this.settings), profiles: [...this.profiles.values()].map((entry) => structuredClone(entry)), participants: this.mergedParticipants() };
+    return { state: this.previewing ? 'preview' : this.connection.connected ? 'connected' : 'ready', url, connectedClients: this.clients.size, previewing: this.previewing, connection: { ...this.connection }, settings: structuredClone(this.settings), profiles: [...this.profiles.values()].map((entry) => structuredClone(entry)), participants: this.mergedParticipants(), guests: this.guestLibrary(), savedGuestCount: this.profiles.size };
   }
 
   close(): void { for (const client of this.clients) client.end(); this.clients.clear(); }
 
   private validateProfile(userId: string, source: Partial<DiscordVoiceProfile>): DiscordVoiceProfile {
+    const username = optionalText(source.username, 'Discord username', 100);
+    const discordDisplayName = optionalText(source.discordDisplayName, 'Discord display name', 100);
+    const avatarUrl = discordAvatarUrl(source.avatarUrl);
     const displayName = source.displayName === undefined || source.displayName === '' ? undefined : cleanText(source.displayName, 'profile display name', 100);
     const accent = source.accent === undefined || source.accent === '' ? undefined : String(source.accent).toUpperCase();
     if (accent && !/^#[0-9a-f]{6}$/i.test(accent)) throw new Error('profile accent must be a six-digit hex color.');
-    return { userId, ...(displayName ? { displayName } : {}), ...(optionalUri(source.idleUri, 'idleUri') ? { idleUri: optionalUri(source.idleUri, 'idleUri') } : {}), ...(optionalUri(source.speakingUri, 'speakingUri') ? { speakingUri: optionalUri(source.speakingUri, 'speakingUri') } : {}), visible: source.visible !== false, order: integer(source.order ?? 0, 'profile order', 0, 999), ...(accent ? { accent } : {}), ...(source.updatedAt ? { updatedAt: source.updatedAt } : {}) };
+    const idleUri = optionalUri(source.idleUri, 'idleUri');
+    const speakingUri = optionalUri(source.speakingUri, 'speakingUri');
+    const createdAt = optionalTimestamp(source.createdAt, 'createdAt');
+    const firstSeenAt = optionalTimestamp(source.firstSeenAt, 'firstSeenAt');
+    const lastSeenAt = optionalTimestamp(source.lastSeenAt, 'lastSeenAt');
+    const updatedAt = optionalTimestamp(source.updatedAt, 'updatedAt');
+    return {
+      userId,
+      ...(username ? { username } : {}),
+      ...(discordDisplayName ? { discordDisplayName } : {}),
+      ...(avatarUrl ? { avatarUrl } : {}),
+      ...(source.bot !== undefined ? { bot: source.bot === true } : {}),
+      ...(source.self !== undefined ? { self: source.self === true } : {}),
+      ...(displayName ? { displayName } : {}),
+      ...(idleUri ? { idleUri } : {}),
+      ...(speakingUri ? { speakingUri } : {}),
+      visible: source.visible !== false,
+      order: integer(source.order ?? 0, 'profile order', 0, 999),
+      ...(accent ? { accent } : {}),
+      ...(createdAt ? { createdAt } : {}),
+      ...(firstSeenAt ? { firstSeenAt } : {}),
+      ...(lastSeenAt ? { lastSeenAt } : {}),
+      ...(optionalText(source.lastChannelName, 'last channel name') ? { lastChannelName: optionalText(source.lastChannelName, 'last channel name') } : {}),
+      ...(optionalText(source.lastGuildName, 'last guild name') ? { lastGuildName: optionalText(source.lastGuildName, 'last guild name') } : {}),
+      ...(updatedAt ? { updatedAt } : {})
+    };
   }
 
   private mergedParticipants(): Array<DiscordVoiceParticipant & { visible: boolean; order: number; accent?: string; idleAssigned: boolean; speakingAssigned: boolean; profileUpdatedAt?: string }> {
@@ -286,6 +384,41 @@ export class TempestDiscordVoiceOverlay {
       const profile = this.profiles.get(participant.id);
       return { ...structuredClone(participant), displayName: profile?.displayName || participant.displayName, visible: profile?.visible !== false, order: profile?.order ?? 500, ...(profile?.accent ? { accent: profile.accent } : {}), idleAssigned: Boolean(profile?.idleUri), speakingAssigned: Boolean(profile?.speakingUri), ...(profile?.updatedAt ? { profileUpdatedAt: profile.updatedAt } : {}) };
     });
+  }
+
+  private guestLibrary(): Array<Record<string, unknown>> {
+    const active = this.mergedParticipants().map((participant) => ({
+      ...participant,
+      inChannel: true,
+      ...(this.profiles.get(participant.id)?.firstSeenAt ? { firstSeenAt: this.profiles.get(participant.id)?.firstSeenAt } : {}),
+      ...(this.profiles.get(participant.id)?.lastSeenAt ? { lastSeenAt: this.profiles.get(participant.id)?.lastSeenAt } : {}),
+      ...(this.profiles.get(participant.id)?.lastChannelName ? { lastChannelName: this.profiles.get(participant.id)?.lastChannelName } : {}),
+      ...(this.profiles.get(participant.id)?.lastGuildName ? { lastGuildName: this.profiles.get(participant.id)?.lastGuildName } : {})
+    }));
+    const activeIds = new Set(active.map((participant) => participant.id));
+    const saved = [...this.profiles.values()].filter((profile) => !activeIds.has(profile.userId)).map((profile) => ({
+      id: profile.userId,
+      username: profile.username || '',
+      displayName: profile.displayName || profile.discordDisplayName || profile.username || `Discord user …${profile.userId.slice(-4)}`,
+      ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
+      bot: profile.bot === true,
+      self: profile.self === true,
+      mute: false,
+      deaf: false,
+      speaking: false,
+      inChannel: false,
+      visible: profile.visible !== false,
+      order: profile.order,
+      ...(profile.accent ? { accent: profile.accent } : {}),
+      idleAssigned: Boolean(profile.idleUri),
+      speakingAssigned: Boolean(profile.speakingUri),
+      ...(profile.updatedAt ? { profileUpdatedAt: profile.updatedAt } : {}),
+      ...(profile.firstSeenAt ? { firstSeenAt: profile.firstSeenAt } : {}),
+      ...(profile.lastSeenAt ? { lastSeenAt: profile.lastSeenAt } : {}),
+      ...(profile.lastChannelName ? { lastChannelName: profile.lastChannelName } : {}),
+      ...(profile.lastGuildName ? { lastGuildName: profile.lastGuildName } : {})
+    }));
+    return [...active, ...saved];
   }
 
   private broadcastState(): void { this.broadcast('state', { participants: this.mergedParticipants() }); }

@@ -759,8 +759,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const removed = await discordVoiceOverlay.removeProfile(decodeURIComponent(discordVoiceProfileMatch[1]));
         return sendJson(response, removed ? 200 : 404, removed ? { removed: true } : { error: 'Discord participant design was not found.' });
       }
+      const discordVoiceProfileResetMatch = requestUrl.pathname.match(/^\/v1\/discord-voice\/profiles\/([^/]+)\/reset$/);
+      if (request.method === 'POST' && discordVoiceProfileResetMatch) {
+        const reset = await discordVoiceOverlay.resetProfile(decodeURIComponent(discordVoiceProfileResetMatch[1]));
+        return sendJson(response, reset ? 200 : 404, reset ? { reset: true } : { error: 'Discord guest profile was not found.' });
+      }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/state') {
-        discordVoiceOverlay.setState(await readJson(request) as Record<string, unknown>);
+        await discordVoiceOverlay.setState(await readJson(request) as Record<string, unknown>);
         return sendJson(response, 200, discordVoiceOverlay.status(`${runtime.baseUrl}/discord-voice`));
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/speaking') {

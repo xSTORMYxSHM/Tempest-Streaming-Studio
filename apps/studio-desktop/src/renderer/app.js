@@ -645,12 +645,20 @@
     catch { return fallback; }
   }
 
+  function discordGuestStateLabel(guest) {
+    if (guest.inChannel) return guest.speaking ? 'SPEAKING' : guest.mute ? 'MUTED' : 'IN CHANNEL';
+    if (!guest.lastSeenAt) return 'SAVED · NOT SEEN YET';
+    const seen = new Date(guest.lastSeenAt);
+    return `OFFLINE · LAST SEEN ${Number.isNaN(seen.getTime()) ? 'EARLIER' : seen.toLocaleDateString()}`;
+  }
+
   function renderDiscordVoice({ settings = false } = {}) {
     const overlay = state.discordVoice;
     const rpc = state.discordRpc || {};
     const configuration = overlay?.settings || {};
     const connection = overlay?.connection || {};
     const participants = overlay?.participants || [];
+    const guests = [...(overlay?.guests || participants)].sort((left, right) => Number(right.inChannel) - Number(left.inChannel) || (left.order - right.order) || String(left.displayName).localeCompare(String(right.displayName)));
     const connected = rpc.state === 'connected';
     $('#discordVoiceBadge').textContent = overlay?.previewing ? 'PREVIEW' : connected ? 'CONNECTED' : overlay ? 'OVERLAY READY' : 'CHECKING';
     $('#discordVoiceBadge').classList.toggle('offline', !connected && !overlay?.previewing);
@@ -658,6 +666,7 @@
     $('#discordVoiceChannelMetric').textContent = String(connection.channelName || rpc.channelName || 'NONE').toUpperCase();
     $('#discordVoiceGuildMetric').textContent = connection.guildName || rpc.guildName || 'Open Discord and join voice';
     $('#discordVoiceParticipantMetric').textContent = participants.length;
+    $('#discordVoiceSavedMetric').textContent = `${overlay?.savedGuestCount || 0} saved guest profile${overlay?.savedGuestCount === 1 ? '' : 's'}`;
     $('#discordVoiceClientMetric').textContent = overlay?.connectedClients || 0;
     $('#discordVoiceBrowserStatus').innerHTML = overlay
       ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Discord Guests browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
@@ -672,18 +681,18 @@
     $('#disconnectDiscordVoice').disabled = rpc.state !== 'connected' && rpc.state !== 'error';
     $('#forgetDiscordVoice').disabled = rpc.state === 'unconfigured';
     const grid = $('#discordVoiceParticipantGrid');
-    grid.classList.toggle('empty-state', !participants.length);
-    grid.innerHTML = participants.length ? participants.map((participant) => {
+    grid.classList.toggle('empty-state', !guests.length);
+    grid.innerHTML = guests.length ? guests.map((participant) => {
       const profile = discordProfileFor(participant.id);
       const idleName = localMediaName(profile.idleUri, 'Default Discord avatar');
       const speakingName = localMediaName(profile.speakingUri, 'Glow + scale idle image');
-      return `<article class="discord-participant-card ${participant.speaking ? 'speaking' : ''}" style="--participant-accent:${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}">
-        <div class="discord-participant-head"><i>${escapeHtml(String(participant.displayName || '?').slice(0, 2).toUpperCase())}</i><div><span>${participant.self ? 'YOU · ' : ''}${participant.bot ? 'BOT · ' : ''}${participant.speaking ? 'SPEAKING' : participant.mute ? 'MUTED' : 'IN CHANNEL'}</span><h3>${escapeHtml(participant.displayName)}</h3></div></div>
+      return `<article class="discord-participant-card ${participant.speaking ? 'speaking' : ''} ${participant.inChannel ? '' : 'offline'}" style="--participant-accent:${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}">
+        <div class="discord-participant-head"><i>${escapeHtml(String(participant.displayName || '?').slice(0, 2).toUpperCase())}</i><div><span>${participant.self ? 'YOU · ' : ''}${participant.bot ? 'BOT · ' : ''}${escapeHtml(discordGuestStateLabel(participant))}</span><h3>${escapeHtml(participant.displayName)}</h3><small class="discord-user-id">Discord ID ${escapeHtml(participant.id)}</small></div></div>
         <div class="discord-profile-fields"><label>Overlay name<input data-discord-profile-name="${escapeHtml(participant.id)}" maxlength="100" value="${escapeHtml(profile.displayName || '')}" placeholder="${escapeHtml(participant.displayName)}" /></label><label>Order<input data-discord-profile-order="${escapeHtml(participant.id)}" type="number" min="0" max="999" value="${profile.order ?? 500}" /></label><label>Accent<input data-discord-profile-accent="${escapeHtml(participant.id)}" type="color" value="${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}" /></label><label class="checkbox-label"><input data-discord-profile-visible="${escapeHtml(participant.id)}" type="checkbox" ${profile.visible === false ? '' : 'checked'} /> Show this person</label></div>
         <div class="discord-media-slots"><div><span>IDLE IMAGE</span><strong title="${escapeHtml(idleName)}">${escapeHtml(idleName)}</strong><button data-discord-image-id="${escapeHtml(participant.id)}" data-discord-image-kind="idle">Assign Idle</button></div><div><span>SPEAKING IMAGE</span><strong title="${escapeHtml(speakingName)}">${escapeHtml(speakingName)}</strong><button data-discord-image-id="${escapeHtml(participant.id)}" data-discord-image-kind="speaking">Assign Speaking</button></div></div>
-        <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button><button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Reset</button></div>
+        <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button><button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button">Reset Style</button><button data-discord-profile-forget="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Forget User</button></div>
       </article>`;
-    }).join('') : 'Connect Discord or load sample guests to assign images.';
+    }).join('') : 'Connect Discord, add someone by User ID, or load sample guests to assign images.';
     if (settings && overlay) {
       $('#discordVoiceEnabled').checked = configuration.enabled !== false;
       $('#discordVoiceLayout').value = configuration.layout || 'horizontal';
@@ -3281,12 +3290,36 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function addDiscordVoiceProfile() {
+    const input = $('#discordGuestUserId');
+    const userId = input.value.trim();
+    if (!/^\d{17,20}$/.test(userId)) return toast('Enter a valid 17–20 digit Discord User ID.', true);
+    try {
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'POST', body: {} });
+      state.discordVoice = await api('/v1/discord-voice');
+      input.value = '';
+      renderDiscordVoice();
+      toast('Offline Discord guest added. You can assign their images now.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function resetDiscordVoiceProfile(userId) {
+    try {
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}/reset`, { method: 'POST', body: {} });
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast('Discord guest style reset. The person remains in your saved library.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function forgetDiscordVoiceProfile(userId) {
+    const guest = (state.discordVoice?.guests || []).find((entry) => entry.id === userId);
+    if (!confirm(`Forget ${guest?.displayName || 'this Discord user'} and remove their assigned images from the guest library? The original image files will not be deleted.`)) return;
     try {
       await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'DELETE' });
       state.discordVoice = await api('/v1/discord-voice');
       renderDiscordVoice();
-      toast('Discord participant design reset.');
+      toast('Discord guest forgotten. They will be added again if detected in voice.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -3626,8 +3659,10 @@
     if (button.dataset.discordVoiceSave) return saveDiscordVoiceSettings();
     if (button.dataset.discordVoicePreview) return previewDiscordVoice();
     if (button.dataset.discordVoiceClear) return clearDiscordVoicePreview();
+    if (button.dataset.discordProfileAdd) return addDiscordVoiceProfile();
     if (button.dataset.discordProfileSave) return saveDiscordVoiceProfile(button.dataset.discordProfileSave);
     if (button.dataset.discordProfileReset) return resetDiscordVoiceProfile(button.dataset.discordProfileReset);
+    if (button.dataset.discordProfileForget) return forgetDiscordVoiceProfile(button.dataset.discordProfileForget);
     if (button.dataset.discordImageId) return assignDiscordVoiceImage(button.dataset.discordImageId, button.dataset.discordImageKind);
     if (button.dataset.twitchVisualToggle) {
       const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === button.dataset.twitchVisualToggle);
@@ -3663,6 +3698,7 @@
     $('#connectDiscordVoice').addEventListener('click', connectDiscordVoice);
     $('#disconnectDiscordVoice').addEventListener('click', disconnectDiscordVoice);
     $('#forgetDiscordVoice').addEventListener('click', forgetDiscordVoice);
+    $('#discordGuestUserId').addEventListener('keydown', (event) => { if (event.key === 'Enter') addDiscordVoiceProfile(); });
     $('#emergencyStopButton').addEventListener('click', toggleSafety);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);

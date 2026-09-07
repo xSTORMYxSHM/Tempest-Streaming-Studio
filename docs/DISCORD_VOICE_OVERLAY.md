@@ -14,7 +14,11 @@ Add that address to OBS, Tempest Broadcast, or another broadcaster as a Browser 
 4. Assign an idle PNG or GIF and, optionally, a speaking PNG or GIF to each participant.
 5. Use **Preview Guests** before going live, then add the Browser Source URL to the broadcaster.
 
-Viewers and guests do not need Tempest, a Discord developer account, a bot invite, or any server permissions. Tempest does not read messages. Local assignments and overlay settings are included in Studio backups; Discord OAuth credentials are excluded.
+Studio automatically saves every detected participant to the **Saved Guest Library** by Discord User ID. Their design remains editable after they leave voice, but an offline saved guest is never rendered in the Browser Source. **Reset Style** removes that person's custom name, images, color, and visibility choices while keeping them in the library. **Forget User** removes the saved profile; an active person may be added again the next time Discord reports the channel.
+
+For setup before a guest joins, enable **Developer Mode** in Discord, right-click the person, choose **Copy User ID**, and paste the 17–20 digit value into **Add someone before they join**. This creates an offline placeholder immediately. The streamer can assign its idle and speaking files, and Tempest fills in the Discord name and avatar without replacing those custom files the next time it detects that ID in voice.
+
+Viewers and guests do not need Tempest, a Discord developer account, a bot invite, or any server permissions. Tempest does not read messages. The saved guest library, local assignments, and overlay settings are included in Studio backups; Discord OAuth credentials are excluded.
 
 ## Discord application approval
 

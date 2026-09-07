@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Discord Guests now keeps a persistent, editable guest library keyed by Discord User ID. Every detected voice participant remains available for offline idle/speaking image setup, streamers can add a profile by User ID before the guest joins, and reset/forget controls make the saved list manageable without ever displaying offline guests in the Browser Source.
+
 ## 1.1.1 — Custom Twitch Experiences
 
 - Added independent Twitch Experience designers for Hype Train, Raid Portal, and Goals with Tempest, Minimal, and Mainframe presets; local PNG/JPG/GIF/WebP/AVIF/MP4/WebM layers; media fit and opacity; portable backup support; and advanced HTML/CSS/JavaScript. Raid Portal now defaults to an animated Mainframe Breach presentation while retaining the original portal as a selectable preset.

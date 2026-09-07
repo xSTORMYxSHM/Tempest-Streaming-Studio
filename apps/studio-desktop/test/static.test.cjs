@@ -7,6 +7,7 @@ test('renderer includes orchestration and management sections with a restrictive
   const html = await readFile(path.join(__dirname, '..', 'dist', 'renderer', 'index.html'), 'utf8');
   const renderer = await readFile(path.join(__dirname, '..', 'dist', 'renderer', 'app.js'), 'utf8');
   const main = await readFile(path.join(__dirname, '..', 'dist', 'main.js'), 'utf8');
+  const discordRpc = await readFile(path.join(__dirname, '..', 'dist', 'discord-rpc.js'), 'utf8');
   const preload = await readFile(path.join(__dirname, '..', 'dist', 'preload.js'), 'utf8');
   const styles = await readFile(path.join(__dirname, '..', 'dist', 'renderer', 'styles.css'), 'utf8');
   assert.match(html, /Studio Home/);
@@ -36,9 +37,16 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Discord Guests/);
   assert.match(renderer, /Assign Idle/);
   assert.match(renderer, /Assign Speaking/);
+  assert.match(html, /Add by User ID/);
+  assert.match(html, /SAVED GUEST LIBRARY/);
+  assert.match(renderer, /savedGuestCount/);
+  assert.match(renderer, /Reset Style/);
+  assert.match(renderer, /Forget User/);
+  assert.match(renderer, /discordProfileAdd/);
   assert.match(renderer, /\/v1\/discord-voice/);
   assert.match(renderer, /Discord Guests browser-source URL/);
   assert.match(main, /TempestDiscordRpcClient/);
+  assert.match(discordRpc, /1546349623701151854/);
   assert.match(main, /discord-rpc-credentials\.bin/);
   assert.match(preload, /studio:connect-discord-voice/);
   assert.match(preload, /studio:select-discord-voice-image/);

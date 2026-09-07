@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import net, { Socket } from 'node:net';
 
-export const OFFICIAL_DISCORD_CLIENT_ID = '';
+export const OFFICIAL_DISCORD_CLIENT_ID = '1546349623701151854';
 export const OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL = 'https://signal.tempestmainframe.com/v1/discord/oauth/exchange';
 
 export interface DiscordRpcTokenSet {

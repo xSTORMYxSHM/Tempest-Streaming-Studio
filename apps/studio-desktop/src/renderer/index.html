@@ -281,7 +281,7 @@
           <div class="metric-grid">
             <article><span>VOICE CONNECTION</span><strong id="discordVoiceConnectionMetric">OFFLINE</strong><small>Private local Discord connection</small></article>
             <article><span>VOICE CHANNEL</span><strong id="discordVoiceChannelMetric">NONE</strong><small id="discordVoiceGuildMetric">Open Discord and join voice</small></article>
-            <article><span>PARTICIPANTS</span><strong id="discordVoiceParticipantMetric">0</strong><small>Visible channel members</small></article>
+            <article><span>IN CHANNEL</span><strong id="discordVoiceParticipantMetric">0</strong><small id="discordVoiceSavedMetric">0 saved guest profiles</small></article>
             <article><span>BROWSER SOURCES</span><strong id="discordVoiceClientMetric">0</strong><small>Connected broadcast canvases</small></article>
           </div>
           <div id="discordVoiceBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local Discord Guests address…</div>
@@ -308,8 +308,9 @@
             </div>
             <div class="chat-overlay-actions"><button data-discord-voice-save="true" class="secondary-button">Save Design</button><button data-discord-voice-preview="true" class="primary-button">Preview Guests</button><button data-discord-voice-clear="true" class="secondary-button danger-outline">Stop Preview</button></div>
           </article>
-          <div class="visual-section-heading discord-participant-heading"><div><span>PARTICIPANT DESIGNS</span><h3>Idle and speaking images</h3><p>Assign local PNG, GIF, JPG, WebP, or AVIF files. A speaking image is optional; the normal avatar still glows and grows while that person talks.</p></div><button data-discord-voice-preview="true" class="secondary-button">Load Sample Guests</button></div>
-          <div id="discordVoiceParticipantGrid" class="discord-participant-grid empty-state">Connect Discord or load sample guests to assign images.</div>
+          <div class="visual-section-heading discord-participant-heading"><div><span>SAVED GUEST LIBRARY</span><h3>Idle and speaking images</h3><p>Everyone detected in voice is remembered here, even while offline. Assign local PNG, GIF, JPG, WebP, or AVIF files; only people currently in the channel appear on stream.</p></div><button data-discord-voice-preview="true" class="secondary-button">Load Sample Guests</button></div>
+          <article class="discord-guest-add-panel"><div><label for="discordGuestUserId">Add someone before they join<input id="discordGuestUserId" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="Discord User ID" /></label><button data-discord-profile-add="true" class="secondary-button">Add by User ID</button></div><small>In Discord, enable Developer Mode, right-click the person, and choose Copy User ID. Their name and avatar fill in automatically when Tempest sees them in voice.</small></article>
+          <div id="discordVoiceParticipantGrid" class="discord-participant-grid empty-state">Connect Discord, add someone by User ID, or load sample guests to assign images.</div>
         </section>
 
         <section id="twitchSection" class="page">

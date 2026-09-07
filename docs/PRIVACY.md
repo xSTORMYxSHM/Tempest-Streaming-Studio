@@ -23,6 +23,10 @@ Twitch-signed viewer JWTs, opaque viewer identifiers, and request identifiers ar
 
 Broadcaster OAuth tokens, chatbot OAuth tokens, local Twitch Extension secrets, hosted Extension relay credentials, and the GIPHY API key are encrypted using the operating system's protected storage. They are excluded from Studio backups, Alert Packs, and diagnostics exports. The hosted service stores only the relay credential's SHA-256 hash.
 
+## Discord guest library
+
+Discord Guests stores detected participant User IDs, usernames, display names, Discord avatar URLs, last-seen channel/server labels and timestamps, and streamer-assigned design settings in the local Studio data directory. This allows guest images to be prepared and edited while that person is offline. The library is included in Studio backups and is never uploaded by Studio. **Forget User** removes one saved entry; the person will be remembered again if Discord later reports them in the selected voice channel. Discord messages are never read or stored, and offline saved guests are never rendered in the live Browser Source.
+
 ## Exported files
 
 Alert Packs can contain alert HTML, CSS, JavaScript, and embedded media. Import only packs from trusted creators. Studio verifies embedded media hashes and warns before importing custom code.
