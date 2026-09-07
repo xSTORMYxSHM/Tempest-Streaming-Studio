@@ -811,6 +811,22 @@ function registerDesktopHandlers(): void {
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
   });
 
+  ipcMain.handle('studio:select-twitch-experience-media', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Assign Twitch Experience Media',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images, animated images, or silent video', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile()) throw new Error('The selected Twitch Experience media is not a file.');
+    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+  });
+
   ipcMain.handle('studio:select-discord-voice-image', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Assign Discord Voice Image',

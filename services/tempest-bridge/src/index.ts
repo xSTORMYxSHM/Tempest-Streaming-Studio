@@ -530,7 +530,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         response.statusCode = 200;
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
         response.setHeader('Cache-Control', 'no-store');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self';");
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self';");
         response.setHeader('X-Content-Type-Options', 'nosniff');
         return response.end(chatOverlay.page());
       }
@@ -565,6 +565,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences/events') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
         twitchExperiences.connect(response);
+        return;
+      }
+      const twitchExperienceMediaMatch = requestUrl.pathname.match(/^\/twitch-experiences\/media\/(hype-train|raid-portal|goal-overlay)$/);
+      if (request.method === 'GET' && twitchExperienceMediaMatch) {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experience media is available only on this computer.' });
+        try {
+          if (!await twitchExperiences.serveMedia(twitchExperienceMediaMatch[1] as 'hype-train' | 'raid-portal' | 'goal-overlay', response)) return sendJson(response, 404, { error: 'The assigned Twitch Experience media is unavailable.' });
+        } catch (error) { return sendJson(response, 502, { error: error instanceof Error ? error.message : 'Twitch Experience media could not be loaded.' }); }
         return;
       }
       if (request.method === 'GET' && requestUrl.pathname === '/discord-voice') {

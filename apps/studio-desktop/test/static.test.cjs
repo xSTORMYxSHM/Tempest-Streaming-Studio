@@ -44,7 +44,11 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(preload, /studio:select-discord-voice-image/);
   assert.match(html, /Hype Train Takeover, Raid Portal \+ Goals/);
   assert.match(html, /id="twitchExperienceRaidDuration"/);
+  assert.match(html, /Mainframe Breach/);
+  assert.match(html, /Advanced HTML, CSS &amp; JavaScript/);
+  assert.match(html, /data-twitch-experience-media="raid-portal"/);
   assert.match(renderer, /\/v1\/twitch-experiences/);
+  assert.match(renderer, /selectTwitchExperienceMedia/);
   assert.match(renderer, /Twitch Experiences browser-source URL/);
   assert.doesNotMatch(html, /class="nav-button[^>]*>\s*<span>\d+/);
   assert.match(html, /<p class="nav-group">STREAM DESIGN<\/p>/);

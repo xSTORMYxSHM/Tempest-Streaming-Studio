@@ -74,6 +74,7 @@
   let alertDesignBasePlacement = null;
   let alertDesignScenePlacements = [];
   let alertDesignSceneScope = '';
+  const twitchExperienceDraftMedia = Object.create(null);
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
@@ -734,6 +735,50 @@
     }
   }
 
+  const twitchExperienceDesigners = {
+    'hype-train': { prefix: 'Hype', designKey: 'hypeTrainDesign', defaultPreset: 'tempest' },
+    'raid-portal': { prefix: 'Raid', designKey: 'raidPortalDesign', defaultPreset: 'mainframe-breach' },
+    'goal-overlay': { prefix: 'Goal', designKey: 'goalOverlayDesign', defaultPreset: 'tempest' }
+  };
+
+  function twitchExperienceMediaName(uri) {
+    if (!uri) return 'None';
+    try { return decodeURIComponent(new URL(uri).pathname.split('/').filter(Boolean).at(-1) || 'Assigned media'); }
+    catch { return 'Assigned media'; }
+  }
+
+  function populateTwitchExperienceDesign(kind, design = {}) {
+    const meta = twitchExperienceDesigners[kind];
+    const prefix = `#twitchExperience${meta.prefix}`;
+    $(`${prefix}Preset`).value = design.preset || meta.defaultPreset;
+    $(`${prefix}MediaLayer`).value = design.mediaLayer || 'background';
+    $(`${prefix}MediaFit`).value = design.mediaFit || 'cover';
+    const opacity = Math.round((Number.isFinite(Number(design.mediaOpacity)) ? Number(design.mediaOpacity) : 0.5) * 100);
+    $(`${prefix}MediaOpacity`).value = opacity;
+    $(`${prefix}MediaOpacityValue`).textContent = `${opacity}%`;
+    $(`${prefix}CustomHtml`).value = design.customHtml || '';
+    $(`${prefix}CustomCss`).value = design.customCss || '';
+    $(`${prefix}CustomJavaScript`).value = design.customJavaScript || '';
+    const mediaUri = Object.hasOwn(twitchExperienceDraftMedia, kind) ? twitchExperienceDraftMedia[kind] : design.mediaUri || '';
+    $(`${prefix}MediaName`).textContent = twitchExperienceMediaName(mediaUri);
+  }
+
+  function twitchExperienceDesignFromForm(kind) {
+    const meta = twitchExperienceDesigners[kind];
+    const prefix = `#twitchExperience${meta.prefix}`;
+    const saved = state.twitchExperiences?.settings?.[meta.designKey] || {};
+    return {
+      preset: $(`${prefix}Preset`).value,
+      mediaUri: Object.hasOwn(twitchExperienceDraftMedia, kind) ? twitchExperienceDraftMedia[kind] : saved.mediaUri || '',
+      mediaLayer: $(`${prefix}MediaLayer`).value,
+      mediaFit: $(`${prefix}MediaFit`).value,
+      mediaOpacity: Number($(`${prefix}MediaOpacity`).value) / 100,
+      customHtml: $(`${prefix}CustomHtml`).value,
+      customCss: $(`${prefix}CustomCss`).value,
+      customJavaScript: $(`${prefix}CustomJavaScript`).value
+    };
+  }
+
   function renderTwitchExperiences({ settings = false } = {}) {
     const experience = state.twitchExperiences;
     const configuration = experience?.settings || {};
@@ -761,6 +806,7 @@
       $('#twitchExperienceHypeAccent').value = configuration.hypeAccent || '#FF4CCF';
       $('#twitchExperienceRaidAccent').value = configuration.raidAccent || '#54F2EB';
       $('#twitchExperienceGoalAccent').value = configuration.goalAccent || '#A7FF5C';
+      for (const [kind, meta] of Object.entries(twitchExperienceDesigners)) populateTwitchExperienceDesign(kind, configuration[meta.designKey]);
     }
   }
 
@@ -3339,12 +3385,53 @@
         raidDurationMs: Math.round(Number($('#twitchExperienceRaidDuration').value) * 1000),
         hypeAccent: $('#twitchExperienceHypeAccent').value,
         raidAccent: $('#twitchExperienceRaidAccent').value,
-        goalAccent: $('#twitchExperienceGoalAccent').value
+        goalAccent: $('#twitchExperienceGoalAccent').value,
+        hypeTrainDesign: twitchExperienceDesignFromForm('hype-train'),
+        raidPortalDesign: twitchExperienceDesignFromForm('raid-portal'),
+        goalOverlayDesign: twitchExperienceDesignFromForm('goal-overlay')
       } });
       state.twitchExperiences = await api('/v1/twitch-experiences');
+      for (const kind of Object.keys(twitchExperienceDraftMedia)) delete twitchExperienceDraftMedia[kind];
       renderTwitchExperiences({ settings: true });
-      toast('Twitch Experiences saved.');
+      toast('Twitch Experience designs and media saved.');
     } catch (error) { toast(error.message, true); }
+  }
+
+  async function assignTwitchExperienceMedia(kind) {
+    const meta = twitchExperienceDesigners[kind];
+    if (!meta) return;
+    try {
+      const selected = await window.tempestStudio.selectTwitchExperienceMedia();
+      if (!selected) return;
+      twitchExperienceDraftMedia[kind] = selected.uri;
+      $(`#twitchExperience${meta.prefix}MediaName`).textContent = selected.name;
+      toast(`${selected.name} assigned. Save Experiences to apply it.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function clearTwitchExperienceMedia(kind) {
+    const meta = twitchExperienceDesigners[kind];
+    if (!meta) return;
+    twitchExperienceDraftMedia[kind] = '';
+    $(`#twitchExperience${meta.prefix}MediaName`).textContent = 'None';
+    toast('Experience media cleared. Save Experiences to apply it.');
+  }
+
+  async function validateTwitchExperienceCode(kind) {
+    const meta = twitchExperienceDesigners[kind];
+    if (!meta) return;
+    const prefix = `#twitchExperience${meta.prefix}`;
+    const output = $(`${prefix}CodeStatus`);
+    try {
+      const result = await window.tempestStudio.validateAlertCode({ html: $(`${prefix}CustomHtml`).value, css: $(`${prefix}CustomCss`).value, javascript: $(`${prefix}CustomJavaScript`).value });
+      output.textContent = result.ok ? 'HTML, CSS, and JavaScript are valid.' : result.errors.join(' ');
+      output.classList.toggle('valid', result.ok);
+      output.classList.toggle('invalid', !result.ok);
+    } catch (error) {
+      output.textContent = error.message;
+      output.classList.remove('valid');
+      output.classList.add('invalid');
+    }
   }
 
   async function previewTwitchExperience(kind) {
@@ -3530,6 +3617,9 @@
     if (button.dataset.emotePyramidPreview) return previewEmotePyramid();
     if (button.dataset.emoteWallClear) return clearEmoteWall();
     if (button.dataset.emoteProviderRefresh) return refreshEmoteProviders();
+    if (button.dataset.twitchExperienceMedia) return assignTwitchExperienceMedia(button.dataset.twitchExperienceMedia);
+    if (button.dataset.twitchExperienceMediaClear) return clearTwitchExperienceMedia(button.dataset.twitchExperienceMediaClear);
+    if (button.dataset.twitchExperienceCodeValidate) return validateTwitchExperienceCode(button.dataset.twitchExperienceCodeValidate);
     if (button.dataset.twitchExperienceSave) return saveTwitchExperiences();
     if (button.dataset.twitchExperiencePreview) return previewTwitchExperience(button.dataset.twitchExperiencePreview);
     if (button.dataset.twitchExperienceClear) return clearTwitchExperiences();
@@ -3580,6 +3670,11 @@
     $('#alertHistoryKind').addEventListener('change', renderAlertHistory);
     $('#alertHistoryState').addEventListener('change', renderAlertHistory);
     $('#giphyTargetAlert').addEventListener('change', updateGiphyTargetContext);
+    for (const meta of Object.values(twitchExperienceDesigners)) {
+      $(`#twitchExperience${meta.prefix}MediaOpacity`).addEventListener('input', (event) => {
+        $(`#twitchExperience${meta.prefix}MediaOpacityValue`).textContent = `${event.target.value}%`;
+      });
+    }
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);
     $('#interactionAlertForm').addEventListener('submit', createInteractionAlert);

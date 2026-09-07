@@ -100,6 +100,15 @@ export async function buildTempestStudioBackup(input: { userDataDirectory: strin
       }
     }
   }
+  const twitchExperiencesDocument = documents.twitchExperiences;
+  if (twitchExperiencesDocument && typeof twitchExperiencesDocument === 'object' && !Array.isArray(twitchExperiencesDocument)) {
+    for (const designKey of ['hypeTrainDesign', 'raidPortalDesign', 'goalOverlayDesign']) {
+      const design = (twitchExperiencesDocument as Record<string, unknown>)[designKey];
+      if (design && typeof design === 'object' && !Array.isArray(design) && typeof (design as Record<string, unknown>).mediaUri === 'string') {
+        (design as Record<string, unknown>).mediaUri = await packUri((design as Record<string, unknown>).mediaUri as string);
+      }
+    }
+  }
   const discordVoiceDocument = documents.discordVoiceOverlay;
   if (discordVoiceDocument && typeof discordVoiceDocument === 'object' && !Array.isArray(discordVoiceDocument)) {
     const profiles = Array.isArray((discordVoiceDocument as Record<string, unknown>).profiles) ? (discordVoiceDocument as Record<string, unknown>).profiles as Array<Record<string, unknown>> : [];

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.1.1 — Custom Twitch Experiences
+
+- Added independent Twitch Experience designers for Hype Train, Raid Portal, and Goals with Tempest, Minimal, and Mainframe presets; local PNG/JPG/GIF/WebP/AVIF/MP4/WebM layers; media fit and opacity; portable backup support; and advanced HTML/CSS/JavaScript. Raid Portal now defaults to an animated Mainframe Breach presentation while retaining the original portal as a selectable preset.
+
 ## 1.1.0 — Discord guests and scene-aware alerts
 
 - Upgraded the shared Twitch and Interaction Alert designer with automatic per-Broadcast-scene placement overrides, a global fallback, safe-edge and configurable grid snapping, exact horizontal/vertical centering, visible center guides, keyboard nudging with undo history, and a silent persistent **Show on Canvas** mode that updates the real Browser Source while positioning.

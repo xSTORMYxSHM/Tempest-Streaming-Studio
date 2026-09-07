@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
   selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
+  selectTwitchExperienceMedia: () => ipcRenderer.invoke('studio:select-twitch-experience-media'),
   validateAlertCode: (input: { html?: string; css?: string; javascript?: string }) => ipcRenderer.invoke('studio:validate-alert-code', input),
   importAlertDesignTemplate: () => ipcRenderer.invoke('studio:import-alert-design-template'),
   exportAlertDesignTemplate: (input: { name: string; kind: string; design: unknown }) => ipcRenderer.invoke('studio:export-alert-design-template', input),

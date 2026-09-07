@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current release: **1.1.0**
+Current release: **1.1.1**
 
 Tempest Streaming Studio is the interaction hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed actions across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Creative rendering, shared asset libraries, and live production stay inside their focused applications.
 
@@ -19,7 +19,7 @@ The **Interaction Alerts** page includes starter viewer performances and can cre
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 
-The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Train Takeover, Raid Portal, and Twitch Goal progress from Studio's broadcaster EventSub connection. These sustained presentations remain independent from the one-shot alert queue and share one full-canvas transparent source. See `docs/TWITCH_EXPERIENCES.md`.
+The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Train Takeover, Raid Portal, and Twitch Goal progress from Studio's broadcaster EventSub connection. Each has independent presets, local image/GIF/video layers, and advanced HTML/CSS/JavaScript; Raid Portal includes a Mainframe Breach presentation. These sustained presentations remain independent from the one-shot alert queue and share one full-canvas transparent source. See `docs/TWITCH_EXPERIENCES.md`.
 
 The **Chat + Emotes** page replaces hosted chat effects with two independent local sources. `http://127.0.0.1:4765/chat-overlay` renders safely escaped message cards, while `http://127.0.0.1:4765/emote-wall` makes native Twitch emotes—and optional exact-name 7TV, BetterTTV, and FrankerFaceZ emotes—bounce across the canvas. Each source can be shown only on the scenes where it belongs. Third-party providers are opt-in and their media is proxied through the local Bridge. See `docs/CHAT_OVERLAY.md` and `docs/EMOTE_WALL.md` for setup.
 
