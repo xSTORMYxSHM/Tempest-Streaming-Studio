@@ -17,7 +17,7 @@ test('round-trips a portable Discord guest profile with verified images and no p
   await writeFile(speakingPath, speakingBytes);
 
   const pack = await buildTempestDiscordProfilePack({
-    createdWithVersion: '1.2.4-test',
+    createdWithVersion: '1.2.5-test',
     profile: {
       userId: '123456789012345678',
       displayName: 'Reactive Guest',

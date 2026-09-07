@@ -1,6 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { encodeDiscordRpcFrame, readDiscordRpcFrames } = require('../dist/discord-rpc');
+const { discordIpcPaths, encodeDiscordRpcFrame, readDiscordRpcFrames } = require('../dist/discord-rpc');
+
+test('tries both Windows Discord named-pipe forms across all ten IPC slots', () => {
+  const paths = discordIpcPaths('win32');
+  assert.equal(paths.length, 20);
+  assert.deepEqual(paths.slice(0, 4), [
+    '\\\\.\\pipe\\discord-ipc-0',
+    '\\\\?\\pipe\\discord-ipc-0',
+    '\\\\.\\pipe\\discord-ipc-1',
+    '\\\\?\\pipe\\discord-ipc-1'
+  ]);
+  assert.equal(new Set(paths).size, paths.length);
+  assert.equal(paths.at(-1), '\\\\?\\pipe\\discord-ipc-9');
+});
 
 test('encodes and incrementally reads Discord RPC IPC frames', () => {
   const first = encodeDiscordRpcFrame(0, { v: 1, client_id: '123' });

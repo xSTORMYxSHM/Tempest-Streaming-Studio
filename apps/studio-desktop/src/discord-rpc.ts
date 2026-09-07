@@ -82,8 +82,13 @@ export function readDiscordRpcFrames(buffer: Buffer): { frames: Array<{ opcode: 
   return { frames, remaining: buffer.subarray(offset) };
 }
 
-function ipcPaths(): string[] {
-  if (process.platform === 'win32') return Array.from({ length: 10 }, (_unused, index) => `\\\\?\\pipe\\discord-ipc-${index}`);
+export function discordIpcPaths(platform = process.platform): string[] {
+  if (platform === 'win32') {
+    return Array.from({ length: 10 }, (_unused, index) => [
+      `\\\\.\\pipe\\discord-ipc-${index}`,
+      `\\\\?\\pipe\\discord-ipc-${index}`
+    ]).flat();
+  }
   const bases = [process.env.XDG_RUNTIME_DIR, process.env.TMPDIR, process.env.TMP, process.env.TEMP, '/tmp'].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
   return bases.flatMap((base) => Array.from({ length: 10 }, (_unused, index) => `${base}/discord-ipc-${index}`));
 }
@@ -232,7 +237,7 @@ export class TempestDiscordRpcClient {
   private async openPipe(): Promise<void> {
     this.destroySocket();
     let lastError: Error | undefined;
-    for (const pipePath of ipcPaths()) {
+    for (const pipePath of discordIpcPaths()) {
       try {
         const socket = await new Promise<Socket>((resolve, reject) => {
           const candidate = net.createConnection(pipePath);
@@ -249,7 +254,11 @@ export class TempestDiscordRpcClient {
         return;
       } catch (error) { lastError = error as Error; }
     }
-    throw new Error(`Discord Desktop is not running or its local connection is unavailable.${lastError?.message ? ` ${lastError.message}` : ''}`);
+    const code = (lastError as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'EACCES' || code === 'EPERM') {
+      throw new Error('Discord blocked its local connection. Run Discord Desktop and Tempest Studio normally under the same Windows account, then try again.');
+    }
+    throw new Error('Discord Desktop did not expose a compatible local connection. Fully quit and reopen the Discord desktop app—not Discord in a browser—then try again.');
   }
 
   private receive(chunk: Buffer): void {

@@ -1,6 +1,6 @@
 {
   "name": "@tempest/studio-desktop",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "author": "Storm Horizon Media",
   "private": true,
   "description": "Desktop streaming control plane for Tempest Streaming Studio.",

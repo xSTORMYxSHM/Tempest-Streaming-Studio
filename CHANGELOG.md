@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.5 — Discord connection compatibility
+
+- Fixed Discord Desktop connections on Windows systems that expose RPC through the standard named-pipe path but reject the extended path. Studio now tries both supported Windows pipe forms across all ten Discord IPC slots.
+- Replaced the raw final pipe error with actionable guidance for unavailable and permission-blocked Discord connections.
+
 ## 1.2.4 — Shareable profiles and runtime limits
 
 - Added portable Discord Guest Profiles. Streamers can export a person's Discord ID, overlay name, accent, and idle/speaking/mute/deafen images into one integrity-checked file, then import it on another Studio installation for automatic Discord ID matching without sharing server history, authorization, layout, or source paths.
