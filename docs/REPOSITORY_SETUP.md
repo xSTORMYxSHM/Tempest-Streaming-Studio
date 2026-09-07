@@ -32,6 +32,7 @@ git push -u origin main
 Never commit:
 
 - Twitch OAuth client secrets or Extension shared secrets.
+- Discord OAuth client secrets or user access/refresh tokens.
 - broadcaster, chatbot, or installation access and refresh tokens.
 - relay credentials, pairing credentials, or bridge tokens.
 - local `.env` files, TLS certificates, Electron profiles, databases, logs, or build archives.

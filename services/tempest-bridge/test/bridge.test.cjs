@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.0.1');
+  assert.equal(health.productVersion, '1.1.0');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -321,6 +321,22 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(clearedPreview.status, 200);
   assert.equal((await clearedPreview.json()).state, 'ready');
 
+  const interactionPositionPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview`, {
+    method: 'POST', headers, body: JSON.stringify({ kind: 'interaction', alertId: 'sound-alert.hype-pulse', viewerName: 'Canvas Operator', sceneName: 'Gameplay', design: { position: 'custom', customPositionX: 50, customPositionY: 50, scenePlacements: [{ sceneName: 'Gameplay', position: 'custom', positionOffsetX: 0, positionOffsetY: 0, customPositionX: 76, customPositionY: 68, scale: 0.9 }] } })
+  });
+  assert.equal(interactionPositionPreview.status, 202);
+  const interactionPositionBody = await interactionPositionPreview.json();
+  assert.equal(interactionPositionBody.positioning, true);
+  assert.equal(interactionPositionBody.activeAlert.positioning, true);
+  assert.equal(interactionPositionBody.activeAlert.audioUrl, undefined);
+  assert.equal(interactionPositionBody.activeAlert.design.customPositionX, 76);
+  assert.equal(interactionPositionBody.activeAlert.design.customPositionY, 68);
+  assert.equal(interactionPositionBody.activeAlert.design.scale, 0.9);
+  assert.equal(interactionPositionBody.activeAlert.sceneName, 'Gameplay');
+  const clearedInteractionPosition = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview/clear`, { method: 'POST', headers, body: JSON.stringify({ kind: 'interaction' }) });
+  assert.equal(clearedInteractionPosition.status, 200);
+  assert.equal((await clearedInteractionPosition.json()).interaction.state, 'ready');
+
   const twitchOverlayPage = await fetch(`${runtime.baseUrl}/visual-alerts/twitch`);
   assert.equal(twitchOverlayPage.status, 200);
   assert.match(await twitchOverlayPage.text(), /new EventSource\("\/visual-alerts\/twitch\/events"\)/);
@@ -369,7 +385,8 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
         ttsTemplate: '{viewer} cheered {amount} Bits',
         customHtml: '<div class="custom-badge">{amount}</div>',
         customCss: '.name { text-transform: uppercase; }',
-        customJavaScript: 'elements.card.dataset.testAmount = variables.amount;'
+        customJavaScript: 'elements.card.dataset.testAmount = variables.amount;',
+        scenePlacements: [{ sceneName: 'Starting Soon', position: 'custom', positionOffsetX: 0, positionOffsetY: 0, customPositionX: 18, customPositionY: 24, scale: 0.8 }]
       }
     })
   });
@@ -399,6 +416,24 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(configuredTwitchAlert.design.customHtml, '<div class="custom-badge">{amount}</div>');
   assert.equal(configuredTwitchAlert.design.customCss, '.name { text-transform: uppercase; }');
   assert.equal(configuredTwitchAlert.design.customJavaScript, 'elements.card.dataset.testAmount = variables.amount;');
+  assert.equal(configuredTwitchAlert.design.scenePlacements[0].sceneName, 'Starting Soon');
+  assert.equal(configuredTwitchAlert.design.scenePlacements[0].customPositionX, 18);
+  const twitchPositionPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview`, {
+    method: 'POST', headers, body: JSON.stringify({ kind: 'twitch', alertId: 'twitch.cheer', viewerName: 'Placement Viewer', amount: '250', message: 'Static preview', sceneName: 'Starting Soon', design: { ...configuredTwitchAlert.design, customPositionX: 50, customPositionY: 50 } })
+  });
+  assert.equal(twitchPositionPreview.status, 202);
+  const twitchPositionBody = await twitchPositionPreview.json();
+  assert.equal(twitchPositionBody.positioning, true);
+  assert.equal(twitchPositionBody.activeAlert.positioning, true);
+  assert.equal(twitchPositionBody.activeAlert.audioUrl, undefined);
+  assert.equal(twitchPositionBody.activeAlert.variables.viewer, 'Placement Viewer');
+  assert.equal(twitchPositionBody.activeAlert.variables.amount, '250');
+  assert.equal(twitchPositionBody.activeAlert.design.customPositionX, 18);
+  assert.equal(twitchPositionBody.activeAlert.design.customPositionY, 24);
+  assert.equal(twitchPositionBody.activeAlert.sceneName, 'Starting Soon');
+  const clearedTwitchPosition = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview/clear`, { method: 'POST', headers, body: JSON.stringify({ kind: 'twitch' }) });
+  assert.equal(clearedTwitchPosition.status, 200);
+  assert.equal((await clearedTwitchPosition.json()).twitch.state, 'ready');
   const configuredVariantResponse = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}`, {
     method: 'POST', headers, body: JSON.stringify({ alertVariants: [{ schemaVersion: 1, id: 'mega-cheer', name: 'Mega Cheer', enabled: true, priority: 10, condition: { minimumBits: 1000 }, durationMs: 5000, volume: 0.75, audioUri: pathToFileURL(audioPath).href, visualUri: pathToFileURL(visualPath).href, accent: '#FF44AA', design: { ...configuredTwitchAlert.design, preset: 'cinematic' } }] })
   });
@@ -417,8 +452,14 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
     payload: {
       applicationId: 'com.tempestmainframe.tempest-broadcast',
       version: '0.15.0',
-      capabilities: ['broadcast.reaction.trigger', 'broadcast.reaction.clear']
+      capabilities: ['broadcast.reaction.trigger', 'broadcast.reaction.clear', 'broadcast.status']
     }
+  })));
+  broadcastSocket.send(JSON.stringify(createBridgeMessage({
+    kind: 'publish',
+    source: 'com.tempestmainframe.tempest-broadcast',
+    topic: 'broadcast.status',
+    payload: { ready: true, sourceInventory: { currentScene: 'Starting Soon', scenes: ['Starting Soon', 'Gameplay'] } }
   })));
   await new Promise((resolve) => setTimeout(resolve, 20));
   const reactionCommandPromise = new Promise((resolve, reject) => {
@@ -440,6 +481,10 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(twitchActiveAlert.mediaUrl, '/visual-alerts/media/twitch.cheer');
   assert.equal(twitchActiveAlert.volume, 0.35);
   assert.equal(twitchActiveAlert.design.entranceAnimation, 'glitch');
+  assert.equal(twitchActiveAlert.design.customPositionX, 18);
+  assert.equal(twitchActiveAlert.design.customPositionY, 24);
+  assert.equal(twitchActiveAlert.design.scale, 0.8);
+  assert.equal(twitchActiveAlert.sceneName, 'Starting Soon');
   assert.equal(twitchActiveAlert.variables.amount, '100');
   assert.equal(twitchActiveAlert.variables.viewer, 'Studio Operator');
   assert.equal(twitchPreviewBody.reactionRun.workflowId, 'com.tempestmainframe.workflow.twitch-alert-reaction');
@@ -452,6 +497,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(reactionCommand.payload.arguments.accent, '#9146FF');
   assert.equal(reactionCommand.payload.arguments.preview, true);
   assert.equal(reactionCommand.payload.lease.durationMs, 3000);
+  const ignoredPositionClear = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview/clear`, { method: 'POST', headers, body: JSON.stringify({ kind: 'twitch' }) });
+  assert.equal(ignoredPositionClear.status, 200);
+  assert.equal((await ignoredPositionClear.json()).twitch.activeAlert.runId, twitchActiveAlert.runId, 'closing positioning mode must not clear a real alert that replaced it');
   const variantPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}/preview`, { method: 'POST', headers, body: JSON.stringify({ variantId: 'mega-cheer' }) });
   assert.equal(variantPreview.status, 202);
   const variantActiveAlert = (await variantPreview.json()).activeAlert;
@@ -506,6 +554,28 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(emoteStatus.activeCount, 2);
   assert.equal(emoteStatus.settings.sizePx, 120);
   assert.equal((await fetch(`${runtime.baseUrl}/v1/emote-wall/clear`, { method: 'POST', headers, body: '{}' })).status, 200);
+
+  const discordPage = await fetch(`${runtime.baseUrl}/discord-voice`);
+  assert.equal(discordPage.status, 200);
+  assert.match(await discordPage.text(), /Tempest Discord Voice Overlay/);
+  const discordSettings = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, layout: 'grid', avatarSize: 144, gap: 18, showNames: true, showStatusIcons: true, hideSelf: false, hideBots: true, inactiveOpacity: 0.65, speakingScale: 1.12, speakingAccent: '#aa55ff', transitionMs: 160 }) });
+  assert.equal(discordSettings.status, 200);
+  assert.equal((await discordSettings.json()).settings.speakingAccent, '#AA55FF');
+  const discordState = await fetch(`${runtime.baseUrl}/v1/discord-voice/state`, { method: 'POST', headers, body: JSON.stringify({ connected: true, channelId: 'voice-1', channelName: 'Creator Lounge', guildName: 'Test Server', participants: [{ id: 'user-1', username: 'guest', displayName: 'Guest', bot: false, self: false, mute: false, deaf: false, speaking: false }] }) });
+  assert.equal(discordState.status, 200);
+  const discordProfile = await fetch(`${runtime.baseUrl}/v1/discord-voice/profiles/user-1`, { method: 'POST', headers, body: JSON.stringify({ idleUri: pathToFileURL(visualPath).href, speakingUri: pathToFileURL(visualPath).href, visible: true, order: 2, accent: '#22ccff' }) });
+  assert.equal(discordProfile.status, 200);
+  assert.equal((await discordProfile.json()).profile.accent, '#22CCFF');
+  assert.equal((await fetch(`${runtime.baseUrl}/discord-voice/media/user-1/idle`)).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/discord-voice/speaking`, { method: 'POST', headers, body: JSON.stringify({ userId: 'user-1', speaking: true }) })).status, 202);
+  let discordStatus = await fetch(`${runtime.baseUrl}/v1/discord-voice`, { headers }).then((response) => response.json());
+  assert.equal(discordStatus.state, 'connected');
+  assert.equal(discordStatus.participants[0].speaking, true);
+  assert.equal(discordStatus.participants[0].idleAssigned, true);
+  discordStatus = await fetch(`${runtime.baseUrl}/v1/discord-voice/preview`, { method: 'POST', headers, body: '{}' }).then((response) => response.json());
+  assert.equal(discordStatus.state, 'preview');
+  assert.equal(discordStatus.participants.length, 3);
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/discord-voice/clear`, { method: 'POST', headers, body: '{}' })).status, 200);
 });
 
 test('creates, persists, protects, and removes custom Interaction and Twitch Alerts', async () => {

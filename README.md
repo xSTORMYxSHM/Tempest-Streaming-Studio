@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current release: **1.0.0**
+Current release: **1.1.0**
 
 Tempest Streaming Studio is the interaction hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed actions across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Creative rendering, shared asset libraries, and live production stay inside their focused applications.
 
@@ -15,13 +15,15 @@ Tempest Streaming Studio is the interaction hub for connected streaming tools. I
 - `examples` — manifests showing how current and future Tempest applications register.
 - `docs` — architecture and integration guidance.
 
-The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Warudo and compatible broadcast reactions are optional per alert. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript.
+The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Warudo and compatible broadcast reactions are optional per alert. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript. Each alert can keep a global placement plus named overrides that automatically follow Broadcast’s active scene. Grid/safe-edge snapping, exact center controls, arrow-key nudging, and a silent **Show on Canvas** mode make it possible to arrange an unsaved design against the real Broadcast scene.
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 
 The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Train Takeover, Raid Portal, and Twitch Goal progress from Studio's broadcaster EventSub connection. These sustained presentations remain independent from the one-shot alert queue and share one full-canvas transparent source. See `docs/TWITCH_EXPERIENCES.md`.
 
 The **Chat + Emotes** page replaces hosted chat effects with two independent local sources. `http://127.0.0.1:4765/chat-overlay` renders safely escaped message cards, while `http://127.0.0.1:4765/emote-wall` makes native Twitch emotes—and optional exact-name 7TV, BetterTTV, and FrankerFaceZ emotes—bounce across the canvas. Each source can be shown only on the scenes where it belongs. Third-party providers are opt-in and their media is proxied through the local Bridge. See `docs/CHAT_OVERLAY.md` and `docs/EMOTE_WALL.md` for setup.
+
+The **Discord Guests** page provides a local Reactive Images-style source at `http://127.0.0.1:4765/discord-voice`. Each current voice participant can use separate idle and speaking PNGs or GIFs, with a normal Discord avatar fallback, layout controls, names, mute/deafen indicators, and per-person visibility. The desktop connector follows the user's selected Discord voice channel through supported local RPC; it never uses a self-bot. See `docs/DISCORD_VOICE_OVERLAY.md`.
 
 The **Panel Designer** creates a channel-specific appearance for the universal Twitch Extension with a real 318 by 496 preview, safe theme controls, local persistence, and runtime delivery to the Local Panel. Hosted releases use the same validated theme model as per-broadcaster configuration, so streamers customize one shared Extension without supplying viewer-facing code.
 
@@ -59,7 +61,7 @@ Weather and now-playing commands are optional providers rather than creator-spec
 
 The Bridge binds to localhost and requires a per-installation token for registry access, WebSocket connections, commands, and events. High-bandwidth video and audio frames do not pass through the JSON API. Applications advertise Spout, NDI, shared-memory, or other media endpoints through capabilities and output descriptors.
 
-Studio's default-on Privacy Shield masks streamer-sensitive values and all five Browser Source URLs in the desktop UI. On Windows, the Studio and isolated authorization windows also request capture exclusion from compatible screen-capture methods.
+Studio's default-on Privacy Shield masks streamer-sensitive values and all Browser Source URLs in the desktop UI. On Windows, the Studio and isolated authorization windows also request capture exclusion from compatible screen-capture methods.
 
 ## License and trademarks
 

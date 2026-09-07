@@ -16,6 +16,8 @@ export interface TempestVisualAlertEvent {
   volume?: number;
   design?: TempestTwitchAlertDesign;
   variables?: Record<string, string>;
+  positioning?: boolean;
+  sceneName?: string;
   startedAt: string;
 }
 
@@ -68,8 +70,9 @@ const visualAlertPage = String.raw`<!doctype html>
       function show(data){
         const current=++revision;cancelTimers();stopAudio();const design=Object.assign({},fallback,data.design||{});const variables=Object.assign({viewer:data.viewerName||'A viewer',event:data.name||'Alert',name:data.name||'Alert',amount:'',message:'',reward:'',tier:'',months:''},data.variables||{});
         root.style.setProperty('--accent',data.accent||'#54f2eb');root.style.setProperty('--text',design.textColor);root.style.setProperty('--secondary',design.secondaryTextColor);root.style.setProperty('--eyebrow-text',design.eyebrowTextColor);root.style.setProperty('--message-text',design.messageTextColor);root.style.setProperty('--background',rgba(design.backgroundColor,design.backgroundOpacity));root.style.setProperty('--font',JSON.stringify(design.fontFamily));root.style.setProperty('--font-size',design.fontSize+'px');root.style.setProperty('--eyebrow-font-size',design.eyebrowFontSize+'px');root.style.setProperty('--detail-font-size',design.detailFontSize+'px');root.style.setProperty('--message-font-size',design.messageFontSize+'px');root.style.setProperty('--font-weight',design.fontWeight);root.style.setProperty('--letter-spacing',design.letterSpacing+'px');root.style.setProperty('--text-shadow',design.textShadow);root.style.setProperty('--card-width',design.cardWidth+'px');root.style.setProperty('--border-width',design.borderWidth+'px');root.style.setProperty('--border-radius',design.borderRadius+'px');root.style.setProperty('--padding',design.padding+'px');root.style.setProperty('--card-shadow',design.cardShadow);root.style.setProperty('--media-width',design.mediaWidth+'px');root.style.setProperty('--media-height',design.mediaHeight+'px');root.style.setProperty('--media-radius',design.mediaBorderRadius+'px');root.style.setProperty('--media-fit',design.mediaFit);root.style.setProperty('--media-scale',design.mediaScale);root.style.setProperty('--media-position-x',design.mediaPositionX+'%');root.style.setProperty('--media-position-y',design.mediaPositionY+'%');root.style.setProperty('--media-opacity',design.mediaOpacity);root.style.setProperty('--text-x',design.textOffsetX+'px');root.style.setProperty('--text-y',design.textOffsetY+'px');root.style.setProperty('--text-position-x',design.textPositionX+'%');root.style.setProperty('--text-position-y',design.textPositionY+'%');root.style.setProperty('--eyebrow-position-x',design.eyebrowPositionX+'%');root.style.setProperty('--eyebrow-position-y',design.eyebrowPositionY+'%');root.style.setProperty('--headline-position-x',design.headlinePositionX+'%');root.style.setProperty('--headline-position-y',design.headlinePositionY+'%');root.style.setProperty('--detail-position-x',design.detailPositionX+'%');root.style.setProperty('--detail-position-y',design.detailPositionY+'%');root.style.setProperty('--message-position-x',design.messagePositionX+'%');root.style.setProperty('--message-position-y',design.messagePositionY+'%');root.style.setProperty('--eyebrow-max-width',design.eyebrowMaxWidth+'px');root.style.setProperty('--headline-max-width',design.headlineMaxWidth+'px');root.style.setProperty('--detail-max-width',design.detailMaxWidth+'px');root.style.setProperty('--message-max-width',design.messageMaxWidth+'px');root.style.setProperty('--text-anchor-x',design.layout==='media-overlay'?'0px':'0px');root.style.setProperty('--text-anchor-y',design.layout==='media-overlay'?'0px':'0px');root.style.setProperty('--text-align',design.textAlign);
-        body.dataset.position=design.position;stage.classList.toggle('custom',design.position==='custom');placement.style.setProperty('--stage-x',design.positionOffsetX+'px');placement.style.setProperty('--stage-y',design.positionOffsetY+'px');placement.style.setProperty('--custom-x',design.customPositionX+'%');placement.style.setProperty('--custom-y',design.customPositionY+'%');placement.style.setProperty('--alert-scale',design.scale);card.dataset.preset=design.preset;card.dataset.layout=design.layout;card.dataset.enter=design.entranceAnimation;card.dataset.exit=design.exitAnimation;copy.dataset.textAnimation=design.textAnimation;customStyle.textContent=design.customCss||'';
+        body.dataset.position=design.position;body.dataset.positioning=data.positioning?'true':'false';stage.classList.toggle('custom',design.position==='custom');placement.style.setProperty('--stage-x',design.positionOffsetX+'px');placement.style.setProperty('--stage-y',design.positionOffsetY+'px');placement.style.setProperty('--custom-x',design.customPositionX+'%');placement.style.setProperty('--custom-y',design.customPositionY+'%');placement.style.setProperty('--alert-scale',design.scale);card.dataset.preset=design.preset;card.dataset.layout=design.layout;card.dataset.enter=design.entranceAnimation;card.dataset.exit=design.exitAnimation;copy.dataset.textAnimation=design.textAnimation;customStyle.textContent=design.customCss||'';
         eyebrow.textContent=data.alertId&&data.alertId.startsWith('twitch.')?'Tempest Twitch alert':'Tempest Interaction alert';name.textContent=template(design.headlineTemplate,variables)||data.name||'Alert';detail.textContent=template(design.detailTemplate,variables);message.textContent=design.showViewerMessage?variables.message||'': '';eyebrow.hidden=!design.showEyebrow;name.hidden=!design.showHeadline;detail.hidden=!design.showDetail;message.hidden=!design.showViewerMessage;media.replaceChildren();customHtml.innerHTML=template(design.customHtml,variables);media.classList.remove('ready');copy.classList.remove('ready');card.style.removeProperty('transform');card.classList.remove('leaving','visible');runCustomCode(design.customJavaScript,data,variables);
+        if(data.positioning){attachMedia(data,current);copy.classList.add('ready');card.classList.add('visible');card.style.transform='none';return}
         later(()=>attachMedia(data,current),design.mediaDelayMs);later(()=>{if(revision===current)copy.classList.add('ready')},design.textDelayMs);if(design.textDurationMs>0)later(()=>{if(revision===current)copy.classList.remove('ready')},design.textDelayMs+design.textDurationMs);later(()=>playAudio(data,current),design.soundDelayMs);later(()=>speak(template(design.ttsTemplate,variables),design,current),design.soundDelayMs);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{card.classList.add('visible');card.style.transform='none'}));later(()=>{if(revision===current)clear({stopAudio:false})},Math.max(1000,Number(data.durationMs)||6000));
       }
@@ -104,8 +107,8 @@ export class TempestVisualAlertOverlay {
     response.on('close', () => this.clients.delete(response));
   }
 
-  show(alert: TempestSoundAlertDefinition, viewerName: string | undefined, runId: string, includeAudio = false): TempestVisualAlertEvent {
-    const browserAudio = includeAudio && alert.audioUri && !alert.broadcastAudioSource;
+  show(alert: TempestSoundAlertDefinition, viewerName: string | undefined, runId: string, includeAudio = false, design: TempestTwitchAlertDesign = alert.design, positioning = false, sceneName?: string): TempestVisualAlertEvent {
+    const browserAudio = !positioning && includeAudio && alert.audioUri && !alert.broadcastAudioSource;
     return this.activate({
       alertId: alert.id,
       runId,
@@ -114,7 +117,7 @@ export class TempestVisualAlertOverlay {
       accent: alert.accent || '#54F2EB',
       effect: alert.broadcastEffect || 'spectrum',
       durationMs: alert.visualDurationMs,
-      design: alert.design,
+      design,
       variables: {
         viewer: viewerName?.trim() || 'A viewer',
         name: alert.name,
@@ -128,11 +131,13 @@ export class TempestVisualAlertOverlay {
       },
       ...(alert.visualUri ? { mediaUrl: `/visual-alerts/media/${encodeURIComponent(alert.id)}`, mediaKind: mediaKind(alert.visualUri) } : {}),
       ...(browserAudio ? { audioUrl: `/visual-alerts/audio/${encodeURIComponent(alert.id)}`, audioDurationMs: alert.durationMs, volume: alert.volume } : {}),
+      ...(positioning ? { positioning: true } : {}),
+      ...(sceneName ? { sceneName } : {}),
       startedAt: new Date().toISOString()
     });
   }
 
-  showTwitch(alert: TempestTwitchVisualAlertDefinition, event: TempestNormalizedTwitchEvent, runId = event.id): TempestVisualAlertEvent {
+  showTwitch(alert: TempestTwitchVisualAlertDefinition, event: TempestNormalizedTwitchEvent, runId = event.id, design: TempestTwitchAlertDesign = alert.design, positioning = false, sceneName?: string): TempestVisualAlertEvent {
     const viewerName = event.topic === 'viewer.raid.received'
       ? String(event.payload.fromBroadcasterName || 'A raider')
       : event.viewer?.displayName || event.viewer?.login || 'A viewer';
@@ -158,7 +163,7 @@ export class TempestVisualAlertOverlay {
       accent: alert.accent,
       effect: 'pulse',
       durationMs: alert.durationMs,
-      design: alert.design,
+      design,
       variables: {
         viewer: viewerName,
         name: viewerName,
@@ -171,7 +176,9 @@ export class TempestVisualAlertOverlay {
         topic: event.topic
       },
       ...(alert.visualUri ? { mediaUrl: `/visual-alerts/media/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, mediaKind: mediaKind(alert.visualUri) } : {}),
-      ...(alert.audioUri ? { audioUrl: `/visual-alerts/audio/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, audioDurationMs: alert.durationMs, volume: alert.volume } : {}),
+      ...(!positioning && alert.audioUri ? { audioUrl: `/visual-alerts/audio/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, audioDurationMs: alert.durationMs, volume: alert.volume } : {}),
+      ...(positioning ? { positioning: true } : {}),
+      ...(sceneName ? { sceneName } : {}),
       startedAt: new Date().toISOString()
     });
   }
@@ -180,11 +187,15 @@ export class TempestVisualAlertOverlay {
     if (this.clearTimer) clearTimeout(this.clearTimer);
     this.activeAlert = event;
     this.broadcast('show', this.activeAlert);
-    const expectedRun = event.runId;
-    this.clearTimer = setTimeout(() => {
-      if (this.activeAlert?.runId === expectedRun) this.clear(false);
-    }, event.durationMs);
-    this.clearTimer.unref?.();
+    if (!event.positioning) {
+      const expectedRun = event.runId;
+      this.clearTimer = setTimeout(() => {
+        if (this.activeAlert?.runId === expectedRun) this.clear(false);
+      }, event.durationMs);
+      this.clearTimer.unref?.();
+    } else {
+      this.clearTimer = undefined;
+    }
     return structuredClone(this.activeAlert);
   }
 
@@ -193,6 +204,12 @@ export class TempestVisualAlertOverlay {
     this.clearTimer = undefined;
     this.activeAlert = undefined;
     this.broadcast('clear', { stopAudio });
+  }
+
+  clearPositioning(): boolean {
+    if (!this.activeAlert?.positioning) return false;
+    this.clear();
+    return true;
   }
 
   hasClients(): boolean {

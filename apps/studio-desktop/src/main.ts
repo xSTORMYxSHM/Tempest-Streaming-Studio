@@ -28,6 +28,7 @@ import {
   validateHostedEbsUrl,
   validateHostedExtensionCredentials
 } from './hosted-extension';
+import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -44,6 +45,7 @@ let localExtension: LocalExtensionRuntime | null = null;
 let localExtensionLastError: string | undefined;
 let hostedExtensionLastError: string | undefined;
 let broadcasterCredentialStore: TwitchCredentialStore | null = null;
+let discordRpc: TempestDiscordRpcClient | null = null;
 let mainWindow: BrowserWindow | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
@@ -255,6 +257,29 @@ function createTwitchCredentialStore(dataDirectory: string, fileName = 'twitch-c
       await unlink(credentialPath).catch((error: NodeJS.ErrnoException) => {
         if (error.code !== 'ENOENT') throw error;
       });
+    }
+  };
+}
+
+function createDiscordCredentialStore(dataDirectory: string): DiscordRpcTokenStore {
+  const credentialPath = path.join(dataDirectory, 'discord-rpc-credentials.bin');
+  return {
+    available: safeStorage.isEncryptionAvailable(),
+    async load(): Promise<DiscordRpcTokenSet | null> {
+      if (!safeStorage.isEncryptionAvailable()) return null;
+      try { return JSON.parse(safeStorage.decryptString(await readFile(credentialPath))) as DiscordRpcTokenSet; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw new Error(`Could not read secure Discord authorization: ${(error as Error).message}`);
+      }
+    },
+    async save(tokens: DiscordRpcTokenSet): Promise<void> {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('Operating-system credential encryption is unavailable.');
+      await mkdir(dataDirectory, { recursive: true });
+      await writeFile(credentialPath, safeStorage.encryptString(JSON.stringify(tokens)), { mode: 0o600 });
+    },
+    async clear(): Promise<void> {
+      await unlink(credentialPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
     }
   };
 }
@@ -619,6 +644,20 @@ function registerDesktopHandlers(): void {
     return { ...vtubeStudioAdapter.status(), hotkeys: [] };
   });
 
+  ipcMain.handle('studio:get-discord-voice-status', () => discordRpc?.status() || { state: 'unconfigured', configured: false, approvedApplicationRequired: true, credentialStorage: safeStorage.isEncryptionAvailable() ? 'windows-encrypted' : 'unavailable', participantCount: 0 });
+  ipcMain.handle('studio:connect-discord-voice', () => {
+    if (!discordRpc) throw new Error('Discord Voice is not running.');
+    return discordRpc.connect(true);
+  });
+  ipcMain.handle('studio:disconnect-discord-voice', () => {
+    if (!discordRpc) throw new Error('Discord Voice is not running.');
+    return discordRpc.disconnect();
+  });
+  ipcMain.handle('studio:forget-discord-voice', () => {
+    if (!discordRpc) throw new Error('Discord Voice is not running.');
+    return discordRpc.forget();
+  });
+
   ipcMain.handle('studio:get-local-extension-status', () => getLocalExtensionStatus());
   ipcMain.handle('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
   ipcMain.handle('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
@@ -769,6 +808,22 @@ function registerDesktopHandlers(): void {
     const filePath = path.normalize(result.filePaths[0]);
     const details = await stat(filePath);
     if (!details.isFile()) throw new Error('The selected Sound Alert visual is not a file.');
+    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+  });
+
+  ipcMain.handle('studio:select-discord-voice-image', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Assign Discord Voice Image',
+      properties: ['openFile'],
+      filters: [
+        { name: 'PNG, GIF, JPG, WebP, or AVIF image', extensions: ['png', 'gif', 'jpg', 'jpeg', 'webp', 'avif'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile()) throw new Error('The selected Discord Voice image is not a file.');
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
   });
 
@@ -983,6 +1038,22 @@ app.whenReady().then(async () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('studio:sound-alert-playback', command);
     }
   });
+  const publishDiscord = async (requestPath: string, body: unknown): Promise<void> => {
+    if (!bridge) return;
+    const response = await fetch(`${bridge.baseUrl}${requestPath}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(body) });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(result.error || `Discord Voice bridge update failed with ${response.status}.`);
+    }
+  };
+  discordRpc = new TempestDiscordRpcClient({
+    clientId: process.env.TEMPEST_DISCORD_CLIENT_ID || OFFICIAL_DISCORD_CLIENT_ID,
+    tokenExchangeUrl: process.env.TEMPEST_DISCORD_TOKEN_EXCHANGE_URL || OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL,
+    tokenStore: createDiscordCredentialStore(bridgeDataDirectory),
+    publishState: (state) => publishDiscord('/v1/discord-voice/state', state),
+    publishSpeaking: (userId, speaking) => publishDiscord('/v1/discord-voice/speaking', { userId, speaking }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
   await restoreHostedExtensionRelay().catch((error) => { hostedExtensionLastError = (error as Error).message; });
   warudoAdapter = startWarudoAdapter({
     bridgeUrl: `${bridge.baseUrl.replace('http', 'ws')}/v1/socket`,
@@ -1000,6 +1071,7 @@ app.whenReady().then(async () => {
   });
   registerDesktopHandlers();
   mainWindow = createWindow();
+  if (discordRpc.status().configured) void discordRpc.connect(false).catch(() => {});
 
   if (app.isPackaged && !process.argv.includes('--smoke-test') && !captureArgument) {
     configureStudioUpdater();
@@ -1086,6 +1158,11 @@ app.on('before-quit', () => {
     const activeAdapter = vtubeStudioAdapter;
     vtubeStudioAdapter = null;
     void activeAdapter.close().catch(() => {});
+  }
+  if (discordRpc) {
+    const activeDiscordRpc = discordRpc;
+    discordRpc = null;
+    void activeDiscordRpc.close().catch(() => {});
   }
   if (bridge) {
     const activeBridge = bridge;

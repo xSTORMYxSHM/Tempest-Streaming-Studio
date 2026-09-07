@@ -26,6 +26,11 @@ async function main(): Promise<void> {
     allowedActions: databaseUrl ? [] : list(process.env.TEMPEST_EBS_ALLOWED_ACTIONS),
     allowedOrigins: list(process.env.TEMPEST_EBS_ALLOWED_ORIGINS),
     allowAnonymous: process.env.TEMPEST_EBS_ALLOW_ANONYMOUS === '1',
+    discordOAuth: process.env.TEMPEST_DISCORD_CLIENT_ID && process.env.TEMPEST_DISCORD_CLIENT_SECRET ? {
+      clientId: process.env.TEMPEST_DISCORD_CLIENT_ID,
+      clientSecret: process.env.TEMPEST_DISCORD_CLIENT_SECRET,
+      redirectUri: process.env.TEMPEST_DISCORD_REDIRECT_URI
+    } : undefined,
     tls: pfxPath ? {
       pfx: await readFile(pfxPath),
       passphrase: process.env.TEMPEST_EBS_TLS_PASSWORD

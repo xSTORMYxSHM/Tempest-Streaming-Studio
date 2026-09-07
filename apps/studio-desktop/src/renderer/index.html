@@ -21,6 +21,7 @@
           <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
           <button class="nav-button" data-section="soundalerts">Interaction Alerts</button>
           <button class="nav-button" data-section="chatoverlay">Chat + Emotes</button>
+          <button class="nav-button" data-section="discordvoice">Discord Guests</button>
           <button class="nav-button" data-section="extensiondesigner">Panel Designer</button>
           <p class="nav-group">AUTOMATION</p>
           <button class="nav-button" data-section="chatbot">Chatbot</button>
@@ -69,6 +70,7 @@
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Interaction Alerts</strong><span>Create queued viewer performances with optional avatar reactions.</span><i>BUILD INTERACTIONS →</i></button>
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat + Emotes</strong><span>Design the local chat stack and bouncing Emote Wall sources.</span><i>DESIGN OVERLAYS →</i></button>
+            <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 04</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>AUTOMATE 01</b><strong>Chatbot</strong><span>Create channel commands and connect replies to Studio automations.</span><i>MANAGE CHATBOT →</i></button>
           </div>
           <div class="home-runtime-heading"><div><p class="eyebrow">RUNTIME SNAPSHOT</p><h3>Studio right now</h3></div><button data-go="events" class="text-button">Open Event Log</button></div>
@@ -245,6 +247,42 @@
             <div id="emoteProviderStatusGrid" class="emote-provider-status-grid"></div>
             <div class="chat-overlay-actions"><button data-emote-wall-save="true" class="primary-button">Save Providers</button><button data-emote-provider-refresh="true" class="secondary-button">Refresh Catalogs</button></div>
           </article>
+        </section>
+
+        <section id="discordvoiceSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">LOCAL DISCORD REACTIVE OVERLAY</p><h2>Discord Guests</h2><p>Turn Discord voice activity into a transparent local Browser Source with a separate idle and speaking PNG or GIF for every guest.</p></div><span id="discordVoiceBadge" class="status-badge">CHECKING</span></div>
+          <div class="metric-grid">
+            <article><span>VOICE CONNECTION</span><strong id="discordVoiceConnectionMetric">OFFLINE</strong><small>Private local Discord connection</small></article>
+            <article><span>VOICE CHANNEL</span><strong id="discordVoiceChannelMetric">NONE</strong><small id="discordVoiceGuildMetric">Open Discord and join voice</small></article>
+            <article><span>PARTICIPANTS</span><strong id="discordVoiceParticipantMetric">0</strong><small>Visible channel members</small></article>
+            <article><span>BROWSER SOURCES</span><strong id="discordVoiceClientMetric">0</strong><small>Connected broadcast canvases</small></article>
+          </div>
+          <div id="discordVoiceBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local Discord Guests address…</div>
+          <div id="discordVoiceConnectionStatus" class="sound-alert-note"><strong>Discord:</strong> Checking the local desktop connection…</div>
+          <article class="panel discord-voice-connect-panel">
+            <div class="panel-header"><div><span>ONE-TIME DISCORD SIGN-IN</span><h3>Follow your current voice channel</h3></div><span class="state-chip installed">NO BOT INVITE</span></div>
+            <p>Keep Discord Desktop open and join the voice channel you use on stream. Tempest reads only that selected channel’s participants and speaking state; it does not read messages or ask viewers to install anything.</p>
+            <div class="chat-overlay-actions"><button id="connectDiscordVoice" class="primary-button">Connect Discord</button><button id="disconnectDiscordVoice" class="secondary-button">Disconnect</button><button id="forgetDiscordVoice" class="secondary-button danger-outline">Forget Authorization</button></div>
+          </article>
+          <article class="panel chat-overlay-settings-panel discord-voice-settings-panel">
+            <div class="panel-header"><div><span>OVERLAY DESIGN</span><h3>Guest layout and reactions</h3></div><span class="state-chip installed">PNG + GIF</span></div>
+            <div class="chat-overlay-settings">
+              <label class="checkbox-label"><input id="discordVoiceEnabled" type="checkbox" checked /> Enable Discord Guests source</label>
+              <label>Layout<select id="discordVoiceLayout"><option value="horizontal">Horizontal row</option><option value="vertical">Vertical stack</option><option value="grid">Responsive grid</option></select></label>
+              <label>Avatar size<input id="discordVoiceAvatarSize" type="number" min="48" max="420" value="160" /><small>pixels</small></label>
+              <label>Spacing<input id="discordVoiceGap" type="number" min="0" max="160" value="24" /><small>pixels</small></label>
+              <label>Inactive opacity<input id="discordVoiceInactiveOpacity" type="number" min="10" max="100" value="72" /><small>percent</small></label>
+              <label>Speaking size<input id="discordVoiceSpeakingScale" type="number" min="100" max="150" value="108" /><small>percent</small></label>
+              <label>Speaking accent<input id="discordVoiceAccent" type="color" value="#54f2eb" /></label>
+              <label class="checkbox-label"><input id="discordVoiceShowNames" type="checkbox" checked /> Show display names</label>
+              <label class="checkbox-label"><input id="discordVoiceShowStatus" type="checkbox" checked /> Show mute and deafen state</label>
+              <label class="checkbox-label"><input id="discordVoiceHideSelf" type="checkbox" /> Hide my Discord account</label>
+              <label class="checkbox-label"><input id="discordVoiceHideBots" type="checkbox" checked /> Hide Discord bots</label>
+            </div>
+            <div class="chat-overlay-actions"><button data-discord-voice-save="true" class="secondary-button">Save Design</button><button data-discord-voice-preview="true" class="primary-button">Preview Guests</button><button data-discord-voice-clear="true" class="secondary-button danger-outline">Stop Preview</button></div>
+          </article>
+          <div class="visual-section-heading discord-participant-heading"><div><span>PARTICIPANT DESIGNS</span><h3>Idle and speaking images</h3><p>Assign local PNG, GIF, JPG, WebP, or AVIF files. A speaking image is optional; the normal avatar still glows and grows while that person talks.</p></div><button data-discord-voice-preview="true" class="secondary-button">Load Sample Guests</button></div>
+          <div id="discordVoiceParticipantGrid" class="discord-participant-grid empty-state">Connect Discord or load sample guests to assign images.</div>
         </section>
 
         <section id="twitchSection" class="page">
@@ -594,9 +632,11 @@
         <div class="template-variable-strip"><span>VARIABLES</span><code>{viewer}</code><code>{name}</code><code>{event}</code><code>{amount}</code><code>{message}</code><code>{reward}</code><code>{tier}</code><code>{months}</code><code>{topic}</code></div>
         <div class="design-editor-grid">
           <section class="design-placement-panel" aria-labelledby="twitchPlacementHeading">
-            <div class="design-placement-heading"><div><span id="alertDesignerCanvasProfile">1920 × 1080 · 16:9 BROWSER SOURCE</span><h3 id="twitchPlacementHeading">Place and resize the alert</h3><p>Drag the alert or any highlighted text layer. Drag the lower-right handle to resize, then preview it here. The canvas follows your active Broadcast profile.</p></div><div class="design-placement-tools"><button id="undoAlertDesign" type="button" class="secondary-button" disabled>Undo</button><button id="redoAlertDesign" type="button" class="secondary-button" disabled>Redo</button><button id="previewAlertDesignHere" type="button" class="secondary-button">Play Here</button><button id="stopAlertDesignPreview" type="button" class="secondary-button">Stop</button><output id="twitchPlacementReadout">X 50% · Y 82% · Size 100%</output></div></div>
+            <div class="design-placement-heading"><div><span id="alertDesignerCanvasProfile">1920 × 1080 · 16:9 BROWSER SOURCE</span><h3 id="twitchPlacementHeading">Place and resize the alert</h3><p>Drag to place, use the alignment buttons for exact centers, or use arrow keys for 1% nudges (Shift = 5%). Show on Canvas keeps a silent copy visible in the real Browser Source while you work.</p></div><div class="design-placement-tools"><button id="undoAlertDesign" type="button" class="secondary-button" disabled>Undo</button><button id="redoAlertDesign" type="button" class="secondary-button" disabled>Redo</button><button id="previewAlertDesignHere" type="button" class="secondary-button">Play Here</button><button id="stopAlertDesignPreview" type="button" class="secondary-button">Stop</button><button id="previewAlertDesignOnCanvas" type="button" class="primary-button" aria-pressed="false">Show on Canvas</button><output id="twitchPlacementReadout">X 50% · Y 82% · Size 100%</output></div></div>
+            <div class="design-scene-placement"><label>Placement applies to<select id="alertDesignSceneScope"><option value="">All scenes · default</option></select></label><button id="useCurrentAlertScene" type="button" class="secondary-button">Use current Broadcast scene</button><button id="removeAlertScenePlacement" type="button" class="secondary-button danger-outline" disabled>Remove scene placement</button><span id="alertDesignSceneStatus">Default placement used by every scene without an override.</span></div>
             <div id="twitchPlacementCanvas" class="design-placement-canvas">
               <div class="design-safe-area" aria-hidden="true"></div>
+              <div id="twitchPlacementGuideX" class="design-snap-guide vertical" aria-hidden="true"></div><div id="twitchPlacementGuideY" class="design-snap-guide horizontal" aria-hidden="true"></div>
               <div id="twitchPlacementMock" class="design-placement-mock" role="img" aria-label="Draggable alert placement preview" tabindex="0"><div id="twitchPlacementMockMedia" class="design-placement-mock-media"><span>ASSIGNED GIF / VIDEO</span></div><div class="design-placement-mock-copy"><span id="twitchPlacementMockEyebrow" data-design-layer="eyebrow" tabindex="0">TWITCH ALERT</span><strong id="twitchPlacementMockTitle" data-design-layer="headline" tabindex="0">New Follower</strong><small id="twitchPlacementMockDetail" data-design-layer="detail" tabindex="0">Triggered by Studio Operator</small><em id="twitchPlacementMockMessage" data-design-layer="message" tabindex="0">Viewer message</em></div><i id="twitchPlacementResizeHandle" aria-hidden="true"></i></div>
             </div>
             <div class="design-placement-controls">
@@ -604,6 +644,7 @@
               <label>Canvas Y (%)<input id="twitchDesignCustomY" type="number" min="0" max="100" step="0.1" /></label>
               <label>Overall alert size <span id="twitchDesignScaleValue">100%</span><input id="twitchDesignScale" type="range" min="25" max="200" step="1" /></label>
             </div>
+            <div class="design-position-assist"><div class="design-align-actions" role="group" aria-label="Canvas alignment"><button id="alignAlertHorizontal" type="button" class="secondary-button">Center horizontally</button><button id="alignAlertVertical" type="button" class="secondary-button">Center vertically</button><button id="alignAlertCenter" type="button" class="secondary-button">Center both</button></div><label>Drag snapping<select id="twitchDesignSnap"><option value="0">Off</option><option value="1">Fine · 1%</option><option value="5" selected>Standard · 5%</option><option value="10">Coarse · 10%</option></select></label><span id="alertCanvasPreviewStatus">Canvas preview is off.</span></div>
             <div class="design-preview-data"><span>PREVIEW DATA</span><label>Viewer<input id="alertDesignPreviewViewer" value="Studio Operator" maxlength="40" /></label><label>Amount<input id="alertDesignPreviewAmount" value="100" maxlength="20" /></label><label>Message<input id="alertDesignPreviewMessage" value="This is a sample viewer message" maxlength="120" /></label></div>
           </section>
           <details open><summary>Layout &amp; motion</summary><div class="design-fields">

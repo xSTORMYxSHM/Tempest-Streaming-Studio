@@ -7,6 +7,7 @@
     soundalerts: { title: 'Interaction Alerts', kicker: 'PERFORMANCE + DANCE CATALOG' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
     chatoverlay: { title: 'Chat + Emotes', kicker: 'LOCAL CHAT OVERLAYS' },
+    discordvoice: { title: 'Discord Guests', kicker: 'LOCAL VOICE OVERLAY' },
     twitch: { title: 'Twitch Gateway', kicker: 'STUDIO-OWNED INTEGRATION' },
     extensiondesigner: { title: 'Twitch Panel Designer', kicker: 'CHANNEL EXTENSION THEME' },
     chatbot: { title: 'Chatbot', kicker: 'STUDIO CHAT AUTOMATION' },
@@ -39,6 +40,8 @@
     chatOverlay: null,
     emoteWall: null,
     twitchExperiences: null,
+    discordVoice: null,
+    discordRpc: null,
     twitch: null,
     chatbot: null,
     localExtension: null,
@@ -65,11 +68,17 @@
   let alertDesignHistory = [];
   let alertDesignHistoryIndex = -1;
   let alertDesignHistoryLocked = false;
+  let alertCanvasPositionPreviewActive = false;
+  let alertCanvasPositionPreviewTimer = null;
+  let alertCanvasPositionPreviewRevision = 0;
+  let alertDesignBasePlacement = null;
+  let alertDesignScenePlacements = [];
+  let alertDesignSceneScope = '';
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
     { title: 'Twitch Accounts', short: 'Broadcaster + bot' },
-    { title: 'Browser Sources', short: 'Five local URLs' },
+    { title: 'Browser Sources', short: 'Local overlay URLs' },
     { title: 'Canvas + Audio', short: 'OBS dimensions' },
     { title: 'Ready Check', short: 'Test before live' }
   ];
@@ -326,6 +335,7 @@
     const chatUrl = state.chatOverlay?.url || `${baseUrl}/chat-overlay`;
     const emoteWallUrl = state.emoteWall?.url || `${baseUrl}/emote-wall`;
     const twitchExperienceUrl = state.twitchExperiences?.url || `${baseUrl}/twitch-experiences`;
+    const discordVoiceUrl = state.discordVoice?.url || `${baseUrl}/discord-voice`;
     const broadcasterLogin = state.twitch?.oauth?.account?.login;
     const botLogin = state.chatbot?.oauth?.account?.login;
     const canvas = setup.canvasProfile;
@@ -339,7 +349,7 @@
     } else if (onboardingStep === 1) {
       markup = `<div class="onboarding-intro"><p>Twitch uses two deliberately separate authorizations: the broadcaster owns channel events, while the bot account reads and replies in chat.</p><div class="onboarding-check-grid">${setupCheckCard(setup.broadcasterReady, 'Broadcaster account', setup.broadcasterReady ? `@${broadcasterLogin} is authorized.` : 'Sign in with the Twitch account that owns your channel. No developer account is needed.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot account', setup.chatbotReady ? `@${botLogin} is connected for EventSub and chat output.` : 'Connect a second Twitch user account in the isolated sign-in window.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="twitch">Open Twitch Gateway</button><button class="secondary-button" type="button" data-onboarding-go="chatbot">Open Chatbot Setup</button></div><div class="onboarding-note"><strong>Why two accounts?</strong> The broadcaster remains the channel owner. The secondary account gives chat automation its own visible identity and keeps those credentials isolated.</div></div>`;
     } else if (onboardingStep === 2) {
-      markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Twitch Experiences · optional', twitchExperienceUrl, 'Hype Train takeover, Raid Portal, and persistent goal progress.', 'Twitch Experiences browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}${onboardingSourceCard('Emote Wall · optional', emoteWallUrl, 'Twitch chat emotes bounce independently across the canvas.', 'Emote Wall browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('twitchExperienceSource', setup.twitchExperienceSourceReady, 'Twitch Experiences added · optional', 'Use the base canvas size so takeovers and portal effects can use the full scene.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}${onboardingFlag('emoteWallSource', setup.emoteWallSourceReady, 'Emote Wall added · optional', 'Keep it as its own source so the effect can be hidden per scene.')}</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Twitch Experiences · optional', twitchExperienceUrl, 'Hype Train takeover, Raid Portal, and persistent goal progress.', 'Twitch Experiences browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}${onboardingSourceCard('Emote Wall · optional', emoteWallUrl, 'Twitch chat emotes bounce independently across the canvas.', 'Emote Wall browser-source URL')}${onboardingSourceCard('Discord Guests · optional', discordVoiceUrl, 'Voice-channel guests switch between local idle and speaking images.', 'Discord Guests browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('twitchExperienceSource', setup.twitchExperienceSourceReady, 'Twitch Experiences added · optional', 'Use the base canvas size so takeovers and portal effects can use the full scene.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}${onboardingFlag('emoteWallSource', setup.emoteWallSourceReady, 'Emote Wall added · optional', 'Keep it as its own source so the effect can be hidden per scene.')}</div></div>`;
     } else if (onboardingStep === 3) {
       markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Twitch Alerts, Interaction Alerts, Chat Overlay, and Emote Wall use ${canvas.baseWidth} × ${canvas.baseHeight} Browser Sources.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
     } else {
@@ -444,9 +454,11 @@
   function broadcastSourceInventory() {
     const connection = state.connections.find((entry) => entry.capabilities?.includes('broadcast.status') || entry.capabilities?.includes('broadcast.audio.play') || entry.applicationId === 'com.tempestmainframe.tempest-broadcast');
     const inventory = connection?.status?.sourceInventory;
+    const scenes = Array.isArray(inventory?.scenes) ? inventory.scenes.map((entry) => typeof entry === 'string' ? entry : entry?.name).filter((entry) => typeof entry === 'string' && entry.trim()).map((entry) => entry.trim()) : [];
     return {
       connected: Boolean(connection),
-      currentScene: typeof inventory?.currentScene === 'string' ? inventory.currentScene : '',
+      currentScene: typeof inventory?.currentScene === 'string' ? inventory.currentScene.trim().slice(0, 120) : '',
+      scenes,
       audio: Array.isArray(inventory?.audio) ? inventory.audio.filter((entry) => typeof entry === 'string') : [],
       visual: Array.isArray(inventory?.visual) ? inventory.visual.filter((entry) => typeof entry === 'string') : []
     };
@@ -619,6 +631,70 @@
       $('#chatOverlayOpacity').value = Math.round((configuration.backgroundOpacity || 0.84) * 100);
       $('#chatOverlayAccent').value = configuration.accent || '#54f2eb';
       $('#chatOverlayShowRoles').checked = configuration.showRoles !== false;
+    }
+  }
+
+  function discordProfileFor(userId) {
+    return (state.discordVoice?.profiles || []).find((entry) => entry.userId === userId) || {};
+  }
+
+  function localMediaName(uri, fallback) {
+    if (!uri) return fallback;
+    try { return decodeURIComponent(new URL(uri).pathname.split('/').pop()) || fallback; }
+    catch { return fallback; }
+  }
+
+  function renderDiscordVoice({ settings = false } = {}) {
+    const overlay = state.discordVoice;
+    const rpc = state.discordRpc || {};
+    const configuration = overlay?.settings || {};
+    const connection = overlay?.connection || {};
+    const participants = overlay?.participants || [];
+    const connected = rpc.state === 'connected';
+    $('#discordVoiceBadge').textContent = overlay?.previewing ? 'PREVIEW' : connected ? 'CONNECTED' : overlay ? 'OVERLAY READY' : 'CHECKING';
+    $('#discordVoiceBadge').classList.toggle('offline', !connected && !overlay?.previewing);
+    $('#discordVoiceConnectionMetric').textContent = rpc.state === 'unconfigured' ? 'PREVIEW READY' : String(rpc.state || 'offline').replaceAll('-', ' ').toUpperCase();
+    $('#discordVoiceChannelMetric').textContent = String(connection.channelName || rpc.channelName || 'NONE').toUpperCase();
+    $('#discordVoiceGuildMetric').textContent = connection.guildName || rpc.guildName || 'Open Discord and join voice';
+    $('#discordVoiceParticipantMetric').textContent = participants.length;
+    $('#discordVoiceClientMetric').textContent = overlay?.connectedClients || 0;
+    $('#discordVoiceBrowserStatus').innerHTML = overlay
+      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Discord Guests browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
+      : '<strong>Browser Source:</strong> Studio is preparing the local Discord Guests overlay.';
+    const connectionMessage = rpc.lastError || (rpc.state === 'connected'
+      ? `Following ${rpc.channelName || 'your selected voice channel'}${rpc.guildName ? ` in ${rpc.guildName}` : ''}.`
+      : rpc.state === 'authorization-required' ? 'Click Connect Discord and approve Tempest once inside Discord Desktop.'
+        : rpc.state === 'unconfigured' ? 'The local overlay and image designer are ready. One-click Discord sign-in is being prepared for the public build; Preview Guests works now.'
+          : 'Open Discord Desktop, join a voice channel, then connect Tempest.');
+    $('#discordVoiceConnectionStatus').innerHTML = `<strong>Discord:</strong> ${escapeHtml(connectionMessage)}`;
+    $('#connectDiscordVoice').disabled = rpc.state === 'connecting' || rpc.state === 'connected' || !rpc.configured;
+    $('#disconnectDiscordVoice').disabled = rpc.state !== 'connected' && rpc.state !== 'error';
+    $('#forgetDiscordVoice').disabled = rpc.state === 'unconfigured';
+    const grid = $('#discordVoiceParticipantGrid');
+    grid.classList.toggle('empty-state', !participants.length);
+    grid.innerHTML = participants.length ? participants.map((participant) => {
+      const profile = discordProfileFor(participant.id);
+      const idleName = localMediaName(profile.idleUri, 'Default Discord avatar');
+      const speakingName = localMediaName(profile.speakingUri, 'Glow + scale idle image');
+      return `<article class="discord-participant-card ${participant.speaking ? 'speaking' : ''}" style="--participant-accent:${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}">
+        <div class="discord-participant-head"><i>${escapeHtml(String(participant.displayName || '?').slice(0, 2).toUpperCase())}</i><div><span>${participant.self ? 'YOU · ' : ''}${participant.bot ? 'BOT · ' : ''}${participant.speaking ? 'SPEAKING' : participant.mute ? 'MUTED' : 'IN CHANNEL'}</span><h3>${escapeHtml(participant.displayName)}</h3></div></div>
+        <div class="discord-profile-fields"><label>Overlay name<input data-discord-profile-name="${escapeHtml(participant.id)}" maxlength="100" value="${escapeHtml(profile.displayName || '')}" placeholder="${escapeHtml(participant.displayName)}" /></label><label>Order<input data-discord-profile-order="${escapeHtml(participant.id)}" type="number" min="0" max="999" value="${profile.order ?? 500}" /></label><label>Accent<input data-discord-profile-accent="${escapeHtml(participant.id)}" type="color" value="${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}" /></label><label class="checkbox-label"><input data-discord-profile-visible="${escapeHtml(participant.id)}" type="checkbox" ${profile.visible === false ? '' : 'checked'} /> Show this person</label></div>
+        <div class="discord-media-slots"><div><span>IDLE IMAGE</span><strong title="${escapeHtml(idleName)}">${escapeHtml(idleName)}</strong><button data-discord-image-id="${escapeHtml(participant.id)}" data-discord-image-kind="idle">Assign Idle</button></div><div><span>SPEAKING IMAGE</span><strong title="${escapeHtml(speakingName)}">${escapeHtml(speakingName)}</strong><button data-discord-image-id="${escapeHtml(participant.id)}" data-discord-image-kind="speaking">Assign Speaking</button></div></div>
+        <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button><button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Reset</button></div>
+      </article>`;
+    }).join('') : 'Connect Discord or load sample guests to assign images.';
+    if (settings && overlay) {
+      $('#discordVoiceEnabled').checked = configuration.enabled !== false;
+      $('#discordVoiceLayout').value = configuration.layout || 'horizontal';
+      $('#discordVoiceAvatarSize').value = configuration.avatarSize || 160;
+      $('#discordVoiceGap').value = configuration.gap ?? 24;
+      $('#discordVoiceInactiveOpacity').value = Math.round((configuration.inactiveOpacity ?? 0.72) * 100);
+      $('#discordVoiceSpeakingScale').value = Math.round((configuration.speakingScale ?? 1.08) * 100);
+      $('#discordVoiceAccent').value = configuration.speakingAccent || '#54f2eb';
+      $('#discordVoiceShowNames').checked = configuration.showNames !== false;
+      $('#discordVoiceShowStatus').checked = configuration.showStatusIcons !== false;
+      $('#discordVoiceHideSelf').checked = configuration.hideSelf === true;
+      $('#discordVoiceHideBots').checked = configuration.hideBots !== false;
     }
   }
 
@@ -1635,6 +1711,7 @@
     renderChatOverlay({ settings: true });
     renderEmoteWall({ settings: true });
     renderTwitchExperiences({ settings: true });
+    renderDiscordVoice({ settings: true });
     renderWarudo();
     renderVTubeStudio();
     renderApi();
@@ -1648,7 +1725,7 @@
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
       state.runs = runs.runs || [];
@@ -1659,6 +1736,8 @@
       state.chatOverlay = chatOverlay;
       state.emoteWall = emoteWall;
       state.twitchExperiences = twitchExperiences;
+      state.discordVoice = discordVoice;
+      state.discordRpc = discordRpc;
       state.warudo = warudo;
       state.vtubeStudio = vtubeStudio;
       state.localExtension = localExtension;
@@ -1674,6 +1753,7 @@
       renderChatOverlay();
       renderEmoteWall();
       renderTwitchExperiences();
+      renderDiscordVoice();
       renderWarudo();
       renderVTubeStudio();
       renderLocalExtension();
@@ -1688,8 +1768,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -2169,16 +2249,121 @@
     return $('#alertDesignKind').value === 'interaction' ? defaultInteractionDesign() : defaultTwitchDesign();
   }
 
+  function alertPlacementFromDesign(design) {
+    return {
+      position: design.position,
+      positionOffsetX: Number(design.positionOffsetX) || 0,
+      positionOffsetY: Number(design.positionOffsetY) || 0,
+      customPositionX: Number(design.customPositionX),
+      customPositionY: Number(design.customPositionY),
+      scale: Number(design.scale)
+    };
+  }
+
+  function alertPlacementFromControls() {
+    return {
+      position: $('#twitchDesignPosition').value,
+      positionOffsetX: Number($('#twitchDesignPositionX').value),
+      positionOffsetY: Number($('#twitchDesignPositionY').value),
+      customPositionX: Number($('#twitchDesignCustomX').value),
+      customPositionY: Number($('#twitchDesignCustomY').value),
+      scale: Number($('#twitchDesignScale').value) / 100
+    };
+  }
+
+  function applyAlertPlacementToControls(placement) {
+    $('#twitchDesignPosition').value = placement.position;
+    $('#twitchDesignPositionX').value = placement.positionOffsetX;
+    $('#twitchDesignPositionY').value = placement.positionOffsetY;
+    $('#twitchDesignCustomX').value = placement.customPositionX;
+    $('#twitchDesignCustomY').value = placement.customPositionY;
+    $('#twitchDesignScale').value = Math.round(placement.scale * 100);
+  }
+
+  function sameAlertPlacement(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function availableAlertSceneNames() {
+    const inventory = broadcastSourceInventory();
+    const names = [...(inventory.scenes || []), inventory.currentScene, ...alertDesignScenePlacements.map((entry) => entry.sceneName)].filter(Boolean);
+    const unique = new Map();
+    for (const name of names) if (!unique.has(name.toLocaleLowerCase())) unique.set(name.toLocaleLowerCase(), name);
+    return [...unique.values()].sort((left, right) => left.localeCompare(right));
+  }
+
+  function alertScenePlacement(sceneName) {
+    const normalized = sceneName.toLocaleLowerCase();
+    return alertDesignScenePlacements.find((entry) => entry.sceneName.toLocaleLowerCase() === normalized);
+  }
+
+  function captureAlertScenePlacement() {
+    if (!alertDesignBasePlacement) return;
+    const placement = alertPlacementFromControls();
+    if (!alertDesignSceneScope) {
+      alertDesignBasePlacement = placement;
+      return;
+    }
+    const index = alertDesignScenePlacements.findIndex((entry) => entry.sceneName.toLocaleLowerCase() === alertDesignSceneScope.toLocaleLowerCase());
+    if (index >= 0) alertDesignScenePlacements[index] = { sceneName: alertDesignSceneScope, ...placement };
+    else if (!sameAlertPlacement(placement, alertDesignBasePlacement)) alertDesignScenePlacements.push({ sceneName: alertDesignSceneScope, ...placement });
+  }
+
+  function renderAlertScenePlacementControls() {
+    const inventory = broadcastSourceInventory();
+    const names = availableAlertSceneNames();
+    const select = $('#alertDesignSceneScope');
+    select.innerHTML = '<option value="">All scenes · default</option>' + names.map((name) => `<option value="${escapeHtml(name)}">${name === inventory.currentScene ? 'Current · ' : ''}${escapeHtml(name)}</option>`).join('');
+    if (alertDesignSceneScope && names.some((name) => name.toLocaleLowerCase() === alertDesignSceneScope.toLocaleLowerCase())) select.value = names.find((name) => name.toLocaleLowerCase() === alertDesignSceneScope.toLocaleLowerCase());
+    else { alertDesignSceneScope = ''; select.value = ''; }
+    $('#useCurrentAlertScene').disabled = !inventory.currentScene;
+    const existing = alertDesignSceneScope ? alertScenePlacement(alertDesignSceneScope) : undefined;
+    $('#removeAlertScenePlacement').disabled = !existing;
+    $('#alertDesignSceneStatus').textContent = !alertDesignSceneScope
+      ? 'Default placement used by every scene without an override.'
+      : existing
+        ? `${alertDesignSceneScope} has its own placement. Alert styling stays shared.`
+        : `Move or resize the alert to create a placement for ${alertDesignSceneScope}.`;
+  }
+
+  function switchAlertScenePlacement(sceneName) {
+    captureAlertScenePlacement();
+    alertDesignSceneScope = sceneName || '';
+    const placement = alertDesignSceneScope ? alertScenePlacement(alertDesignSceneScope) || alertDesignBasePlacement : alertDesignBasePlacement;
+    applyAlertPlacementToControls(placement);
+    renderAlertScenePlacementControls();
+    updateTwitchPlacementPreview();
+  }
+
+  function useCurrentAlertScene() {
+    const sceneName = broadcastSourceInventory().currentScene;
+    if (!sceneName) return toast('Broadcast is not reporting an active scene yet.', true);
+    switchAlertScenePlacement(sceneName);
+    pushAlertDesignHistory();
+  }
+
+  function removeCurrentAlertScenePlacement() {
+    if (!alertDesignSceneScope) return;
+    alertDesignScenePlacements = alertDesignScenePlacements.filter((entry) => entry.sceneName.toLocaleLowerCase() !== alertDesignSceneScope.toLocaleLowerCase());
+    applyAlertPlacementToControls(alertDesignBasePlacement);
+    renderAlertScenePlacementControls();
+    updateTwitchPlacementPreview();
+    pushAlertDesignHistory();
+  }
+
   function populateTwitchDesign(designValue) {
     const design = { ...defaultCurrentAlertDesign(), ...(designValue || {}) };
+    alertDesignBasePlacement = alertPlacementFromDesign(design);
+    alertDesignScenePlacements = structuredClone(design.scenePlacements || []);
+    const currentScene = broadcastSourceInventory().currentScene;
+    const requestedScope = alertDesignSceneScope;
+    alertDesignSceneScope = requestedScope && availableAlertSceneNames().some((name) => name.toLocaleLowerCase() === requestedScope.toLocaleLowerCase())
+      ? requestedScope
+      : currentScene && alertScenePlacement(currentScene) ? currentScene : '';
+    const displayedPlacement = alertDesignSceneScope ? alertScenePlacement(alertDesignSceneScope) || alertDesignBasePlacement : alertDesignBasePlacement;
     $('#twitchDesignPreset').value = design.preset;
     $('#twitchDesignLayout').value = design.layout;
-    $('#twitchDesignPosition').value = design.position;
-    $('#twitchDesignPositionX').value = design.positionOffsetX;
-    $('#twitchDesignPositionY').value = design.positionOffsetY;
-    $('#twitchDesignCustomX').value = design.customPositionX;
-    $('#twitchDesignCustomY').value = design.customPositionY;
-    $('#twitchDesignScale').value = Math.round(design.scale * 100);
+    applyAlertPlacementToControls(displayedPlacement);
     $('#twitchDesignEntrance').value = design.entranceAnimation;
     $('#twitchDesignExit').value = design.exitAnimation;
     $('#twitchDesignTextAnimation').value = design.textAnimation;
@@ -2247,6 +2432,7 @@
     $('#twitchDesignCustomHtml').value = design.customHtml;
     $('#twitchDesignCustomCss').value = design.customCss;
     $('#twitchDesignCustomJavaScript').value = design.customJavaScript;
+    renderAlertScenePlacementControls();
     switchAlertCodeTab('html');
     updateTwitchPlacementPreview();
   }
@@ -2302,6 +2488,37 @@
     updateTwitchPlacementPreview();
   }
 
+  function alertPlacementLimits() {
+    const canvas = $('#twitchPlacementCanvas');
+    const mock = $('#twitchPlacementMock');
+    const canvasBounds = canvas.getBoundingClientRect();
+    const mockBounds = mock.getBoundingClientRect();
+    if (!canvasBounds.width || !canvasBounds.height) return { minimumX: 0, maximumX: 100, minimumY: 0, maximumY: 100 };
+    const halfWidth = Math.min(50, mockBounds.width / canvasBounds.width * 50);
+    const halfHeight = Math.min(50, mockBounds.height / canvasBounds.height * 50);
+    return { minimumX: halfWidth, maximumX: 100 - halfWidth, minimumY: halfHeight, maximumY: 100 - halfHeight };
+  }
+
+  function snapAlertCoordinate(value, minimum, maximum) {
+    const clamped = Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : 50));
+    const step = Number($('#twitchDesignSnap').value) || 0;
+    if (!step) return clamped;
+    let snapped = Math.round(clamped / step) * step;
+    const magneticThreshold = Math.max(1.25, step * 0.55);
+    for (const target of [minimum, 50, maximum]) {
+      if (Math.abs(clamped - target) <= magneticThreshold) {
+        snapped = target;
+        break;
+      }
+    }
+    return Math.min(maximum, Math.max(minimum, snapped));
+  }
+
+  function updateAlertSnapGuides(x, y) {
+    $('#twitchPlacementGuideX').classList.toggle('visible', Math.abs(x - 50) < 0.05);
+    $('#twitchPlacementGuideY').classList.toggle('visible', Math.abs(y - 50) < 0.05);
+  }
+
   function updateTwitchPlacementPreview() {
     const canvas = $('#twitchPlacementCanvas');
     const mock = $('#twitchPlacementMock');
@@ -2314,10 +2531,12 @@
       $('#twitchDesignCustomX').value = x;
       $('#twitchDesignCustomY').value = y;
     }
+    const canvasProfile = activeCanvasProfile();
+    x += Number($('#twitchDesignPositionX').value || 0) / canvasProfile.baseWidth * 100;
+    y += Number($('#twitchDesignPositionY').value || 0) / canvasProfile.baseHeight * 100;
     x = Math.min(100, Math.max(0, Number.isFinite(x) ? x : 50));
     y = Math.min(100, Math.max(0, Number.isFinite(y) ? y : 50));
     const scalePercent = Math.min(200, Math.max(25, Number($('#twitchDesignScale').value) || 100));
-    const canvasProfile = activeCanvasProfile();
     const baseCanvasWidth = canvasProfile.baseWidth;
     const baseCanvasHeight = canvasProfile.baseHeight;
     canvas.style.aspectRatio = `${baseCanvasWidth} / ${baseCanvasHeight}`;
@@ -2367,13 +2586,34 @@
     $('#twitchPlacementMockTitle').textContent = renderAlertDesignerTemplate($('#twitchDesignHeadline').value) || 'Alert';
     $('#twitchPlacementMockDetail').textContent = renderAlertDesignerTemplate($('#twitchDesignDetail').value);
     $('#twitchPlacementMockMessage').textContent = $('#alertDesignPreviewMessage').value;
+    updateAlertSnapGuides(x, y);
+    scheduleAlertCanvasPositionPreview();
   }
 
-  function setCustomTwitchPlacement(x, y) {
+  function setCustomTwitchPlacement(x, y, snap = false, resetOffsets = false) {
+    if (resetOffsets) {
+      $('#twitchDesignPositionX').value = 0;
+      $('#twitchDesignPositionY').value = 0;
+    }
+    const limits = alertPlacementLimits();
+    const nextX = snap ? snapAlertCoordinate(x, limits.minimumX, limits.maximumX) : Math.min(limits.maximumX, Math.max(limits.minimumX, x));
+    const nextY = snap ? snapAlertCoordinate(y, limits.minimumY, limits.maximumY) : Math.min(limits.maximumY, Math.max(limits.minimumY, y));
     $('#twitchDesignPosition').value = 'custom';
-    $('#twitchDesignCustomX').value = Math.min(100, Math.max(0, x)).toFixed(1);
-    $('#twitchDesignCustomY').value = Math.min(100, Math.max(0, y)).toFixed(1);
+    $('#twitchDesignCustomX').value = nextX.toFixed(1);
+    $('#twitchDesignCustomY').value = nextY.toFixed(1);
     updateTwitchPlacementPreview();
+  }
+
+  function alignTwitchPlacement(axis) {
+    const position = $('#twitchDesignPosition').value;
+    const current = position === 'custom'
+      ? { x: Number($('#twitchDesignCustomX').value), y: Number($('#twitchDesignCustomY').value) }
+      : twitchAnchorCoordinates(position);
+    if (axis === 'horizontal' || axis === 'both') $('#twitchDesignPositionX').value = 0;
+    if (axis === 'vertical' || axis === 'both') $('#twitchDesignPositionY').value = 0;
+    setCustomTwitchPlacement(axis === 'horizontal' || axis === 'both' ? 50 : current.x, axis === 'vertical' || axis === 'both' ? 50 : current.y);
+    pushAlertDesignHistory();
+    $('#twitchPlacementMock').focus();
   }
 
   function beginTwitchPlacementInteraction(event) {
@@ -2414,7 +2654,7 @@
         return;
       }
       const bounds = canvas.getBoundingClientRect();
-      setCustomTwitchPlacement((moveEvent.clientX - bounds.left) / bounds.width * 100, (moveEvent.clientY - bounds.top) / bounds.height * 100);
+      setCustomTwitchPlacement((moveEvent.clientX - bounds.left) / bounds.width * 100, (moveEvent.clientY - bounds.top) / bounds.height * 100, true, true);
     };
     const finish = () => {
       mock.removeEventListener('pointermove', move);
@@ -2443,11 +2683,17 @@
     const current = position === 'custom'
       ? { x: Number($('#twitchDesignCustomX').value), y: Number($('#twitchDesignCustomY').value) }
       : twitchAnchorCoordinates(position);
+    const canvasProfile = activeCanvasProfile();
+    current.x += Number($('#twitchDesignPositionX').value || 0) / canvasProfile.baseWidth * 100;
+    current.y += Number($('#twitchDesignPositionY').value || 0) / canvasProfile.baseHeight * 100;
+    $('#twitchDesignPositionX').value = 0;
+    $('#twitchDesignPositionY').value = 0;
     setCustomTwitchPlacement(current.x + movement[0] * step, current.y + movement[1] * step);
+    pushAlertDesignHistory();
   }
 
   function readTwitchDesign() {
-    return {
+    const design = {
       preset: $('#twitchDesignPreset').value,
       layout: $('#twitchDesignLayout').value,
       position: $('#twitchDesignPosition').value,
@@ -2522,6 +2768,10 @@
       customCss: $('#twitchDesignCustomCss').value,
       customJavaScript: $('#twitchDesignCustomJavaScript').value
     };
+    captureAlertScenePlacement();
+    Object.assign(design, alertDesignBasePlacement || alertPlacementFromControls());
+    if (alertDesignScenePlacements.length) design.scenePlacements = structuredClone(alertDesignScenePlacements);
+    return design;
   }
 
   function updateAlertDesignHistoryButtons() {
@@ -2581,6 +2831,79 @@
       setTimeout(() => { if (revision === alertDesignPreviewRevision && alertDesignAudio === previewAudio) void previewAudio.play().catch(() => {}); }, Math.max(0, Number($('#twitchDesignSoundDelay').value) || 0));
     }
     setTimeout(() => { if (revision === alertDesignPreviewRevision) mock.classList.remove('previewing'); }, 1800);
+  }
+
+  function alertCanvasPreviewKind() {
+    return $('#alertDesignKind').value === 'interaction' ? 'interaction' : 'twitch';
+  }
+
+  function renderAlertCanvasPreviewState(message) {
+    const button = $('#previewAlertDesignOnCanvas');
+    button.textContent = alertCanvasPositionPreviewActive ? 'Hide from Canvas' : 'Show on Canvas';
+    button.setAttribute('aria-pressed', String(alertCanvasPositionPreviewActive));
+    button.classList.toggle('active', alertCanvasPositionPreviewActive);
+    $('#alertCanvasPreviewStatus').textContent = message || (alertCanvasPositionPreviewActive ? 'Updating the Browser Source as you edit.' : 'Canvas preview is off.');
+  }
+
+  function scheduleAlertCanvasPositionPreview() {
+    if (!alertCanvasPositionPreviewActive || !$('#twitchDesignDialog').open) return;
+    clearTimeout(alertCanvasPositionPreviewTimer);
+    alertCanvasPositionPreviewTimer = setTimeout(() => { void syncAlertCanvasPositionPreview(); }, 90);
+  }
+
+  async function syncAlertCanvasPositionPreview() {
+    if (!alertCanvasPositionPreviewActive || !$('#twitchDesignDialog').open) return;
+    const revision = ++alertCanvasPositionPreviewRevision;
+    const kind = alertCanvasPreviewKind();
+    try {
+      const result = await api('/v1/visual-alerts/position-preview', {
+        method: 'POST',
+        body: {
+          kind,
+          alertId: $('#twitchDesignAlertId').value,
+          variantId: $('#twitchDesignVariantId').value || undefined,
+          design: readTwitchDesign(),
+          viewerName: $('#alertDesignPreviewViewer').value,
+          amount: $('#alertDesignPreviewAmount').value,
+          message: $('#alertDesignPreviewMessage').value,
+          sceneName: alertDesignSceneScope || undefined,
+          useGlobalPlacement: !alertDesignSceneScope
+        }
+      });
+      if (!alertCanvasPositionPreviewActive || revision !== alertCanvasPositionPreviewRevision) {
+        if (!alertCanvasPositionPreviewActive) await api('/v1/visual-alerts/position-preview/clear', { method: 'POST', body: { kind } });
+        return;
+      }
+      renderAlertCanvasPreviewState(result.connectedClients > 0
+        ? `Live on ${result.connectedClients} connected ${kind === 'interaction' ? 'Interaction' : 'Twitch'} Browser Source${result.connectedClients === 1 ? '' : 's'}.`
+        : `Preview is ready. Open the ${kind === 'interaction' ? 'Interaction Alerts' : 'Twitch Alerts'} Browser Source in Broadcast to see it.`);
+    } catch (error) {
+      if (alertCanvasPositionPreviewActive && revision === alertCanvasPositionPreviewRevision) renderAlertCanvasPreviewState(`Canvas preview needs attention: ${error.message}`);
+    }
+  }
+
+  async function stopAlertCanvasPositionPreview(announce = false) {
+    const wasActive = alertCanvasPositionPreviewActive;
+    const kind = alertCanvasPreviewKind();
+    alertCanvasPositionPreviewActive = false;
+    alertCanvasPositionPreviewRevision++;
+    clearTimeout(alertCanvasPositionPreviewTimer);
+    alertCanvasPositionPreviewTimer = null;
+    renderAlertCanvasPreviewState();
+    if (!wasActive) return;
+    try {
+      await api('/v1/visual-alerts/position-preview/clear', { method: 'POST', body: { kind } });
+      if (announce) toast('Canvas positioning preview hidden.');
+    } catch (error) {
+      if (announce) toast(error.message, true);
+    }
+  }
+
+  async function toggleAlertCanvasPositionPreview() {
+    if (alertCanvasPositionPreviewActive) return stopAlertCanvasPositionPreview(true);
+    alertCanvasPositionPreviewActive = true;
+    renderAlertCanvasPreviewState('Connecting to the Browser Source…');
+    await syncAlertCanvasPositionPreview();
   }
 
   async function validateAlertDesignCode(showSuccess = true) {
@@ -2661,6 +2984,9 @@
     $('#twitchDesignVariantId').value = '';
     $('#twitchDesignTitle').textContent = `${alert.name} Design`;
     activeAlertDesignAssets = { visualUri: alert.visualUri || '', audioUri: alert.audioUri || '', volume: alert.volume };
+    alertCanvasPositionPreviewActive = false;
+    alertDesignSceneScope = '';
+    renderAlertCanvasPreviewState();
     populateTwitchDesign(alert.design);
     renderAlertDesignerMedia();
     $('#twitchDesignDialog').showModal();
@@ -2680,6 +3006,9 @@
     $('#twitchDesignVariantId').value = variant.id;
     $('#twitchDesignTitle').textContent = `${variant.name} Design`;
     activeAlertDesignAssets = { visualUri: variant.visualUri || '', audioUri: variant.audioUri || '', volume: variant.volume };
+    alertCanvasPositionPreviewActive = false;
+    alertDesignSceneScope = '';
+    renderAlertCanvasPreviewState();
     populateTwitchDesign(variant.design || alert.design);
     renderAlertDesignerMedia();
     $('#twitchDesignDialog').showModal();
@@ -2698,6 +3027,9 @@
     $('#twitchDesignVariantId').value = '';
     $('#twitchDesignTitle').textContent = `${alert.name} Design`;
     activeAlertDesignAssets = { visualUri: alert.visualUri || '', audioUri: alert.audioUri || '', volume: alert.volume };
+    alertCanvasPositionPreviewActive = false;
+    alertDesignSceneScope = '';
+    renderAlertCanvasPreviewState();
     populateTwitchDesign(alert.design || defaultInteractionDesign());
     renderAlertDesignerMedia();
     $('#twitchDesignDialog').showModal();
@@ -2722,6 +3054,7 @@
         ? await updateTwitchVariant(id, variantId, { design: readTwitchDesign() }, 'Twitch Alert variant design saved.')
         : await updateTwitchVisualAlert(id, { design: readTwitchDesign() }, 'Twitch Alert design saved.');
     if (!saved) return;
+    await stopAlertCanvasPositionPreview(false);
     $('#twitchDesignDialog').close();
     if (preview) {
       if (kind === 'interaction') await previewVisualAlert(id);
@@ -2813,6 +3146,112 @@
       state.chatOverlay = await api('/v1/chat-overlay');
       renderChatOverlay({ settings: true });
       toast('Chat Overlay design saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function connectDiscordVoice() {
+    try {
+      state.discordRpc = { ...(state.discordRpc || {}), state: 'connecting' };
+      renderDiscordVoice();
+      state.discordRpc = await window.tempestStudio.connectDiscordVoice();
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice({ settings: true });
+      toast('Discord Voice connected. Join or change channels in Discord normally.');
+    } catch (error) {
+      state.discordRpc = await window.tempestStudio.getDiscordVoiceStatus().catch(() => state.discordRpc);
+      renderDiscordVoice();
+      toast(error.message, true);
+    }
+  }
+
+  async function disconnectDiscordVoice() {
+    try {
+      state.discordRpc = await window.tempestStudio.disconnectDiscordVoice();
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast('Discord Voice disconnected. Your image assignments are still saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function forgetDiscordVoice() {
+    try {
+      state.discordRpc = await window.tempestStudio.forgetDiscordVoice();
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast('Discord authorization removed from this computer.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveDiscordVoiceSettings() {
+    try {
+      await api('/v1/discord-voice/settings', { method: 'POST', body: {
+        enabled: $('#discordVoiceEnabled').checked,
+        layout: $('#discordVoiceLayout').value,
+        avatarSize: Number($('#discordVoiceAvatarSize').value),
+        gap: Number($('#discordVoiceGap').value),
+        inactiveOpacity: Number($('#discordVoiceInactiveOpacity').value) / 100,
+        speakingScale: Number($('#discordVoiceSpeakingScale').value) / 100,
+        speakingAccent: $('#discordVoiceAccent').value,
+        showNames: $('#discordVoiceShowNames').checked,
+        showStatusIcons: $('#discordVoiceShowStatus').checked,
+        hideSelf: $('#discordVoiceHideSelf').checked,
+        hideBots: $('#discordVoiceHideBots').checked,
+        transitionMs: state.discordVoice?.settings?.transitionMs ?? 140
+      } });
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice({ settings: true });
+      toast('Discord Guests overlay design saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewDiscordVoice() {
+    try {
+      state.discordVoice = await api('/v1/discord-voice/preview', { method: 'POST', body: {} });
+      renderDiscordVoice();
+      toast('Sample Discord guests sent to the Browser Source.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearDiscordVoicePreview() {
+    try {
+      state.discordVoice = await api('/v1/discord-voice/clear', { method: 'POST', body: {} });
+      renderDiscordVoice();
+      toast('Discord Guests preview stopped.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveDiscordVoiceProfile(userId) {
+    const selector = CSS.escape(userId);
+    try {
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'POST', body: {
+        displayName: document.querySelector(`[data-discord-profile-name="${selector}"]`).value.trim(),
+        order: Number(document.querySelector(`[data-discord-profile-order="${selector}"]`).value),
+        accent: document.querySelector(`[data-discord-profile-accent="${selector}"]`).value,
+        visible: document.querySelector(`[data-discord-profile-visible="${selector}"]`).checked
+      } });
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast('Discord participant design saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function resetDiscordVoiceProfile(userId) {
+    try {
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast('Discord participant design reset.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function assignDiscordVoiceImage(userId, kind) {
+    try {
+      const selected = await window.tempestStudio.selectDiscordVoiceImage();
+      if (!selected) return;
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'POST', body: { [`${kind}Uri`]: selected.uri } });
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice();
+      toast(`${selected.name} assigned as the ${kind} image.`);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -3094,6 +3533,12 @@
     if (button.dataset.twitchExperienceSave) return saveTwitchExperiences();
     if (button.dataset.twitchExperiencePreview) return previewTwitchExperience(button.dataset.twitchExperiencePreview);
     if (button.dataset.twitchExperienceClear) return clearTwitchExperiences();
+    if (button.dataset.discordVoiceSave) return saveDiscordVoiceSettings();
+    if (button.dataset.discordVoicePreview) return previewDiscordVoice();
+    if (button.dataset.discordVoiceClear) return clearDiscordVoicePreview();
+    if (button.dataset.discordProfileSave) return saveDiscordVoiceProfile(button.dataset.discordProfileSave);
+    if (button.dataset.discordProfileReset) return resetDiscordVoiceProfile(button.dataset.discordProfileReset);
+    if (button.dataset.discordImageId) return assignDiscordVoiceImage(button.dataset.discordImageId, button.dataset.discordImageKind);
     if (button.dataset.twitchVisualToggle) {
       const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === button.dataset.twitchVisualToggle);
       if (alert) return updateTwitchVisualAlert(alert.id, { enabled: !alert.enabled }, `${alert.name} ${alert.enabled ? 'disabled' : 'enabled'}.`);
@@ -3125,6 +3570,9 @@
     $('#authorizeVTubeStudio').addEventListener('click', authorizeVTubeStudio);
     $('#refreshVTubeStudioHotkeys').addEventListener('click', refreshVTubeStudioHotkeys);
     $('#forgetVTubeStudio').addEventListener('click', forgetVTubeStudio);
+    $('#connectDiscordVoice').addEventListener('click', connectDiscordVoice);
+    $('#disconnectDiscordVoice').addEventListener('click', disconnectDiscordVoice);
+    $('#forgetDiscordVoice').addEventListener('click', forgetDiscordVoice);
     $('#emergencyStopButton').addEventListener('click', toggleSafety);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);
@@ -3149,6 +3597,14 @@
     $('#redoAlertDesign').addEventListener('click', () => moveAlertDesignHistory(1));
     $('#previewAlertDesignHere').addEventListener('click', previewAlertDesignHere);
     $('#stopAlertDesignPreview').addEventListener('click', stopAlertDesignPreview);
+    $('#previewAlertDesignOnCanvas').addEventListener('click', () => { void toggleAlertCanvasPositionPreview(); });
+    $('#alignAlertHorizontal').addEventListener('click', () => alignTwitchPlacement('horizontal'));
+    $('#alignAlertVertical').addEventListener('click', () => alignTwitchPlacement('vertical'));
+    $('#alignAlertCenter').addEventListener('click', () => alignTwitchPlacement('both'));
+    $('#twitchDesignSnap').addEventListener('change', updateTwitchPlacementPreview);
+    $('#alertDesignSceneScope').addEventListener('change', (event) => { switchAlertScenePlacement(event.target.value); pushAlertDesignHistory(); });
+    $('#useCurrentAlertScene').addEventListener('click', useCurrentAlertScene);
+    $('#removeAlertScenePlacement').addEventListener('click', removeCurrentAlertScenePlacement);
     $('#validateAlertDesignCode').addEventListener('click', () => validateAlertDesignCode().catch((error) => toast(error.message, true)));
     $('#importAlertDesign').addEventListener('click', importAlertDesignTemplate);
     $('#exportAlertDesign').addEventListener('click', exportAlertDesignTemplate);
@@ -3159,12 +3615,13 @@
       $('#twitchDesignPosition').value = 'custom';
       updateTwitchPlacementPreview();
     }));
-    ['#twitchDesignScale', '#twitchDesignCardWidth', '#twitchDesignMediaWidth', '#twitchDesignMediaHeight', '#twitchDesignTextPositionX', '#twitchDesignTextPositionY', '#twitchDesignEyebrowX', '#twitchDesignEyebrowY', '#twitchDesignHeadlineX', '#twitchDesignHeadlineY', '#twitchDesignDetailX', '#twitchDesignDetailY', '#twitchDesignMessageX', '#twitchDesignMessageY', '#twitchDesignShowEyebrow', '#twitchDesignShowHeadline', '#twitchDesignShowDetail', '#twitchDesignShowMessage', '#twitchDesignFont', '#twitchDesignTextAlign', '#twitchDesignMediaFit', '#twitchDesignMediaScale', '#twitchDesignMediaPositionX', '#twitchDesignMediaPositionY', '#twitchDesignMediaOpacity', '#twitchDesignEyebrowFontSize', '#twitchDesignHeadlineFontSize', '#twitchDesignDetailFontSize', '#twitchDesignMessageFontSize', '#twitchDesignEyebrowColor', '#twitchDesignHeadlineColor', '#twitchDesignDetailColor', '#twitchDesignMessageColor', '#twitchDesignEyebrowMaxWidth', '#twitchDesignHeadlineMaxWidth', '#twitchDesignDetailMaxWidth', '#twitchDesignMessageMaxWidth', '#twitchDesignHeadline', '#twitchDesignDetail', '#alertDesignPreviewViewer', '#alertDesignPreviewAmount', '#alertDesignPreviewMessage'].forEach((selector) => $(selector).addEventListener('input', updateTwitchPlacementPreview));
+    ['#twitchDesignScale', '#twitchDesignPositionX', '#twitchDesignPositionY', '#twitchDesignCardWidth', '#twitchDesignMediaWidth', '#twitchDesignMediaHeight', '#twitchDesignTextPositionX', '#twitchDesignTextPositionY', '#twitchDesignEyebrowX', '#twitchDesignEyebrowY', '#twitchDesignHeadlineX', '#twitchDesignHeadlineY', '#twitchDesignDetailX', '#twitchDesignDetailY', '#twitchDesignMessageX', '#twitchDesignMessageY', '#twitchDesignShowEyebrow', '#twitchDesignShowHeadline', '#twitchDesignShowDetail', '#twitchDesignShowMessage', '#twitchDesignFont', '#twitchDesignTextAlign', '#twitchDesignMediaFit', '#twitchDesignMediaScale', '#twitchDesignMediaPositionX', '#twitchDesignMediaPositionY', '#twitchDesignMediaOpacity', '#twitchDesignEyebrowFontSize', '#twitchDesignHeadlineFontSize', '#twitchDesignDetailFontSize', '#twitchDesignMessageFontSize', '#twitchDesignEyebrowColor', '#twitchDesignHeadlineColor', '#twitchDesignDetailColor', '#twitchDesignMessageColor', '#twitchDesignEyebrowMaxWidth', '#twitchDesignHeadlineMaxWidth', '#twitchDesignDetailMaxWidth', '#twitchDesignMessageMaxWidth', '#twitchDesignHeadline', '#twitchDesignDetail', '#alertDesignPreviewViewer', '#alertDesignPreviewAmount', '#alertDesignPreviewMessage'].forEach((selector) => $(selector).addEventListener('input', updateTwitchPlacementPreview));
     $('#twitchDesignLayout').addEventListener('change', updateTwitchPlacementPreview);
     $('#twitchDesignForm').addEventListener('change', pushAlertDesignHistory);
+    $('#twitchDesignForm').addEventListener('input', scheduleAlertCanvasPositionPreview);
     $('#twitchPlacementMock').addEventListener('pointerdown', beginTwitchPlacementInteraction);
     $('#twitchPlacementMock').addEventListener('keydown', moveTwitchPlacementWithKeyboard);
-    $('#twitchDesignDialog').addEventListener('close', stopAlertDesignPreview);
+    $('#twitchDesignDialog').addEventListener('close', () => { stopAlertDesignPreview(); void stopAlertCanvasPositionPreview(false); });
     window.addEventListener('resize', updateTwitchPlacementPreview);
     $('#newInteractionAlertName').addEventListener('input', () => {
       const key = $('#newInteractionAlertKey');

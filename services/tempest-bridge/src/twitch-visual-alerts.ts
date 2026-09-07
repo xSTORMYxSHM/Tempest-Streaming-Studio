@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizedTwitchEventTopics, TempestNormalizedTwitchEvent, TempestTwitchAlertDesign, TempestTwitchAlertVariant, TempestTwitchAlertVariantCondition, TempestTwitchVisualAlertDefinition } from '@tempest/contracts';
+import { normalizedTwitchEventTopics, TempestAlertScenePlacement, TempestNormalizedTwitchEvent, TempestTwitchAlertDesign, TempestTwitchAlertVariant, TempestTwitchAlertVariantCondition, TempestTwitchVisualAlertDefinition } from '@tempest/contracts';
 
 interface TwitchVisualAlertDocument {
   schemaVersion: 1;
@@ -58,19 +58,58 @@ function designText(value: unknown, fallback: string, maximum: number, field: st
   return value;
 }
 
+const alertPositions = ['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right', 'custom'] as const;
+
+function validateScenePlacements(value: unknown): TempestAlertScenePlacement[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 100) throw new Error('design.scenePlacements must contain at most 100 scene placements.');
+  const sceneNames = new Set<string>();
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`design.scenePlacements[${index}] must be an object.`);
+    const input = entry as Record<string, unknown>;
+    const allowed = new Set(['sceneName', 'position', 'positionOffsetX', 'positionOffsetY', 'customPositionX', 'customPositionY', 'scale']);
+    for (const key of Object.keys(input)) if (!allowed.has(key)) throw new Error(`design.scenePlacements[${index}].${key} is not supported.`);
+    const sceneName = typeof input.sceneName === 'string' ? input.sceneName.trim() : '';
+    if (!sceneName || sceneName.length > 120 || /[\0\r\n]/.test(sceneName)) throw new Error(`design.scenePlacements[${index}].sceneName must contain 1 to 120 characters.`);
+    const normalizedName = sceneName.toLocaleLowerCase();
+    if (sceneNames.has(normalizedName)) throw new Error(`design.scenePlacements contains more than one placement for ${sceneName}.`);
+    sceneNames.add(normalizedName);
+    return {
+      sceneName,
+      position: choice(input.position, 'custom', alertPositions, `design.scenePlacements[${index}].position`),
+      positionOffsetX: numberRange(input.positionOffsetX, 0, -1000, 1000, `design.scenePlacements[${index}].positionOffsetX`, true),
+      positionOffsetY: numberRange(input.positionOffsetY, 0, -1000, 1000, `design.scenePlacements[${index}].positionOffsetY`, true),
+      customPositionX: numberRange(input.customPositionX, 50, 0, 100, `design.scenePlacements[${index}].customPositionX`),
+      customPositionY: numberRange(input.customPositionY, 82, 0, 100, `design.scenePlacements[${index}].customPositionY`),
+      scale: numberRange(input.scale, 1, 0.25, 2, `design.scenePlacements[${index}].scale`)
+    };
+  });
+}
+
+export function resolveTwitchAlertDesignForScene(design: TempestTwitchAlertDesign, sceneName?: string): TempestTwitchAlertDesign {
+  const normalizedName = sceneName?.trim().toLocaleLowerCase();
+  if (!normalizedName) return structuredClone(design);
+  const placement = design.scenePlacements?.find((entry) => entry.sceneName.toLocaleLowerCase() === normalizedName);
+  if (!placement) return structuredClone(design);
+  const { sceneName: _sceneName, ...override } = placement;
+  return { ...structuredClone(design), ...override };
+}
+
 export function validateTwitchAlertDesign(value: unknown): TempestTwitchAlertDesign {
   if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error('design must be an object.');
   const input = (value || {}) as Record<string, unknown>;
   const base = defaultTwitchAlertDesign();
+  const scenePlacements = validateScenePlacements(input.scenePlacements);
   return {
     preset: choice(input.preset, base.preset, ['tempest', 'minimal', 'compact', 'glass', 'neon', 'cinematic'], 'design.preset'),
     layout: choice(input.layout, base.layout, ['media-left', 'media-right', 'media-top', 'media-overlay', 'text-only', 'media-only'], 'design.layout'),
-    position: choice(input.position, base.position, ['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right', 'custom'], 'design.position'),
+    position: choice(input.position, base.position, alertPositions, 'design.position'),
     positionOffsetX: numberRange(input.positionOffsetX, base.positionOffsetX, -1000, 1000, 'design.positionOffsetX', true),
     positionOffsetY: numberRange(input.positionOffsetY, base.positionOffsetY, -1000, 1000, 'design.positionOffsetY', true),
     customPositionX: numberRange(input.customPositionX, base.customPositionX, 0, 100, 'design.customPositionX'),
     customPositionY: numberRange(input.customPositionY, base.customPositionY, 0, 100, 'design.customPositionY'),
     scale: numberRange(input.scale, base.scale, 0.25, 2, 'design.scale'),
+    ...(scenePlacements.length ? { scenePlacements } : {}),
     entranceAnimation: choice(input.entranceAnimation, base.entranceAnimation, ['fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'zoom', 'bounce', 'flip', 'glitch'], 'design.entranceAnimation'),
     exitAnimation: choice(input.exitAnimation, base.exitAnimation, ['fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'zoom'], 'design.exitAnimation'),
     textAnimation: choice(input.textAnimation, base.textAnimation, ['none', 'pulse', 'wiggle', 'glow', 'typewriter'], 'design.textAnimation'),

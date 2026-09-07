@@ -212,3 +212,37 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   assert.equal(revoked.status, 200);
   assert.equal((await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } })).status, 403);
 });
+
+test('exchanges Discord RPC authorization codes without exposing the client secret', async (context) => {
+  let submitted;
+  const runtime = await startTwitchEbs({
+    port: 0,
+    twitchExtensionSecrets: [randomBytes(32).toString('base64')],
+    installationStore: new MemoryTwitchEbsInstallationStore(),
+    logger: { info() {}, warn() {}, error() {} },
+    discordOAuth: {
+      clientId: '123456789012345678',
+      clientSecret: 'server-only-secret',
+      redirectUri: 'https://signal.example/discord/callback',
+      exchange: async (body) => {
+        submitted = body;
+        return new Response(JSON.stringify({ access_token: 'access-token', refresh_token: 'refresh-token', expires_in: 3600, scope: 'rpc identify rpc.voice.read', token_type: 'Bearer' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+  });
+  context.after(() => runtime.close());
+  const response = await fetch(`${runtime.baseUrl}/v1/discord/oauth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grantType: 'authorization_code', clientId: '123456789012345678', code: 'one-time-code' }) });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.accessToken, 'access-token');
+  assert.equal(result.refreshToken, 'refresh-token');
+  assert.equal(JSON.stringify(result).includes('server-only-secret'), false);
+  assert.equal(submitted.get('client_secret'), 'server-only-secret');
+  assert.equal(submitted.get('code'), 'one-time-code');
+  const refreshed = await fetch(`${runtime.baseUrl}/v1/discord/oauth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grantType: 'refresh_token', clientId: '123456789012345678', refreshToken: 'refresh-token' }) });
+  assert.equal(refreshed.status, 200);
+  assert.equal(submitted.get('grant_type'), 'refresh_token');
+  assert.equal(submitted.get('refresh_token'), 'refresh-token');
+  const wrongClient = await fetch(`${runtime.baseUrl}/v1/discord/oauth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grantType: 'authorization_code', clientId: 'wrong', code: 'one-time-code' }) });
+  assert.equal(wrongClient.status, 400);
+});

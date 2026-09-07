@@ -1,5 +1,5 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '1.0.1';
+export const TEMPEST_STUDIO_VERSION = '1.1.0';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 
@@ -240,6 +240,16 @@ export interface TempestTwitchAlertVariant {
   design: TempestTwitchAlertDesign;
 }
 
+export interface TempestAlertScenePlacement {
+  sceneName: string;
+  position: 'top-left' | 'top-center' | 'top-right' | 'center-left' | 'center' | 'center-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'custom';
+  positionOffsetX: number;
+  positionOffsetY: number;
+  customPositionX: number;
+  customPositionY: number;
+  scale: number;
+}
+
 export interface TempestTwitchAlertDesign {
   preset: 'tempest' | 'minimal' | 'compact' | 'glass' | 'neon' | 'cinematic';
   layout: 'media-left' | 'media-right' | 'media-top' | 'media-overlay' | 'text-only' | 'media-only';
@@ -249,6 +259,7 @@ export interface TempestTwitchAlertDesign {
   customPositionX: number;
   customPositionY: number;
   scale: number;
+  scenePlacements?: TempestAlertScenePlacement[];
   entranceAnimation: 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom' | 'bounce' | 'flip' | 'glitch';
   exitAnimation: 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom';
   textAnimation: 'none' | 'pulse' | 'wiggle' | 'glow' | 'typewriter';

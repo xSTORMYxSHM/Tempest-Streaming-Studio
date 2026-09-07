@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.1.0 — Discord guests and scene-aware alerts
+
+- Upgraded the shared Twitch and Interaction Alert designer with automatic per-Broadcast-scene placement overrides, a global fallback, safe-edge and configurable grid snapping, exact horizontal/vertical centering, visible center guides, keyboard nudging with undo history, and a silent persistent **Show on Canvas** mode that updates the real Browser Source while positioning.
+- Added a first-class Discord Guests Browser Source with local idle/speaking PNG, GIF, JPG, WebP, or AVIF assignments; responsive layouts; speaking glow/scale; mute/deafen indicators; per-person names, colors, order, and visibility; live preview; persistence; and portable backup support.
+- Added a supported Discord Desktop RPC connector for selected-channel membership and speaking events, encrypted Windows OAuth storage and refresh, one-click authorization, automatic channel following, and a hosted token-exchange boundary that keeps the Discord client secret out of the desktop application.
+
 ## 1.0.1 — Signed updates and avatar controllers
 
 - Made Twitch onboarding a normal sign-in experience by bundling the official Public Tempest application Client ID; streamers no longer need a developer account, while self-hosters retain an Advanced custom Client ID override.

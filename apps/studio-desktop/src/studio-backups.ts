@@ -31,13 +31,14 @@ const safeDocuments = new Map([
   ['chatOverlay', ['bridge', 'chat-overlay.json']],
   ['emoteWall', ['bridge', 'emote-wall.json']],
   ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
+  ['discordVoiceOverlay', ['bridge', 'discord-voice-overlay.json']],
   ['panelDesign', ['twitch-panel-design.json']]
 ]);
 const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.mp4', '.webm']);
 const maximumAssetBytes = 96 * 1024 * 1024;
 const maximumTotalBytes = 500 * 1024 * 1024;
 const assetPrefix = 'tempest-backup-asset:';
-const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'registered asset file paths', 'application launch paths', 'playback history'];
+const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Discord OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'registered asset file paths', 'application launch paths', 'playback history'];
 const copy = <T>(value: T): T => structuredClone(value);
 
 async function readJsonIfAvailable(filePath: string): Promise<unknown | undefined> {
@@ -97,6 +98,14 @@ export async function buildTempestStudioBackup(input: { userDataDirectory: strin
         if (typeof variant.audioUri === 'string') variant.audioUri = await packUri(variant.audioUri);
         if (typeof variant.visualUri === 'string') variant.visualUri = await packUri(variant.visualUri);
       }
+    }
+  }
+  const discordVoiceDocument = documents.discordVoiceOverlay;
+  if (discordVoiceDocument && typeof discordVoiceDocument === 'object' && !Array.isArray(discordVoiceDocument)) {
+    const profiles = Array.isArray((discordVoiceDocument as Record<string, unknown>).profiles) ? (discordVoiceDocument as Record<string, unknown>).profiles as Array<Record<string, unknown>> : [];
+    for (const profile of profiles) {
+      if (typeof profile.idleUri === 'string') profile.idleUri = await packUri(profile.idleUri);
+      if (typeof profile.speakingUri === 'string') profile.speakingUri = await packUri(profile.speakingUri);
     }
   }
   return {

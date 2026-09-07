@@ -35,14 +35,16 @@ All starter entries are permanently marked `free: true` and intentionally contai
 The **Twitch Alerts** page owns follows, subscriptions, gift subscriptions, cheers/Bits, raids, and channel-point rewards. Every Twitch card keeps its sound, visual, duration, volume, accent, enablement, and preview controls together. **Customize Design** opens the full alert designer with:
 
 - Tempest HUD, Minimal, Compact, Glass, Neon, and Cinematic presets.
-- Five media/text dispositions, nine screen anchors with X/Y offsets, separate entrance/exit animations, and text animation.
+- Five media/text dispositions, nine screen anchors with X/Y offsets, configurable grid and safe-edge snapping, exact horizontal/vertical centering, separate entrance/exit animations, and text animation.
 - Headline, detail, and TTS templates using `{viewer}`, `{name}`, `{event}`, `{amount}`, `{message}`, `{reward}`, `{tier}`, `{months}`, and `{topic}`.
 - Viewer-message visibility, font family/size/weight, alignment, two text colors, glow/shadow, letter spacing, and independent text offsets.
 - Card width, background color/opacity, padding, border, corner radius, glow, media dimensions/fit/corners, and delayed media appearance.
 - Independent text appearance/duration, sound delay, and TTS volume/rate/pitch.
 - Locally scoped custom CSS for advanced styling. The Browser Source CSP blocks network loads and arbitrary JavaScript; custom CSS is applied with `textContent` and is cleared between alerts.
 
-**Save & Preview** persists the complete design and immediately runs a representative local event through the real Browser Source renderer.
+The **Placement applies to** control keeps one global default and optional per-scene overrides. Choose **Use current Broadcast scene** while that scene is active, arrange the alert, and save. When an alert starts, Studio reads Broadcast’s current scene and selects the matching override automatically; any scene without one receives the global placement. Styling, media, text, and timing remain shared, so scene overrides only store the anchor, X/Y offsets, custom coordinates, and overall size. Removing a scene placement returns that scene to the global default.
+
+**Show on Canvas** keeps a silent, non-expiring copy in the matching real Browser Source and updates it while the design changes. This positioning mode does not play audio, enter the alert queue, trigger reactions, or write alert history, and it clears automatically when the designer closes. **Save & Preview** persists the complete design and immediately runs a representative local event through the real Browser Source renderer.
 
 Use **New Interaction Alert** to add a locally persisted dance or routine with a generated namespaced ID and Warudo cue. Use **New Twitch Alert** to add a preset for another normalized Twitch event. Studio prevents duplicate IDs, duplicate Warudo cues, and duplicate Twitch event mappings. Bundled alerts can be disabled but not deleted; custom alerts expose a delete control that removes only the catalog entry, never its assigned media files.
 
@@ -63,7 +65,7 @@ Live Twitch Alerts and Interaction Alerts enter one bounded first-in, first-out 
 
 The Twitch Alerts and Interaction Alerts pages show the current item and waiting count. **Clear Waiting** removes the backlog without interrupting the alert already playing. **Emergency Restore** clears the active item and the complete backlog while also releasing workflows, stopping local fallback audio, and clearing both Browser Sources. Operator design previews remain immediate and outside the live queue so configuring an alert does not wait behind a long viewer interaction.
 
-Each Twitch Alert uses the active base-canvas profile in the designer. Drag the alert to any X/Y position in the Browser Source, drag its lower-right handle to scale the complete alert from 25% to 200%, or enter exact percentage coordinates. Anchor presets remain available for quick placement, while pixel nudges and card width provide fine control. Because placement is stored as percentages, it remains aligned when the broadcaster scales the base canvas to the output resolution.
+Each Twitch Alert uses the active base-canvas profile in the designer. Drag the alert to any X/Y position in the Browser Source, drag its lower-right handle to scale the complete alert from 25% to 200%, or enter exact percentage coordinates. Dragging can snap at 1%, 5%, or 10% intervals and magnetizes to the safe edges and center axes; dedicated buttons center either axis or both. Arrow keys nudge the selected alert by 1%, while Shift plus an arrow moves it by 5%. Anchor presets, pixel nudges, center guides, and card width provide additional control. Because placement is stored as percentages, it remains aligned when the broadcaster scales the base canvas to the output resolution.
 
 Each Browser Source opens its own local server-sent event connection to Studio. An accepted alert replaces only the current card in its matching source and plays its assigned image/GIF/video and audio at the saved volume. Interaction Alerts also include the viewer name and keep independent visual and performance durations. Studio reports each source's connection count and can preview or clear both outputs. Emergency Restore stops both Browser Source audio players and clears both cards immediately. When no Interaction Alert source is connected, Studio plays a local fallback copy for Interaction Alerts. These unauthenticated media routes accept loopback requests only and do not expose the authenticated Studio control API.
 

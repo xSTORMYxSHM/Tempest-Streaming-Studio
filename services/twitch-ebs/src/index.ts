@@ -49,6 +49,12 @@ export interface StartTwitchEbsOptions {
   viewerRequestsPerMinute?: number;
   channelRequestsPerMinute?: number;
   relayTimeoutMs?: number;
+  discordOAuth?: {
+    clientId: string;
+    clientSecret: string;
+    redirectUri?: string;
+    exchange?: (body: URLSearchParams) => Promise<Response>;
+  };
   tls?: {
     pfx: Buffer;
     passphrase?: string;
@@ -341,7 +347,26 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         return response.end();
       }
       if (request.method === 'GET' && requestUrl.pathname === '/health') {
-        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', installations: await installationStore.countActive(), studioConnections: studioSockets.size }, origin);
+        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', installations: await installationStore.countActive(), studioConnections: studioSockets.size, discordOAuth: options.discordOAuth ? 'configured' : 'disabled' }, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord/oauth/exchange') {
+        if (!options.discordOAuth) throw new HttpError(503, 'Discord authorization is not configured on this service.');
+        const remoteAddress = request.socket.remoteAddress || 'unknown';
+        const retryAfterMs = limiter.consume(`discord-oauth:${remoteAddress}`, 10);
+        if (retryAfterMs) throw new HttpError(429, 'Too many Discord authorization attempts. Please wait and try again.', { retryAfterMs });
+        const body = await readJson(request);
+        const clientId = String(body.clientId || '').trim();
+        const grantType = body.grantType === 'refresh_token' ? 'refresh_token' : body.grantType === 'authorization_code' ? 'authorization_code' : '';
+        if (!grantType || clientId !== options.discordOAuth.clientId) throw new HttpError(400, 'Discord authorization request is invalid.');
+        const credentialName = grantType === 'authorization_code' ? 'code' : 'refreshToken';
+        const credential = String(body[credentialName] || '').trim();
+        if (!credential || credential.length > 2048 || /[\r\n\0]/.test(credential)) throw new HttpError(400, `Discord ${grantType === 'authorization_code' ? 'authorization code' : 'refresh token'} is invalid.`);
+        const form = new URLSearchParams({ client_id: options.discordOAuth.clientId, client_secret: options.discordOAuth.clientSecret, grant_type: grantType, [grantType === 'authorization_code' ? 'code' : 'refresh_token']: credential });
+        if (grantType === 'authorization_code' && options.discordOAuth.redirectUri) form.set('redirect_uri', options.discordOAuth.redirectUri);
+        const discordResponse = await (options.discordOAuth.exchange || ((payload) => fetch('https://discord.com/api/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: payload })))(form);
+        const tokens = await discordResponse.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown };
+        if (!discordResponse.ok || typeof tokens.access_token !== 'string') throw new HttpError(502, typeof tokens.error_description === 'string' ? tokens.error_description : typeof tokens.message === 'string' ? tokens.message : 'Discord authorization exchange failed.');
+        return sendJson(response, 200, { accessToken: tokens.access_token, ...(typeof tokens.refresh_token === 'string' ? { refreshToken: tokens.refresh_token } : {}), ...(Number.isFinite(Number(tokens.expires_in)) ? { expiresIn: Number(tokens.expires_in) } : {}), ...(typeof tokens.scope === 'string' ? { scope: tokens.scope } : {}), ...(typeof tokens.token_type === 'string' ? { tokenType: tokens.token_type } : {}) }, origin);
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/installations/pair') {
         const remoteAddress = request.socket.remoteAddress || 'unknown';

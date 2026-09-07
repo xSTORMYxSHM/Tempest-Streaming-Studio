@@ -24,11 +24,12 @@ import { blackHoleWorkflow, soundAlertPerformanceWorkflow, twitchAlertReactionWo
 import { TwitchIntegrationGateway, type TwitchCredentialStore } from './twitch-integration';
 import { TempestSoundAlertCatalog } from './sound-alerts';
 import { TempestVisualAlertOverlay } from './visual-alerts';
-import { TempestTwitchVisualAlertCatalog } from './twitch-visual-alerts';
-export { TempestTwitchVisualAlertCatalog, validateTwitchAlertDesign } from './twitch-visual-alerts';
+import { TempestTwitchVisualAlertCatalog, resolveTwitchAlertDesignForScene, validateTwitchAlertDesign } from './twitch-visual-alerts';
+export { TempestTwitchVisualAlertCatalog, resolveTwitchAlertDesignForScene, validateTwitchAlertDesign } from './twitch-visual-alerts';
 import { TempestChatOverlay } from './chat-overlay';
 import { TempestEmoteWall } from './emote-wall';
 import { TempestTwitchExperiences } from './twitch-experiences';
+import { TempestDiscordVoiceOverlay } from './discord-voice-overlay';
 import { TempestAlertQueue, TempestAlertQueueItem } from './alert-queue';
 import { TempestAlertHistory } from './alert-history';
 import {
@@ -197,11 +198,21 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await emoteWall.initialize();
   const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory);
   await twitchExperiences.initialize();
+  const discordVoiceOverlay = new TempestDiscordVoiceOverlay(options.dataDirectory);
+  await discordVoiceOverlay.initialize();
   let alertQueue: TempestAlertQueue | undefined;
   let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
 
   let workflowEngine: TempestWorkflowEngine | null = null;
+
+  const activeBroadcastScene = (): string | undefined => {
+    const broadcast = [...clients.values()].find((client) => client.applicationId === 'com.tempestmainframe.tempest-broadcast' || client.capabilities.includes('broadcast.status'));
+    const inventory = broadcast?.status?.sourceInventory;
+    if (!inventory || typeof inventory !== 'object' || Array.isArray(inventory)) return undefined;
+    const sceneName = (inventory as Record<string, unknown>).currentScene;
+    return typeof sceneName === 'string' && sceneName.trim() ? sceneName.trim().slice(0, 120) : undefined;
+  };
 
   const health = (): TempestBridgeHealth => ({
     service: 'tempest-bridge',
@@ -364,7 +375,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       },
       execute: async () => {
         const reactionRun = await triggerTwitchAlertReaction(alert, event, source);
-        const activeAlert = twitchAlertOverlay.showTwitch(alert, event);
+        const sceneName = activeBroadcastScene();
+        const activeAlert = twitchAlertOverlay.showTwitch(alert, event, event.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         return { reactionRun, activeAlert };
       }
     });
@@ -447,7 +459,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           simulateMissing: request.simulateMissing,
           bypassCooldown: request.bypassCooldown
         });
-        const activeVisualAlert = visualAlerts.show(prepared.alert, request.viewerName, run.id, true);
+        const sceneName = activeBroadcastScene();
+        const activeVisualAlert = visualAlerts.show(prepared.alert, request.viewerName, run.id, true, resolveTwitchAlertDesignForScene(prepared.alert.design, sceneName), false, sceneName);
         workflowEngine!.recordExternalEvent('sound-alert.triggered', 'success', `${prepared.alert.name} started from the Alert Queue.`, {
           alertId: prepared.alert.id,
           eventId: prepared.eventId,
@@ -552,6 +565,28 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences/events') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
         twitchExperiences.connect(response);
+        return;
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/discord-voice') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Discord Voice overlay is available only on this computer.' });
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'text/html; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' https://cdn.discordapp.com https://media.discordapp.net;");
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        return response.end(discordVoiceOverlay.page());
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/discord-voice/events') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Discord Voice overlay is available only on this computer.' });
+        discordVoiceOverlay.connect(response);
+        return;
+      }
+      const discordVoiceMediaMatch = requestUrl.pathname.match(/^\/discord-voice\/media\/([^/]+)\/(idle|speaking)$/);
+      if (request.method === 'GET' && discordVoiceMediaMatch) {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Discord Voice media is available only on this computer.' });
+        try {
+          if (!await discordVoiceOverlay.serveMedia(decodeURIComponent(discordVoiceMediaMatch[1]), discordVoiceMediaMatch[2], response)) return sendJson(response, 404, { error: 'Discord participant media is unavailable.' });
+        } catch (error) { return sendJson(response, 502, { error: error instanceof Error ? error.message : 'Discord participant media could not be loaded.' }); }
         return;
       }
       const emoteMediaMatch = requestUrl.pathname.match(/^\/emote-wall\/media\/([a-f0-9]{32})$/);
@@ -702,6 +737,37 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return sendJson(response, 202, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`));
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/twitch-experiences/clear') { twitchExperiences.clear(); return sendJson(response, 200, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`)); }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/discord-voice') return sendJson(response, 200, discordVoiceOverlay.status(`${runtime.baseUrl}/discord-voice`));
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/settings') {
+        const settings = await discordVoiceOverlay.updateSettings(await readJson(request));
+        return sendJson(response, 200, { settings });
+      }
+      const discordVoiceProfileMatch = requestUrl.pathname.match(/^\/v1\/discord-voice\/profiles\/([^/]+)$/);
+      if (request.method === 'POST' && discordVoiceProfileMatch) {
+        const profile = await discordVoiceOverlay.updateProfile(decodeURIComponent(discordVoiceProfileMatch[1]), await readJson(request));
+        return sendJson(response, 200, { profile });
+      }
+      if (request.method === 'DELETE' && discordVoiceProfileMatch) {
+        const removed = await discordVoiceOverlay.removeProfile(decodeURIComponent(discordVoiceProfileMatch[1]));
+        return sendJson(response, removed ? 200 : 404, removed ? { removed: true } : { error: 'Discord participant design was not found.' });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/state') {
+        discordVoiceOverlay.setState(await readJson(request) as Record<string, unknown>);
+        return sendJson(response, 200, discordVoiceOverlay.status(`${runtime.baseUrl}/discord-voice`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/speaking') {
+        const body = await readJson(request) as { userId?: unknown; speaking?: unknown };
+        discordVoiceOverlay.setSpeaking(body.userId, body.speaking);
+        return sendJson(response, 202, { accepted: true });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/preview') {
+        discordVoiceOverlay.preview();
+        return sendJson(response, 202, discordVoiceOverlay.status(`${runtime.baseUrl}/discord-voice`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/discord-voice/clear') {
+        discordVoiceOverlay.clearPreview();
+        return sendJson(response, 200, discordVoiceOverlay.status(`${runtime.baseUrl}/discord-voice`));
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/visual-alerts/twitch') {
         return sendJson(response, 200, { alerts: twitchVisualAlerts.list() });
       }
@@ -720,6 +786,52 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const removed = await twitchVisualAlerts.remove(id);
         if (removed) broadcastSystemEvent('twitch-alert.configuration.removed', { id });
         return sendJson(response, removed ? 200 : 404, removed ? { removed: true, id } : { error: 'The Twitch Alert was not found.' });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/visual-alerts/position-preview/clear') {
+        const body = await readJson(request) as { kind?: unknown };
+        if (body.kind === 'interaction') visualAlerts.clearPositioning();
+        else if (body.kind === 'twitch') twitchAlertOverlay.clearPositioning();
+        else return sendJson(response, 400, { error: 'kind must be interaction or twitch.' });
+        return sendJson(response, 200, visualAlertOutputStatus());
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/visual-alerts/position-preview') {
+        const body = await readJson(request) as { kind?: unknown; alertId?: unknown; variantId?: unknown; design?: unknown; viewerName?: unknown; amount?: unknown; message?: unknown; sceneName?: unknown; useGlobalPlacement?: unknown };
+        const kind = body.kind === 'interaction' ? 'interaction' : body.kind === 'twitch' ? 'twitch' : undefined;
+        const alertId = typeof body.alertId === 'string' ? body.alertId : '';
+        if (!kind) return sendJson(response, 400, { error: 'kind must be interaction or twitch.' });
+        if (!alertId) return sendJson(response, 400, { error: 'alertId is required.' });
+        const design = validateTwitchAlertDesign(body.design);
+        const requestedSceneName = body.useGlobalPlacement === true ? undefined : typeof body.sceneName === 'string' && body.sceneName.trim() ? body.sceneName.trim().slice(0, 120) : activeBroadcastScene();
+        const sceneDesign = resolveTwitchAlertDesignForScene(design, requestedSceneName);
+        const viewerName = typeof body.viewerName === 'string' ? body.viewerName.trim().slice(0, 80) || 'Studio Operator' : 'Studio Operator';
+        if (kind === 'interaction') {
+          const alert = soundAlerts.find(alertId);
+          if (!alert) return sendJson(response, 404, { error: 'The Interaction Alert was not found.' });
+          const activeAlert = visualAlerts.show(alert, viewerName, `positioning:${alert.id}`, false, sceneDesign, true, requestedSceneName);
+          return sendJson(response, 202, { activeAlert, positioning: true, connectedClients: visualAlerts.status('').connectedClients });
+        }
+        const variantId = typeof body.variantId === 'string' && body.variantId ? body.variantId : undefined;
+        const alert = twitchVisualAlerts.resolveVariant(alertId, variantId);
+        if (!alert) return sendJson(response, 404, { error: variantId ? 'The Twitch Alert variant was not found.' : 'The Twitch Alert was not found.' });
+        const numericAmount = Number(body.amount);
+        const amount = Number.isFinite(numericAmount) ? Math.max(0, numericAmount) : 100;
+        const viewerMessage = typeof body.message === 'string' ? body.message.slice(0, 500) : '';
+        const previewEvent: TempestNormalizedTwitchEvent = {
+          schemaVersion: 1,
+          id: `positioning:${alert.id}`,
+          topic: alert.topic,
+          occurredAt: new Date().toISOString(),
+          source: 'twitch',
+          channel: { id: 'studio-positioning', displayName: 'Studio Positioning' },
+          viewer: { id: 'studio-operator', displayName: viewerName },
+          payload: alert.topic === 'viewer.cheer.received' ? { bits: amount, message: viewerMessage }
+            : alert.topic === 'viewer.raid.received' ? { fromBroadcasterId: 'studio-positioning', fromBroadcasterName: viewerName, viewers: amount }
+              : alert.topic === 'viewer.reward.redeemed' ? { rewardTitle: 'Sample Reward', rewardId: 'studio-positioning-reward', rewardCost: amount, input: viewerMessage }
+                : alert.topic === 'viewer.subscription.started' ? { isGift: alert.variant === 'gift', tier: '1000', cumulativeMonths: amount, message: viewerMessage }
+                  : { message: viewerMessage }
+        };
+        const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent, `positioning:${alert.id}`, sceneDesign, true, requestedSceneName);
+        return sendJson(response, 202, { activeAlert, positioning: true, connectedClients: twitchAlertOverlay.status('').connectedClients });
       }
       const twitchVisualPreviewMatch = requestUrl.pathname.match(/^\/v1\/visual-alerts\/twitch\/([^/]+)\/preview$/);
       if (request.method === 'POST' && twitchVisualPreviewMatch) {
@@ -744,7 +856,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
                 : alert.topic === 'viewer.subscription.started' ? { isGift: alert.variant === 'gift', tier: selectedCondition?.subscriptionTier || '1000', cumulativeMonths: selectedCondition?.minimumMonths ?? selectedCondition?.maximumMonths ?? 3 }
                   : {}
         };
-        const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent);
+        const sceneName = activeBroadcastScene();
+        const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent, previewEvent.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         const reactionRun = await triggerTwitchAlertReaction(alert, previewEvent, 'studio.simulator');
         const previewTime = new Date().toISOString();
         const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri ? 'browser-source' : 'none', browserClients: twitchAlertOverlay.status('').connectedClients, preview: true } };
@@ -763,7 +876,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (!alert) return sendJson(response, 404, { error: 'The Visual Alert was not found.' });
         const body = await readJson(request) as { viewerName?: unknown };
         const viewerName = typeof body.viewerName === 'string' ? body.viewerName.slice(0, 80) : 'Studio Operator';
-        const activeAlert = visualAlerts.show(alert, viewerName, globalThis.crypto.randomUUID());
+        const sceneName = activeBroadcastScene();
+        const activeAlert = visualAlerts.show(alert, viewerName, globalThis.crypto.randomUUID(), false, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         const previewTime = new Date().toISOString();
         const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'interaction', alertId: alert.id, name: alert.name, source: 'studio.visual-preview', durationMs: alert.visualDurationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: 'none', browserClients: visualAlerts.status('').connectedClients, preview: true } };
         alertHistory.started(previewItem);
@@ -1147,6 +1261,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       chatOverlay.close();
       emoteWall.close();
       twitchExperiences.close();
+      discordVoiceOverlay.close();
       twitchGateway.close();
       workflowEngine?.close();
       for (const client of clients.values()) client.socket.close(1001, 'Tempest Bridge shutting down');
