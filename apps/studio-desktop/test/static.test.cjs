@@ -263,6 +263,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(main, /quitAndInstall/);
   assert.match(preload, /studio:update-status/);
   assert.match(styles, /body\.streamer-privacy \[data-sensitive\]/);
+  assert.match(styles, /min\(100%,520px\)/);
+  assert.match(styles, /discord-participant-card>\.chat-overlay-actions/);
   assert.match(renderer, /getAppInfo/);
   assert.match(renderer, /exportStudioDiagnostics/);
   assert.match(main, /studio:export-diagnostics/);

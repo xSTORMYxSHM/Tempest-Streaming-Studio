@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.2.1');
+  assert.equal(health.productVersion, '1.2.2');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);

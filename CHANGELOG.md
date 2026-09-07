@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.2 — Discord Guest card layout fix
+
+- Fixed Discord Guest profile cards becoming clipped when several saved people were shown at once. Cards now use a readable responsive width and wrap their actions cleanly.
+
 ## 1.2.1 — Discord Guest profile controls
 
 - Discord Guests profiles now show their assigned artwork directly in Studio, support separate idle, speaking, muted, and deafened images, and can be dragged into per-person positions on a canvas-sized preview. The streamer's own profile can also be hidden without affecting the other guests.
