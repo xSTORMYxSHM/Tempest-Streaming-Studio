@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+## 1.2.0 — Official Discord sign-in and saved guests
+
 - Discord Guests now keeps a persistent, editable guest library keyed by Discord User ID. Every detected voice participant remains available for offline idle/speaking image setup, streamers can add a profile by User ID before the guest joins, and reset/forget controls make the saved list manageable without ever displaying offline guests in the Browser Source.
+- Bundled the official Tempest Discord application ID and connected Studio to the hosted Tempest Signal token exchange, so supported Discord Desktop users can authorize without creating their own Discord developer application or placing a client secret on their computer.
 
 ## 1.1.1 — Custom Twitch Experiences
 
