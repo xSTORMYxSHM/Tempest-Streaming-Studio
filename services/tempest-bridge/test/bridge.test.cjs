@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.2.3');
+  assert.equal(health.productVersion, '1.2.4');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -244,6 +244,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /Tempest Studio Visual Alerts/);
   assert.match(overlayMarkup, /new EventSource\("\/visual-alerts\/interactions\/events"\)/);
   assert.match(overlayMarkup, /id="alertAudio"/);
+  assert.match(overlayMarkup, /runtimeStopTimer=setTimeout\(stopAudio/);
   assert.match(overlayMarkup, /id="customStyle"/);
   assert.match(overlayMarkup, /id="placement"/);
   assert.match(overlayMarkup, /speechSynthesis/);
@@ -261,7 +262,8 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(overlayStatus.twitch.state, 'ready');
   assert.equal(overlayStatus.interaction.activeAlert.name, 'Hype Pulse');
   assert.equal(overlayStatus.interaction.activeAlert.viewerName, 'A viewer');
-  assert.equal(overlayStatus.interaction.activeAlert.durationMs, 2000);
+  assert.equal(overlayStatus.interaction.activeAlert.durationMs, 1000);
+  assert.equal(overlayStatus.interaction.activeAlert.maximumRuntimeMs, 1000);
   assert.equal(overlayStatus.interaction.activeAlert.audioUrl, '/visual-alerts/audio/sound-alert.hype-pulse');
   assert.equal(overlayStatus.interaction.activeAlert.audioDurationMs, 1000);
   assert.equal(overlayStatus.interaction.activeAlert.volume, 0.5);
@@ -286,12 +288,11 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   });
   assert.equal(browserRouted.status, 202);
   const browserRoutedResult = await browserRouted.json();
-  assert.equal(browserRoutedResult.queued, true);
-  assert.equal(browserRoutedResult.queuePosition, 1);
+  assert.equal(browserRoutedResult.queued, false);
+  assert.equal(browserRoutedResult.queuePosition, 0);
   const queuedStatus = await fetch(`${runtime.baseUrl}/v1/alert-queue`, { headers }).then((response) => response.json());
   assert.equal(queuedStatus.active.alertId, 'sound-alert.hype-pulse');
-  assert.equal(queuedStatus.waitingCount, 1);
-  assert.equal(queuedStatus.waiting[0].alertId, 'sound-alert.hype-pulse');
+  assert.equal(queuedStatus.waitingCount, 0);
   assert.equal(playback.length, 1, 'connected Browser Source suppresses the duplicate desktop audio copy');
   await browserSourceEvents.body.cancel();
   const separateAudioOverride = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
@@ -302,7 +303,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
 
   const stopped = await fetch(`${runtime.baseUrl}/v1/safety/stop`, { method: 'POST', headers, body: '{}' });
   assert.equal(stopped.status, 200);
-  assert.equal((await stopped.json()).clearedQueuedAlerts, 2);
+  assert.equal((await stopped.json()).clearedQueuedAlerts, 1);
   assert.equal(playback.at(-1).phase, 'stop-all');
   const clearedOverlay = await fetch(`${runtime.baseUrl}/v1/visual-alerts`, { headers }).then((response) => response.json());
   assert.equal(clearedOverlay.state, 'ready');

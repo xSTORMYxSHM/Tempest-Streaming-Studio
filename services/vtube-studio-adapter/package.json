@@ -1,6 +1,6 @@
 {
   "name": "@tempest/vtube-studio-adapter",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "description": "Local Tempest Bridge adapter for VTube Studio hotkeys.",
   "main": "dist/index.js",

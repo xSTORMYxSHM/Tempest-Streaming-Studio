@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   disconnectDiscordVoice: () => ipcRenderer.invoke('studio:disconnect-discord-voice'),
   forgetDiscordVoice: () => ipcRenderer.invoke('studio:forget-discord-voice'),
   selectDiscordVoiceImage: () => ipcRenderer.invoke('studio:select-discord-voice-image'),
+  exportDiscordProfile: (input: { profile: unknown }) => ipcRenderer.invoke('studio:export-discord-profile', input),
+  importDiscordProfile: () => ipcRenderer.invoke('studio:import-discord-profile'),
   getLocalExtensionStatus: () => ipcRenderer.invoke('studio:get-local-extension-status'),
   getHostedExtensionStatus: () => ipcRenderer.invoke('studio:get-hosted-extension-status'),
   pairHostedExtension: (settings: { ebsBaseUrl: string }) => ipcRenderer.invoke('studio:pair-hosted-extension', settings),

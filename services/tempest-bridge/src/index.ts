@@ -439,7 +439,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       alertId: prepared.alert.id,
       name: prepared.alert.name,
       source: request.source,
-      durationMs: Math.max(prepared.alert.durationMs, prepared.alert.visualDurationMs),
+      durationMs: prepared.alert.durationMs,
       diagnostics: {
         viewerName: request.viewerName,
         audioAssigned: Boolean(prepared.alert.audioUri),

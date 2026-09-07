@@ -23,6 +23,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /Interaction audio routed off the VOD track/);
   assert.match(renderer, /visual-alerts\/interactions/);
   assert.match(renderer, /visual-alerts\/twitch/);
+  assert.match(renderer, /Maximum runtime/);
+  assert.match(html, /Hard-stops sound, visuals, TTS/);
   assert.match(renderer, /\/chat-overlay/);
   assert.match(renderer, /\/emote-wall/);
   assert.match(html, /Emote Wall/);
@@ -58,6 +60,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(main, /discord-rpc-credentials\.bin/);
   assert.match(preload, /studio:connect-discord-voice/);
   assert.match(preload, /studio:select-discord-voice-image/);
+  assert.match(main, /studio:export-discord-profile/);
+  assert.match(main, /studio:import-discord-profile/);
+  assert.match(preload, /studio:export-discord-profile/);
+  assert.match(preload, /studio:import-discord-profile/);
+  assert.match(renderer, /Export Profile/);
+  assert.match(html, /Import Guest Profile/);
   assert.match(html, /Hype Train Takeover, Raid Portal \+ Goals/);
   assert.match(html, /id="twitchExperienceRaidDuration"/);
   assert.match(html, /Mainframe Breach/);

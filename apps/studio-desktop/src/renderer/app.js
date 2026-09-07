@@ -498,20 +498,21 @@
     const visualOptions = inventory.visual.map((name) => `<option value="${escapeHtml(name)}"></option>`).join('');
     grid.innerHTML = `<datalist id="broadcastAudioSourceOptions">${audioOptions}</datalist><datalist id="visualAlertBroadcastSourceOptions">${visualOptions}</datalist>` + alerts.map((alert) => `<article class="sound-alert-card interaction-alert-card ${alert.enabled ? '' : 'disabled'}" style="--alert-accent:${escapeHtml(alert.accent || '#54f2eb')}">
       <div class="sound-alert-head"><div><span class="copyable-value">${escapeHtml(alert.id)}${copyButton(alert.id, 'interaction alert ID')}</span><h3>${escapeHtml(alert.name)}</h3></div><div class="card-head-actions"><b>${alert.enabled ? (alert.custom ? 'CUSTOM' : 'READY') : 'OFF'}</b>${alert.custom ? `<button class="card-delete-button" data-delete-interaction-alert="${escapeHtml(alert.id)}" title="Delete custom Interaction Alert" aria-label="Delete ${escapeHtml(alert.name)}">×</button>` : ''}</div></div>
-      <div class="sound-alert-cue"><span>${alert.warudoEnabled || alert.vtubeStudioEnabled ? `${alert.warudoEnabled ? 'WARUDO' : ''}${alert.warudoEnabled && alert.vtubeStudioEnabled ? ' + ' : ''}${alert.vtubeStudioEnabled ? 'VTUBE STUDIO' : ''} + OVERLAY` : 'OVERLAY'}</span><span>${durationLabel(alert.visualDurationMs)}</span></div>
+      <div class="sound-alert-cue"><span>${alert.warudoEnabled || alert.vtubeStudioEnabled ? `${alert.warudoEnabled ? 'WARUDO' : ''}${alert.warudoEnabled && alert.vtubeStudioEnabled ? ' + ' : ''}${alert.vtubeStudioEnabled ? 'VTUBE STUDIO' : ''} + OVERLAY` : 'OVERLAY'}</span><span>MAX ${durationLabel(alert.durationMs)}</span></div>
       <div class="alert-media-summary">
         <div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(alert.audioUri))}</strong></div>
         <div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(alert.visualUri))}</strong></div>
       </div>
       <div class="sound-alert-settings interaction-primary-settings">
-        <label>Display duration <span><input data-visual-alert-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round((alert.visualDurationMs || 6000) / 1000)}" /> sec</span></label>
+        <label title="Hard stop for sound, visuals, TTS, avatar actions, and queue playback">Maximum runtime <span><input data-alert-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label>
+        <label title="The visual can leave earlier, but never exceeds maximum runtime">Visual duration <span><input data-visual-alert-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round((alert.visualDurationMs || 6000) / 1000)}" /> sec</span></label>
         <label>Volume <span><input data-alert-volume="${escapeHtml(alert.id)}" type="number" min="0" max="100" value="${Math.round(alert.volume * 100)}" /> %</span></label>
         <label>Alert accent <input data-visual-alert-accent="${escapeHtml(alert.id)}" type="color" value="${escapeHtml(alert.accent || '#54f2eb')}" /></label>
       </div>
       <label class="interaction-integration-toggle compact"><input data-alert-warudo-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.warudoEnabled ? 'checked' : ''} /><span><strong>Use Warudo</strong><small>Trigger an avatar performance with this alert.</small></span></label>
       <div class="interaction-integration-options card-options" data-alert-warudo-options="${escapeHtml(alert.id)}" ${alert.warudoEnabled ? '' : 'hidden'}>
         <span>WARUDO PERFORMANCE</span>
-        <div class="sound-alert-cue"><span class="copyable-value"><code>${escapeHtml(alert.cue)}</code>${copyButton(alert.cue, 'Warudo cue')}</span><label>Length <span><input data-alert-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label></div>
+        <div class="sound-alert-cue"><span class="copyable-value"><code>${escapeHtml(alert.cue)}</code>${copyButton(alert.cue, 'Warudo cue')}</span><small>Releases at maximum runtime.</small></div>
       </div>
       <label class="interaction-integration-toggle compact"><input data-alert-vtube-studio-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.vtubeStudioEnabled ? 'checked' : ''} /><span><strong>Use VTube Studio</strong><small>Trigger a Live2D model hotkey with this alert.</small></span></label>
       <div class="interaction-integration-options card-options" data-alert-vtube-studio-options="${escapeHtml(alert.id)}" ${alert.vtubeStudioEnabled ? '' : 'hidden'}>
@@ -602,7 +603,7 @@
         <div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(alert.visualUri))}</strong></div>
       </div>
       <div class="sound-alert-settings">
-        <label>Display duration <span><input data-twitch-visual-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label>
+        <label title="Hard stop for sound, visuals, TTS, reactions, and queue playback">Maximum runtime <span><input data-twitch-visual-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label>
         <label>Volume <span><input data-twitch-alert-volume="${escapeHtml(alert.id)}" type="number" min="0" max="100" value="${Math.round((alert.volume ?? 0.8) * 100)}" /> %</span></label>
         <label>Alert accent <input data-twitch-visual-accent="${escapeHtml(alert.id)}" type="color" value="${escapeHtml(alert.accent || '#54f2eb')}" /></label>
       </div>
@@ -752,7 +753,7 @@
         <div class="discord-participant-head">${discordImagePreview(currentImage, participant.displayName, 'discord-participant-avatar')}<div><span>${participant.self ? 'YOU · ' : ''}${participant.bot ? 'BOT · ' : ''}${escapeHtml(discordGuestStateLabel(participant))}</span><h3>${escapeHtml(participant.displayName)}</h3><small class="discord-user-id">Discord ID ${escapeHtml(participant.id)}</small></div></div>
         <div class="discord-profile-fields"><label>Overlay name<input data-discord-profile-name="${escapeHtml(participant.id)}" maxlength="100" value="${escapeHtml(profile.displayName || '')}" placeholder="${escapeHtml(participant.displayName)}" /></label><label>Order<input data-discord-profile-order="${escapeHtml(participant.id)}" type="number" min="0" max="999" value="${profile.order ?? 500}" /></label><label>Accent<input data-discord-profile-accent="${escapeHtml(participant.id)}" type="color" value="${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}" /></label><label>Canvas X<input data-discord-profile-x="${escapeHtml(participant.id)}" type="number" min="0" max="100" step="0.1" value="${position.x.toFixed(1)}" /><small>percent</small></label><label>Canvas Y<input data-discord-profile-y="${escapeHtml(participant.id)}" type="number" min="0" max="100" step="0.1" value="${position.y.toFixed(1)}" /><small>percent</small></label><label class="checkbox-label"><input data-discord-profile-visible="${escapeHtml(participant.id)}" type="checkbox" ${profile.visible === false ? '' : 'checked'} /> ${participant.self ? 'Show streamer profile on canvas' : 'Show this person'}</label></div>
         <div class="discord-media-slots">${discordMediaSlot(participant, profile, 'idle', 'IDLE IMAGE', 'Default Discord avatar')}${discordMediaSlot(participant, profile, 'speaking', 'SPEAKING IMAGE', 'Falls back to idle')}${discordMediaSlot(participant, profile, 'mute', 'MUTE IMAGE', 'Falls back to idle')}${discordMediaSlot(participant, profile, 'deafen', 'DEAFEN IMAGE', 'Falls back to mute or idle')}</div>
-        <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button>${participant.self && profile.visible !== false ? `<button data-discord-profile-hide-self="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Hide Streamer</button>` : ''}<button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button">Reset Style</button><button data-discord-profile-forget="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Forget User</button></div>
+        <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button><button data-discord-profile-export="${escapeHtml(participant.id)}" class="secondary-button">Export Profile</button>${participant.self && profile.visible !== false ? `<button data-discord-profile-hide-self="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Hide Streamer</button>` : ''}<button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button">Reset Style</button><button data-discord-profile-forget="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Forget User</button></div>
       </article>`;
     }).join('') : 'Connect Discord, add someone by User ID, or load sample guests to assign images.';
     guests.forEach((participant) => document.querySelector(`[data-discord-profile-card="${CSS.escape(participant.id)}"]`)?.style.setProperty('--participant-accent', discordProfileFor(participant.id).accent || configuration.speakingAccent || '#54f2eb'));
@@ -2226,7 +2227,7 @@
     list.innerHTML = variants.length ? variants.map((variant) => `<article class="twitch-variant-card ${variant.enabled ? '' : 'disabled'}" style="--alert-accent:${escapeHtml(variant.accent)}">
       <div class="variant-card-head"><div><span>PRIORITY ${variant.priority}</span><h3>${escapeHtml(variant.name)}</h3><p>${escapeHtml(variantConditionSummary(variant.condition))}</p></div><b>${variant.enabled ? 'ACTIVE' : 'OFF'}</b></div>
       <div class="alert-media-summary"><div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(variant.audioUri))}</strong></div><div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(variant.visualUri))}</strong></div></div>
-      <div class="variant-settings-grid"><label>Priority<input data-variant-priority="${escapeHtml(variant.id)}" type="number" min="-1000" max="1000" value="${variant.priority}" /></label><label>Duration<input data-variant-duration="${escapeHtml(variant.id)}" type="number" min="1" max="60" value="${Math.round(variant.durationMs / 1000)}" /><small>seconds</small></label><label>Volume<input data-variant-volume="${escapeHtml(variant.id)}" type="number" min="0" max="100" value="${Math.round(variant.volume * 100)}" /><small>percent</small></label><label>Accent<input data-variant-accent="${escapeHtml(variant.id)}" type="color" value="${escapeHtml(variant.accent)}" /></label></div>
+      <div class="variant-settings-grid"><label>Priority<input data-variant-priority="${escapeHtml(variant.id)}" type="number" min="-1000" max="1000" value="${variant.priority}" /></label><label>Maximum runtime<input data-variant-duration="${escapeHtml(variant.id)}" type="number" min="1" max="60" value="${Math.round(variant.durationMs / 1000)}" /><small>seconds</small></label><label>Volume<input data-variant-volume="${escapeHtml(variant.id)}" type="number" min="0" max="100" value="${Math.round(variant.volume * 100)}" /><small>percent</small></label><label>Accent<input data-variant-accent="${escapeHtml(variant.id)}" type="color" value="${escapeHtml(variant.accent)}" /></label></div>
       <div class="variant-card-actions"><button type="button" data-variant-edit="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Edit Rule</button><button type="button" data-variant-save="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Save Settings</button><button type="button" data-variant-design="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Design</button><button type="button" data-variant-audio="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Sound</button><button type="button" data-variant-visual="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Visual</button><button type="button" data-variant-toggle="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">${variant.enabled ? 'Disable' : 'Enable'}</button><button type="button" class="primary-button" data-variant-preview="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Preview</button><button type="button" class="danger-outline" data-variant-delete="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Delete</button></div>
     </article>`).join('') : 'No variants yet. The base alert handles every event.';
   }
@@ -3386,6 +3387,47 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function exportDiscordVoiceProfile(userId) {
+    const participant = (state.discordVoice?.guests || []).find((entry) => entry.id === userId);
+    if (!participant) return toast('The Discord guest profile could not be found.', true);
+    const saved = discordProfileFor(userId);
+    try {
+      const result = await window.tempestStudio.exportDiscordProfile({ profile: {
+        userId,
+        displayName: saved.displayName || participant.displayName,
+        accent: saved.accent || state.discordVoice?.settings?.speakingAccent || '#54F2EB',
+        idleUri: saved.idleUri,
+        speakingUri: saved.speakingUri,
+        muteUri: saved.muteUri,
+        deafenUri: saved.deafenUri
+      } });
+      if (result) toast(`${saved.displayName || participant.displayName} exported with ${result.assetCount} embedded reactive image${result.assetCount === 1 ? '' : 's'}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function importDiscordVoiceProfile() {
+    try {
+      const imported = await window.tempestStudio.importDiscordProfile();
+      if (!imported) return;
+      const profile = imported.profile;
+      const existing = (state.discordVoice?.profiles || []).find((entry) => entry.userId === profile.userId);
+      if (existing && !confirm(`${profile.displayName} already has a saved profile in Studio. Replace its name, accent, and reactive images with the imported profile? Canvas placement and visibility will stay unchanged.`)) return;
+      await api(`/v1/discord-voice/profiles/${encodeURIComponent(profile.userId)}`, { method: 'POST', body: {
+        displayName: profile.displayName,
+        accent: profile.accent || '#54F2EB',
+        idleUri: profile.idleUri || null,
+        speakingUri: profile.speakingUri || null,
+        muteUri: profile.muteUri || null,
+        deafenUri: profile.deafenUri || null
+      } });
+      discordProfileDrafts.delete(profile.userId);
+      state.discordVoice = await api('/v1/discord-voice');
+      renderDiscordVoice({ force: true });
+      showSection('discordvoice');
+      toast(`${profile.displayName} imported with ${imported.assetCount} verified reactive image${imported.assetCount === 1 ? '' : 's'}. The profile will match Discord ID ${profile.userId} automatically.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function addDiscordVoiceProfile() {
     const input = $('#discordGuestUserId');
     const userId = input.value.trim();
@@ -3802,6 +3844,8 @@
     if (button.dataset.discordVoiceClear) return clearDiscordVoicePreview();
     if (button.dataset.discordProfileAdd) return addDiscordVoiceProfile();
     if (button.dataset.discordProfileSave) return saveDiscordVoiceProfile(button.dataset.discordProfileSave);
+    if (button.dataset.discordProfileExport) return exportDiscordVoiceProfile(button.dataset.discordProfileExport);
+    if (button.dataset.importDiscordProfile) return importDiscordVoiceProfile();
     if (button.dataset.discordProfileHideSelf) return hideDiscordStreamerProfile(button.dataset.discordProfileHideSelf);
     if (button.dataset.discordProfileReset) return resetDiscordVoiceProfile(button.dataset.discordProfileReset);
     if (button.dataset.discordProfileForget) return forgetDiscordVoiceProfile(button.dataset.discordProfileForget);

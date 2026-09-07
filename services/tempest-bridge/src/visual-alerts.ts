@@ -9,6 +9,7 @@ export interface TempestVisualAlertEvent {
   accent: string;
   effect: string;
   durationMs: number;
+  maximumRuntimeMs: number;
   mediaUrl?: string;
   mediaKind?: 'image' | 'video';
   audioUrl?: string;
@@ -56,15 +57,15 @@ const visualAlertPage = String.raw`<!doctype html>
     (()=>{
       const root=document.documentElement,body=document.body,stage=document.getElementById('stage'),placement=document.getElementById('placement'),card=document.getElementById('alert'),media=document.getElementById('media'),copy=document.getElementById('copy'),eyebrow=document.getElementById('eyebrow'),name=document.getElementById('name'),detail=document.getElementById('detail'),message=document.getElementById('message'),customHtml=document.getElementById('customHtml'),audio=document.getElementById('alertAudio'),customStyle=document.getElementById('customStyle');
       const fallback={preset:'tempest',layout:'media-left',position:'bottom-center',positionOffsetX:0,positionOffsetY:0,customPositionX:50,customPositionY:82,scale:1,entranceAnimation:'slide-up',exitAnimation:'fade',textAnimation:'glow',headlineTemplate:'{event}',detailTemplate:'Triggered by {viewer}',showEyebrow:true,showHeadline:true,showDetail:true,showViewerMessage:true,fontFamily:'Inter',fontSize:42,eyebrowFontSize:13,detailFontSize:21,messageFontSize:16,fontWeight:800,textAlign:'left',textColor:'#F5FBFF',secondaryTextColor:'#A9BDC7',eyebrowTextColor:'#54F2EB',messageTextColor:'#F5FBFF',textShadow:.35,letterSpacing:0,textOffsetX:0,textOffsetY:0,textPositionX:50,textPositionY:72,eyebrowPositionX:50,eyebrowPositionY:52,headlinePositionX:50,headlinePositionY:63,detailPositionX:50,detailPositionY:74,messagePositionX:50,messagePositionY:84,eyebrowMaxWidth:1000,headlineMaxWidth:1800,detailMaxWidth:1600,messageMaxWidth:1600,cardWidth:900,backgroundColor:'#050C13',backgroundOpacity:.94,borderWidth:1,borderRadius:24,padding:22,cardShadow:.55,mediaWidth:320,mediaHeight:210,mediaFit:'contain',mediaScale:1,mediaPositionX:50,mediaPositionY:50,mediaOpacity:1,mediaBorderRadius:16,mediaDelayMs:0,textDelayMs:0,textDurationMs:0,soundDelayMs:0,ttsEnabled:false,ttsTemplate:'{viewer}: {event}',ttsVolume:.8,ttsRate:1,ttsPitch:1,customHtml:'',customCss:'',customJavaScript:''};
-      let timers=[],revision=0;
+      let timers=[],revision=0,runtimeStopTimer;
       function later(fn,delay){const timer=setTimeout(fn,Math.max(0,Number(delay)||0));timers.push(timer);return timer}function cancelTimers(){for(const timer of timers)clearTimeout(timer);timers=[]}
-      function stopAudio(){audio.pause();audio.removeAttribute('src');audio.load();if('speechSynthesis'in window)window.speechSynthesis.cancel()}
+      function stopAudio(){if(runtimeStopTimer){clearTimeout(runtimeStopTimer);runtimeStopTimer=undefined}audio.pause();audio.removeAttribute('src');audio.load();if('speechSynthesis'in window)window.speechSynthesis.cancel()}
       function rgba(hex,opacity){const clean=String(hex||'#050C13').replace('#','');const number=parseInt(clean,16);return 'rgba('+((number>>16)&255)+','+((number>>8)&255)+','+(number&255)+','+Math.max(0,Math.min(1,Number(opacity)))+')'}
       function template(value,variables){return String(value||'').replace(/\{([a-z]+)\}/gi,(_,key)=>variables[String(key).toLowerCase()]??'')}
       function cleanupCustomCode(){if(typeof window.__tempestAlertCleanup==='function'){try{window.__tempestAlertCleanup()}catch(error){console.error('Tempest custom alert cleanup failed',error)}}window.__tempestAlertCleanup=undefined;window.TempestAlertContext=undefined}
       function clear(options){revision++;cancelTimers();if(options&&options.stopAudio)stopAudio();cleanupCustomCode();card.style.removeProperty('transform');card.classList.add('leaving');card.classList.remove('visible');copy.classList.remove('ready');media.classList.remove('ready');later(()=>{if(!card.classList.contains('visible')){media.replaceChildren();customHtml.replaceChildren();card.classList.remove('leaving');customStyle.textContent=''}},560)}
       function attachMedia(data,current){if(revision!==current)return;media.replaceChildren();if(data.mediaUrl){const element=document.createElement(data.mediaKind==='video'?'video':'img');element.src=data.mediaUrl+(data.mediaUrl.includes('?')?'&':'?')+'run='+encodeURIComponent(data.runId||Date.now());if(element.tagName==='VIDEO'){element.autoplay=true;element.loop=true;element.muted=true;element.playsInline=true}media.append(element)}media.classList.add('ready')}
-      function playAudio(data,current){if(revision!==current||!data.audioUrl)return;audio.src=data.audioUrl+(data.audioUrl.includes('?')?'&':'?')+'run='+encodeURIComponent(data.runId||Date.now());audio.volume=Math.max(0,Math.min(1,Number(data.volume)||0));audio.play().catch(()=>{});later(()=>{if(revision===current)stopAudio()},Math.max(1000,Number(data.audioDurationMs)||60000))}
+      function playAudio(data,current){if(revision!==current||!data.audioUrl)return;audio.src=data.audioUrl+(data.audioUrl.includes('?')?'&':'?')+'run='+encodeURIComponent(data.runId||Date.now());audio.volume=Math.max(0,Math.min(1,Number(data.volume)||0));audio.play().catch(()=>{})}
       function speak(text,design,current){if(revision!==current||!design.ttsEnabled||!text||!('speechSynthesis'in window))return;const utterance=new SpeechSynthesisUtterance(text);utterance.volume=design.ttsVolume;utterance.rate=design.ttsRate;utterance.pitch=design.ttsPitch;window.speechSynthesis.speak(utterance)}
       function runCustomCode(source,data,variables){cleanupCustomCode();if(!source)return;window.TempestAlertContext={data,variables,elements:{stage,placement,card,media,copy,eyebrow,name,detail,message,customHtml,audio}};const runner=document.createElement('script');runner.textContent='try{window.__tempestAlertCleanup=(()=>{const context=window.TempestAlertContext;const data=context.data;const variables=context.variables;const elements=context.elements;'+source+'\n})()||undefined}catch(error){console.error("Tempest custom alert JavaScript failed",error)}';document.body.append(runner);runner.remove()}
       function show(data){
@@ -73,7 +74,7 @@ const visualAlertPage = String.raw`<!doctype html>
         body.dataset.position=design.position;body.dataset.positioning=data.positioning?'true':'false';stage.classList.toggle('custom',design.position==='custom');placement.style.setProperty('--stage-x',design.positionOffsetX+'px');placement.style.setProperty('--stage-y',design.positionOffsetY+'px');placement.style.setProperty('--custom-x',design.customPositionX+'%');placement.style.setProperty('--custom-y',design.customPositionY+'%');placement.style.setProperty('--alert-scale',design.scale);card.dataset.preset=design.preset;card.dataset.layout=design.layout;card.dataset.enter=design.entranceAnimation;card.dataset.exit=design.exitAnimation;copy.dataset.textAnimation=design.textAnimation;customStyle.textContent=design.customCss||'';
         eyebrow.textContent=data.alertId&&data.alertId.startsWith('twitch.')?'Tempest Twitch alert':'Tempest Interaction alert';name.textContent=template(design.headlineTemplate,variables)||data.name||'Alert';detail.textContent=template(design.detailTemplate,variables);message.textContent=design.showViewerMessage?variables.message||'': '';eyebrow.hidden=!design.showEyebrow;name.hidden=!design.showHeadline;detail.hidden=!design.showDetail;message.hidden=!design.showViewerMessage;media.replaceChildren();customHtml.innerHTML=template(design.customHtml,variables);media.classList.remove('ready');copy.classList.remove('ready');card.style.removeProperty('transform');card.classList.remove('leaving','visible');runCustomCode(design.customJavaScript,data,variables);
         if(data.positioning){attachMedia(data,current);copy.classList.add('ready');card.classList.add('visible');card.style.transform='none';return}
-        later(()=>attachMedia(data,current),design.mediaDelayMs);later(()=>{if(revision===current)copy.classList.add('ready')},design.textDelayMs);if(design.textDurationMs>0)later(()=>{if(revision===current)copy.classList.remove('ready')},design.textDelayMs+design.textDurationMs);later(()=>playAudio(data,current),design.soundDelayMs);later(()=>speak(template(design.ttsTemplate,variables),design,current),design.soundDelayMs);
+        runtimeStopTimer=setTimeout(stopAudio,Math.max(1000,Number(data.maximumRuntimeMs)||Number(data.durationMs)||6000));later(()=>attachMedia(data,current),design.mediaDelayMs);later(()=>{if(revision===current)copy.classList.add('ready')},design.textDelayMs);if(design.textDurationMs>0)later(()=>{if(revision===current)copy.classList.remove('ready')},design.textDelayMs+design.textDurationMs);later(()=>playAudio(data,current),design.soundDelayMs);later(()=>speak(template(design.ttsTemplate,variables),design,current),design.soundDelayMs);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{card.classList.add('visible');card.style.transform='none'}));later(()=>{if(revision===current)clear({stopAudio:false})},Math.max(1000,Number(data.durationMs)||6000));
       }
       const events=new EventSource(__TEMPEST_ALERT_EVENTS__);events.addEventListener('show',event=>show(JSON.parse(event.data)));events.addEventListener('clear',event=>{let data={};try{data=JSON.parse(event.data||'{}')}catch{}clear({stopAudio:data.stopAudio!==false})});events.onerror=()=>{};
@@ -116,7 +117,8 @@ export class TempestVisualAlertOverlay {
       viewerName: viewerName?.trim() || 'A viewer',
       accent: alert.accent || '#54F2EB',
       effect: alert.broadcastEffect || 'spectrum',
-      durationMs: alert.visualDurationMs,
+      durationMs: Math.min(alert.visualDurationMs, alert.durationMs),
+      maximumRuntimeMs: alert.durationMs,
       design,
       variables: {
         viewer: viewerName?.trim() || 'A viewer',
@@ -163,6 +165,7 @@ export class TempestVisualAlertOverlay {
       accent: alert.accent,
       effect: 'pulse',
       durationMs: alert.durationMs,
+      maximumRuntimeMs: alert.durationMs,
       design,
       variables: {
         viewer: viewerName,

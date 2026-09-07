@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.2.4 — Shareable profiles and runtime limits
+
+- Added portable Discord Guest Profiles. Streamers can export a person's Discord ID, overlay name, accent, and idle/speaking/mute/deafen images into one integrity-checked file, then import it on another Studio installation for automatic Discord ID matching without sharing server history, authorization, layout, or source paths.
+- Added a visible per-alert **Maximum runtime** to every Interaction Alert, Twitch Alert, and Twitch variant. The limit now governs sound, visuals, TTS, avatar/reaction leases, and shared queue playback.
+- Fixed Browser Source audio stop timers being cancelled when an alert's visual left the canvas, which allowed long audio files to continue playing until their natural end.
+
 ## 1.2.3 — Stable Discord canvas editing
 
 - Fixed live Discord polling rebuilding the guest editor while a streamer was typing or dragging. Unsaved profile values now remain stable, Manual canvas placement responds immediately, and drag positions save on release.

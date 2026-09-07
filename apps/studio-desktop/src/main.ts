@@ -18,6 +18,7 @@ import {
 } from './local-extension';
 import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign } from './panel-design';
 import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
+import { buildTempestDiscordProfilePack, importTempestDiscordProfilePack } from './discord-profile-packs';
 import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
 import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migrations';
 import {
@@ -841,6 +842,32 @@ function registerDesktopHandlers(): void {
     const details = await stat(filePath);
     if (!details.isFile()) throw new Error('The selected Discord Voice image is not a file.');
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+  });
+
+  ipcMain.handle('studio:export-discord-profile', async (_event, input: { profile?: unknown }) => {
+    const document = await buildTempestDiscordProfilePack({ profile: input?.profile, createdWithVersion: TEMPEST_STUDIO_VERSION });
+    const slug = document.profile.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'discord-guest';
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Export Discord Guest Profile',
+      defaultPath: `${slug}-${document.profile.userId}.tempest-discord-profile`,
+      filters: [{ name: 'Tempest Discord Guest Profile', extensions: ['tempest-discord-profile'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath, assetCount: document.assets.length, totalAssetBytes: document.assets.reduce((sum, asset) => sum + asset.size, 0) };
+  });
+
+  ipcMain.handle('studio:import-discord-profile', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Import Discord Guest Profile', properties: ['openFile'], filters: [{ name: 'Tempest Discord Guest Profile', extensions: ['tempest-discord-profile'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile() || details.size > 175 * 1024 * 1024) throw new Error('Discord Guest Profile files must be smaller than 175 MB.');
+    const document = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+    const imported = await importTempestDiscordProfilePack(document, path.join(app.getPath('userData'), 'bridge', 'discord-voice', 'imported'));
+    return { ...imported, sourcePath: filePath };
   });
 
   ipcMain.handle('studio:validate-alert-code', (_event, input: { html?: unknown; css?: unknown; javascript?: unknown }) => {
