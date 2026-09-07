@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.2.0');
+  assert.equal(health.productVersion, '1.2.1');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -558,7 +558,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const discordPage = await fetch(`${runtime.baseUrl}/discord-voice`);
   assert.equal(discordPage.status, 200);
   assert.match(await discordPage.text(), /Tempest Discord Voice Overlay/);
-  const discordSettings = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, layout: 'grid', avatarSize: 144, gap: 18, showNames: true, showStatusIcons: true, hideSelf: false, hideBots: true, inactiveOpacity: 0.65, speakingScale: 1.12, speakingAccent: '#aa55ff', transitionMs: 160 }) });
+  const discordSettings = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, layout: 'manual', avatarSize: 144, gap: 18, showNames: true, showStatusIcons: true, hideSelf: false, hideBots: true, inactiveOpacity: 0.65, speakingScale: 1.12, speakingAccent: '#aa55ff', transitionMs: 160 }) });
   assert.equal(discordSettings.status, 200);
   assert.equal((await discordSettings.json()).settings.speakingAccent, '#AA55FF');
   const discordState = await fetch(`${runtime.baseUrl}/v1/discord-voice/state`, { method: 'POST', headers, body: JSON.stringify({ connected: true, channelId: 'voice-1', channelName: 'Creator Lounge', guildName: 'Test Server', participants: [{ id: 'user-1', username: 'guest', displayName: 'Guest', bot: false, self: false, mute: false, deaf: false, speaking: false }] }) });
@@ -570,21 +570,30 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const savedDiscordLibrary = JSON.parse(await readFile(path.join(dataDirectory, 'discord-voice-overlay.json'), 'utf8'));
   assert.equal(savedDiscordLibrary.profiles[0].userId, 'user-1');
   assert.equal(savedDiscordLibrary.profiles[0].lastSeenAt, rememberedState.profiles[0].lastSeenAt);
-  const discordProfile = await fetch(`${runtime.baseUrl}/v1/discord-voice/profiles/user-1`, { method: 'POST', headers, body: JSON.stringify({ idleUri: pathToFileURL(visualPath).href, speakingUri: pathToFileURL(visualPath).href, visible: true, order: 2, accent: '#22ccff' }) });
+  const discordProfile = await fetch(`${runtime.baseUrl}/v1/discord-voice/profiles/user-1`, { method: 'POST', headers, body: JSON.stringify({ idleUri: pathToFileURL(visualPath).href, speakingUri: pathToFileURL(visualPath).href, muteUri: pathToFileURL(visualPath).href, deafenUri: pathToFileURL(visualPath).href, visible: true, order: 2, accent: '#22ccff', positionX: 27.5, positionY: 73.2 }) });
   assert.equal(discordProfile.status, 200);
-  assert.equal((await discordProfile.json()).profile.accent, '#22CCFF');
+  const savedDiscordProfile = (await discordProfile.json()).profile;
+  assert.equal(savedDiscordProfile.accent, '#22CCFF');
+  assert.equal(savedDiscordProfile.positionX, 27.5);
+  assert.equal(savedDiscordProfile.positionY, 73.2);
   assert.equal((await fetch(`${runtime.baseUrl}/discord-voice/media/user-1/idle`)).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/discord-voice/media/user-1/mute`)).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/discord-voice/media/user-1/deafen`)).status, 200);
   assert.equal((await fetch(`${runtime.baseUrl}/v1/discord-voice/speaking`, { method: 'POST', headers, body: JSON.stringify({ userId: 'user-1', speaking: true }) })).status, 202);
   let discordStatus = await fetch(`${runtime.baseUrl}/v1/discord-voice`, { headers }).then((response) => response.json());
   assert.equal(discordStatus.state, 'connected');
   assert.equal(discordStatus.participants[0].speaking, true);
   assert.equal(discordStatus.participants[0].idleAssigned, true);
+  assert.equal(discordStatus.participants[0].muteAssigned, true);
+  assert.equal(discordStatus.participants[0].deafenAssigned, true);
+  assert.equal(discordStatus.participants[0].positionX, 27.5);
   assert.equal(discordStatus.savedGuestCount, 1);
   assert.equal((await fetch(`${runtime.baseUrl}/v1/discord-voice/profiles/user-1/reset`, { method: 'POST', headers, body: '{}' })).status, 200);
   discordStatus = await fetch(`${runtime.baseUrl}/v1/discord-voice/state`, { method: 'POST', headers, body: JSON.stringify({ connected: true, channelId: 'voice-1', channelName: 'Creator Lounge', guildName: 'Test Server', participants: [] }) }).then((response) => response.json());
   assert.equal(discordStatus.participants.length, 0);
   assert.equal(discordStatus.guests.find((guest) => guest.id === 'user-1').inChannel, false);
   assert.equal(discordStatus.profiles.find((profile) => profile.userId === 'user-1').idleUri, undefined);
+  assert.equal(discordStatus.profiles.find((profile) => profile.userId === 'user-1').muteUri, undefined);
   const offlineUserId = '123456789012345678';
   assert.equal((await fetch(`${runtime.baseUrl}/v1/discord-voice/profiles/${offlineUserId}`, { method: 'POST', headers, body: '{}' })).status, 200);
   discordStatus = await fetch(`${runtime.baseUrl}/v1/discord-voice`, { headers }).then((response) => response.json());

@@ -115,6 +115,8 @@ export async function buildTempestStudioBackup(input: { userDataDirectory: strin
     for (const profile of profiles) {
       if (typeof profile.idleUri === 'string') profile.idleUri = await packUri(profile.idleUri);
       if (typeof profile.speakingUri === 'string') profile.speakingUri = await packUri(profile.speakingUri);
+      if (typeof profile.muteUri === 'string') profile.muteUri = await packUri(profile.muteUri);
+      if (typeof profile.deafenUri === 'string') profile.deafenUri = await packUri(profile.deafenUri);
     }
   }
   return {

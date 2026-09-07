@@ -26,9 +26,13 @@ export interface DiscordVoiceProfile {
   displayName?: string;
   idleUri?: string;
   speakingUri?: string;
+  muteUri?: string;
+  deafenUri?: string;
   visible: boolean;
   order: number;
   accent?: string;
+  positionX?: number;
+  positionY?: number;
   createdAt?: string;
   firstSeenAt?: string;
   lastSeenAt?: string;
@@ -40,7 +44,7 @@ export interface DiscordVoiceProfile {
 export interface DiscordVoiceOverlaySettings {
   schemaVersion: 1;
   enabled: boolean;
-  layout: 'horizontal' | 'vertical' | 'grid';
+  layout: 'horizontal' | 'vertical' | 'grid' | 'manual';
   avatarSize: number;
   gap: number;
   showNames: boolean;
@@ -91,8 +95,8 @@ const mediaTypes: Record<string, string> = {
 };
 
 const overlayPage = String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Discord Voice Overlay</title><style>
-:root{--size:160px;--gap:24px;--inactive:.72;--scale:1.08;--accent:#54f2eb;--speed:140ms;color-scheme:dark}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent;font-family:Inter,Segoe UI,sans-serif}#stage{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:4vh 4vw;gap:var(--gap)}#stage.vertical{flex-direction:column;align-items:flex-end;justify-content:center}#stage.grid{display:grid;grid-template-columns:repeat(auto-fit,var(--size));align-content:end;justify-content:center}.person{position:relative;display:flex;width:var(--size);flex:0 0 var(--size);flex-direction:column;align-items:center;gap:9px;opacity:var(--inactive);transform-origin:50% 100%;transition:opacity var(--speed) ease,transform var(--speed) ease,filter var(--speed) ease}.person.speaking{opacity:1;transform:scale(var(--scale));filter:drop-shadow(0 0 14px color-mix(in srgb,var(--person-accent,var(--accent)) 72%,transparent))}.portrait{position:relative;width:var(--size);height:var(--size);overflow:hidden;border:3px solid rgba(255,255,255,.17);border-radius:24%;background:linear-gradient(145deg,#162631,#071018);box-shadow:0 10px 34px rgba(0,0,0,.38);transition:border-color var(--speed) ease,box-shadow var(--speed) ease}.speaking .portrait{border-color:var(--person-accent,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--person-accent,var(--accent)) 22%,transparent),0 10px 34px rgba(0,0,0,.42)}.portrait img{width:100%;height:100%;display:block;object-fit:contain}.initials{position:absolute;inset:0;display:grid;place-items:center;color:#ecfbff;font-size:calc(var(--size)*.3);font-weight:850}.portrait img:not([src=""])+.initials{display:none}.name{max-width:calc(var(--size)*1.25);padding:6px 11px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(5,13,19,.82);color:#f3fbff;font-size:calc(var(--size)*.09);font-weight:750;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status{position:absolute;right:-6px;top:-7px;display:flex;gap:4px}.status i{display:grid;min-width:25px;height:25px;padding:0 5px;place-items:center;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:#111d25;color:#ff8b9a;font:800 10px Consolas,monospace}.hidden{display:none!important}</style></head><body><main id="stage" aria-live="polite"></main><script>(()=>{
-const stage=document.getElementById('stage');let settings={};let participants=[];const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function initials(v){return String(v||'?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()}function apply(next){settings={...settings,...next};const root=document.documentElement.style;root.setProperty('--size',(settings.avatarSize||160)+'px');root.setProperty('--gap',(settings.gap||24)+'px');root.setProperty('--inactive',String(settings.inactiveOpacity??.72));root.setProperty('--scale',String(settings.speakingScale??1.08));root.setProperty('--accent',settings.speakingAccent||'#54f2eb');root.setProperty('--speed',(settings.transitionMs||140)+'ms');stage.className=settings.layout||'horizontal';render()}function media(p,kind){if(kind==='speaking'&&p.speaking&&p.speakingAssigned)return './discord-voice/media/'+encodeURIComponent(p.id)+'/speaking?v='+encodeURIComponent(p.profileUpdatedAt||'');if(p.idleAssigned)return './discord-voice/media/'+encodeURIComponent(p.id)+'/idle?v='+encodeURIComponent(p.profileUpdatedAt||'');return p.avatarUrl||''}function render(){const visible=(settings.enabled===false?[]:participants).filter(p=>p.visible!==false&&!(settings.hideSelf&&p.self)&&!(settings.hideBots&&p.bot)).sort((a,b)=>(a.order-b.order)||a.displayName.localeCompare(b.displayName));stage.innerHTML=visible.map(p=>{const src=media(p,p.speaking?'speaking':'idle');const states=[];if(settings.showStatusIcons&&p.mute)states.push('<i title="Muted">MUTE</i>');if(settings.showStatusIcons&&p.deaf)states.push('<i title="Deafened">DEAF</i>');return '<article class="person '+(p.speaking?'speaking':'')+'" style="--person-accent:'+esc(p.accent||settings.speakingAccent)+'"><div class="portrait">'+(src?'<img src="'+esc(src)+'" alt="" onerror="this.remove()">':'')+'<span class="initials">'+esc(initials(p.displayName))+'</span><span class="status">'+states.join('')+'</span></div>'+(settings.showNames?'<strong class="name">'+esc(p.displayName)+'</strong>':'')+'</article>'}).join('')}const events=new EventSource('./discord-voice/events');events.addEventListener('init',e=>{const d=JSON.parse(e.data);participants=d.participants||[];apply(d.settings||{})});events.addEventListener('settings',e=>apply(JSON.parse(e.data)));events.addEventListener('state',e=>{participants=JSON.parse(e.data).participants||[];render()});events.onerror=()=>{};
+:root{--size:160px;--gap:24px;--inactive:.72;--scale:1.08;--accent:#54f2eb;--speed:140ms;color-scheme:dark}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent;font-family:Inter,Segoe UI,sans-serif}#stage{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:4vh 4vw;gap:var(--gap)}#stage.vertical{flex-direction:column;align-items:flex-end;justify-content:center}#stage.grid{display:grid;grid-template-columns:repeat(auto-fit,var(--size));align-content:end;justify-content:center}#stage.manual{display:block;padding:0}.person{position:relative;display:flex;width:var(--size);flex:0 0 var(--size);flex-direction:column;align-items:center;gap:9px;opacity:var(--inactive);transform-origin:50% 100%;transition:opacity var(--speed) ease,transform var(--speed) ease,filter var(--speed) ease}.person.speaking{opacity:1;transform:scale(var(--scale));filter:drop-shadow(0 0 14px color-mix(in srgb,var(--person-accent,var(--accent)) 72%,transparent))}.manual .person{position:absolute;left:var(--person-x);top:var(--person-y);transform:translate(-50%,-50%);transform-origin:50% 50%}.manual .person.speaking{transform:translate(-50%,-50%) scale(var(--scale))}.portrait{position:relative;width:var(--size);height:var(--size);overflow:hidden;border:3px solid rgba(255,255,255,.17);border-radius:24%;background:linear-gradient(145deg,#162631,#071018);box-shadow:0 10px 34px rgba(0,0,0,.38);transition:border-color var(--speed) ease,box-shadow var(--speed) ease}.speaking .portrait{border-color:var(--person-accent,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--person-accent,var(--accent)) 22%,transparent),0 10px 34px rgba(0,0,0,.42)}.portrait img{width:100%;height:100%;display:block;object-fit:contain}.initials{position:absolute;inset:0;display:grid;place-items:center;color:#ecfbff;font-size:calc(var(--size)*.3);font-weight:850}.portrait img:not([src=""])+.initials{display:none}.name{max-width:calc(var(--size)*1.25);padding:6px 11px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(5,13,19,.82);color:#f3fbff;font-size:calc(var(--size)*.09);font-weight:750;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status{position:absolute;right:-6px;top:-7px;display:flex;gap:4px}.status i{display:grid;min-width:25px;height:25px;padding:0 5px;place-items:center;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:#111d25;color:#ff8b9a;font:800 10px Consolas,monospace}.hidden{display:none!important}</style></head><body><main id="stage" aria-live="polite"></main><script>(()=>{
+const stage=document.getElementById('stage');let settings={};let participants=[];const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function initials(v){return String(v||'?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()}function apply(next){settings={...settings,...next};const root=document.documentElement.style;root.setProperty('--size',(settings.avatarSize||160)+'px');root.setProperty('--gap',(settings.gap||24)+'px');root.setProperty('--inactive',String(settings.inactiveOpacity??.72));root.setProperty('--scale',String(settings.speakingScale??1.08));root.setProperty('--accent',settings.speakingAccent||'#54f2eb');root.setProperty('--speed',(settings.transitionMs||140)+'ms');stage.className=settings.layout||'horizontal';render()}function media(p){let kind='idle';if(p.deaf&&p.deafenAssigned)kind='deafen';else if(p.mute&&p.muteAssigned)kind='mute';else if(p.speaking&&p.speakingAssigned)kind='speaking';if(kind!=='idle'||p.idleAssigned)return './discord-voice/media/'+encodeURIComponent(p.id)+'/'+kind+'?v='+encodeURIComponent(p.profileUpdatedAt||'');return p.avatarUrl||''}function render(){const visible=(settings.enabled===false?[]:participants).filter(p=>p.visible!==false&&!(settings.hideSelf&&p.self)&&!(settings.hideBots&&p.bot)).sort((a,b)=>(a.order-b.order)||a.displayName.localeCompare(b.displayName));stage.innerHTML=visible.map((p,index)=>{const src=media(p);const states=[];if(settings.showStatusIcons&&p.mute)states.push('<i title="Muted">MUTE</i>');if(settings.showStatusIcons&&p.deaf)states.push('<i title="Deafened">DEAF</i>');const x=p.positionX??((index+1)/(visible.length+1)*100);const y=p.positionY??82;return '<article class="person '+(p.speaking?'speaking':'')+'" style="--person-accent:'+esc(p.accent||settings.speakingAccent)+';--person-x:'+x+'%;--person-y:'+y+'%"><div class="portrait">'+(src?'<img src="'+esc(src)+'" alt="" onerror="this.remove()">':'')+'<span class="initials">'+esc(initials(p.displayName))+'</span><span class="status">'+states.join('')+'</span></div>'+(settings.showNames?'<strong class="name">'+esc(p.displayName)+'</strong>':'')+'</article>'}).join('')}const events=new EventSource('./discord-voice/events');events.addEventListener('init',e=>{const d=JSON.parse(e.data);participants=d.participants||[];apply(d.settings||{})});events.addEventListener('settings',e=>apply(JSON.parse(e.data)));events.addEventListener('state',e=>{participants=JSON.parse(e.data).participants||[];render()});events.onerror=()=>{};
 })();</script></body></html>`;
 
 function integer(value: unknown, name: string, minimum: number, maximum: number): number {
@@ -139,7 +143,7 @@ function discordAvatarUrl(value: unknown): string | undefined {
 
 function validateSettings(input: DiscordVoiceOverlaySettings): DiscordVoiceOverlaySettings {
   if (typeof input.enabled !== 'boolean' || typeof input.showNames !== 'boolean' || typeof input.showStatusIcons !== 'boolean' || typeof input.hideSelf !== 'boolean' || typeof input.hideBots !== 'boolean') throw new Error('Discord Voice boolean settings are invalid.');
-  if (!['horizontal', 'vertical', 'grid'].includes(input.layout)) throw new Error('layout must be horizontal, vertical, or grid.');
+  if (!['horizontal', 'vertical', 'grid', 'manual'].includes(input.layout)) throw new Error('layout must be horizontal, vertical, grid, or manual.');
   if (!/^#[0-9a-f]{6}$/i.test(input.speakingAccent)) throw new Error('speakingAccent must be a six-digit hex color.');
   return {
     ...input,
@@ -213,7 +217,7 @@ export class TempestDiscordVoiceOverlay {
     const userId = cleanText(userIdValue, 'Discord user id', 128);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Discord participant design must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['displayName', 'idleUri', 'speakingUri', 'visible', 'order', 'accent']);
+    const allowed = new Set(['displayName', 'idleUri', 'speakingUri', 'muteUri', 'deafenUri', 'visible', 'order', 'accent', 'positionX', 'positionY']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} is not a Discord participant design setting.`);
     const now = new Date().toISOString();
     const previous = this.profiles.get(userId) || { userId, visible: true, order: this.profiles.size, createdAt: now };
@@ -320,9 +324,9 @@ export class TempestDiscordVoiceOverlay {
 
   async serveMedia(userIdValue: unknown, kind: unknown, response: ServerResponse): Promise<boolean> {
     const userId = cleanText(userIdValue, 'Discord user id', 128);
-    if (kind !== 'idle' && kind !== 'speaking') throw new Error('Discord participant media kind must be idle or speaking.');
+    if (!['idle', 'speaking', 'mute', 'deafen'].includes(String(kind))) throw new Error('Discord participant media kind must be idle, speaking, mute, or deafen.');
     const profile = this.profiles.get(userId);
-    const uri = kind === 'speaking' ? profile?.speakingUri : profile?.idleUri;
+    const uri = kind === 'speaking' ? profile?.speakingUri : kind === 'mute' ? profile?.muteUri : kind === 'deafen' ? profile?.deafenUri : profile?.idleUri;
     if (!uri) return false;
     const filePath = fileURLToPath(uri);
     const details = await stat(filePath);
@@ -353,6 +357,8 @@ export class TempestDiscordVoiceOverlay {
     if (accent && !/^#[0-9a-f]{6}$/i.test(accent)) throw new Error('profile accent must be a six-digit hex color.');
     const idleUri = optionalUri(source.idleUri, 'idleUri');
     const speakingUri = optionalUri(source.speakingUri, 'speakingUri');
+    const muteUri = optionalUri(source.muteUri, 'muteUri');
+    const deafenUri = optionalUri(source.deafenUri, 'deafenUri');
     const createdAt = optionalTimestamp(source.createdAt, 'createdAt');
     const firstSeenAt = optionalTimestamp(source.firstSeenAt, 'firstSeenAt');
     const lastSeenAt = optionalTimestamp(source.lastSeenAt, 'lastSeenAt');
@@ -367,9 +373,13 @@ export class TempestDiscordVoiceOverlay {
       ...(displayName ? { displayName } : {}),
       ...(idleUri ? { idleUri } : {}),
       ...(speakingUri ? { speakingUri } : {}),
+      ...(muteUri ? { muteUri } : {}),
+      ...(deafenUri ? { deafenUri } : {}),
       visible: source.visible !== false,
       order: integer(source.order ?? 0, 'profile order', 0, 999),
       ...(accent ? { accent } : {}),
+      ...(source.positionX !== undefined ? { positionX: finite(source.positionX, 'positionX', 0, 100) } : {}),
+      ...(source.positionY !== undefined ? { positionY: finite(source.positionY, 'positionY', 0, 100) } : {}),
       ...(createdAt ? { createdAt } : {}),
       ...(firstSeenAt ? { firstSeenAt } : {}),
       ...(lastSeenAt ? { lastSeenAt } : {}),
@@ -379,10 +389,10 @@ export class TempestDiscordVoiceOverlay {
     };
   }
 
-  private mergedParticipants(): Array<DiscordVoiceParticipant & { visible: boolean; order: number; accent?: string; idleAssigned: boolean; speakingAssigned: boolean; profileUpdatedAt?: string }> {
+  private mergedParticipants(): Array<DiscordVoiceParticipant & { visible: boolean; order: number; accent?: string; positionX?: number; positionY?: number; idleAssigned: boolean; speakingAssigned: boolean; muteAssigned: boolean; deafenAssigned: boolean; profileUpdatedAt?: string }> {
     return [...this.participants.values()].map((participant) => {
       const profile = this.profiles.get(participant.id);
-      return { ...structuredClone(participant), displayName: profile?.displayName || participant.displayName, visible: profile?.visible !== false, order: profile?.order ?? 500, ...(profile?.accent ? { accent: profile.accent } : {}), idleAssigned: Boolean(profile?.idleUri), speakingAssigned: Boolean(profile?.speakingUri), ...(profile?.updatedAt ? { profileUpdatedAt: profile.updatedAt } : {}) };
+      return { ...structuredClone(participant), displayName: profile?.displayName || participant.displayName, visible: profile?.visible !== false, order: profile?.order ?? 500, ...(profile?.accent ? { accent: profile.accent } : {}), ...(profile?.positionX !== undefined ? { positionX: profile.positionX } : {}), ...(profile?.positionY !== undefined ? { positionY: profile.positionY } : {}), idleAssigned: Boolean(profile?.idleUri), speakingAssigned: Boolean(profile?.speakingUri), muteAssigned: Boolean(profile?.muteUri), deafenAssigned: Boolean(profile?.deafenUri), ...(profile?.updatedAt ? { profileUpdatedAt: profile.updatedAt } : {}) };
     });
   }
 
@@ -410,8 +420,12 @@ export class TempestDiscordVoiceOverlay {
       visible: profile.visible !== false,
       order: profile.order,
       ...(profile.accent ? { accent: profile.accent } : {}),
+      ...(profile.positionX !== undefined ? { positionX: profile.positionX } : {}),
+      ...(profile.positionY !== undefined ? { positionY: profile.positionY } : {}),
       idleAssigned: Boolean(profile.idleUri),
       speakingAssigned: Boolean(profile.speakingUri),
+      muteAssigned: Boolean(profile.muteUri),
+      deafenAssigned: Boolean(profile.deafenUri),
       ...(profile.updatedAt ? { profileUpdatedAt: profile.updatedAt } : {}),
       ...(profile.firstSeenAt ? { firstSeenAt: profile.firstSeenAt } : {}),
       ...(profile.lastSeenAt ? { lastSeenAt: profile.lastSeenAt } : {}),

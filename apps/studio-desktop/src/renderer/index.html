@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: https://*.giphy.com; media-src 'self' file:; style-src 'self'; script-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: https://*.giphy.com https://cdn.discordapp.com https://media.discordapp.net; media-src 'self' file:; style-src 'self'; script-src 'self'" />
     <title>Tempest Streaming Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -277,7 +277,7 @@
         </section>
 
         <section id="discordvoiceSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">LOCAL DISCORD REACTIVE OVERLAY</p><h2>Discord Guests</h2><p>Turn Discord voice activity into a transparent local Browser Source with a separate idle and speaking PNG or GIF for every guest.</p></div><span id="discordVoiceBadge" class="status-badge">CHECKING</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">LOCAL DISCORD REACTIVE OVERLAY</p><h2>Discord Guests</h2><p>Turn Discord voice activity into a transparent local Browser Source with separate idle, speaking, mute, and deafen artwork for every guest.</p></div><span id="discordVoiceBadge" class="status-badge">CHECKING</span></div>
           <div class="metric-grid">
             <article><span>VOICE CONNECTION</span><strong id="discordVoiceConnectionMetric">OFFLINE</strong><small>Private local Discord connection</small></article>
             <article><span>VOICE CHANNEL</span><strong id="discordVoiceChannelMetric">NONE</strong><small id="discordVoiceGuildMetric">Open Discord and join voice</small></article>
@@ -295,7 +295,7 @@
             <div class="panel-header"><div><span>OVERLAY DESIGN</span><h3>Guest layout and reactions</h3></div><span class="state-chip installed">PNG + GIF</span></div>
             <div class="chat-overlay-settings">
               <label class="checkbox-label"><input id="discordVoiceEnabled" type="checkbox" checked /> Enable Discord Guests source</label>
-              <label>Layout<select id="discordVoiceLayout"><option value="horizontal">Horizontal row</option><option value="vertical">Vertical stack</option><option value="grid">Responsive grid</option></select></label>
+              <label>Layout<select id="discordVoiceLayout"><option value="horizontal">Horizontal row</option><option value="vertical">Vertical stack</option><option value="grid">Responsive grid</option><option value="manual">Manual canvas placement</option></select></label>
               <label>Avatar size<input id="discordVoiceAvatarSize" type="number" min="48" max="420" value="160" /><small>pixels</small></label>
               <label>Spacing<input id="discordVoiceGap" type="number" min="0" max="160" value="24" /><small>pixels</small></label>
               <label>Inactive opacity<input id="discordVoiceInactiveOpacity" type="number" min="10" max="100" value="72" /><small>percent</small></label>
@@ -303,12 +303,17 @@
               <label>Speaking accent<input id="discordVoiceAccent" type="color" value="#54f2eb" /></label>
               <label class="checkbox-label"><input id="discordVoiceShowNames" type="checkbox" checked /> Show display names</label>
               <label class="checkbox-label"><input id="discordVoiceShowStatus" type="checkbox" checked /> Show mute and deafen state</label>
-              <label class="checkbox-label"><input id="discordVoiceHideSelf" type="checkbox" /> Hide my Discord account</label>
+              <label class="checkbox-label discord-streamer-toggle"><input id="discordVoiceHideSelf" type="checkbox" /> Hide my streamer profile from the Browser Source</label>
               <label class="checkbox-label"><input id="discordVoiceHideBots" type="checkbox" checked /> Hide Discord bots</label>
             </div>
             <div class="chat-overlay-actions"><button data-discord-voice-save="true" class="secondary-button">Save Design</button><button data-discord-voice-preview="true" class="primary-button">Preview Guests</button><button data-discord-voice-clear="true" class="secondary-button danger-outline">Stop Preview</button></div>
           </article>
-          <div class="visual-section-heading discord-participant-heading"><div><span>SAVED GUEST LIBRARY</span><h3>Idle and speaking images</h3><p>Everyone detected in voice is remembered here, even while offline. Assign local PNG, GIF, JPG, WebP, or AVIF files; only people currently in the channel appear on stream.</p></div><button data-discord-voice-preview="true" class="secondary-button">Load Sample Guests</button></div>
+          <article class="panel discord-canvas-panel">
+            <div class="panel-header"><div><span>OUTPUT CANVAS</span><h3>Place each Discord profile</h3><p>Choose Manual canvas placement above, then drag profiles to their stream positions. Placement is stored as percentages, so it scales with Broadcast.</p></div><span id="discordCanvasProfile" class="state-chip installed">1920 × 1080</span></div>
+            <div id="discordVoiceCanvasPreview" class="discord-canvas-preview" aria-label="Discord guest placement canvas"><div class="discord-canvas-empty">Add or preview a guest to place profiles.</div></div>
+            <p id="discordCanvasHelp" class="discord-canvas-help">Automatic layouts preview their default row. Select Manual canvas placement to drag profiles.</p>
+          </article>
+          <div class="visual-section-heading discord-participant-heading"><div><span>SAVED GUEST LIBRARY</span><h3>Idle, speaking, mute, and deafen images</h3><p>Everyone detected in voice is remembered here, even while offline. Assigned files appear as live thumbnails; only people currently in the channel appear on stream.</p></div><button data-discord-voice-preview="true" class="secondary-button">Load Sample Guests</button></div>
           <article class="discord-guest-add-panel"><div><label for="discordGuestUserId">Add someone before they join<input id="discordGuestUserId" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="Discord User ID" /></label><button data-discord-profile-add="true" class="secondary-button">Add by User ID</button></div><small>In Discord, enable Developer Mode, right-click the person, and choose Copy User ID. Their name and avatar fill in automatically when Tempest sees them in voice.</small></article>
           <div id="discordVoiceParticipantGrid" class="discord-participant-grid empty-state">Connect Discord, add someone by User ID, or load sample guests to assign images.</div>
         </section>

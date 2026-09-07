@@ -494,22 +494,42 @@ button:disabled { opacity: .42; cursor: not-allowed; }
 .discord-participant-card.speaking { border-color:var(--participant-accent); box-shadow:inset 0 0 26px color-mix(in srgb,var(--participant-accent) 8%,transparent); }
 .discord-participant-card.speaking::before { opacity:1; box-shadow:0 0 13px var(--participant-accent); }
 .discord-participant-head { display:flex; align-items:center; gap:11px; }
-.discord-participant-head>i { display:grid; width:46px; height:46px; flex:0 0 46px; place-items:center; border:2px solid var(--participant-accent); border-radius:14px; color:#eefaff; background:#101922; font:800 15px Consolas,monospace; font-style:normal; }
+.discord-image-preview { position:relative; display:grid; place-items:center; overflow:hidden; border:2px solid var(--participant-accent,#36515e); color:#eefaff; background:#101922; }
+.discord-image-preview img { width:100%; height:100%; display:block; object-fit:contain; }
+.discord-image-preview>i { font:800 13px Consolas,monospace; font-style:normal; }
+.discord-participant-avatar { width:56px; height:56px; flex:0 0 56px; border-radius:14px; }
 .discord-participant-head span,.discord-media-slots span { display:block; color:var(--participant-accent); font:700 8px Consolas,monospace; letter-spacing:.12em; }
 .discord-participant-head h3 { margin:4px 0 0; font-size:15px; }
 .discord-user-id { display:block; margin-top:3px; font-family:Consolas,monospace; }
-.discord-profile-fields { display:grid; grid-template-columns:minmax(140px,1.4fr) 70px 72px; gap:8px; align-items:end; }
+.discord-profile-fields { display:grid; grid-template-columns:minmax(140px,1.4fr) 64px 72px 70px 70px; gap:8px; align-items:end; }
 .discord-profile-fields label:not(.checkbox-label) { display:grid; gap:5px; color:var(--muted); font:8px Consolas,monospace; }
 .discord-profile-fields input:not([type="checkbox"]) { width:100%; min-height:34px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; color:var(--text); background:#070e14; }
 .discord-profile-fields input[type="color"] { padding:3px; }
+.discord-profile-fields label small { color:#5f7580; }
 .discord-profile-fields .checkbox-label { grid-column:1/-1; }
 .discord-media-slots { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.discord-media-slots>div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; align-items:center; padding:10px; border:1px solid #1a303b; border-radius:7px; background:#071018; }
+.discord-media-slot { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:8px; align-items:center; padding:8px; border:1px solid #1a303b; border-radius:7px; background:#071018; }
+.discord-media-slot.assigned { border-color:#285763; background:linear-gradient(135deg,rgba(30,75,85,.2),#071018 62%); }
+.discord-media-thumb { width:52px; height:52px; border-width:1px; border-radius:8px; }
+.discord-media-slot>div { min-width:0; }
 .discord-media-slots span,.discord-media-slots strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.discord-media-slots span { grid-column:1/-1; }
 .discord-media-slots strong { color:#b8cbd3; font-size:9px; }
 .discord-media-slots button { min-height:30px; padding:5px 8px; }
-@media (max-width:760px) { .discord-participant-grid,.discord-profile-fields,.discord-media-slots { grid-template-columns:1fr; }.discord-profile-fields .checkbox-label { grid-column:auto; }.discord-guest-add-panel>div { align-items:stretch; flex-direction:column; } }
+.discord-streamer-toggle { padding:8px 10px; border:1px solid #633d49; border-radius:6px; background:rgba(110,45,61,.1); }
+.discord-canvas-panel { margin-top:14px; }
+.discord-canvas-panel .panel-header p { max-width:850px; margin:5px 0 0; color:var(--muted); font-size:10px; line-height:1.5; }
+.discord-canvas-preview { position:relative; width:min(100%,960px); margin:15px auto 0; overflow:hidden; border:1px solid #294451; border-radius:9px; background-color:#061019; background-image:linear-gradient(rgba(79,131,145,.11) 1px,transparent 1px),linear-gradient(90deg,rgba(79,131,145,.11) 1px,transparent 1px),linear-gradient(rgba(84,242,235,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(84,242,235,.15) 1px,transparent 1px); background-size:5% 5%,5% 5%,50% 50%,50% 50%; box-shadow:inset 0 0 50px rgba(0,0,0,.45); }
+.discord-canvas-preview::after { position:absolute; inset:4%; border:1px dashed rgba(125,190,201,.2); pointer-events:none; content:""; }
+.discord-canvas-empty { position:absolute; inset:0; display:grid; place-items:center; color:#607985; font:9px Consolas,monospace; }
+.discord-canvas-person { position:absolute; z-index:1; display:grid; width:82px; padding:0; transform:translate(-50%,-50%); border:0; color:var(--text); background:transparent; cursor:not-allowed; touch-action:none; }
+.discord-canvas-preview.manual .discord-canvas-person { cursor:grab; }
+.discord-canvas-preview.manual .discord-canvas-person.dragging { z-index:3; cursor:grabbing; filter:drop-shadow(0 0 10px var(--participant-accent)); }
+.discord-canvas-avatar { width:64px; height:64px; margin:auto; border-radius:16px; box-shadow:0 7px 18px rgba(0,0,0,.42); }
+.discord-canvas-person.self .discord-canvas-avatar { border-style:dashed; }
+.discord-canvas-person strong { margin-top:5px; overflow:hidden; color:#d7e6eb; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.discord-canvas-help { margin:9px 0 0; color:#78909a; text-align:center; font:9px Consolas,monospace; }
+@media (max-width:900px) { .discord-profile-fields { grid-template-columns:minmax(130px,1fr) repeat(2,70px); }.discord-profile-fields .checkbox-label { grid-column:1/-1; } }
+@media (max-width:760px) { .discord-participant-grid,.discord-profile-fields,.discord-media-slots { grid-template-columns:1fr; }.discord-profile-fields .checkbox-label { grid-column:auto; }.discord-guest-add-panel>div { align-items:stretch; flex-direction:column; }.discord-canvas-person { width:66px; }.discord-canvas-avatar { width:50px; height:50px; } }
 
 /* Keep keyboard navigation visible across the dense control surface. */
 :where(button,a,input,select,textarea,[tabindex]):focus-visible {

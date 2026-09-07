@@ -589,7 +589,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         discordVoiceOverlay.connect(response);
         return;
       }
-      const discordVoiceMediaMatch = requestUrl.pathname.match(/^\/discord-voice\/media\/([^/]+)\/(idle|speaking)$/);
+      const discordVoiceMediaMatch = requestUrl.pathname.match(/^\/discord-voice\/media\/([^/]+)\/(idle|speaking|mute|deafen)$/);
       if (request.method === 'GET' && discordVoiceMediaMatch) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Discord Voice media is available only on this computer.' });
         try {

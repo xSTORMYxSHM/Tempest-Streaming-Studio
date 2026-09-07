@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current release: **1.2.0**
+Current release: **1.2.1**
 
 Tempest Streaming Studio is the interaction hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed actions across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Creative rendering, shared asset libraries, and live production stay inside their focused applications.
 
@@ -23,7 +23,7 @@ The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Trai
 
 The **Chat + Emotes** page replaces hosted chat effects with two independent local sources. `http://127.0.0.1:4765/chat-overlay` renders safely escaped message cards, while `http://127.0.0.1:4765/emote-wall` makes native Twitch emotes—and optional exact-name 7TV, BetterTTV, and FrankerFaceZ emotes—bounce across the canvas. Each source can be shown only on the scenes where it belongs. Third-party providers are opt-in and their media is proxied through the local Bridge. See `docs/CHAT_OVERLAY.md` and `docs/EMOTE_WALL.md` for setup.
 
-The **Discord Guests** page provides a local Reactive Images-style source at `http://127.0.0.1:4765/discord-voice`. Each voice participant is saved to an editable local library keyed by Discord User ID, so streamers can assign separate idle and speaking PNGs or GIFs while the guest is offline or create their profile by ID before they join. Discord avatars remain the fallback, and the overlay includes layout controls, names, mute/deafen indicators, and per-person visibility. Only people currently in the selected voice channel appear in the Browser Source. The desktop connector uses supported local RPC and never uses a self-bot. See `docs/DISCORD_VOICE_OVERLAY.md`.
+The **Discord Guests** page provides a local Reactive Images-style source at `http://127.0.0.1:4765/discord-voice`. Each voice participant is saved to an editable local library keyed by Discord User ID, so streamers can assign separate idle, speaking, muted, and deafened PNGs or GIFs while the guest is offline or create their profile by ID before they join. Assigned artwork appears in the person's Studio profile, Discord avatars remain the fallback, and a canvas-sized preview supports per-person drag placement. The overlay also includes automatic layouts, names, status indicators, per-person visibility, and a dedicated option to hide the streamer's own profile. Only people currently in the selected voice channel appear in the Browser Source. The desktop connector uses supported local RPC and never uses a self-bot. See `docs/DISCORD_VOICE_OVERLAY.md`.
 
 The **Panel Designer** creates a channel-specific appearance for the universal Twitch Extension with a real 318 by 496 preview, safe theme controls, local persistence, and runtime delivery to the Local Panel. Hosted releases use the same validated theme model as per-broadcaster configuration, so streamers customize one shared Extension without supplying viewer-facing code.
 

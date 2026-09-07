@@ -35,8 +35,13 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /data-section="discordvoice"/);
   assert.match(html, /id="discordvoiceSection"/);
   assert.match(html, /Discord Guests/);
-  assert.match(renderer, /Assign Idle/);
-  assert.match(renderer, /Assign Speaking/);
+  assert.match(renderer, /IDLE IMAGE/);
+  assert.match(renderer, /SPEAKING IMAGE/);
+  assert.match(renderer, /MUTE IMAGE/);
+  assert.match(renderer, /DEAFEN IMAGE/);
+  assert.match(renderer, /Hide Streamer/);
+  assert.match(html, /Manual canvas placement/);
+  assert.match(html, /id="discordVoiceCanvasPreview"/);
   assert.match(html, /Add by User ID/);
   assert.match(html, /SAVED GUEST LIBRARY/);
   assert.match(renderer, /savedGuestCount/);
