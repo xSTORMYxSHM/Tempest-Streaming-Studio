@@ -1,4 +1,4 @@
-# 1.2.2 release checklist
+# 1.2.3 release checklist
 
 ## Automated gates
 
@@ -34,4 +34,4 @@
 - [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
 - [x] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
 - [x] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From 1.2.1, check, download, verify, restart, migrate data, and confirm version 1.2.2 in **Settings + About**.
+- [ ] From 1.2.2, check, download, verify, restart, migrate data, and confirm version 1.2.3 in **Settings + About**.

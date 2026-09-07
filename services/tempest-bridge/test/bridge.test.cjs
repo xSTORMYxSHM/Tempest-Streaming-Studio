@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.2.2');
+  assert.equal(health.productVersion, '1.2.3');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -557,7 +557,14 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
 
   const discordPage = await fetch(`${runtime.baseUrl}/discord-voice`);
   assert.equal(discordPage.status, 200);
-  assert.match(await discordPage.text(), /Tempest Discord Voice Overlay/);
+  const discordHtml = await discordPage.text();
+  assert.match(discordHtml, /Tempest Discord Voice Overlay/);
+  assert.match(discordHtml, /const cards=new Map\(\)/);
+  assert.match(discordHtml, /image\.dataset\.source!==src/);
+  assert.doesNotMatch(discordHtml, /stage\.innerHTML/);
+  const discordScript = discordHtml.match(/<script>\(\(\)=>\{([\s\S]+)\}\)\(\);<\/script>/)?.[1];
+  assert.ok(discordScript);
+  assert.doesNotThrow(() => new Function(discordScript));
   const discordSettings = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, layout: 'manual', avatarSize: 144, gap: 18, showNames: true, showStatusIcons: true, hideSelf: false, hideBots: true, inactiveOpacity: 0.65, speakingScale: 1.12, speakingAccent: '#aa55ff', transitionMs: 160 }) });
   assert.equal(discordSettings.status, 200);
   assert.equal((await discordSettings.json()).settings.speakingAccent, '#AA55FF');

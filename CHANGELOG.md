@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.3 — Stable Discord canvas editing
+
+- Fixed live Discord polling rebuilding the guest editor while a streamer was typing or dragging. Unsaved profile values now remain stable, Manual canvas placement responds immediately, and drag positions save on release.
+- Discord Browser Source profiles are now reconciled in place, so routine voice-state updates no longer reload every PNG or GIF and flash the overlay.
+
 ## 1.2.2 — Discord Guest card layout fix
 
 - Fixed Discord Guest profile cards becoming clipped when several saved people were shown at once. Cards now use a readable responsive width and wrap their actions cleanly.

@@ -40,6 +40,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /MUTE IMAGE/);
   assert.match(renderer, /DEAFEN IMAGE/);
   assert.match(renderer, /Hide Streamer/);
+  assert.match(renderer, /discordProfileDrafts/);
+  assert.match(renderer, /editingDiscordProfile/);
+  assert.match(renderer, /discordVoiceLayout'\)\.value !== 'manual/);
   assert.match(html, /Manual canvas placement/);
   assert.match(html, /id="discordVoiceCanvasPreview"/);
   assert.match(html, /Add by User ID/);

@@ -69,6 +69,8 @@
   let alertDesignHistoryIndex = -1;
   let alertDesignHistoryLocked = false;
   let discordCanvasDrag = null;
+  let discordSettingsDirty = false;
+  const discordProfileDrafts = new Map();
   let alertCanvasPositionPreviewActive = false;
   let alertCanvasPositionPreviewTimer = null;
   let alertCanvasPositionPreviewRevision = 0;
@@ -637,7 +639,33 @@
   }
 
   function discordProfileFor(userId) {
-    return (state.discordVoice?.profiles || []).find((entry) => entry.userId === userId) || {};
+    const saved = (state.discordVoice?.profiles || []).find((entry) => entry.userId === userId) || {};
+    return { ...saved, ...(discordProfileDrafts.get(userId) || {}) };
+  }
+
+  function rememberDiscordProfileDraft(event) {
+    const target = event.target;
+    const definitions = [
+      ['discordProfileName', 'displayName', (value) => value],
+      ['discordProfileOrder', 'order', (value) => value],
+      ['discordProfileAccent', 'accent', (value) => value],
+      ['discordProfileX', 'positionX', (value) => value],
+      ['discordProfileY', 'positionY', (value) => value],
+      ['discordProfileVisible', 'visible', (_value, input) => input.checked]
+    ];
+    const match = definitions.find(([datasetKey]) => target.dataset?.[datasetKey] !== undefined);
+    if (!match) return;
+    const [datasetKey, profileKey, transform] = match;
+    const userId = target.dataset[datasetKey];
+    discordProfileDrafts.set(userId, { ...(discordProfileDrafts.get(userId) || {}), [profileKey]: transform(target.value, target) });
+    const canvasPerson = document.querySelector(`[data-discord-canvas-id="${CSS.escape(userId)}"]`);
+    if (!canvasPerson) return;
+    if (profileKey === 'positionX' || profileKey === 'positionY') {
+      const value = Number(target.value);
+      if (Number.isFinite(value)) canvasPerson.style[profileKey === 'positionX' ? 'left' : 'top'] = `${Math.max(0, Math.min(100, value))}%`;
+    } else if (profileKey === 'accent') canvasPerson.style.setProperty('--participant-accent', target.value);
+    else if (profileKey === 'displayName') canvasPerson.querySelector('strong').textContent = target.value || canvasPerson.querySelector('strong').textContent;
+    else if (profileKey === 'visible') canvasPerson.hidden = !target.checked;
   }
 
   function localMediaName(uri, fallback) {
@@ -680,7 +708,7 @@
     return `OFFLINE · LAST SEEN ${Number.isNaN(seen.getTime()) ? 'EARLIER' : seen.toLocaleDateString()}`;
   }
 
-  function renderDiscordVoice({ settings = false } = {}) {
+  function renderDiscordVoice({ settings = false, force = false } = {}) {
     const overlay = state.discordVoice;
     const rpc = state.discordRpc || {};
     const configuration = overlay?.settings || {};
@@ -708,32 +736,46 @@
     $('#connectDiscordVoice').disabled = rpc.state === 'connecting' || rpc.state === 'connected' || !rpc.configured;
     $('#disconnectDiscordVoice').disabled = rpc.state !== 'connected' && rpc.state !== 'error';
     $('#forgetDiscordVoice').disabled = rpc.state === 'unconfigured';
+    const editingDiscordProfile = discordCanvasDrag || document.activeElement?.closest?.('#discordVoiceParticipantGrid');
+    if (editingDiscordProfile && !force) return;
+    const useStoredSettings = settings && !discordSettingsDirty;
+    const selectedLayout = useStoredSettings ? configuration.layout || 'horizontal' : $('#discordVoiceLayout').value || configuration.layout || 'horizontal';
+    const hideSelf = useStoredSettings ? configuration.hideSelf === true : $('#discordVoiceHideSelf').checked;
+    const hideBots = useStoredSettings ? configuration.hideBots !== false : $('#discordVoiceHideBots').checked;
     const grid = $('#discordVoiceParticipantGrid');
     grid.classList.toggle('empty-state', !guests.length);
     grid.innerHTML = guests.length ? guests.map((participant, index) => {
       const profile = discordProfileFor(participant.id);
       const position = discordCanvasPosition(participant, index, guests.length);
       const currentImage = discordProfileImage(participant, profile);
-      return `<article class="discord-participant-card ${participant.speaking ? 'speaking' : ''} ${participant.inChannel ? '' : 'offline'}" style="--participant-accent:${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}">
+      return `<article class="discord-participant-card ${participant.speaking ? 'speaking' : ''} ${participant.inChannel ? '' : 'offline'}" data-discord-profile-card="${escapeHtml(participant.id)}">
         <div class="discord-participant-head">${discordImagePreview(currentImage, participant.displayName, 'discord-participant-avatar')}<div><span>${participant.self ? 'YOU · ' : ''}${participant.bot ? 'BOT · ' : ''}${escapeHtml(discordGuestStateLabel(participant))}</span><h3>${escapeHtml(participant.displayName)}</h3><small class="discord-user-id">Discord ID ${escapeHtml(participant.id)}</small></div></div>
         <div class="discord-profile-fields"><label>Overlay name<input data-discord-profile-name="${escapeHtml(participant.id)}" maxlength="100" value="${escapeHtml(profile.displayName || '')}" placeholder="${escapeHtml(participant.displayName)}" /></label><label>Order<input data-discord-profile-order="${escapeHtml(participant.id)}" type="number" min="0" max="999" value="${profile.order ?? 500}" /></label><label>Accent<input data-discord-profile-accent="${escapeHtml(participant.id)}" type="color" value="${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}" /></label><label>Canvas X<input data-discord-profile-x="${escapeHtml(participant.id)}" type="number" min="0" max="100" step="0.1" value="${position.x.toFixed(1)}" /><small>percent</small></label><label>Canvas Y<input data-discord-profile-y="${escapeHtml(participant.id)}" type="number" min="0" max="100" step="0.1" value="${position.y.toFixed(1)}" /><small>percent</small></label><label class="checkbox-label"><input data-discord-profile-visible="${escapeHtml(participant.id)}" type="checkbox" ${profile.visible === false ? '' : 'checked'} /> ${participant.self ? 'Show streamer profile on canvas' : 'Show this person'}</label></div>
         <div class="discord-media-slots">${discordMediaSlot(participant, profile, 'idle', 'IDLE IMAGE', 'Default Discord avatar')}${discordMediaSlot(participant, profile, 'speaking', 'SPEAKING IMAGE', 'Falls back to idle')}${discordMediaSlot(participant, profile, 'mute', 'MUTE IMAGE', 'Falls back to idle')}${discordMediaSlot(participant, profile, 'deafen', 'DEAFEN IMAGE', 'Falls back to mute or idle')}</div>
         <div class="chat-overlay-actions"><button data-discord-profile-save="${escapeHtml(participant.id)}" class="primary-button">Save Person</button>${participant.self && profile.visible !== false ? `<button data-discord-profile-hide-self="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Hide Streamer</button>` : ''}<button data-discord-profile-reset="${escapeHtml(participant.id)}" class="secondary-button">Reset Style</button><button data-discord-profile-forget="${escapeHtml(participant.id)}" class="secondary-button danger-outline">Forget User</button></div>
       </article>`;
     }).join('') : 'Connect Discord, add someone by User ID, or load sample guests to assign images.';
+    guests.forEach((participant) => document.querySelector(`[data-discord-profile-card="${CSS.escape(participant.id)}"]`)?.style.setProperty('--participant-accent', discordProfileFor(participant.id).accent || configuration.speakingAccent || '#54f2eb'));
     const canvas = activeCanvasProfile();
     const canvasPreview = $('#discordVoiceCanvasPreview');
-    const canvasGuests = guests.filter((participant) => participant.visible !== false && !(configuration.hideSelf && participant.self) && !(configuration.hideBots && participant.bot));
+    const canvasGuests = guests.filter((participant) => discordProfileFor(participant.id).visible !== false && !(hideSelf && participant.self) && !(hideBots && participant.bot));
     canvasPreview.style.aspectRatio = `${canvas.baseWidth} / ${canvas.baseHeight}`;
-    canvasPreview.classList.toggle('manual', configuration.layout === 'manual');
-    canvasPreview.innerHTML = canvasGuests.length ? canvasGuests.map((participant, index) => {
+    canvasPreview.classList.toggle('manual', selectedLayout === 'manual');
+    canvasPreview.innerHTML = canvasGuests.length ? canvasGuests.map((participant) => {
+      const profile = discordProfileFor(participant.id);
+      return `<button type="button" class="discord-canvas-person ${participant.self ? 'self' : ''}" data-discord-canvas-id="${escapeHtml(participant.id)}" title="${selectedLayout === 'manual' ? 'Drag to place' : 'Choose Manual canvas placement to drag'}">${discordImagePreview(discordProfileImage(participant, profile), profile.displayName || participant.displayName, 'discord-canvas-avatar')}<strong>${escapeHtml(profile.displayName || participant.displayName)}</strong></button>`;
+    }).join('') : '<div class="discord-canvas-empty">Add or preview a guest to place profiles.</div>';
+    canvasGuests.forEach((participant, index) => {
+      const person = document.querySelector(`[data-discord-canvas-id="${CSS.escape(participant.id)}"]`);
       const profile = discordProfileFor(participant.id);
       const position = discordCanvasPosition(participant, index, canvasGuests.length);
-      return `<button type="button" class="discord-canvas-person ${participant.self ? 'self' : ''}" data-discord-canvas-id="${escapeHtml(participant.id)}" style="left:${position.x}%;top:${position.y}%;--participant-accent:${escapeHtml(profile.accent || configuration.speakingAccent || '#54f2eb')}" title="${configuration.layout === 'manual' ? 'Drag to place' : 'Choose Manual canvas placement to drag'}">${discordImagePreview(discordProfileImage(participant, profile), participant.displayName, 'discord-canvas-avatar')}<strong>${escapeHtml(participant.displayName)}</strong></button>`;
-    }).join('') : '<div class="discord-canvas-empty">Add or preview a guest to place profiles.</div>';
+      person?.style.setProperty('left', `${position.x}%`);
+      person?.style.setProperty('top', `${position.y}%`);
+      person?.style.setProperty('--participant-accent', profile.accent || configuration.speakingAccent || '#54f2eb');
+    });
     $('#discordCanvasProfile').textContent = `${canvas.baseWidth} × ${canvas.baseHeight}`;
-    $('#discordCanvasHelp').textContent = configuration.layout === 'manual' ? 'Drag any profile to place it. The new X/Y position saves when you release it.' : 'Automatic layouts preview their default row. Select Manual canvas placement to drag profiles.';
-    if (settings && overlay) {
+    $('#discordCanvasHelp').textContent = selectedLayout === 'manual' ? 'Drag any profile to place it. The new X/Y position saves when you release it.' : 'Automatic layouts preview their default row. Select Manual canvas placement to drag profiles.';
+    if (useStoredSettings && overlay) {
       $('#discordVoiceEnabled').checked = configuration.enabled !== false;
       $('#discordVoiceLayout').value = configuration.layout || 'horizontal';
       $('#discordVoiceAvatarSize').value = configuration.avatarSize || 160;
@@ -3293,6 +3335,7 @@
         hideBots: $('#discordVoiceHideBots').checked,
         transitionMs: state.discordVoice?.settings?.transitionMs ?? 140
       } });
+      discordSettingsDirty = false;
       state.discordVoice = await api('/v1/discord-voice');
       renderDiscordVoice({ settings: true });
       toast('Discord Guests overlay design saved.');
@@ -3326,8 +3369,9 @@
         positionY: Number(document.querySelector(`[data-discord-profile-y="${selector}"]`).value),
         visible: document.querySelector(`[data-discord-profile-visible="${selector}"]`).checked
       } });
+      discordProfileDrafts.delete(userId);
       state.discordVoice = await api('/v1/discord-voice');
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
       if (!quiet) toast('Discord participant design saved.');
     } catch (error) { toast(error.message, true); }
   }
@@ -3335,8 +3379,9 @@
   async function hideDiscordStreamerProfile(userId) {
     try {
       await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'POST', body: { visible: false } });
+      discordProfileDrafts.delete(userId);
       state.discordVoice = await api('/v1/discord-voice');
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
       toast('Your streamer profile is hidden from the Discord Browser Source.');
     } catch (error) { toast(error.message, true); }
   }
@@ -3357,8 +3402,9 @@
   async function resetDiscordVoiceProfile(userId) {
     try {
       await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}/reset`, { method: 'POST', body: {} });
+      discordProfileDrafts.delete(userId);
       state.discordVoice = await api('/v1/discord-voice');
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
       toast('Discord guest style reset. The person remains in your saved library.');
     } catch (error) { toast(error.message, true); }
   }
@@ -3368,8 +3414,9 @@
     if (!confirm(`Forget ${guest?.displayName || 'this Discord user'} and remove their assigned images from the guest library? The original image files will not be deleted.`)) return;
     try {
       await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+      discordProfileDrafts.delete(userId);
       state.discordVoice = await api('/v1/discord-voice');
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
       toast('Discord guest forgotten. They will be added again if detected in voice.');
     } catch (error) { toast(error.message, true); }
   }
@@ -3380,7 +3427,7 @@
       if (!selected) return;
       await api(`/v1/discord-voice/profiles/${encodeURIComponent(userId)}`, { method: 'POST', body: { [`${kind}Uri`]: selected.uri } });
       state.discordVoice = await api('/v1/discord-voice');
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
       toast(`${selected.name} assigned as the ${kind} image.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -3394,14 +3441,17 @@
     discordCanvasDrag.element.style.left = `${x}%`;
     discordCanvasDrag.element.style.top = `${y}%`;
     const selector = CSS.escape(discordCanvasDrag.userId);
-    document.querySelector(`[data-discord-profile-x="${selector}"]`).value = x.toFixed(1);
-    document.querySelector(`[data-discord-profile-y="${selector}"]`).value = y.toFixed(1);
+    const xInput = document.querySelector(`[data-discord-profile-x="${selector}"]`);
+    const yInput = document.querySelector(`[data-discord-profile-y="${selector}"]`);
+    if (xInput) xInput.value = x.toFixed(1);
+    if (yInput) yInput.value = y.toFixed(1);
+    discordProfileDrafts.set(discordCanvasDrag.userId, { ...(discordProfileDrafts.get(discordCanvasDrag.userId) || {}), positionX: x.toFixed(1), positionY: y.toFixed(1) });
   }
 
   function beginDiscordCanvasDrag(event) {
     const person = event.target.closest('[data-discord-canvas-id]');
     if (!person) return;
-    if (state.discordVoice?.settings?.layout !== 'manual') {
+    if ($('#discordVoiceLayout').value !== 'manual') {
       toast('Choose Manual canvas placement, then drag a profile.', true);
       return;
     }
@@ -3790,9 +3840,13 @@
     $('#connectDiscordVoice').addEventListener('click', connectDiscordVoice);
     $('#disconnectDiscordVoice').addEventListener('click', disconnectDiscordVoice);
     $('#discordVoiceLayout').addEventListener('change', (event) => {
+      discordSettingsDirty = true;
       if (state.discordVoice?.settings) state.discordVoice.settings.layout = event.target.value;
-      renderDiscordVoice();
+      renderDiscordVoice({ force: true });
     });
+    document.querySelectorAll('.discord-voice-settings-panel input,.discord-voice-settings-panel select').forEach((input) => input.addEventListener('input', () => { discordSettingsDirty = true; }));
+    $('#discordVoiceParticipantGrid').addEventListener('input', rememberDiscordProfileDraft);
+    $('#discordVoiceParticipantGrid').addEventListener('change', rememberDiscordProfileDraft);
     $('#discordVoiceCanvasPreview').addEventListener('pointerdown', beginDiscordCanvasDrag);
     $('#discordVoiceCanvasPreview').addEventListener('pointermove', moveDiscordCanvasDrag);
     $('#discordVoiceCanvasPreview').addEventListener('pointerup', endDiscordCanvasDrag);
