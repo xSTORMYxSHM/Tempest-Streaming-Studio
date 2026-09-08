@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.3.0');
+  assert.equal(health.productVersion, '1.3.1');
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -245,6 +245,10 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /new EventSource\("\/visual-alerts\/interactions\/events"\)/);
   assert.match(overlayMarkup, /id="alertAudio"/);
   assert.match(overlayMarkup, /runtimeStopTimer=setTimeout\(stopAudio/);
+  assert.match(overlayMarkup, /audioContext\.decodeAudioData/);
+  assert.match(overlayMarkup, /fetch\(url,\{cache:'no-store',signal:controller\.signal\}\)/);
+  assert.match(overlayMarkup, /media element timed out while loading/);
+  assert.match(overlayMarkup, /Tempest alert audio playback failed/);
   assert.match(overlayMarkup, /id="customStyle"/);
   assert.match(overlayMarkup, /id="placement"/);
   assert.match(overlayMarkup, /speechSynthesis/);

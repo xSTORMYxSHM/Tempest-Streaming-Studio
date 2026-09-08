@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.1 — Reliable Browser Source alert audio
+
+- Replaced the stalled Chromium media-element path for Twitch and Interaction Alert sounds with Web Audio fetch and decoding, while retaining a bounded media-element fallback for compatibility.
+- Alert sounds continue to honor their configured volume, sound delay, visual duration, and maximum runtime, including cancellation when an alert is cleared or superseded.
+- Browser Source playback failures now appear in Broadcast logs instead of being silently discarded.
+
 ## 1.3.0 — Streamer Mode and synced Twitch panels
 
 - Fixed the Twitch Panel Designer so a paired Studio securely publishes its validated channel theme to Tempest Signal instead of saving it only on the local computer. The live Twitch panel now refreshes the hosted theme automatically while visible.
