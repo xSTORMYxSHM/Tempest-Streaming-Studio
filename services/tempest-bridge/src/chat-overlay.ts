@@ -1,7 +1,7 @@
 import { ServerResponse } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
+import { TempestNormalizedChatEvent } from '@tempest/contracts';
 
 export interface TempestChatOverlaySettings {
   schemaVersion: 1;
@@ -20,6 +20,7 @@ export interface TempestChatOverlayMessage {
   text: string;
   roles: string[];
   sharedChat: boolean;
+  platform: 'twitch' | 'kick';
   occurredAt: string;
 }
 
@@ -82,7 +83,7 @@ export class TempestChatOverlay {
     response.on('close', () => this.clients.delete(response));
   }
 
-  push(event: TempestNormalizedTwitchEvent): TempestChatOverlayMessage | undefined {
+  push(event: TempestNormalizedChatEvent): TempestChatOverlayMessage | undefined {
     if (event.topic !== 'viewer.chat.message') return undefined;
     const text = String(event.payload.text || '').trim().slice(0, 500);
     if (!text) return undefined;
@@ -92,6 +93,7 @@ export class TempestChatOverlay {
       text,
       roles: (event.viewer?.roles || []).filter((role) => typeof role === 'string').slice(0, 5),
       sharedChat: event.payload.sharedChat === true,
+      platform: event.source,
       occurredAt: event.occurredAt
     };
     this.messages = this.messages.filter((entry) => entry.id !== message.id);

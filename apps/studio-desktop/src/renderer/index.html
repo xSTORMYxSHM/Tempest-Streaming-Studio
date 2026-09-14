@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: https://*.giphy.com https://cdn.discordapp.com https://media.discordapp.net; media-src 'self' file:; style-src 'self'; script-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: https://*.giphy.com https://cdn.discordapp.com https://media.discordapp.net; media-src 'self' file:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'" />
     <title>Tempest Streaming Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -26,6 +26,8 @@
           <p class="nav-group">CHANNEL</p>
           <button class="nav-button" data-section="chatbot">Chatbot</button>
           <button class="nav-button" data-section="twitch">Twitch Setup</button>
+          <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
+          <button class="nav-button" data-section="simulcast">Twitch + Kick Go Live</button>
           <button class="nav-button" data-section="api">Avatar Apps</button>
           <p class="nav-group" data-advanced>ADVANCED</p>
           <button class="nav-button" data-section="events" data-advanced>Activity &amp; Diagnostics</button>
@@ -71,6 +73,8 @@
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAYS →</i></button>
             <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 04</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>CHANNEL 01</b><strong>Chatbot</strong><span>Create commands, replies, and simple viewer triggers.</span><i>MANAGE CHATBOT →</i></button>
+            <button class="home-menu-card" data-go="dualformat"><b>SETUP 03</b><strong>Dual Format</strong><span>Prepare and monitor Twitch horizontal and mobile-first vertical output.</span><i>CHECK MOBILE OUTPUT →</i></button>
+            <button class="home-menu-card" data-go="simulcast"><b>ON AIR 00</b><strong>Go Live</strong><span>Start and monitor Twitch Dual Format plus Kick horizontal output from one production control.</span><i>OPEN OUTPUT CONTROL →</i></button>
           </div>
           <div class="home-runtime-heading"><div><p class="eyebrow">LIVE STATUS</p><h3>Studio right now</h3></div><button data-go="events" class="text-button" data-advanced>Open Diagnostics</button></div>
           <div class="metric-grid home-runtime-metrics">
@@ -97,7 +101,7 @@
         </section>
 
         <section id="soundalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">PERFORMANCE + DANCE CATALOG</p><h2>Interaction Alerts</h2><p>Design viewer-triggered sound and visual alerts, place them anywhere on the stream canvas, and optionally connect them to Warudo performances.</p></div><div class="page-toolbar-actions"><span class="status-badge">ALWAYS FREE</span><button data-import-alert-pack="interaction" class="secondary-button">Import Alert Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction Alert</button></div></div>
+          <div class="page-toolbar"><div><p class="eyebrow">PERFORMANCE + DANCE CATALOG</p><h2>Interaction Alerts</h2><p>Design viewer-triggered sound and visual alerts, place them anywhere on the stream canvas, and send actions directly to Tempest 2D or Warudo.</p></div><div class="page-toolbar-actions"><span class="status-badge">ALWAYS FREE</span><button data-import-alert-pack="interaction" class="secondary-button">Import Alert Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction Alert</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>
@@ -428,6 +432,26 @@
             <article><span>TRIGGERS</span><strong id="chatbotTriggerCount">0</strong><small id="chatbotLastMessage">No messages received</small></article>
           </div>
 
+          <article class="panel shared-chat-panel">
+            <div class="panel-header"><div><span>STREAM TOGETHER COLLABORATION CENTER</span><h3>Live Chat + Shared Chat</h3><p>Monitor your home channel and every participating Stream Together community directly in Studio.</p></div><div class="page-toolbar-actions"><span id="sharedChatBadge" class="status-badge offline">NOT CONNECTED</span><button id="clearSharedChatMessages" class="secondary-button" type="button">Clear View</button></div></div>
+            <div class="shared-chat-layout">
+              <aside class="shared-chat-session">
+                <span>SESSION</span>
+                <strong id="sharedChatSessionTitle">Connect the chatbot</strong>
+                <p id="sharedChatSessionDetail">Studio will detect Shared Chat automatically after EventSub connects.</p>
+                <div><span>PARTICIPATING CHANNELS</span><div id="sharedChatParticipants" class="shared-chat-participants empty-state">No active Stream Together session.</div></div>
+              </aside>
+              <div class="shared-chat-console">
+                <div id="sharedChatMessages" class="shared-chat-messages empty-state" aria-live="polite">Chat messages will appear here while Studio is connected.</div>
+                <form id="sharedChatComposer" class="shared-chat-composer">
+                  <label for="sharedChatMessage">Send through a connected platform</label>
+                  <div><select id="sharedChatPlatform" aria-label="Chat platform"><option value="twitch">Twitch</option><option value="kick">Kick</option></select><input id="sharedChatMessage" maxlength="500" autocomplete="off" placeholder="Message your live chat…" /><button id="sendSharedChatMessage" class="primary-button" type="submit">Send</button></div>
+                  <small>Commands and operator messages stay on their originating platform. Twitch Shared Chat continues to distribute through the home channel identity.</small>
+                </form>
+              </div>
+            </div>
+          </article>
+
           <article class="panel chatbot-account-guide">
             <div class="chatbot-account-guide-icon" aria-hidden="true">02</div>
             <div><span>SECOND TWITCH ACCOUNT REQUIRED</span><h3>Your chatbot signs in as a separate Twitch user</h3><p>Keep your broadcaster connected in Twitch Setup. For chat listening and replies, create or sign into a secondary Twitch account, then authorize that account below. The username Twitch returns is always shown beside any custom bot name.</p></div>
@@ -471,6 +495,20 @@
             <div class="dialog-actions"><button class="primary-button" type="submit">Save Assigned Creators</button></div>
           </form>
 
+          <article class="panel kick-chat-panel">
+            <div class="panel-header"><div><span>SECOND PLATFORM</span><h3>Kick Chat Connection</h3><p>Authorize the Kick broadcaster account so the same command directory and live monitor can operate on both platforms.</p></div><span id="kickChatBadge" class="status-badge offline">NOT CONFIGURED</span></div>
+            <div class="twitch-setup-grid">
+              <div class="twitch-form-stack">
+                <label>Kick Client ID<input id="kickClientId" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Kick developer application Client ID" /></label>
+                <label>Kick Client Secret<input id="kickClientSecret" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" placeholder="Paste once; stored with Windows encryption" /><small>Studio never writes the secret to its ordinary settings file or diagnostics.</small></label>
+                <label>OAuth Redirect URL<div class="copyable-field"><input id="kickRedirectUri" readonly /><button id="copyKickRedirectUri" class="copy-button" type="button" aria-label="Copy Kick OAuth redirect URL" title="Copy Kick OAuth redirect URL"></button></div><small>Register this exact URL in your Kick developer application.</small></label>
+                <label>Signed Webhook URL<div class="copyable-field"><input id="kickWebhookUrl" readonly /><button id="copyKickWebhookUrl" class="copy-button" type="button" aria-label="Copy Kick webhook URL" title="Copy Kick webhook URL"></button></div><small>Register this URL as the app webhook endpoint before subscribing.</small></label>
+                <div class="twitch-setup-actions"><button id="saveKickConfiguration" class="secondary-button" type="button">Save Kick App</button><button id="connectKickButton" class="primary-button" type="button">Connect Kick</button><button id="validateKickButton" class="secondary-button" type="button">Validate + Subscribe</button><button id="linkKickRelayButton" class="secondary-button" type="button">Link Hosted Relay</button><button id="disconnectKickButton" class="secondary-button danger-outline" type="button">Disconnect</button></div>
+              </div>
+              <div class="twitch-auth-summary"><span>CONNECTION STATUS</span><p id="kickSetupMessage">Create a Kick developer application, then save its Client ID and secret here.</p><div class="local-extension-status"><div><small>ACCOUNT</small><strong id="kickAccountState">—</strong></div><div><small>OAUTH</small><strong id="kickOauthState">NOT CONFIGURED</strong></div><div><small>WEBHOOK</small><strong id="kickEventState">DISCONNECTED</strong></div></div><div class="scope-list"><code>user:read</code><code>chat:write</code><code>events:subscribe</code></div><p>Kick chat arrives through the hosted Tempest relay because Kick delivers chat events as signed public webhooks. Replies are posted only to the platform where the command originated.</p></div>
+            </div>
+          </article>
+
           <form id="chatbotProvidersForm" class="panel chatbot-provider-panel" data-advanced>
             <div class="panel-header"><div><span>OPTIONAL RESPONSE PROVIDERS</span><h3>Local weather + now playing</h3><p>These stay hidden from command choices until configured. No API key is required for NWS or public AzuraCast metadata.</p></div><button class="primary-button" type="submit">Save Providers</button></div>
             <div class="chatbot-provider-grid">
@@ -506,6 +544,103 @@
             <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Shared Chat collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
             <article class="panel"><div class="panel-header"><div><span>CHATBOT ACTIVITY</span><h3>Recent command decisions</h3></div></div><div id="chatbotActivity" class="compact-list empty-state">No chatbot activity recorded.</div></article>
           </div>
+        </section>
+
+        <section id="dualformatSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">TWITCH MOBILE OUTPUT</p><h2>Twitch Dual Format</h2><p>Prepare one horizontal broadcast and one mobile-first vertical canvas through Tempest Broadcast and Twitch Enhanced Broadcasting.</p></div><span id="dualFormatBadge" class="status-badge offline">BROADCAST OFFLINE</span></div>
+          <div class="metric-grid dual-format-metrics">
+            <article><span>DUAL FORMAT</span><strong id="dualFormatStateMetric">OFFLINE</strong><small id="dualFormatStateNote">Waiting for Broadcast</small></article>
+            <article><span>HORIZONTAL</span><strong id="dualFormatHorizontalMetric">—</strong><small>Desktop and TV output</small></article>
+            <article><span>VERTICAL</span><strong id="dualFormatVerticalMetric">—</strong><small>Mobile 9:16 output</small></article>
+            <article><span>ENHANCED BROADCASTING</span><strong id="dualFormatEnhancedMetric">OFF</strong><small>Twitch multitrack delivery</small></article>
+          </div>
+
+          <div class="dual-format-layout">
+            <article class="panel dual-format-readiness-panel">
+              <div class="panel-header"><div><span>GO-LIVE READINESS</span><h3>Horizontal + vertical route</h3></div><button id="refreshDualFormatButton" class="secondary-button" disabled>Refresh Broadcast</button></div>
+              <div id="dualFormatChecks" class="dual-format-checks empty-state">Connect Tempest Broadcast to inspect Dual Format readiness.</div>
+              <p id="dualFormatStatusMessage" class="dual-format-status-message">Studio is waiting for a Broadcast status report.</p>
+            </article>
+
+            <article class="panel dual-format-control-panel">
+              <div class="panel-header"><div><span>OFF-AIR CONFIGURATION</span><h3>Prepare the vertical canvas</h3></div><span class="state-chip installed">BROADCAST OWNED</span></div>
+              <div class="dual-format-controls">
+                <label>Vertical resolution<select id="dualFormatCanvasPreset"><option value="1080x1920">1080 × 1920 — recommended</option><option value="720x1280">720 × 1280 — reduced load</option></select></label>
+                <label>Canvas name<input id="dualFormatCanvasName" maxlength="80" value="Tempest Vertical" /></label>
+              </div>
+              <div class="dual-format-actions"><button id="prepareDualFormatButton" class="primary-button" disabled>Prepare Dual Format</button><button id="previewDualFormatButton" class="secondary-button" disabled>Open Vertical Preview</button><button id="disableDualFormatButton" class="secondary-button danger-outline" disabled>Disable Dual Format</button></div>
+              <small>Studio requests configuration from Broadcast and waits for a new status report. Canvas or encoder settings cannot be changed while live.</small>
+              <div id="verticalAlertSources" class="dual-format-source-list empty-state">Vertical-safe alert sources will appear when Studio is online.</div>
+            </article>
+          </div>
+
+          <div class="dual-format-guide">
+            <article class="panel vertical-safe-preview"><div class="vertical-phone-frame"><span>KEEP PRIMARY CONTENT CENTERED</span><div><strong>9:16</strong><small>1080 × 1920</small></div><em>TWITCH CHAT LAYER</em></div><p>Twitch places chat over the vertical video on mobile. Keep faces, gameplay HUDs, captions, and alerts away from the lower interaction area; do not add Studio's Chat Overlay to this canvas.</p></article>
+            <article class="panel"><div class="panel-header"><div><span>PLATFORM ROUTING</span><h3>What this switch controls</h3></div></div><div class="dual-format-route-list"><div><strong>Twitch desktop + TV</strong><span>Your existing horizontal Broadcast canvas.</span></div><div><strong>Twitch mobile</strong><span>The selected vertical additional canvas through Enhanced Broadcasting.</span></div><div><strong>Kick output</strong><span>Unaffected. Kick chat remains unified in Studio; video simulcast routing remains owned by Broadcast.</span></div></div></article>
+          </div>
+
+          <div class="sound-alert-note"><strong>Production requirement:</strong> Dual Format uses Twitch Enhanced Broadcasting. Confirm upload and GPU headroom in Broadcast, then verify both orientations in Twitch Stream Manager and on a real phone before going live.</div>
+        </section>
+
+        <section id="simulcastSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">PRODUCTION OUTPUT CONTROL</p><h2>Twitch + Kick Go Live</h2><p>Coordinate Twitch horizontal and vertical delivery with a separate Kick horizontal output owned by Tempest Broadcast.</p></div><span id="simulcastBadge" class="status-badge offline">BROADCAST OFFLINE</span></div>
+          <div class="metric-grid simulcast-metrics">
+            <article><span>TWITCH</span><strong id="simulcastTwitchMetric">OFFLINE</strong><small>Horizontal + vertical</small></article>
+            <article><span>KICK</span><strong id="simulcastKickMetric">OFFLINE</strong><small>Horizontal shared encoder</small></article>
+            <article><span>UPLOAD BUDGET</span><strong id="simulcastUploadMetric">—</strong><small id="simulcastUploadNote">Set measured capacity</small></article>
+            <article><span>LOCAL RECORDING</span><strong id="simulcastRecordingMetric">OFF</strong><small>Optional coordinated recording</small></article>
+          </div>
+
+          <div class="dual-format-layout simulcast-layout">
+            <article class="panel dual-format-readiness-panel">
+              <div class="panel-header"><div><span>DESTINATION READINESS</span><h3>Production preflight</h3></div><div class="panel-header-actions"><button id="runSimulcastPreflightButton" class="primary-button" disabled>Run Preflight</button><button id="refreshSimulcastButton" class="secondary-button" disabled>Refresh Broadcast</button></div></div>
+              <div id="simulcastChecks" class="dual-format-checks empty-state">Connect Tempest Broadcast to inspect output readiness.</div>
+              <p id="simulcastStatusMessage" class="dual-format-status-message">Studio is waiting for Broadcast output status.</p>
+            </article>
+
+            <article class="panel dual-format-control-panel">
+              <div class="panel-header"><div><span>BROADCAST-OWNED CREDENTIALS</span><h3>Kick destination</h3></div><span class="state-chip installed">WINDOWS ENCRYPTED</span></div>
+              <div class="simulcast-config-grid">
+                <label>Kick ingest URL<input id="simulcastKickServer" maxlength="500" placeholder="rtmps://…/app" /></label>
+                <label>Kick stream key<input id="simulcastKickStreamKey" type="password" maxlength="512" autocomplete="new-password" placeholder="Leave blank to keep stored key" /></label>
+                <label>Measured upload capacity (Kbps)<input id="simulcastUploadCapacity" type="number" min="1000" max="1000000" step="100" placeholder="25000" /></label>
+                <label class="checkbox-row"><input id="simulcastRecordingWithStream" type="checkbox" /> Start a local recording with the stream</label>
+              </div>
+              <div class="dual-format-actions"><button id="saveSimulcastButton" class="secondary-button" disabled>Save Output Setup</button><button id="disableSimulcastButton" class="secondary-button danger-outline" disabled>Disable Simulcast</button></div>
+              <small>The stream key is sent once over the authenticated loopback bridge and encrypted by Windows inside Broadcast. Studio never saves it or returns it in status.</small>
+            </article>
+          </div>
+
+          <article class="panel simulcast-rehearsal-panel">
+            <div class="panel-header"><div><span>OPERATOR SIGN-OFF · THIS SESSION ONLY</span><h3>Production rehearsal checklist</h3></div><button id="resetSimulcastChecklistButton" class="text-button">Reset</button></div>
+            <div id="simulcastManualChecklist" class="simulcast-manual-checklist">
+              <label><input class="simulcast-manual-check" type="checkbox" value="stream-info" /><span><strong>Stream information is final</strong><small>Title, category, tags, and notifications have been reviewed.</small></span></label>
+              <label><input class="simulcast-manual-check" type="checkbox" value="dashboards" /><span><strong>Platform dashboards are open</strong><small>Twitch Stream Manager and the Kick creator dashboard are ready to monitor.</small></span></label>
+              <label><input class="simulcast-manual-check" type="checkbox" value="phone" /><span><strong>Mobile viewer device is ready</strong><small>A real phone can verify Twitch's vertical presentation and chat layer.</small></span></label>
+              <label><input class="simulcast-manual-check" type="checkbox" value="audio" /><span><strong>Program audio has been monitored</strong><small>Microphone, program mix, alerts, and duplicate vertical audio were checked.</small></span></label>
+              <label><input class="simulcast-manual-check" type="checkbox" value="recording" /><span><strong>Recording and disk are ready</strong><small>The destination path and free disk space were checked, or recording is intentionally off.</small></span></label>
+              <label><input class="simulcast-manual-check" type="checkbox" value="recovery" /><span><strong>Recovery controls are understood</strong><small>Kick-only retry/stop and Emergency Stop All Outputs are immediately reachable.</small></span></label>
+            </div>
+            <p id="simulcastChecklistStatus" class="dual-format-status-message">Complete all operator checks after the automatic preflight passes.</p>
+          </article>
+
+          <article class="panel simulcast-live-panel">
+            <div><span>COORDINATED GO LIVE</span><h3>One start, independent destination health</h3><p>Twitch starts first. Once its encoders are live, Broadcast shares the horizontal encoder with Kick. A Kick failure does not end Twitch; stopping Twitch ends the coordinated Kick output.</p><div id="simulcastOutputTelemetry" class="simulcast-output-health"><div><b>TWITCH</b><strong>0 MB</strong><small>0 dropped · 0% congestion</small></div><div><b>KICK</b><strong>0 MB</strong><small>0 dropped · 0% congestion</small></div></div></div>
+            <div class="simulcast-live-actions"><button id="startSimulcastButton" class="primary-button" disabled>Go Live: Twitch + Kick</button><button id="retryKickOutputButton" class="secondary-button" disabled>Retry Kick</button><button id="stopKickOutputButton" class="secondary-button danger-outline" disabled>Stop Kick Only</button><button id="stopAllOutputsButton" class="emergency-button" disabled>Emergency Stop All Outputs</button></div>
+          </article>
+
+          <article class="panel simulcast-operations-panel">
+            <div class="panel-header"><div><span>STUDIO LIVE-OPERATIONS SUPERVISOR</span><h3>Session health + incident timeline</h3></div><button id="clearSimulcastTimelineButton" class="text-button">Clear Timeline</button></div>
+            <div class="simulcast-operations-metrics">
+              <div><span>SESSION</span><strong id="simulcastSessionClock">STANDING BY</strong><small id="simulcastSessionClockNote">Starts when Twitch reports live</small></div>
+              <div><span>TELEMETRY</span><strong id="simulcastTelemetryFreshness">NO SIGNAL</strong><small>Age of the latest Broadcast status</small></div>
+              <div><span>SUPERVISOR</span><strong id="simulcastSupervisorHealth">STANDING BY</strong><small id="simulcastSupervisorGuidance">Waiting for a live session</small></div>
+            </div>
+            <div id="simulcastIncidentTimeline" class="simulcast-incident-timeline empty-state">No live-session incidents recorded in this Studio window.</div>
+            <small>This supervisor observes Broadcast telemetry only. It never renders video, changes encoders, or replaces the Twitch and Kick platform dashboards.</small>
+          </article>
+
+          <div class="sound-alert-note"><strong>Before the first production stream:</strong> copy the ingest URL and key from the Kick creator dashboard, measure sustained upload capacity, verify both Twitch orientations in Stream Manager, and confirm Twitch and Kick playback on separate viewer devices. Never display the stream key on screen.</div>
         </section>
 
         <section id="apiSection" class="page">

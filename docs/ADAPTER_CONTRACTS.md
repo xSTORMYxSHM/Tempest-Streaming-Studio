@@ -31,19 +31,28 @@ Required capabilities for the bundled Black Hole Event:
 - `broadcast.visual.show` — show the named source in Broadcast's current scene and restart it when it is controllable media.
 - `broadcast.visual.hide` — hide the visual source for the same workflow action when its lease ends.
 - `broadcast.status` — publish adapter/OBS readiness and output state.
+- `broadcast.dual-format.configure` — while off air, enable or disable Enhanced Broadcasting and select a supported vertical additional canvas.
+- `broadcast.dual-format.preview` — focus the native vertical preview without starting an output.
+- `broadcast.simulcast.configure` — off air, store the Kick destination and Windows-encrypted key plus upload and recording preferences.
+- `broadcast.simulcast.preflight` — off air, verify local credential decryption, Twitch service, Dual Format, RTMP module, and upload reserve without connecting to a platform.
+- `broadcast.simulcast.retry-kick` — while Twitch remains live and Kick is offline, reconstruct and restart only the Kick output.
+- `broadcast.simulcast.start` — start Twitch first, then attach the independent Kick output to the active horizontal encoders.
+- `broadcast.simulcast.stop` — stop Kick independently or perform an emergency stop of all coordinated outputs.
 
 Exact Broadcast compatibility changes:
 
 1. Remove or disable interaction-facing Twitch OAuth, EventSub, chat, channel-point, Sound Alerts, cheer, and subscription ingestion. Keep OBS/Twitch stream-service authentication and Stream Information inside Broadcast.
 2. Register the application manifest and connect to `/v1/socket` with the Studio-issued Bridge token.
 3. Send `hello` as `com.tempestmainframe.tempest-broadcast` and subscribe to its command topics plus required system health topics.
-4. Advertise `broadcast.reaction.trigger`, `broadcast.reaction.clear`, `broadcast.audio.play`, `broadcast.visual.show`, `broadcast.visual.hide`, and `broadcast.status`.
+4. Advertise `broadcast.reaction.trigger`, `broadcast.reaction.clear`, `broadcast.audio.play`, `broadcast.visual.show`, `broadcast.visual.hide`, `broadcast.status`, `broadcast.dual-format.configure`, `broadcast.dual-format.preview`, `broadcast.simulcast.configure`, `broadcast.simulcast.preflight`, `broadcast.simulcast.retry-kick`, `broadcast.simulcast.start`, and `broadcast.simulcast.stop`.
 5. Add a command adapter that calls `TriggerReactionEvent(eventType, name, circuit, accent, effect, strength, durationMs, dedupeId, runId)` for trigger and `ClearReactionEvent(dedupeId, runId)` for clear.
 6. Make repeated trigger/clear calls safe. Track overrides by `runId` and `actionId`, restore only the filters/scenes/overlays that reaction changed, and add a lease-expiry fallback.
 7. Return command responses correlated to the workflow run and publish health/failure events. A missing OBS source should degrade that action rather than crash the adapter.
 8. Keep Spout, NDI, textures, encoded video, and continuous audio off the JSON Bridge.
 
 Broadcast may retain low-level filter/overlay commands for operator tooling, but cross-suite viewer workflows should prefer the reaction trigger/clear pair so OBS implementation details stay inside Broadcast.
+
+The Dual Format status and command payloads are specified in [TWITCH_DUAL_FORMAT.md](TWITCH_DUAL_FORMAT.md). Broadcast must reject canvas or encoder mutations while streaming and publish a fresh `broadcast.status` after every accepted request.
 
 ## Warudo
 
@@ -69,3 +78,10 @@ Required capability:
 - `avatar.performance.apply` — trigger the Interaction Alert's assigned VTube Studio hotkey on activation. VTube Studio owns hotkey duration and auto-deactivation, so release acknowledges completion without triggering the hotkey a second time.
 
 The desktop app is the VTube Studio plugin client and connects only to the local VTube Studio WebSocket API. It requests permission only after the user selects **Authorize in VTube Studio**, stores the returned token with Windows encryption, reauthenticates locally on later launches, and lists hotkeys from the currently loaded Live2D model. It never requires or installs a separate VTube Studio DLL or script.
+## Tempest 2D
+
+Application ID: `com.tempestmainframe.tempest2d`
+
+The in-process adapter advertises `avatar.expression.apply`, `avatar.performance.apply`, `avatar.reaction.apply`, and `avatar.parameter.apply`. Studio targets the adapter over the authenticated Bridge; the adapter forwards a compact local UDP envelope to `127.0.0.1:19193`. No Twitch credential or continuous tracking/audio data enters this channel.
+
+Interaction Alert payloads may supply `tempest2dAction` as `expression:Name`, `motion:Name`, or `parameter:ParamId=value`. Activate holds the control for `durationMs`. Release clears expressions and parameter overrides or returns motion playback to the configured idle animation. The renderer also expires the control locally if a release packet is lost.

@@ -5,7 +5,7 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
-const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -56,6 +56,8 @@ test('validates a public hosted EBS and derives a credential-free WSS relay URL'
 test('ships the official Tempest Signal endpoint as the hosted default', () => {
   assert.equal(OFFICIAL_HOSTED_EBS_URL, 'https://signal.tempestmainframe.com');
   assert.equal(validateHostedEbsUrl(OFFICIAL_HOSTED_EBS_URL), OFFICIAL_HOSTED_EBS_URL);
+  assert.equal(isOfficialHostedEbsUrl(OFFICIAL_HOSTED_EBS_URL), true);
+  assert.equal(isOfficialHostedEbsUrl('https://tempest.example.com'), false);
 });
 
 test('turns hosted pairing allowlist failures into account-safe recovery guidance', () => {

@@ -14,7 +14,7 @@ Tempest Streaming Studio is the streaming orchestration control plane. It owns n
 
 Each application remains useful on its own. Studio becomes valuable when one event must coordinate several applications and restore their prior state reliably.
 
-Studio is the only interaction-facing Twitch product. It owns interaction authorization, secure token refresh/expiry, EventSub subscriptions, chat connectivity, Extension interaction intake, rewards, signature/replay protection, and normalization. Warudo never parses Twitch messages. Tempest Broadcast remains downstream for interaction events, but retains OBS/Twitch stream-service authentication, streaming credentials, and Stream Information because those are broadcast-output responsibilities rather than viewer-interaction ingestion.
+Studio is the interaction-facing platform product. It owns Twitch and Kick interaction authorization, secure token refresh/expiry, EventSub and webhook subscriptions, chat connectivity, Extension interaction intake, rewards, signature/replay protection, normalization, and the Dual Format/simulcast operator surfaces. Warudo never parses platform messages. Tempest Broadcast remains downstream for interaction events and executes output commands, but retains stream-service authentication, Windows-encrypted RTMP credentials, horizontal and vertical canvases, Enhanced Broadcasting, encoders, reconnection, telemetry, live output, and Stream Information because those are broadcast-output responsibilities rather than viewer-interaction ingestion.
 
 ## Control and media planes
 
@@ -31,6 +31,7 @@ Future applications ──────┘
 
 Twitch Extension ── hosted EBS ══ outbound Studio relay ── Studio Twitch Gateway
 EventSub / chat ──────────────────────────────────────────── Studio Twitch Gateway
+Kick signed webhooks ── hosted signal relay ══ outbound Studio relay ── Studio Kick Gateway
 
 Data Horizon / Engine ─────── Spout or shared texture ────── Tempest Broadcast
 Network render source ─────── NDI ────────────────────────── Tempest Broadcast

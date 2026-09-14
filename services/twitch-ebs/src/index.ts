@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, verify as verifySignature } from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { AddressInfo } from 'node:net';
@@ -36,6 +36,11 @@ export interface TwitchOAuthIdentity {
   expiresIn: number;
 }
 
+export interface KickOAuthIdentity {
+  userId: string;
+  username: string;
+}
+
 export interface StartTwitchEbsOptions {
   host?: string;
   port?: number;
@@ -46,6 +51,8 @@ export interface StartTwitchEbsOptions {
   installationStore?: TwitchEbsInstallationStore;
   allowedTwitchClientIds?: string[];
   validateTwitchOAuthToken?: (accessToken: string) => Promise<TwitchOAuthIdentity>;
+  validateKickOAuthToken?: (accessToken: string) => Promise<KickOAuthIdentity>;
+  verifyKickWebhook?: (messageId: string, timestamp: string, rawBody: Buffer, signature: string) => boolean;
   allowedOrigins?: string[];
   allowAnonymous?: boolean;
   viewerRequestsPerMinute?: number;
@@ -115,6 +122,15 @@ const requestIdPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const actionPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const soundAlertPattern = /^sound-alert\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const glyphPattern = /^[A-Z0-9]{1,4}$/;
+const kickPublicKey = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq/+l1WnlRrGSolDMA+A8
+6rAhMbQGmQ2SapVcGM3zq8ANXjnhDWocMqfWcTd95btDydITa10kDvHzw9WQOqp2
+MZI7ZyrfzJuz5nhTPCiJwTwnEtWft7nV14BYRDHvlfqPUaZ+1KR4OCaO/wWIk/rQ
+L/TjY0M70gse8rlBkbo2a8rKhu69RQTRsoaf4DVhDPEeSeI5jVrRDGAMGL3cGuyY
+6CLKGdjVEM78g3JfYOvDU/RvfqD7L89TZ3iN94jrmWdGz34JNlEI5hqK8dd7C5EF
+BEbZ5jgB8s8ReQV8H+MkuffjdAj3ajDDX3DOJMIut1lBrUVD1AaSrGCKHooWoL2e
+twIDAQAB
+-----END PUBLIC KEY-----`;
 
 function relayTokenHash(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -132,6 +148,29 @@ function extensionToken(request: IncomingMessage): string {
 
 function twitchOAuthToken(request: IncomingMessage): string {
   return String(request.headers['x-twitch-oauth'] || '').trim() || bearerToken(request);
+}
+
+function kickOAuthToken(request: IncomingMessage): string {
+  return String(request.headers['x-kick-oauth'] || '').trim() || bearerToken(request);
+}
+
+async function validateKickOAuthToken(accessToken: string): Promise<KickOAuthIdentity> {
+  if (!accessToken || accessToken.length > 4096 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Kick OAuth token is required.');
+  const response = await fetch('https://api.kick.com/public/v1/users', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const body = await response.json().catch(() => ({})) as { data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown };
+  const user = body.data?.[0];
+  if (!response.ok || !user?.user_id || !user.name) throw new HttpError(401, String(body.message || body.error || 'Kick OAuth validation failed.'));
+  return { userId: String(user.user_id), username: user.name };
+}
+
+function verifyKickWebhook(messageId: string, timestamp: string, rawBody: Buffer, signature: string): boolean {
+  if (!messageId || !timestamp || !signature || !Number.isFinite(Date.parse(timestamp))) return false;
+  if (Math.abs(Date.now() - Date.parse(timestamp)) > 10 * 60_000) return false;
+  try {
+    return verifySignature('RSA-SHA256', Buffer.from(`${messageId}.${timestamp}.${rawBody.toString('utf8')}`), kickPublicKey, Buffer.from(signature, 'base64'));
+  } catch {
+    return false;
+  }
 }
 
 async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAuthIdentity> {
@@ -252,6 +291,21 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
   }
 }
 
+async function readRawJson(request: IncomingMessage): Promise<{ raw: Buffer; value: Record<string, unknown> }> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > maximumBodyBytes) throw new HttpError(413, 'Request body exceeds the 16 KB limit.');
+    chunks.push(bytes);
+  }
+  const raw = Buffer.concat(chunks);
+  const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'Request body must be a JSON object.');
+  return { raw, value };
+}
+
 function validOrigin(origin: string, configured: Set<string>): boolean {
   if (configured.has(origin)) return true;
   try {
@@ -313,6 +367,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const allowedActions = new Set((options.allowedActions || []).map((value) => value.trim()).filter((value) => actionPattern.test(value)));
   const allowedTwitchClientIds = new Set((options.allowedTwitchClientIds || []).map((value) => value.trim()).filter((value) => /^[a-z0-9]{8,80}$/i.test(value)));
   const oauthValidator = options.validateTwitchOAuthToken || validateTwitchOAuthToken;
+  const kickOauthValidator = options.validateKickOAuthToken || validateKickOAuthToken;
+  const kickWebhookVerifier = options.verifyKickWebhook || verifyKickWebhook;
   const allowedOrigins = new Set((options.allowedOrigins || []).map((value) => value.trim().replace(/\/$/, '')).filter(Boolean));
   const viewerLimit = Math.max(1, options.viewerRequestsPerMinute || 20);
   const channelLimit = Math.max(viewerLimit, options.channelRequestsPerMinute || 240);
@@ -338,7 +394,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     }
   };
 
-  const forward = async (channelId: string, requestId: string, event: TempestNormalizedTwitchEvent): Promise<RelayResult> => {
+  const forward = async (channelId: string, requestId: string, event: unknown, type: 'interaction' | 'kick.event' = 'interaction'): Promise<RelayResult> => {
     const socket = studioSockets.get(channelId);
     if (!socket || socket.readyState !== WebSocket.OPEN) throw new HttpError(503, 'Tempest Streaming Studio is offline.');
     const key = `${channelId}:${requestId}`;
@@ -348,7 +404,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         reject(new HttpError(504, 'Tempest Streaming Studio did not acknowledge the interaction in time.'));
       }, relayTimeoutMs);
       pending.set(key, { channelId, timer, resolve, reject });
-      socket.send(JSON.stringify({ protocolVersion: 1, type: 'interaction', requestId, event }), (error) => {
+      socket.send(JSON.stringify({ protocolVersion: 1, type, requestId, event }), (error) => {
         if (!error) return;
         clearTimeout(timer);
         pending.delete(key);
@@ -400,6 +456,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, Authorization');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, X-Kick-OAuth, Authorization');
         response.setHeader('Access-Control-Max-Age', '600');
         response.setHeader('Vary', 'Origin');
         return response.end();
@@ -449,7 +506,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'GET' && requestUrl.pathname === '/v1/installations/current') {
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
         if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
-        return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, channel: { id: installation.channelId, login: installation.channelLogin }, updatedAt: installation.updatedAt }, origin);
+        return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, channel: { id: installation.channelId, login: installation.channelLogin }, ...(installation.kickUserId ? { kick: { userId: installation.kickUserId, username: installation.kickUsername } } : {}), updatedAt: installation.updatedAt }, origin);
       }
       if (request.method === 'PUT' && requestUrl.pathname === '/v1/installations/current/panel-design') {
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
@@ -465,6 +522,40 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         await installationStore.revoke(installation.id);
         studioSockets.get(installation.channelId)?.close(4003, 'Installation revoked');
         return sendJson(response, 200, { revoked: true }, origin);
+      }
+      if (request.method === 'PUT' && requestUrl.pathname === '/v1/installations/current/kick') {
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
+        const identity = await kickOauthValidator(kickOAuthToken(request));
+        if (!/^\d{1,30}$/.test(identity.userId) || !identity.username || identity.username.length > 120) throw new HttpError(401, 'Kick OAuth identity is invalid.');
+        const linked = await installationStore.linkKick(installation.id, identity.userId, identity.username);
+        return sendJson(response, 200, { linked: true, kick: { userId: linked.kickUserId, username: linked.kickUsername } }, origin);
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/installations/current/kick') {
+        const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
+        if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
+        await installationStore.unlinkKick(installation.id);
+        return sendJson(response, 200, { unlinked: true }, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/kick/events') {
+        const messageId = String(request.headers['kick-event-message-id'] || '').trim();
+        const timestamp = String(request.headers['kick-event-message-timestamp'] || '').trim();
+        const signature = String(request.headers['kick-event-signature'] || '').trim();
+        const eventType = String(request.headers['kick-event-type'] || '').trim();
+        const eventVersion = String(request.headers['kick-event-version'] || '').trim();
+        const { raw, value } = await readRawJson(request);
+        if (eventType !== 'chat.message.sent' || eventVersion !== '1') throw new HttpError(400, 'Kick webhook event type or version is not supported.');
+        if (!requestIdPattern.test(messageId) || !kickWebhookVerifier(messageId, timestamp, raw, signature)) throw new HttpError(401, 'Kick webhook signature is invalid or expired.');
+        const broadcaster = value.broadcaster as Record<string, unknown> | undefined;
+        const installation = await installationStore.findActiveByKickUserId(String(broadcaster?.user_id || ''));
+        if (!installation) throw new HttpError(404, 'This Kick broadcaster has not linked Tempest Streaming Studio.');
+        const resultKey = `kick:${messageId}`;
+        expireResults();
+        const cached = results.get(resultKey);
+        if (cached) return sendJson(response, cached.status, cached.body, origin);
+        const result = await forward(installation.channelId, messageId, { event: value, eventId: messageId, occurredAt: timestamp }, 'kick.event');
+        results.set(resultKey, { ...result, storedAt: Date.now() });
+        return sendJson(response, result.status, result.body, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/status') {
         const { claims } = await authenticateViewer(request);

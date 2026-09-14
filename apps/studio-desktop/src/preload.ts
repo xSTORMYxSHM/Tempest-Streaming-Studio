@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer as electronIpcRenderer } from 'electron';
-import { userFacingIpcErrorMessage } from './ipc-errors';
+
+// Sandboxed Electron preloads cannot load arbitrary sibling CommonJS modules.
+const userFacingIpcErrorMessage = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error || 'Studio could not complete that action.');
+  const cleaned = raw
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim();
+  return cleaned || 'Studio could not complete that action.';
+};
 
 const ipcRenderer = {
   invoke: (channel: string, ...args: unknown[]) => electronIpcRenderer.invoke(channel, ...args).catch((error) => {
@@ -31,6 +40,8 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   getHostedExtensionStatus: () => ipcRenderer.invoke('studio:get-hosted-extension-status'),
   pairHostedExtension: (settings: { ebsBaseUrl: string }) => ipcRenderer.invoke('studio:pair-hosted-extension', settings),
   revokeHostedExtension: () => ipcRenderer.invoke('studio:revoke-hosted-extension'),
+  linkHostedKick: () => ipcRenderer.invoke('studio:link-hosted-kick'),
+  unlinkHostedKick: () => ipcRenderer.invoke('studio:unlink-hosted-kick'),
   getTwitchPanelDesign: () => ipcRenderer.invoke('studio:get-twitch-panel-design'),
   saveTwitchPanelDesign: (design: unknown) => ipcRenderer.invoke('studio:save-twitch-panel-design', design),
   startLocalExtension: (settings: { channelId: string; extensionSecret?: string }) => ipcRenderer.invoke('studio:start-local-extension', settings),

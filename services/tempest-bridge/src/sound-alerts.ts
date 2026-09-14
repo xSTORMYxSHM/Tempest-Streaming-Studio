@@ -57,6 +57,8 @@ export const bundledSoundAlerts: TempestSoundAlertDefinition[] = catalogSeed.map
   free: true,
   warudoEnabled: false,
   vtubeStudioEnabled: false,
+  tempest2dEnabled: false,
+  tempest2dAction: '',
   viewerCooldownMs: 60000,
   globalCooldownMs: alert.durationMs,
   volume: 0.8,
@@ -191,7 +193,7 @@ export class TempestSoundAlertCatalog {
     if (index < 0) throw new Error(`Sound Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Sound Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
+    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Sound Alert catalog.`);
     const current = this.alerts[index];
     const updated = this.validate({
@@ -200,6 +202,8 @@ export class TempestSoundAlertCatalog {
       ...(source.warudoEnabled === undefined ? {} : { warudoEnabled: source.warudoEnabled }),
       ...(source.vtubeStudioEnabled === undefined ? {} : { vtubeStudioEnabled: source.vtubeStudioEnabled }),
       ...(Object.hasOwn(source, 'vtubeStudioHotkey') ? { vtubeStudioHotkey: validateVTubeStudioHotkey(source.vtubeStudioHotkey) } : {}),
+      ...(source.tempest2dEnabled === undefined ? {} : { tempest2dEnabled: source.tempest2dEnabled }),
+      ...(source.tempest2dAction === undefined ? {} : { tempest2dAction: source.tempest2dAction }),
       ...(source.durationMs === undefined ? {} : { durationMs: source.durationMs }),
       ...(source.viewerCooldownMs === undefined ? {} : { viewerCooldownMs: source.viewerCooldownMs }),
       ...(source.globalCooldownMs === undefined ? {} : { globalCooldownMs: source.globalCooldownMs }),
@@ -239,6 +243,8 @@ export class TempestSoundAlertCatalog {
       warudoEnabled: source.warudoEnabled === undefined ? false : source.warudoEnabled,
       vtubeStudioEnabled: source.vtubeStudioEnabled === undefined ? false : source.vtubeStudioEnabled,
       vtubeStudioHotkey: source.vtubeStudioHotkey,
+      tempest2dEnabled: source.tempest2dEnabled === undefined ? false : source.tempest2dEnabled,
+      tempest2dAction: typeof source.tempest2dAction === 'string' ? source.tempest2dAction : '',
       cue,
       durationMs,
       viewerCooldownMs: source.viewerCooldownMs === undefined ? 60000 : source.viewerCooldownMs,
@@ -299,6 +305,8 @@ export class TempestSoundAlertCatalog {
         warudoEnabled: alert.warudoEnabled,
         vtubeStudioEnabled: alert.vtubeStudioEnabled,
         vtubeStudioHotkey: alert.vtubeStudioHotkey,
+        tempest2dEnabled: Boolean(alert.tempest2dEnabled),
+        tempest2dAction: alert.tempest2dAction,
         name: alert.name,
         durationMs: alert.durationMs,
         visualDurationMs: alert.visualDurationMs,
@@ -335,6 +343,13 @@ export class TempestSoundAlertCatalog {
     if (typeof vtubeStudioEnabled !== 'boolean') throw new Error('Sound Alert vtubeStudioEnabled must be boolean.');
     const vtubeStudioHotkey = validateVTubeStudioHotkey(input.vtubeStudioHotkey);
     if (vtubeStudioEnabled && !vtubeStudioHotkey) throw new Error('Choose a VTube Studio hotkey before enabling VTube Studio for this alert.');
+    const tempest2dEnabled = input.tempest2dEnabled === undefined ? false : input.tempest2dEnabled;
+    if (typeof tempest2dEnabled !== 'boolean') throw new Error('Sound Alert tempest2dEnabled must be boolean.');
+    const tempest2dAction = input.tempest2dAction === undefined || input.tempest2dAction === null
+      ? '' : String(input.tempest2dAction).trim();
+    if (tempest2dAction.length > 128 || /[\r\n\0]/.test(tempest2dAction)) {
+      throw new Error('Tempest 2D action must contain at most 128 printable characters.');
+    }
     if (input.free !== true) throw new Error('Studio Sound Alerts must remain free.');
     const volume = Number(input.volume);
     if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('Sound Alert volume must be between 0 and 1.');
@@ -349,6 +364,8 @@ export class TempestSoundAlertCatalog {
       warudoEnabled,
       vtubeStudioEnabled,
       vtubeStudioHotkey,
+      tempest2dEnabled,
+      tempest2dAction,
       durationMs: boundedInteger(input.durationMs, 'durationMs', 1000, 60000),
       viewerCooldownMs: boundedInteger(input.viewerCooldownMs, 'viewerCooldownMs', 0, 24 * 60 * 60 * 1000),
       globalCooldownMs: boundedInteger(input.globalCooldownMs, 'globalCooldownMs', 0, 24 * 60 * 60 * 1000),

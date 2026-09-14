@@ -9,8 +9,15 @@
   "capabilities": {
     "provides": [
       "broadcast.audio.play",
+      "broadcast.dual-format.configure",
+      "broadcast.dual-format.preview",
       "broadcast.reaction.clear",
       "broadcast.reaction.trigger",
+      "broadcast.simulcast.configure",
+      "broadcast.simulcast.preflight",
+      "broadcast.simulcast.retry-kick",
+      "broadcast.simulcast.start",
+      "broadcast.simulcast.stop",
       "broadcast.visual.hide",
       "broadcast.visual.show",
       "broadcast.status"

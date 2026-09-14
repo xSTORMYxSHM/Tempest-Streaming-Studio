@@ -1,4 +1,4 @@
-# 1.3.1 release checklist
+# 1.4.0 release checklist
 
 ## Automated gates
 
@@ -18,6 +18,19 @@
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback.
 - [ ] Backup/restore succeeds, reconnects are clearly requested, and pre-restore snapshot exists.
 - [ ] Upgrade from 0.11.x preserves credentials, alerts, media, commands, ultrawide canvas, station, and weather settings.
+- [ ] Kick Client Secret and OAuth tokens are Windows-encrypted, excluded from backups/diagnostics, and removed on disconnect.
+- [ ] Kick stream key is Windows-encrypted inside Broadcast, is never returned through Bridge status, and is excluded from Studio backups/diagnostics.
+- [ ] Simulcast readiness blocks Go Live when Twitch, Dual Format, Kick destination, secure storage, or configured upload headroom is not ready.
+- [ ] Local simulcast preflight runs only while off-air, expires after four hours, and is invalidated by Broadcast restart and output/Dual Format changes.
+- [ ] The session-only operator checklist gates Go Live, clears with the Studio window, and is never persisted to profile data.
+- [ ] Kick output failure leaves Twitch live; Stop Kick Only and Emergency Stop All Outputs behave independently and predictably.
+- [ ] Retry Kick recreates only the Kick output while Twitch remains uninterrupted.
+- [ ] Studio's live-operations clock follows Twitch state, delayed Broadcast telemetry is warned after 15 seconds and treated as lost after 30 seconds, and the incident timeline clears when the Studio window closes.
+- [ ] Kick OAuth callback accepts loopback requests only; hosted webhook rejects invalid, stale, or mismatched signatures.
+- [ ] Twitch and Kick messages share the Collaboration Center, while replies and reply IDs remain platform-local.
+- [ ] Connect a Dual Format-capable Broadcast build and confirm Studio reports Enhanced Broadcasting, the selected 9:16 canvas, scene links, and audio routing.
+- [ ] Confirm Studio blocks Dual Format configuration while live and that vertical preview does not start an output.
+- [ ] Verify Twitch's horizontal and vertical previews in Stream Manager and on a physical phone.
 - [ ] Offline use, disconnected optional integrations, missing media, and provider outages show recoverable errors.
 - [ ] Keyboard navigation, Windows scaling, reduced-motion preference, and 1080p/1440p layouts are reviewed.
 
@@ -34,4 +47,5 @@
 - [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
 - [x] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
 - [x] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From 1.3.0, check, download, verify, restart, migrate data, and confirm version 1.3.1 in **Settings + About**.
+- [ ] From 1.3.1, check, download, verify, restart, migrate data, and confirm version 1.4.0 in **Settings + About**.
+- [x] Configure an Authenticode signing identity before running `pnpm package:win`; the release verifier rejects unsigned installers and application executables. Use `pnpm package:win:unsigned` only for local unsigned packaging tests.

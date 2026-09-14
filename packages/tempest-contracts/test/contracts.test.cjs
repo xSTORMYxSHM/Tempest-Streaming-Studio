@@ -7,6 +7,11 @@ const {
   validateAssetManifest,
   validateBridgeMessage,
   validateNormalizedTwitchEvent,
+  validateNormalizedKickChatEvent,
+  validateDualFormatConfigureRequest,
+  validateSimulcastConfigureRequest,
+  validateSimulcastStartRequest,
+  validateSimulcastStopRequest,
   validateWorkflowDefinition
 } = require('../dist');
 
@@ -23,6 +28,57 @@ test('accepts a namespaced application manifest', () => {
   });
   assert.equal(result.ok, true);
   assert.equal(result.value.id, 'com.tempestmainframe.quartic-pulse');
+});
+
+test('validates normalized Kick chat events and Kick workflow triggers', () => {
+  const event = validateNormalizedKickChatEvent({
+    schemaVersion: 1,
+    id: 'kick:message-123',
+    topic: 'viewer.chat.message',
+    occurredAt: new Date().toISOString(),
+    source: 'kick',
+    channel: { id: '445566', login: 'creator' },
+    viewer: { id: '778899', login: 'viewer', roles: ['subscriber'] },
+    payload: { messageId: 'message-123', text: '!studio' }
+  });
+  assert.equal(event.ok, true, event.errors.join(' '));
+  const workflow = validateWorkflowDefinition({
+    schemaVersion: 1,
+    id: 'com.tempestmainframe.workflow.kick-chat',
+    name: 'Kick Chat Trigger', enabled: true,
+    trigger: { type: 'kick.chat', action: 'tempest.chat-command' },
+    actions: [{ id: 'notify', name: 'Notify', target: 'com.tempestmainframe.tempest-broadcast', capability: 'broadcast.notify' }]
+  });
+  assert.equal(workflow.ok, true, workflow.errors.join(' '));
+});
+
+test('validates guarded Twitch Dual Format configuration requests', () => {
+  const enabled = validateDualFormatConfigureRequest({ enabled: true, canvasPreset: '1080x1920', canvasName: 'Mobile Main' });
+  assert.equal(enabled.ok, true, enabled.errors.join(' '));
+  assert.deepEqual(enabled.value, { enabled: true, canvasPreset: '1080x1920', canvasName: 'Mobile Main' });
+  const defaults = validateDualFormatConfigureRequest({ enabled: false });
+  assert.deepEqual(defaults.value, { enabled: false, canvasPreset: '1080x1920', canvasName: 'Tempest Vertical' });
+  assert.equal(validateDualFormatConfigureRequest({ enabled: true, canvasPreset: '1920x1080' }).ok, false);
+  assert.equal(validateDualFormatConfigureRequest({ enabled: 'yes' }).ok, false);
+});
+
+test('validates production simulcast configuration and guarded output actions', () => {
+  const configured = validateSimulcastConfigureRequest({
+    enabled: true,
+    kickServer: 'rtmps://ingest.example.test/app',
+    kickStreamKey: 'live_stream_key_123',
+    uploadCapacityKbps: 25000,
+    recordingWithStream: true
+  });
+  assert.equal(configured.ok, true, configured.errors.join(' '));
+  assert.equal(configured.value.kickServer, 'rtmps://ingest.example.test/app');
+  assert.equal(configured.value.recordingWithStream, true);
+  assert.equal(validateSimulcastConfigureRequest({ enabled: true, kickServer: 'https://example.test', kickStreamKey: 'short' }).ok, false);
+  assert.equal(validateSimulcastConfigureRequest({ enabled: true, kickServer: 'rtmp://user:pass@example.test/app', kickStreamKey: 'valid_key_123' }).ok, false);
+  assert.equal(validateSimulcastStartRequest({ recording: true, operatorChecklistAccepted: true }).ok, true);
+  assert.equal(validateSimulcastStartRequest({ recording: 'yes' }).ok, false);
+  assert.deepEqual(validateSimulcastStopRequest({ scope: 'kick', force: true }).value, { scope: 'kick', force: true });
+  assert.equal(validateSimulcastStopRequest({ scope: 'twitch' }).ok, false);
 });
 
 test('rejects an unsafe application identifier', () => {

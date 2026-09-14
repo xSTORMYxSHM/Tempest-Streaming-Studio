@@ -6,7 +6,7 @@ export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 export const applicationStates = ['development', 'installed', 'disabled'] as const;
 export const healthModes = ['none', 'process', 'http'] as const;
 export const messageKinds = ['hello', 'welcome', 'subscribe', 'unsubscribe', 'publish', 'event', 'command', 'response', 'heartbeat', 'error'] as const;
-export const workflowTriggerTypes = ['viewer.interaction', 'twitch.chat', 'twitch.channel-points', 'twitch.cheer', 'system.event', 'operator.manual'] as const;
+export const workflowTriggerTypes = ['viewer.interaction', 'twitch.chat', 'kick.chat', 'twitch.channel-points', 'twitch.cheer', 'system.event', 'operator.manual'] as const;
 export const workflowRunStates = ['pending', 'running', 'completed', 'partial', 'stopped', 'failed'] as const;
 export const workflowActionStates = ['scheduled', 'active', 'completed', 'released', 'unavailable', 'failed', 'cancelled'] as const;
 export const normalizedTwitchEventTopics = [
@@ -37,6 +37,106 @@ export type NormalizedTwitchEventTopic = typeof normalizedTwitchEventTopics[numb
 export interface TempestCapabilitySet {
   provides: string[];
   consumes: string[];
+}
+
+export const twitchDualFormatCanvasPresets = ['1080x1920', '720x1280'] as const;
+export type TwitchDualFormatCanvasPreset = typeof twitchDualFormatCanvasPresets[number];
+
+export interface TempestBroadcastCanvasProfile {
+  baseWidth: number;
+  baseHeight: number;
+  outputWidth: number;
+  outputHeight: number;
+  fpsNumerator: number;
+  fpsDenominator: number;
+}
+
+export interface TempestBroadcastDualFormatCanvas extends TempestBroadcastCanvasProfile {
+  id: string;
+  name: string;
+}
+
+export interface TempestBroadcastDualFormatStatus {
+  supported: boolean;
+  enabled: boolean;
+  enhancedBroadcastingEnabled: boolean;
+  additionalCanvasSelected: boolean;
+  canvas?: TempestBroadcastDualFormatCanvas;
+  sceneLinksReady: boolean;
+  linkedScenes?: number;
+  totalScenes?: number;
+  audioReady: boolean;
+  browserSourcesReady: boolean;
+  previewAvailable: boolean;
+  lastError?: string;
+}
+
+export interface TempestBroadcastStatus {
+  ready?: boolean;
+  streaming?: boolean;
+  recording?: boolean;
+  canvasProfile?: TempestBroadcastCanvasProfile;
+  dualFormat?: TempestBroadcastDualFormatStatus;
+  simulcast?: TempestBroadcastSimulcastStatus;
+  [key: string]: unknown;
+}
+
+export interface TempestDualFormatConfigureRequest {
+  enabled: boolean;
+  canvasPreset?: TwitchDualFormatCanvasPreset;
+  canvasName?: string;
+}
+
+export interface TempestBroadcastOutputHealth {
+  state: 'disabled' | 'offline' | 'starting' | 'live' | 'reconnecting' | 'stopping' | 'error';
+  active: boolean;
+  bytesSent?: number;
+  droppedFrames?: number;
+  totalFrames?: number;
+  congestion?: number;
+  lastError?: string;
+}
+
+export interface TempestBroadcastSimulcastStatus {
+  supported: boolean;
+  enabled: boolean;
+  configured: boolean;
+  credentialsStored: boolean;
+  secureStorageAvailable: boolean;
+  kickServerConfigured: boolean;
+  twitchServiceReady: boolean;
+  dualFormatReady: boolean;
+  sharedEncoder: boolean;
+  uploadCapacityConfigured: boolean;
+  uploadCapacityKbps?: number;
+  estimatedRequiredKbps?: number;
+  uploadHeadroomReady?: boolean;
+  recordingWithStream: boolean;
+  lastPreflightAt?: string;
+  lastPreflightPassed?: boolean;
+  lastPreflightError?: string;
+  twitch: TempestBroadcastOutputHealth;
+  kick: TempestBroadcastOutputHealth;
+  lastError?: string;
+}
+
+export interface TempestSimulcastConfigureRequest {
+  enabled: boolean;
+  kickServer?: string;
+  kickStreamKey?: string;
+  keepStoredKey?: boolean;
+  uploadCapacityKbps?: number;
+  recordingWithStream?: boolean;
+}
+
+export interface TempestSimulcastStartRequest {
+  recording?: boolean;
+  operatorChecklistAccepted?: boolean;
+}
+
+export interface TempestSimulcastStopRequest {
+  scope?: 'all' | 'kick';
+  force?: boolean;
 }
 
 export interface TempestAssetTypeSet {
@@ -156,6 +256,8 @@ export interface TempestSoundAlertDefinition {
   warudoEnabled: boolean;
   vtubeStudioEnabled: boolean;
   vtubeStudioHotkey?: string;
+  tempest2dEnabled?: boolean;
+  tempest2dAction?: string;
   cue: string;
   durationMs: number;
   viewerCooldownMs: number;
@@ -387,6 +489,19 @@ export interface TempestNormalizedTwitchEvent {
   payload: Record<string, unknown>;
 }
 
+export interface TempestNormalizedKickChatEvent {
+  schemaVersion: 1;
+  id: string;
+  topic: 'viewer.chat.message';
+  occurredAt: string;
+  source: 'kick';
+  channel: TempestTwitchChannelIdentity;
+  viewer?: TempestTwitchViewerIdentity;
+  payload: Record<string, unknown>;
+}
+
+export type TempestNormalizedChatEvent = TempestNormalizedTwitchEvent | TempestNormalizedKickChatEvent;
+
 export interface TempestWorkflowActionRun {
   id: string;
   name: string;
@@ -477,6 +592,91 @@ function requiredString(source: Record<string, unknown>, key: string, errors: st
     return '';
   }
   return value.trim();
+}
+
+export function validateDualFormatConfigureRequest(input: unknown): ValidationResult<TempestDualFormatConfigureRequest> {
+  const errors: string[] = [];
+  if (!isObject(input)) return { ok: false, errors: ['Dual Format configuration must be an object.'] };
+  if (typeof input.enabled !== 'boolean') errors.push('enabled must be a boolean.');
+  if (input.canvasPreset !== undefined && !twitchDualFormatCanvasPresets.includes(input.canvasPreset as TwitchDualFormatCanvasPreset)) {
+    errors.push(`canvasPreset must be one of: ${twitchDualFormatCanvasPresets.join(', ')}.`);
+  }
+  if (input.canvasName !== undefined && (typeof input.canvasName !== 'string' || !input.canvasName.trim() || input.canvasName.trim().length > 80)) {
+    errors.push('canvasName must be a non-empty string no longer than 80 characters.');
+  }
+  if (errors.length) return { ok: false, errors };
+  return {
+    ok: true,
+    errors,
+    value: {
+      enabled: input.enabled as boolean,
+      canvasPreset: (input.canvasPreset || '1080x1920') as TwitchDualFormatCanvasPreset,
+      canvasName: typeof input.canvasName === 'string' ? input.canvasName.trim() : 'Tempest Vertical'
+    }
+  };
+}
+
+export function validateSimulcastConfigureRequest(input: unknown): ValidationResult<TempestSimulcastConfigureRequest> {
+  const errors: string[] = [];
+  if (!isObject(input)) return { ok: false, errors: ['Simulcast configuration must be an object.'] };
+  if (typeof input.enabled !== 'boolean') errors.push('enabled must be a boolean.');
+  let kickServer: string | undefined;
+  if (input.kickServer !== undefined) {
+    if (typeof input.kickServer !== 'string' || !input.kickServer.trim() || input.kickServer.length > 500) {
+      errors.push('kickServer must be a non-empty RTMP or RTMPS URL no longer than 500 characters.');
+    } else {
+      try {
+        const parsed = new URL(input.kickServer.trim());
+        if (!['rtmp:', 'rtmps:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) {
+          errors.push('kickServer must be an RTMP or RTMPS URL without credentials, query, or fragment.');
+        } else kickServer = input.kickServer.trim().replace(/\/$/, '');
+      } catch {
+        errors.push('kickServer must be a valid RTMP or RTMPS URL.');
+      }
+    }
+  }
+  let kickStreamKey: string | undefined;
+  if (input.kickStreamKey !== undefined) {
+    if (typeof input.kickStreamKey !== 'string' || input.kickStreamKey.trim().length < 8 || input.kickStreamKey.trim().length > 512 || /[\r\n\0\s]/.test(input.kickStreamKey.trim())) {
+      errors.push('kickStreamKey must be between 8 and 512 characters and contain no whitespace.');
+    } else kickStreamKey = input.kickStreamKey.trim();
+  }
+  if (input.keepStoredKey !== undefined && typeof input.keepStoredKey !== 'boolean') errors.push('keepStoredKey must be a boolean.');
+  const uploadCapacityKbps = input.uploadCapacityKbps === undefined ? undefined : Number(input.uploadCapacityKbps);
+  if (uploadCapacityKbps !== undefined && (!Number.isInteger(uploadCapacityKbps) || uploadCapacityKbps < 1000 || uploadCapacityKbps > 1000000)) {
+    errors.push('uploadCapacityKbps must be an integer between 1000 and 1000000.');
+  }
+  if (input.recordingWithStream !== undefined && typeof input.recordingWithStream !== 'boolean') errors.push('recordingWithStream must be a boolean.');
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, errors, value: {
+    enabled: input.enabled as boolean,
+    ...(kickServer ? { kickServer } : {}),
+    ...(kickStreamKey ? { kickStreamKey } : {}),
+    keepStoredKey: input.keepStoredKey !== false,
+    ...(uploadCapacityKbps !== undefined ? { uploadCapacityKbps } : {}),
+    recordingWithStream: input.recordingWithStream === true
+  } };
+}
+
+export function validateSimulcastStartRequest(input: unknown): ValidationResult<TempestSimulcastStartRequest> {
+  if (!isObject(input)) return { ok: false, errors: ['Simulcast start request must be an object.'] };
+  const errors: string[] = [];
+  if (input.recording !== undefined && typeof input.recording !== 'boolean') errors.push('recording must be a boolean.');
+  if (input.operatorChecklistAccepted !== undefined && typeof input.operatorChecklistAccepted !== 'boolean') errors.push('operatorChecklistAccepted must be a boolean.');
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, errors: [], value: {
+    ...(input.recording !== undefined ? { recording: input.recording === true } : {}),
+    ...(input.operatorChecklistAccepted !== undefined ? { operatorChecklistAccepted: input.operatorChecklistAccepted === true } : {})
+  } };
+}
+
+export function validateSimulcastStopRequest(input: unknown): ValidationResult<TempestSimulcastStopRequest> {
+  if (!isObject(input)) return { ok: false, errors: ['Simulcast stop request must be an object.'] };
+  const errors: string[] = [];
+  if (input.scope !== undefined && !['all', 'kick'].includes(String(input.scope))) errors.push('scope must be all or kick.');
+  if (input.force !== undefined && typeof input.force !== 'boolean') errors.push('force must be a boolean.');
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, errors, value: { scope: input.scope === 'kick' ? 'kick' : 'all', force: input.force === true } };
 }
 
 export function validateApplicationManifest(input: unknown): ValidationResult<TempestApplicationManifest> {
@@ -662,6 +862,29 @@ export function validateNormalizedTwitchEvent(input: unknown): ValidationResult<
 
   if (errors.length) return { ok: false, errors };
   return { ok: true, errors, value: { ...source, schemaVersion: 1, id, occurredAt } as unknown as TempestNormalizedTwitchEvent };
+}
+
+export function validateNormalizedKickChatEvent(input: unknown): ValidationResult<TempestNormalizedKickChatEvent> {
+  const errors: string[] = [];
+  if (!isObject(input)) return { ok: false, errors: ['Normalized Kick chat event must be an object.'] };
+  const source = input;
+  if (source.schemaVersion !== 1) errors.push('schemaVersion must be 1.');
+  const id = requiredString(source, 'id', errors);
+  if (source.source !== 'kick') errors.push('source must be kick.');
+  if (source.topic !== 'viewer.chat.message') errors.push('topic must be viewer.chat.message.');
+  const occurredAt = requiredString(source, 'occurredAt', errors);
+  if (occurredAt && !Number.isFinite(Date.parse(occurredAt))) errors.push('occurredAt must be an ISO date-time.');
+  if (!isObject(source.channel)) errors.push('channel must be an object.');
+  else requiredString(source.channel, 'id', errors);
+  if (source.viewer !== undefined && !isObject(source.viewer)) errors.push('viewer must be an object when supplied.');
+  else if (isObject(source.viewer)) requiredString(source.viewer, 'id', errors);
+  if (!isObject(source.payload)) errors.push('payload must be an object.');
+  else {
+    requiredString(source.payload, 'messageId', errors);
+    requiredString(source.payload, 'text', errors);
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, errors, value: { ...source, schemaVersion: 1, id, occurredAt } as unknown as TempestNormalizedKickChatEvent };
 }
 
 export function validateWorkflowDefinition(input: unknown): ValidationResult<TempestWorkflowDefinition> {

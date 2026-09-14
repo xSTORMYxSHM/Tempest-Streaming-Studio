@@ -1,14 +1,19 @@
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
-import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet } from '@tempest/bridge';
-import { TEMPEST_STUDIO_VERSION, TempestSoundAlertPlaybackCommand } from '@tempest/contracts';
-import { validateTwitchAlertDesign } from '@tempest/bridge';
-import { startWarudoAdapter, WarudoAdapterRuntime } from '@tempest/warudo-adapter';
 import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
+import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet, KickCredentialStore, KickCredentialSet, validateTwitchAlertDesign } from '@tempest/bridge';
+import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
+import {
+  startTempest2DAdapter,
+  startWarudoAdapter,
+  Tempest2DAdapterRuntime,
+  WarudoAdapterRuntime
+} from '@tempest/warudo-adapter';
 import {
   LocalExtensionRuntime,
   LocalExtensionStatus,
@@ -28,6 +33,7 @@ import {
   describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
   syncHostedExtensionPanelDesign,
+  isOfficialHostedEbsUrl,
   validateHostedEbsUrl,
   validateHostedExtensionCredentials
 } from './hosted-extension';
@@ -41,14 +47,20 @@ const captureTargetArgument = process.argv.find((argument) => argument.startsWit
 const captureDialogArgument = process.argv.find((argument) => argument.startsWith('--capture-dialog='));
 const captureOverlay = process.argv.includes('--capture-overlay');
 const capturePreviewArgument = process.argv.find((argument) => argument.startsWith('--capture-preview='));
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'tempest',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false }
+}]);
 let bridge: TempestBridgeRuntime | null = null;
 let warudoAdapter: WarudoAdapterRuntime | null = null;
 let vtubeStudioAdapter: VTubeStudioAdapterRuntime | null = null;
+let tempest2dAdapter: Tempest2DAdapterRuntime | null = null;
 let localExtension: LocalExtensionRuntime | null = null;
 let localExtensionLastError: string | undefined;
 let hostedExtensionLastError: string | undefined;
 let broadcasterCredentialStore: TwitchCredentialStore | null = null;
 let discordRpc: TempestDiscordRpcClient | null = null;
+let kickCredentialStore: KickCredentialStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
@@ -180,6 +192,21 @@ const warudoReceiverSource = app.isPackaged
   ? path.join(supportRoot, 'avatar-controllers', 'warudo', 'TempestPerformanceNode.cs')
   : path.join(workspaceRoot, 'integrations', 'warudo', 'TempestPerformanceNode.cs');
 const extensionCertificatePassword = 'tempest-local-dev';
+const desktopRendererUrl = 'tempest://app/renderer/index.html';
+
+function resolveDesktopAssetUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== 'tempest:' || url.hostname !== 'app' || url.username || url.password || url.search || url.hash) {
+    throw new Error('Invalid desktop asset URL.');
+  }
+  const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  if (!relativePath || relativePath.includes('\0')) throw new Error('Invalid desktop asset path.');
+  const assetRoot = path.resolve(__dirname);
+  const assetPath = path.resolve(assetRoot, relativePath);
+  const normalizedRoot = `${assetRoot.toLowerCase()}${path.sep}`;
+  if (!assetPath.toLowerCase().startsWith(normalizedRoot)) throw new Error('Desktop asset path escapes the application bundle.');
+  return pathToFileURL(assetPath).href;
+}
 
 function privacySettingsPath(): string {
   return path.join(app.getPath('userData'), 'privacy-settings.json');
@@ -237,6 +264,11 @@ async function waitForRendererReady(window: BrowserWindow): Promise<boolean> {
   })`);
 }
 
+function resolveManifestPath(value: string | undefined, manifestDirectory: string): string | undefined {
+  if (!value) return value;
+  return path.isAbsolute(value) ? path.normalize(value) : path.resolve(manifestDirectory, value);
+}
+
 function createTwitchCredentialStore(dataDirectory: string, fileName = 'twitch-credentials.bin'): TwitchCredentialStore {
   const credentialPath = path.join(dataDirectory, fileName);
   return {
@@ -283,6 +315,32 @@ function createDiscordCredentialStore(dataDirectory: string): DiscordRpcTokenSto
     },
     async clear(): Promise<void> {
       await unlink(credentialPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    }
+  };
+}
+
+function createKickCredentialStore(dataDirectory: string): KickCredentialStore {
+  const credentialPath = path.join(dataDirectory, 'kick-credentials.bin');
+  return {
+    available: safeStorage.isEncryptionAvailable(),
+    async load(): Promise<KickCredentialSet | null> {
+      if (!safeStorage.isEncryptionAvailable()) return null;
+      try {
+        return JSON.parse(safeStorage.decryptString(await readFile(credentialPath))) as KickCredentialSet;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw new Error(`Could not read secure Kick credentials: ${(error as Error).message}`);
+      }
+    },
+    async save(credentials: KickCredentialSet): Promise<void> {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('Operating-system credential encryption is unavailable.');
+      await mkdir(dataDirectory, { recursive: true });
+      await writeFile(credentialPath, safeStorage.encryptString(JSON.stringify(credentials)), { mode: 0o600 });
+    },
+    async clear(): Promise<void> {
+      await unlink(credentialPath).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
     }
   };
 }
@@ -462,15 +520,47 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true,
+      webSecurity: true,
+      spellcheck: false
     }
   });
   window.setContentProtection(Boolean(privacySettings.captureProtection && !captureArgument));
   window.removeMenu();
-  window.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  const windowSession = window.webContents.session;
+  windowSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  windowSession.on('will-download', (event) => event.preventDefault());
+  const guardNavigation = (event: Electron.Event, targetUrl: string) => {
+    if (targetUrl === desktopRendererUrl) return;
+    try {
+      const target = new URL(targetUrl);
+      const localBridge = bridge ? new URL(bridge.baseUrl) : null;
+      if (captureOverlay && localBridge && target.origin === localBridge.origin && target.pathname === '/visual-alerts') return;
+    } catch {}
+    event.preventDefault();
+  };
+  window.webContents.on('will-navigate', guardNavigation);
+  window.webContents.on('will-redirect', guardNavigation);
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  void window.loadURL(desktopRendererUrl);
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
   return window;
+}
+
+function assertTrustedDesktopSender(event: IpcMainInvokeEvent): void {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    throw new Error('Studio rejected IPC from an untrusted renderer.');
+  }
+  const senderUrl = event.senderFrame?.url || event.sender.getURL();
+  if (senderUrl !== desktopRendererUrl) throw new Error('Studio rejected IPC outside the desktop renderer.');
+}
+
+function handleDesktop<TArgs extends unknown[]>(channel: string, listener: (event: IpcMainInvokeEvent, ...args: TArgs) => unknown): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedDesktopSender(event);
+    return listener(event, ...(args as TArgs));
+  });
 }
 
 function isAllowedTwitchAuthorizationNavigation(value: string): boolean {
@@ -546,40 +636,40 @@ function registerDesktopHandlers(): void {
   ipcMain.handle('studio:get-privacy-settings', () => ({ ...privacySettings }));
   ipcMain.handle('studio:save-privacy-settings', (_event, value: unknown) => savePrivacySettings(value));
 
-  ipcMain.handle('studio:copy-text', (_event, value: unknown) => {
+  handleDesktop('studio:copy-text', (_event, value: unknown) => {
     const text = String(value || '');
     if (!text || text.length > 4096) throw new Error('The value could not be copied.');
     clipboard.writeText(text);
     return true;
   });
 
-  ipcMain.handle('studio:get-bridge-config', () => {
+  handleDesktop('studio:get-bridge-config', () => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     return { baseUrl: bridge.baseUrl, protocolVersion: '1.0', dataMigration: dataMigrationStatus };
   });
 
-  ipcMain.handle('studio:get-app-info', () => ({ productName, version: TEMPEST_STUDIO_VERSION, dataDirectory: app.getPath('userData'), dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }));
   ipcMain.handle('studio:get-update-status', () => ({ ...studioUpdateStatus }));
   ipcMain.handle('studio:check-for-updates', () => checkForStudioUpdates());
   ipcMain.handle('studio:download-update', () => downloadStudioUpdate());
   ipcMain.handle('studio:install-update', () => installStudioUpdate());
+  handleDesktop('studio:get-app-info', () => ({ productName, version: TEMPEST_STUDIO_VERSION, dataDirectory: app.getPath('userData'), dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }));
 
-  ipcMain.handle('studio:open-data-directory', async () => {
+  handleDesktop('studio:open-data-directory', async () => {
     await mkdir(app.getPath('userData'), { recursive: true });
     const error = await shell.openPath(app.getPath('userData'));
     if (error) throw new Error(error);
     return true;
   });
 
-  ipcMain.handle('studio:export-diagnostics', async () => {
+  handleDesktop('studio:export-diagnostics', async () => {
     if (!bridge) throw new Error('Local control service is not running.');
     const bridgeGet = async (requestPath: string): Promise<unknown> => {
       const response = await fetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
       return response.ok ? response.json() : { status: response.status };
     };
-    const [health, alerts, sources] = await Promise.all([bridgeGet('/health'), bridgeGet('/v1/alert-diagnostics'), bridgeGet('/v1/visual-alerts')]);
+    const [health, alerts, sources, kick] = await Promise.all([bridgeGet('/health'), bridgeGet('/v1/alert-diagnostics'), bridgeGet('/v1/visual-alerts'), bridgeGet('/v1/integrations/kick')]);
     const sanitize = (value: unknown, key = ''): unknown => {
-      if (/token|secret|credential|api.?key|viewer|channelid|login/i.test(key)) return '[redacted]';
+      if (/token|secret|credential|api.?key|viewer|channelid|login|user(name|id)/i.test(key)) return '[redacted]';
       if (typeof value === 'string' && value.startsWith('file:')) {
         try { return `file:///[local]/${path.basename(new URL(value).pathname)}`; } catch { return '[local file]'; }
       }
@@ -587,14 +677,14 @@ function registerDesktopHandlers(): void {
       if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([entryKey, entry]) => [entryKey, sanitize(entry, entryKey)]));
       return value;
     };
-    const report = sanitize({ schemaVersion: 1, type: 'tempest.studio-diagnostics', generatedAt: new Date().toISOString(), product: { name: productName, version: TEMPEST_STUDIO_VERSION, dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }, health, alertDiagnostics: alerts, browserSources: sources, avatarControllers: { warudo: warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }, vtubeStudio: vtubeStudioAdapter?.status() || { bridge: 'disconnected', vtubeStudio: 'disconnected', authorization: 'required' } }, localExtension: { running: Boolean(localExtension), certificateAvailable: Boolean((await getLocalExtensionStatus()).certificateAvailable) } });
+    const report = sanitize({ schemaVersion: 1, type: 'tempest.studio-diagnostics', generatedAt: new Date().toISOString(), product: { name: productName, version: TEMPEST_STUDIO_VERSION, dataVersion: dataMigrationStatus?.dataVersion, packaged: app.isPackaged, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.versions.node }, health, alertDiagnostics: alerts, browserSources: sources, kick, avatarControllers: { warudo: warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }, vtubeStudio: vtubeStudioAdapter?.status() || { bridge: 'disconnected', vtubeStudio: 'disconnected', authorization: 'required' } }, localExtension: { running: Boolean(localExtension), certificateAvailable: Boolean((await getLocalExtensionStatus()).certificateAvailable) } });
     const result = await dialog.showSaveDialog(mainWindow || undefined as never, { title: 'Export Redacted Studio Diagnostics', defaultPath: `tempest-studio-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON diagnostics', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return null;
     await writeFile(result.filePath, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     return { path: result.filePath };
   });
 
-  ipcMain.handle('studio:bridge-request', async (_event, request: { path?: string; method?: string; body?: unknown }) => {
+  handleDesktop('studio:bridge-request', async (_event, request: { path?: string; method?: string; body?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     const requestPath = String(request?.path || '');
     if (requestPath !== '/health' && !requestPath.startsWith('/v1/')) throw new Error('Bridge route is outside the Studio API boundary.');
@@ -613,7 +703,7 @@ function registerDesktopHandlers(): void {
     return body;
   });
 
-  ipcMain.handle('studio:get-warudo-status', () => ({
+  handleDesktop('studio:get-warudo-status', () => ({
     ...(warudoAdapter?.status() || { bridge: 'disconnected', warudo: 'disconnected' }),
     endpoint: process.env.TEMPEST_WARUDO_URL || 'ws://localhost:4770/',
     action: 'tempestPerformance'
@@ -666,9 +756,9 @@ function registerDesktopHandlers(): void {
     return discordRpc.forget();
   });
 
-  ipcMain.handle('studio:get-local-extension-status', () => getLocalExtensionStatus());
-  ipcMain.handle('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
-  ipcMain.handle('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
+  handleDesktop('studio:get-local-extension-status', () => getLocalExtensionStatus());
+  handleDesktop('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
+  handleDesktop('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     if (!broadcasterCredentialStore?.available) throw new Error('Windows credential encryption is unavailable.');
     hostedExtensionLastError = undefined;
@@ -683,6 +773,21 @@ function registerDesktopHandlers(): void {
     if (officialService && !officialTwitchAuthorization) throw new Error('The public Extension requires the built-in Tempest Twitch application. Choose Use Official Twitch Sign-In, reconnect your broadcaster account, then connect your channel again.');
     const tokens = await broadcasterCredentialStore.load();
     if (!tokens?.accessToken) throw new Error('Authorize your broadcaster account in Twitch Gateway before pairing the hosted Extension.');
+    if (!isOfficialHostedEbsUrl(ebsBaseUrl)) {
+      const destination = new URL(ebsBaseUrl);
+      const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
+        type: 'warning',
+        title: 'Send Twitch authorization to a custom service?',
+        message: `This will send your current Twitch OAuth access token to ${destination.host}.`,
+        detail: 'Only continue if you operate or fully trust this service. The official Tempest Signal service is signal.tempestmainframe.com.',
+        buttons: ['Cancel', 'Send and pair'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+      });
+      if (confirmation.response !== 1) throw new Error('Pairing with the custom Extension service was canceled.');
+    }
+    hostedExtensionLastError = undefined;
     try {
       const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {
         method: 'POST',
@@ -710,7 +815,7 @@ function registerDesktopHandlers(): void {
       throw error;
     }
   });
-  ipcMain.handle('studio:revoke-hosted-extension', async () => {
+  handleDesktop('studio:revoke-hosted-extension', async () => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     const credentials = await loadHostedExtensionCredentials();
     if (!credentials) return getHostedExtensionStatus();
@@ -727,10 +832,30 @@ function registerDesktopHandlers(): void {
       throw error;
     }
   });
-  ipcMain.handle('studio:get-twitch-panel-design', () => loadTwitchPanelDesign());
-  ipcMain.handle('studio:save-twitch-panel-design', (_event, input: unknown) => saveTwitchPanelDesign(input));
+  handleDesktop('studio:link-hosted-kick', async () => {
+    const [hosted, kick] = await Promise.all([loadHostedExtensionCredentials(), kickCredentialStore?.load()]);
+    if (!hosted) throw new Error('Pair the Hosted Extension relay in Twitch Gateway before enabling Kick webhooks.');
+    if (!kick?.accessToken) throw new Error('Connect the Kick broadcaster account first.');
+    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${hosted.relayToken}`, 'X-Kick-OAuth': kick.accessToken }
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string; linked?: boolean; kick?: { userId?: string; username?: string } };
+    if (!response.ok || !result.linked) throw new Error(result.error || `Hosted Kick relay linking failed with ${response.status}.`);
+    return result;
+  });
+  handleDesktop('studio:unlink-hosted-kick', async () => {
+    const hosted = await loadHostedExtensionCredentials();
+    if (!hosted) return { unlinked: true };
+    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
+    const result = await response.json().catch(() => ({})) as { error?: string; unlinked?: boolean };
+    if (!response.ok && response.status !== 404) throw new Error(result.error || `Hosted Kick relay unlinking failed with ${response.status}.`);
+    return { unlinked: true };
+  });
+  handleDesktop('studio:get-twitch-panel-design', () => loadTwitchPanelDesign());
+  handleDesktop('studio:save-twitch-panel-design', (_event, input: unknown) => saveTwitchPanelDesign(input));
 
-  ipcMain.handle('studio:start-local-extension', async (_event, input: { channelId?: unknown; extensionSecret?: unknown }) => {
+  handleDesktop('studio:start-local-extension', async (_event, input: { channelId?: unknown; extensionSecret?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     if (localExtension) return getLocalExtensionStatus();
     const stored = await loadLocalExtensionSettings();
@@ -755,13 +880,13 @@ function registerDesktopHandlers(): void {
     }
   });
 
-  ipcMain.handle('studio:stop-local-extension', async () => {
+  handleDesktop('studio:stop-local-extension', async () => {
     await stopLocalExtension();
     localExtensionLastError = undefined;
     return getLocalExtensionStatus();
   });
 
-  ipcMain.handle('studio:forget-local-extension-secret', async () => {
+  handleDesktop('studio:forget-local-extension-secret', async () => {
     await stopLocalExtension();
     await unlink(localExtensionCredentialPath()).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== 'ENOENT') throw error;
@@ -770,7 +895,18 @@ function registerDesktopHandlers(): void {
     return getLocalExtensionStatus();
   });
 
-  ipcMain.handle('studio:prepare-local-extension-certificate', async () => {
+  handleDesktop('studio:prepare-local-extension-certificate', async () => {
+    const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'warning',
+      title: 'Trust a localhost development certificate?',
+      message: 'Studio will create a localhost certificate and add it to the current Windows user trusted root store.',
+      detail: 'This is only needed for Twitch local Extension testing. You can remove it later with the Untrust command in the local testing guide.',
+      buttons: ['Cancel', 'Create and trust'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
+    });
+    if (confirmation.response !== 1) throw new Error('Local certificate preparation was canceled.');
     const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), '-Trust'], {
       cwd: supportRoot,
       windowsHide: true,
@@ -785,13 +921,64 @@ function registerDesktopHandlers(): void {
     return getLocalExtensionStatus();
   });
 
-  ipcMain.handle('studio:open-local-extension-panel', async () => {
+  handleDesktop('studio:open-local-extension-panel', async () => {
     if (!localExtension) throw new Error('Start the Local Extension before opening its panel.');
     await shell.openExternal(localExtensionUrls.panelUrl);
     return true;
   });
 
-  ipcMain.handle('studio:select-sound-alert-audio', async () => {
+  handleDesktop('studio:select-application-manifest', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Register Tempest Application',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Tempest application manifest', extensions: ['json'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const manifestPath = result.filePaths[0];
+    const parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as TempestApplicationManifest;
+    const validation = validateApplicationManifest(parsed);
+    if (!validation.ok || !validation.value) throw new Error(validation.errors.join('\n'));
+    const manifestDirectory = path.dirname(manifestPath);
+    const manifest: TempestApplicationManifest = {
+      ...validation.value,
+      manifestPath,
+      icon: resolveManifestPath(validation.value.icon, manifestDirectory),
+      launch: validation.value.launch ? {
+        ...validation.value.launch,
+        executable: resolveManifestPath(validation.value.launch.executable, manifestDirectory) as string,
+        workingDirectory: resolveManifestPath(validation.value.launch.workingDirectory, manifestDirectory)
+      } : undefined
+    };
+    return manifest;
+  });
+
+  handleDesktop('studio:select-asset', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Add Asset to Tempest Library',
+      properties: ['openFile'],
+      filters: [{ name: 'All assets', extensions: ['*'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = result.filePaths[0];
+    const bytes = await readFile(filePath);
+    const details = await stat(filePath);
+    const baseName = path.basename(filePath, path.extname(filePath));
+    const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'asset';
+    return {
+      path: filePath,
+      uri: pathToFileURL(filePath).href,
+      name: baseName,
+      suggestedId: `com.tempestmainframe.asset.${slug}`,
+      checksum: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      size: details.size,
+      extension: path.extname(filePath).toLowerCase()
+    };
+  });
+
+  handleDesktop('studio:select-sound-alert-audio', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Assign Sound Alert Audio',
       properties: ['openFile'],
@@ -807,7 +994,7 @@ function registerDesktopHandlers(): void {
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
   });
 
-  ipcMain.handle('studio:select-sound-alert-visual', async () => {
+  handleDesktop('studio:select-sound-alert-visual', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Assign Sound Alert Visual',
       properties: ['openFile'],
@@ -881,7 +1068,7 @@ function registerDesktopHandlers(): void {
     return { ...imported, sourcePath: filePath };
   });
 
-  ipcMain.handle('studio:validate-alert-code', (_event, input: { html?: unknown; css?: unknown; javascript?: unknown }) => {
+  handleDesktop('studio:validate-alert-code', (_event, input: { html?: unknown; css?: unknown; javascript?: unknown }) => {
     const html = String(input?.html || '');
     const css = String(input?.css || '');
     const javascript = String(input?.javascript || '');
@@ -899,7 +1086,7 @@ function registerDesktopHandlers(): void {
     return { ok: errors.length === 0, errors };
   });
 
-  ipcMain.handle('studio:import-alert-design-template', async () => {
+  handleDesktop('studio:import-alert-design-template', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Import Tempest Alert Design', properties: ['openFile'], filters: [{ name: 'Tempest alert design', extensions: ['json'] }]
     });
@@ -913,7 +1100,7 @@ function registerDesktopHandlers(): void {
     return { path: filePath, name: String(document.name || path.basename(filePath, '.json')), kind: String(document.kind || 'alert'), design };
   });
 
-  ipcMain.handle('studio:export-alert-design-template', async (_event, input: { name?: unknown; kind?: unknown; design?: unknown }) => {
+  handleDesktop('studio:export-alert-design-template', async (_event, input: { name?: unknown; kind?: unknown; design?: unknown }) => {
     const name = String(input?.name || 'Alert').trim().slice(0, 100) || 'Alert';
     const design = validateTwitchAlertDesign(input?.design);
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'alert';
@@ -925,7 +1112,7 @@ function registerDesktopHandlers(): void {
     return { path: result.filePath };
   });
 
-  ipcMain.handle('studio:export-alert-pack', async (_event, input: { name?: unknown; description?: unknown; kind?: unknown; alert?: unknown }) => {
+  handleDesktop('studio:export-alert-pack', async (_event, input: { name?: unknown; description?: unknown; kind?: unknown; alert?: unknown }) => {
     const document = await buildTempestAlertPack({ ...input, createdWithVersion: TEMPEST_STUDIO_VERSION });
     const slug = document.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'tempest-alert';
     const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
@@ -938,7 +1125,7 @@ function registerDesktopHandlers(): void {
     return { path: result.filePath, assetCount: document.assets.length, totalAssetBytes: document.assets.reduce((sum, asset) => sum + asset.size, 0) };
   });
 
-  ipcMain.handle('studio:import-alert-pack', async () => {
+  handleDesktop('studio:import-alert-pack', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Import Tempest Alert Pack', properties: ['openFile'], filters: [{ name: 'Tempest Alert Pack', extensions: ['tempest-alert-pack'] }]
     });
@@ -964,7 +1151,7 @@ function registerDesktopHandlers(): void {
     return { ...imported, sourcePath: filePath };
   });
 
-  ipcMain.handle('studio:export-backup', async (_event, rendererSettings: unknown) => {
+  handleDesktop('studio:export-backup', async (_event, rendererSettings: unknown) => {
     const document = await buildTempestStudioBackup({ userDataDirectory: app.getPath('userData'), productVersion: TEMPEST_STUDIO_VERSION, rendererSettings });
     const date = new Date().toISOString().slice(0, 10);
     const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
@@ -975,7 +1162,7 @@ function registerDesktopHandlers(): void {
     return { path: result.filePath, documentCount: Object.keys(document.documents).length, assetCount: document.assets.length, excluded: document.exclusions };
   });
 
-  ipcMain.handle('studio:restore-backup', async () => {
+  handleDesktop('studio:restore-backup', async () => {
     const selection = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Restore Tempest Streaming Studio', properties: ['openFile'], filters: [{ name: 'Tempest Studio Backup', extensions: ['tempest-studio-backup'] }]
     });
@@ -1006,20 +1193,20 @@ function registerDesktopHandlers(): void {
     return { ...restored, sourcePath: filePath, restartRequired: true };
   });
 
-  ipcMain.handle('studio:restart-app', () => {
+  handleDesktop('studio:restart-app', () => {
     app.relaunch();
     app.exit(0);
     return true;
   });
 
-  ipcMain.handle('studio:get-giphy-status', async () => ({ configured: Boolean(await loadGiphyApiKey()), encryptionAvailable: safeStorage.isEncryptionAvailable() }));
+  handleDesktop('studio:get-giphy-status', async () => ({ configured: Boolean(await loadGiphyApiKey()), encryptionAvailable: safeStorage.isEncryptionAvailable() }));
 
-  ipcMain.handle('studio:save-giphy-api-key', async (_event, apiKey: unknown) => {
+  handleDesktop('studio:save-giphy-api-key', async (_event, apiKey: unknown) => {
     await saveGiphyApiKey(apiKey);
     return { configured: true, encryptionAvailable: true };
   });
 
-  ipcMain.handle('studio:search-giphy', async (_event, query: unknown) => {
+  handleDesktop('studio:search-giphy', async (_event, query: unknown) => {
     const apiKey = await loadGiphyApiKey();
     if (!apiKey) throw new Error('Add a GIPHY API key before searching.');
     const search = String(query || '').trim();
@@ -1041,7 +1228,7 @@ function registerDesktopHandlers(): void {
     };
   });
 
-  ipcMain.handle('studio:import-giphy-visual', async (_event, input: { id?: unknown; mediaUrl?: unknown }) => {
+  handleDesktop('studio:import-giphy-visual', async (_event, input: { id?: unknown; mediaUrl?: unknown }) => {
     const id = String(input?.id || '').trim();
     if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('The selected GIPHY result has an invalid identifier.');
     const mediaUrl = new URL(String(input?.mediaUrl || ''));
@@ -1064,29 +1251,59 @@ function registerDesktopHandlers(): void {
     return { path: filePath, uri: pathToFileURL(filePath).href, name: `GIPHY ${id}${extension}`, size: bytes.length };
   });
 
-  ipcMain.handle('studio:open-external', async (_event, targetUrl: string) => {
+  handleDesktop('studio:launch-application', async (_event, input: unknown) => {
+    const validation = validateApplicationManifest(input);
+    if (!validation.ok || !validation.value) throw new Error(validation.errors.join(' '));
+    const launch = validation.value.launch;
+    if (!launch) throw new Error(`${validation.value.name} has no launch configuration.`);
+    const executable = path.normalize(launch.executable);
+    const executableDetails = await stat(executable).catch(() => null);
+    if (!executableDetails?.isFile()) throw new Error(`Application executable was not found: ${executable}`);
+    const workingDirectory = launch.workingDirectory || path.dirname(executable);
+    const child = spawn(executable, launch.args || [], {
+      cwd: workingDirectory,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+      shell: false
+    });
+    child.unref();
+    return { launched: true, pid: child.pid };
+  });
+
+  handleDesktop('studio:reveal-path', async (_event, targetPath: string) => {
+    const normalized = path.normalize(String(targetPath || ''));
+    if (!normalized) throw new Error('No path was supplied.');
+    shell.showItemInFolder(normalized);
+    return true;
+  });
+
+  handleDesktop('studio:open-external', async (_event, targetUrl: string) => {
     const url = new URL(String(targetUrl || ''));
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Only public HTTPS links may be opened from Studio.');
     await shell.openExternal(url.href);
     return true;
   });
 
-  ipcMain.handle('studio:open-isolated-twitch-authorization', (_event, targetUrl: unknown) => openIsolatedTwitchAuthorization(targetUrl));
-  ipcMain.handle('studio:close-isolated-twitch-authorization', () => closeIsolatedTwitchAuthorization());
+  handleDesktop('studio:open-isolated-twitch-authorization', (_event, targetUrl: unknown) => openIsolatedTwitchAuthorization(targetUrl));
+  handleDesktop('studio:close-isolated-twitch-authorization', () => closeIsolatedTwitchAuthorization());
 }
 
 app.whenReady().then(async () => {
+  await protocol.handle('tempest', (request) => net.fetch(resolveDesktopAssetUrl(request.url)));
   const userDataDirectory = app.getPath('userData');
   privacySettings = await loadPrivacySettings();
   dataMigrationStatus = await runStudioDataMigrations({ userDataDirectory, productVersion: TEMPEST_STUDIO_VERSION });
   const bridgeDataDirectory = path.join(userDataDirectory, 'bridge');
   broadcasterCredentialStore = createTwitchCredentialStore(bridgeDataDirectory);
+  kickCredentialStore = createKickCredentialStore(bridgeDataDirectory);
   bridge = await startTempestBridge({
     host: '127.0.0.1',
     port: bridgePort,
     dataDirectory: bridgeDataDirectory,
     twitchCredentialStore: broadcasterCredentialStore,
     chatbotCredentialStore: createTwitchCredentialStore(bridgeDataDirectory, 'chatbot-credentials.bin'),
+    kickCredentialStore,
     extensionRelay: extensionRelayOptionsFromEnvironment(),
     soundAlertPlayback(command: TempestSoundAlertPlaybackCommand) {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('studio:sound-alert-playback', command);
@@ -1121,6 +1338,14 @@ app.whenReady().then(async () => {
     bridgeToken: bridge.token,
     vtubeStudioUrl: process.env.TEMPEST_VTUBE_STUDIO_URL,
     tokenStore: createVTubeStudioTokenStore(),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  tempest2dAdapter = startTempest2DAdapter({
+    bridgeUrl: `${bridge.baseUrl.replace('http', 'ws')}/v1/socket`,
+    bridgeToken: bridge.token,
+    host: process.env.TEMPEST_2D_HOST,
+    port: Number(process.env.TEMPEST_2D_PORT) || undefined,
+    // Packaged GUI launches do not have a durable stdout/stderr pipe on Windows.
     logger: { info() {}, warn() {}, error() {} }
   });
   registerDesktopHandlers();
@@ -1193,6 +1418,7 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
   });
 }).catch((error) => {
+  console.error(`${productName} could not start:`, error);
   dialog.showErrorBox(`${productName} could not start`, error.message);
   app.exit(1);
 });
@@ -1217,6 +1443,11 @@ app.on('before-quit', () => {
     const activeDiscordRpc = discordRpc;
     discordRpc = null;
     void activeDiscordRpc.close().catch(() => {});
+  }
+  if (tempest2dAdapter) {
+    const activeAdapter = tempest2dAdapter;
+    tempest2dAdapter = null;
+    void activeAdapter.close().catch(() => {});
   }
   if (bridge) {
     const activeBridge = bridge;

@@ -24,6 +24,7 @@ export interface ExtensionRelayStatus {
 
 export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   handler(event: TempestNormalizedTwitchEvent): Promise<ExtensionRelayResult>;
+  kickEventHandler?(event: { event: unknown; eventId?: string; occurredAt?: string }): Promise<ExtensionRelayResult>;
   catalog?(): Array<{
     id: string;
     name: string;
@@ -173,8 +174,17 @@ export class TempestExtensionRelayClient {
     try {
       const message = JSON.parse(raw) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; event?: unknown };
       if (message.type === 'welcome' || message.type === 'heartbeat' || message.type === 'catalog.ack') return;
-      if (message.protocolVersion !== 1 || message.type !== 'interaction' || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
+      if (message.protocolVersion !== 1 || !['interaction', 'kick.event'].includes(String(message.type)) || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
       requestId = message.requestId;
+      if (message.type === 'kick.event') {
+        if (!this.options.kickEventHandler || !message.event || typeof message.event !== 'object' || Array.isArray(message.event)) throw new Error('EBS sent an invalid Kick relay event.');
+        const envelope = message.event as { event?: unknown; eventId?: unknown; occurredAt?: unknown };
+        const result = await this.options.kickEventHandler({ event: envelope.event, eventId: typeof envelope.eventId === 'string' ? envelope.eventId : undefined, occurredAt: typeof envelope.occurredAt === 'string' ? envelope.occurredAt : undefined });
+        if (!Number.isInteger(result.status) || result.status < 100 || result.status > 599) throw new Error('Studio Kick relay handler returned an invalid HTTP status.');
+        this.update({ ...this.currentStatus, lastInteractionAt: new Date().toISOString(), lastError: undefined });
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId, status: result.status, body: result.body }));
+        return;
+      }
       const validation = validateNormalizedTwitchEvent(message.event);
       if (!validation.ok || !validation.value) throw new Error(validation.errors.join(' '));
       if (validation.value.channel.id !== this.options.channelId) throw new Error('EBS interaction channel does not match this Studio relay.');

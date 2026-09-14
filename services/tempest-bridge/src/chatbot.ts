@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import type { TempestNormalizedTwitchEvent } from '@tempest/contracts';
+import type { TempestNormalizedChatEvent, TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
 
 export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as const;
@@ -36,8 +36,40 @@ export interface ChatbotActivity {
   viewerName?: string;
   sourceChannelLogin?: string;
   sharedChat?: boolean;
+  platform?: 'twitch' | 'kick';
   state: 'accepted' | 'blocked' | 'ignored' | 'error';
   message: string;
+}
+
+export interface ChatbotLiveMessage {
+  id: string;
+  occurredAt: string;
+  viewerId: string;
+  viewerLogin: string;
+  viewerName: string;
+  roles: string[];
+  text: string;
+  platform: 'twitch' | 'kick';
+  sharedChat: boolean;
+  sourceChannelId?: string;
+  sourceChannelLogin?: string;
+  sourceChannelDisplayName?: string;
+}
+
+export interface TwitchSharedChatParticipant {
+  userId: string;
+  login: string;
+  displayName: string;
+  host: boolean;
+}
+
+export interface TwitchSharedChatStatus {
+  state: 'inactive' | 'active' | 'unavailable';
+  sessionId?: string;
+  host?: { userId: string; login: string; displayName: string };
+  participants: TwitchSharedChatParticipant[];
+  updatedAt?: string;
+  lastError?: string;
 }
 
 export interface ChatbotWeatherProvider {
@@ -145,6 +177,8 @@ export interface ChatbotStatus {
   channel?: { userId: string; login: string };
   commands: ChatbotCommand[];
   activity: ChatbotActivity[];
+  messages: ChatbotLiveMessage[];
+  sharedChat: TwitchSharedChatStatus;
   messagesReceived: number;
   commandsTriggered: number;
   lastMessageAt?: string;
@@ -188,7 +222,7 @@ export interface NowPlayingProviderStatus {
 
 export interface ChatbotDispatch {
   command: ChatbotCommand;
-  event: TempestNormalizedTwitchEvent;
+  event: TempestNormalizedChatEvent;
   arguments: string[];
   simulated: boolean;
 }
@@ -203,8 +237,9 @@ export interface TwitchChatbotOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
-  onEvent?: (event: TempestNormalizedTwitchEvent) => void | Promise<void>;
+  onEvent?: (event: TempestNormalizedChatEvent) => void | Promise<void>;
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
+  sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
 }
 
@@ -559,6 +594,8 @@ export class TwitchChatbot {
   private silenceTimer?: NodeJS.Timeout;
   private stopping = false;
   private activity: ChatbotActivity[] = [];
+  private messages: ChatbotLiveMessage[] = [];
+  private sharedChat: TwitchSharedChatStatus = { state: 'inactive', participants: [] };
   private messagesReceived = 0;
   private commandsTriggered = 0;
   private lastMessageAt?: string;
@@ -686,6 +723,12 @@ export class TwitchChatbot {
       channel: this.channel ? { userId: this.channel.channelId, login: this.channel.channelLogin } : undefined,
       commands: this.configuration.commands.map(copyCommand),
       activity: this.activity.map((entry) => ({ ...entry })),
+      messages: this.messages.map((entry) => ({ ...entry, roles: [...entry.roles] })),
+      sharedChat: {
+        ...this.sharedChat,
+        host: this.sharedChat.host ? { ...this.sharedChat.host } : undefined,
+        participants: this.sharedChat.participants.map((participant) => ({ ...participant }))
+      },
       messagesReceived: this.messagesReceived,
       commandsTriggered: this.commandsTriggered,
       lastMessageAt: this.lastMessageAt,
@@ -898,7 +941,21 @@ export class TwitchChatbot {
     return { allowed: false, code: 'not-assigned', reason: 'This channel has limited interactions to its assigned creators.' };
   }
 
-  async processChatEvent(event: TempestNormalizedTwitchEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
+  async postMessage(input: unknown): Promise<{ sent: true }> {
+    const source = input && typeof input === 'object' ? input as { message?: unknown } : {};
+    const message = String(source.message || '').trim();
+    if (!message) throw new Error('Chat message is required.');
+    if ([...message].length > 500) throw new Error('Chat message must be 500 characters or fewer.');
+    await this.sendMessage(message);
+    return { sent: true };
+  }
+
+  clearMessages(): ChatbotStatus {
+    this.messages = [];
+    return this.status();
+  }
+
+  async processChatEvent(event: TempestNormalizedChatEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
     if (!simulated) {
       const cutoff = Date.now() - 10 * 60 * 1000;
       for (const [id, seenAt] of this.seenEventIds) if (seenAt < cutoff) this.seenEventIds.delete(id);
@@ -913,9 +970,33 @@ export class TwitchChatbot {
     if (!simulated) await this.options.onEvent?.(event);
     if (event.topic !== 'viewer.chat.message') return { matched: false, accepted: false };
     if (event.viewer?.id && event.viewer.id === this.identity?.userId) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
-    const autoModResult = await this.processAutoMod(event, simulated);
-    if (autoModResult) return autoModResult;
-    if (!simulated) await this.processFirstChatShoutout(event);
+    if (event.source === 'twitch') {
+      const autoModResult = await this.processAutoMod(event, simulated);
+      if (autoModResult) return autoModResult;
+      if (!simulated) await this.processFirstChatShoutout(event);
+    }
+    if (!simulated) {
+      const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
+      const sourceChannelLogin = String(event.payload.sourceChannelLogin || '').trim();
+      const sourceChannelDisplayName = String(event.payload.sourceChannelDisplayName || '').trim();
+      const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
+      this.messages.push({
+        id: event.id,
+        occurredAt: event.occurredAt,
+        viewerId: String(event.viewer?.id || ''),
+        viewerLogin: String(event.viewer?.login || ''),
+        viewerName: String(event.viewer?.displayName || event.viewer?.login || 'Viewer'),
+        roles: [...(event.viewer?.roles || [])],
+        text: String(event.payload.text || '').slice(0, 500),
+        platform: event.source,
+        sharedChat,
+        ...(sourceChannelId ? { sourceChannelId } : {}),
+        ...(sourceChannelLogin ? { sourceChannelLogin } : {}),
+        ...(sourceChannelDisplayName ? { sourceChannelDisplayName } : {})
+      });
+      this.messages = this.messages.slice(-100);
+    }
+    if (event.payload.botMessage === true || (event.source === 'twitch' && event.viewer?.id && event.viewer.id === this.identity?.userId)) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
     const [rawName, ...args] = text.slice(this.configuration.prefix.length).trim().split(/\s+/);
@@ -926,7 +1007,7 @@ export class TwitchChatbot {
     const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
     const sourceChannelLogin = String(event.payload.sourceChannelLogin || '').trim();
     const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
-    const activityContext = sharedChat ? { sharedChat: true, sourceChannelLogin: sourceChannelLogin || sourceChannelId || 'shared-chat-participant' } : {};
+    const activityContext = { platform: event.source, ...(sharedChat ? { sharedChat: true, sourceChannelLogin: sourceChannelLogin || sourceChannelId || 'shared-chat-participant' } : {}) };
     if (sharedChat && !command.allowSharedChat) {
       return this.block(command, viewerName, `Unavailable from Shared Chat${sourceChannelLogin ? ` channel @${sourceChannelLogin}` : ''}.`, activityContext);
     }
@@ -936,7 +1017,7 @@ export class TwitchChatbot {
     if (!bypassCooldown) {
       const globalRemaining = (this.lastGlobalUse.get(command.id) || 0) + command.globalCooldownMs - now;
       if (globalRemaining > 0) return this.block(command, viewerName, `Global cooldown: ${Math.ceil(globalRemaining / 1000)}s remaining.`, activityContext);
-      const viewerKey = `${command.id}:${event.viewer?.id || viewerName.toLowerCase()}`;
+      const viewerKey = `${command.id}:${event.source}:${event.viewer?.id || viewerName.toLowerCase()}`;
       const viewerRemaining = (this.lastViewerUse.get(viewerKey) || 0) + command.viewerCooldownMs - now;
       if (viewerRemaining > 0) return this.block(command, viewerName, `Viewer cooldown: ${Math.ceil(viewerRemaining / 1000)}s remaining.`, activityContext);
       this.lastViewerUse.set(viewerKey, now);
@@ -950,7 +1031,14 @@ export class TwitchChatbot {
       .replaceAll('{args}', args.join(' '));
     try {
       await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
-      if (response && !simulated) await this.sendMessage(response, command.replyToViewer ? String(event.payload.messageId || '') : undefined);
+      if (response && !simulated) {
+        const replyId = command.replyToViewer ? String(event.payload.messageId || '') : undefined;
+        if (event.source === 'kick') {
+          if (!this.options.sendPlatformMessage) throw new Error('Kick chat output is not configured.');
+          await this.options.sendPlatformMessage('kick', response, replyId);
+        }
+        else await this.sendMessage(response, replyId);
+      }
       this.commandsTriggered += simulated ? 0 : 1;
       this.record({ command: command.name, viewerName, ...activityContext, state: 'accepted', message: simulated ? `Simulated !${command.name}.` : `Accepted !${command.name} from ${viewerName}.` });
       return { matched: true, accepted: true, command: copyCommand(command), response };
@@ -1119,7 +1207,7 @@ export class TwitchChatbot {
     await this.stopConnection();
   }
 
-  private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin'> = {}) {
+  private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin' | 'platform'> = {}) {
     this.record({ command: command.name, viewerName, ...activityContext, state: 'blocked', message: `${viewerName}: ${reason}` });
     return { matched: true, accepted: false, command: copyCommand(command), reason };
   }
@@ -1296,13 +1384,13 @@ export class TwitchChatbot {
     }
   }
 
-  private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedTwitchEvent): Promise<string> {
+  private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedChatEvent): Promise<string> {
     switch (command.handler) {
       case 'command-directory': return this.commandDirectoryResponse(event);
-      case 'stream-uptime': return this.streamUptimeResponse();
-      case 'channel-title': return this.channelTitleResponse();
-      case 'channel-game': return this.channelGameResponse();
-      case 'stream-schedule': return this.streamScheduleResponse();
+      case 'stream-uptime': return event.source === 'kick' ? 'Stream uptime is currently available on Twitch only.' : this.streamUptimeResponse();
+      case 'channel-title': return event.source === 'kick' ? 'The title command is currently available on Twitch only.' : this.channelTitleResponse();
+      case 'channel-game': return event.source === 'kick' ? 'The category command is currently available on Twitch only.' : this.channelGameResponse();
+      case 'stream-schedule': return event.source === 'kick' ? 'The schedule command is currently available on Twitch only.' : this.streamScheduleResponse();
       case 'local-weather':
       case 'seattle-weather': return this.localWeatherResponse();
       case 'radio-now-playing': return this.radioNowPlayingResponse();
@@ -1310,12 +1398,12 @@ export class TwitchChatbot {
     }
   }
 
-  private commandDirectoryResponse(event: TempestNormalizedTwitchEvent): string {
+  private commandDirectoryResponse(event: TempestNormalizedChatEvent): string {
     const sourceChannelId = String(event.payload.sourceChannelId || '').trim();
     const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
     const roles = event.viewer?.roles || [];
     const names = this.configuration.commands
-      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles))
+      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles) && !(event.source === 'kick' && ['stream-uptime', 'channel-title', 'channel-game', 'stream-schedule'].includes(command.handler || '')))
       .map((command) => `${this.configuration.prefix}${command.name}`);
     return `Available commands: ${names.join(' · ')}`.slice(0, 500);
   }
@@ -1569,14 +1657,18 @@ export class TwitchChatbot {
     if (this.socket !== socket) return;
     const message = JSON.parse(raw) as {
       metadata?: { message_id?: string; message_type?: string; message_timestamp?: string; subscription_type?: string };
-      payload?: { session?: { id?: string; keepalive_timeout_seconds?: number; reconnect_url?: string }; event?: Record<string, unknown> };
+      payload?: {
+        session?: { id?: string; keepalive_timeout_seconds?: number; reconnect_url?: string };
+        subscription?: { type?: string; status?: string };
+        event?: Record<string, unknown>;
+      };
     };
     const type = message.metadata?.message_type;
     this.resetSilenceTimer(Number(message.payload?.session?.keepalive_timeout_seconds) || 30);
     if (type === 'session_welcome') {
       const sessionId = message.payload?.session?.id;
       if (!sessionId) throw new Error('EventSub Welcome message did not include a session ID.');
-      if (!this.inheritedSubscriptionSockets.has(socket)) await this.subscribeToChat(sessionId);
+      if (!this.inheritedSubscriptionSockets.has(socket)) await this.subscribeToEvents(sessionId);
       this.setConnectionState('connected', 'connected');
       this.lastError = undefined;
       return;
@@ -1589,11 +1681,21 @@ export class TwitchChatbot {
       return;
     }
     if (type === 'revocation') {
+      if (message.payload?.subscription?.type?.startsWith('channel.shared_chat.')) {
+        this.sharedChat = { state: 'unavailable', participants: [], updatedAt: new Date().toISOString(), lastError: 'Twitch revoked Shared Chat session monitoring. Reconnect the bot account.' };
+        return;
+      }
       this.lastError = 'Twitch revoked the Chat EventSub subscription. Reconnect the bot account.';
       this.setConnectionState('error', 'error');
       return;
     }
-    if (type !== 'notification' || message.metadata?.subscription_type !== 'channel.chat.message' || !message.payload?.event) return;
+    if (type !== 'notification' || !message.payload?.event) return;
+    const subscriptionType = message.metadata?.subscription_type || message.payload.subscription?.type || '';
+    if (subscriptionType.startsWith('channel.shared_chat.')) {
+      this.applySharedChatEvent(subscriptionType, message.payload.event);
+      return;
+    }
+    if (subscriptionType !== 'channel.chat.message') return;
     const event = message.payload.event;
     const chatterId = String(event.chatter_user_id || '');
     const chatMessage = event.message && typeof event.message === 'object' && !Array.isArray(event.message)
@@ -1651,15 +1753,89 @@ export class TwitchChatbot {
     });
   }
 
-  private async subscribeToChat(sessionId: string): Promise<void> {
+  private async subscribeToEvents(sessionId: string): Promise<void> {
     if (!this.tokens || !this.identity || !this.channel) throw new Error('Chatbot authorization is incomplete.');
+    await this.createEventSubSubscription(sessionId, 'channel.chat.message', { broadcaster_user_id: this.channel.channelId, user_id: this.identity.userId });
+    const sharedChatSubscriptions = ['channel.shared_chat.begin', 'channel.shared_chat.update', 'channel.shared_chat.end'];
+    try {
+      for (const type of sharedChatSubscriptions) await this.createEventSubSubscription(sessionId, type, { broadcaster_user_id: this.channel.channelId });
+      await this.loadSharedChatSession();
+    } catch (error) {
+      this.sharedChat = { state: 'unavailable', participants: [], updatedAt: new Date().toISOString(), lastError: (error as Error).message };
+    }
+  }
+
+  private async createEventSubSubscription(sessionId: string, type: string, condition: Record<string, string>): Promise<void> {
+    if (!this.tokens) throw new Error('Chatbot authorization is incomplete.');
     const response = await this.request('https://api.twitch.tv/helix/eventsub/subscriptions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: this.channel.channelId, user_id: this.identity.userId }, transport: { method: 'websocket', session_id: sessionId } })
+      body: JSON.stringify({ type, version: '1', condition, transport: { method: 'websocket', session_id: sessionId } })
     });
     const result = await response.json().catch(() => ({})) as { message?: string; error?: string };
-    if (response.status !== 202) throw new Error(result.message || result.error || `Chat EventSub subscription failed with ${response.status}.`);
+    if (response.status !== 202) throw new Error(result.message || result.error || `${type} EventSub subscription failed with ${response.status}.`);
+  }
+
+  private applySharedChatEvent(type: string, event: Record<string, unknown>): void {
+    const timestamp = new Date().toISOString();
+    if (type === 'channel.shared_chat.end') {
+      const previousHost = this.sharedChat.host?.login;
+      this.sharedChat = { state: 'inactive', participants: [], updatedAt: timestamp };
+      this.record({ state: 'accepted', message: `Shared Chat${previousHost ? ` hosted by @${previousHost}` : ''} ended.` });
+      return;
+    }
+    const sessionId = String(event.session_id || '').trim();
+    const host = {
+      userId: String(event.host_broadcaster_user_id || '').trim(),
+      login: String(event.host_broadcaster_user_login || '').trim(),
+      displayName: String(event.host_broadcaster_user_name || '').trim()
+    };
+    const rawParticipants = Array.isArray(event.participants) ? event.participants as Array<Record<string, unknown>> : [];
+    const participants = rawParticipants.map((participant) => {
+      const userId = String(participant.broadcaster_user_id || '').trim();
+      return {
+        userId,
+        login: String(participant.broadcaster_user_login || '').trim(),
+        displayName: String(participant.broadcaster_user_name || '').trim(),
+        host: Boolean(userId && userId === host.userId)
+      };
+    }).filter((participant) => participant.userId);
+    if (host.userId && !participants.some((participant) => participant.userId === host.userId)) participants.unshift({ ...host, host: true });
+    this.sharedChat = { state: 'active', sessionId, host, participants, updatedAt: timestamp };
+    this.record({ state: 'accepted', message: `Shared Chat active with ${participants.length} channel${participants.length === 1 ? '' : 's'}${host.login ? ` · hosted by @${host.login}` : ''}.` });
+  }
+
+  private async loadSharedChatSession(): Promise<void> {
+    if (!this.tokens || !this.channel) return;
+    const response = await this.request(`https://api.twitch.tv/helix/shared_chat/session?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
+    const result = await response.json().catch(() => ({})) as {
+      data?: Array<{ session_id?: string; host_broadcaster_id?: string; participants?: Array<{ broadcaster_id?: string }> }>;
+      message?: string;
+    };
+    if (!response.ok) throw new Error(result.message || `Shared Chat session lookup failed with ${response.status}.`);
+    const session = result.data?.[0];
+    if (!session?.session_id) {
+      this.sharedChat = { state: 'inactive', participants: [], updatedAt: new Date().toISOString() };
+      return;
+    }
+    const hostId = String(session.host_broadcaster_id || '').trim();
+    const participantIds = [...new Set((session.participants || []).map((participant) => String(participant.broadcaster_id || '').trim()).filter(Boolean))];
+    if (hostId && !participantIds.includes(hostId)) participantIds.unshift(hostId);
+    const identities = new Map<string, { login: string; displayName: string }>();
+    if (participantIds.length) {
+      const usersResponse = await this.request(`https://api.twitch.tv/helix/users?${participantIds.map((id) => `id=${encodeURIComponent(id)}`).join('&')}`, { headers: this.twitchHeaders() });
+      const users = await usersResponse.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string; display_name?: string }> };
+      if (usersResponse.ok) for (const user of users.data || []) identities.set(String(user.id || ''), { login: String(user.login || ''), displayName: String(user.display_name || '') });
+    }
+    const participants = participantIds.map((userId) => ({ userId, login: identities.get(userId)?.login || '', displayName: identities.get(userId)?.displayName || '', host: userId === hostId }));
+    const hostIdentity = identities.get(hostId);
+    this.sharedChat = {
+      state: 'active',
+      sessionId: session.session_id,
+      host: { userId: hostId, login: hostIdentity?.login || '', displayName: hostIdentity?.displayName || '' },
+      participants,
+      updatedAt: new Date().toISOString()
+    };
   }
 
   private resetSilenceTimer(seconds: number): void {
@@ -1684,6 +1860,7 @@ export class TwitchChatbot {
     this.socket = null;
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close(1000, 'Studio stopped Chatbot');
     this.setConnectionState('disconnected', 'disconnected');
+    this.sharedChat = { state: 'inactive', participants: [], updatedAt: new Date().toISOString() };
   }
 
   private setConnectionState(eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']): void {

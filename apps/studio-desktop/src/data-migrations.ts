@@ -27,6 +27,7 @@ const snapshotFiles = [
   ['chatbot', 'bridge', 'chatbot.json'],
   ['twitch-alerts', 'bridge', 'twitch-visual-alerts.json'],
   ['twitch-integration', 'bridge', 'twitch-integration.json'],
+  ['kick-integration', 'bridge', 'kick-integration.json'],
   ['interaction-alerts', 'bridge', 'sound-alerts.json'],
   ['chat-overlay', 'bridge', 'chat-overlay.json'],
   ['emote-wall', 'bridge', 'emote-wall.json'],

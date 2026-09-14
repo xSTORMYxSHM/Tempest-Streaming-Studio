@@ -32,6 +32,10 @@ export function validateHostedEbsUrl(value: unknown): string {
   return url.origin;
 }
 
+export function isOfficialHostedEbsUrl(value: unknown): boolean {
+  return validateHostedEbsUrl(value) === OFFICIAL_HOSTED_EBS_URL;
+}
+
 export function validateHostedExtensionCredentials(value: unknown): HostedExtensionCredentials {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Hosted Extension credentials are invalid.');
   const source = value as Partial<HostedExtensionCredentials>;

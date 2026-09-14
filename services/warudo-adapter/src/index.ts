@@ -5,6 +5,7 @@ import {
   validateBridgeMessage
 } from '@tempest/contracts';
 import { WebSocket } from 'ws';
+import { createSocket, type Socket } from 'node:dgram';
 
 const applicationId = 'com.tempestmainframe.warudo';
 const capabilities = ['avatar.expression.apply', 'avatar.performance.apply', 'avatar.reaction.apply'];
@@ -26,6 +27,28 @@ export interface WarudoAdapterStatus {
 
 export interface WarudoAdapterRuntime {
   status(): WarudoAdapterStatus;
+  close(): Promise<void>;
+}
+
+export interface StartTempest2DAdapterOptions {
+  bridgeUrl?: string;
+  bridgeToken: string;
+  host?: string;
+  port?: number;
+  reconnectMs?: number;
+  logger?: Pick<Console, 'info' | 'warn' | 'error'>;
+}
+
+export interface Tempest2DAdapterStatus {
+  bridge: 'disconnected' | 'connecting' | 'connected';
+  tempest2d: 'ready' | 'closed';
+  endpoint: string;
+  lastCue?: string;
+  lastError?: string;
+}
+
+export interface Tempest2DAdapterRuntime {
+  status(): Tempest2DAdapterStatus;
   close(): Promise<void>;
 }
 
@@ -173,6 +196,122 @@ export function startWarudoAdapter(options: StartWarudoAdapterOptions): WarudoAd
       bridge = null;
       warudo = null;
       update({ bridge: 'disconnected', warudo: 'disconnected' });
+    }
+  };
+}
+
+export function startTempest2DAdapter(options: StartTempest2DAdapterOptions): Tempest2DAdapterRuntime {
+  const bridgeUrl = localSocketUrl(options.bridgeUrl || 'ws://127.0.0.1:4765/v1/socket', 'bridgeUrl');
+  bridgeUrl.searchParams.set('token', options.bridgeToken.trim());
+  if (options.bridgeToken.trim().length < 32) throw new Error('Bridge token must contain at least 32 characters.');
+  const host = options.host || '127.0.0.1';
+  if (!['127.0.0.1', 'localhost'].includes(host)) throw new Error('Tempest 2D host must be local.');
+  const port = Math.max(1, Math.min(65535, Math.round(options.port || 19193)));
+  const reconnectMs = Math.max(250, Math.min(30_000, options.reconnectMs || 2_000));
+  const logger = options.logger || console;
+  const applicationId = 'com.tempestmainframe.tempest2d';
+  const adapterCapabilities = ['avatar.expression.apply', 'avatar.performance.apply', 'avatar.reaction.apply', 'avatar.parameter.apply'];
+  const udp: Socket = createSocket('udp4');
+  let stopped = false;
+  let bridge: WebSocket | null = null;
+  let bridgeTimer: NodeJS.Timeout | null = null;
+  let current: Tempest2DAdapterStatus = {
+    bridge: 'disconnected',
+    tempest2d: 'ready',
+    endpoint: `udp://${host}:${port}`
+  };
+
+  const update = (patch: Partial<Tempest2DAdapterStatus>): void => { current = { ...current, ...patch }; };
+  const scheduleBridge = (): void => {
+    if (stopped || bridgeTimer) return;
+    bridgeTimer = setTimeout(() => { bridgeTimer = null; connectBridge(); }, reconnectMs);
+    bridgeTimer.unref();
+  };
+  const respond = (command: TempestBridgeMessage, success: boolean, detail: string): void => {
+    if (!bridge || bridge.readyState !== WebSocket.OPEN) return;
+    bridge.send(JSON.stringify(createBridgeMessage({
+      kind: 'response',
+      source: applicationId,
+      target: command.source,
+      topic: command.topic,
+      correlationId: command.correlationId || command.id,
+      payload: { commandId: command.id, success, detail }
+    })));
+  };
+  const handleCommand = (command: TempestBridgeMessage): void => {
+    if (command.kind !== 'command' || command.target !== applicationId || !adapterCapabilities.includes(String(command.topic || ''))) return;
+    const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
+      ? command.payload as Record<string, unknown> : {};
+    const args = payload.arguments && typeof payload.arguments === 'object' && !Array.isArray(payload.arguments)
+      ? payload.arguments as Record<string, unknown> : {};
+    const phase = payload.phase === 'release' ? 'release' : 'activate';
+    const cue = text(args.cue) || text(args.reactionId) || text(args.expression) || 'tempest.default';
+    const control = text(args.tempest2dAction) || text(args.control) || text(args.expression) || text(args.motion) || cue;
+    const data = {
+      phase,
+      cue,
+      control,
+      name: text(args.name) || cue,
+      durationMs: Math.max(0, Math.round(Number(args.durationMs) || Number((payload.lease as Record<string, unknown> | undefined)?.durationMs) || 0)),
+      intensity: Math.max(0, Math.min(1, Number(args.intensity) || Number(args.strength) || 1)),
+      runId: text(payload.runId),
+      actionId: text(payload.actionId),
+      capability: command.topic
+    };
+    const packet = Buffer.from(JSON.stringify({ action: 'tempest2dInteraction', data }), 'utf8');
+    udp.send(packet, port, host, (error) => {
+      if (error) {
+        update({ lastError: error.message });
+        respond(command, false, error.message);
+        return;
+      }
+      update({ lastCue: control, lastError: undefined });
+      respond(command, true, `${phase} control forwarded directly to Tempest 2D.`);
+    });
+  };
+
+  function connectBridge(): void {
+    if (stopped || bridge) return;
+    update({ bridge: 'connecting' });
+    const socket = new WebSocket(bridgeUrl, { handshakeTimeout: 5_000, maxPayload: 256 * 1024 });
+    bridge = socket;
+    socket.on('open', () => {
+      update({ bridge: 'connected', lastError: undefined });
+      socket.send(JSON.stringify(createBridgeMessage({
+        kind: 'hello',
+        source: applicationId,
+        payload: { applicationId, version: '0.21.0', protocolVersion: TEMPEST_PROTOCOL_VERSION, capabilities: adapterCapabilities }
+      })));
+      logger.info('Tempest 2D adapter connected to Tempest Bridge.');
+    });
+    socket.on('message', (raw) => {
+      try {
+        const validation = validateBridgeMessage(JSON.parse(raw.toString()));
+        if (!validation.ok || !validation.value) throw new Error(validation.errors.join(' '));
+        handleCommand(validation.value);
+      } catch (error) {
+        update({ lastError: (error as Error).message });
+        logger.warn(error);
+      }
+    });
+    socket.on('error', (error) => update({ lastError: error.message }));
+    socket.on('close', () => {
+      if (bridge === socket) bridge = null;
+      update({ bridge: 'disconnected' });
+      scheduleBridge();
+    });
+  }
+
+  connectBridge();
+  return {
+    status: () => ({ ...current }),
+    close: async () => {
+      stopped = true;
+      if (bridgeTimer) clearTimeout(bridgeTimer);
+      if (bridge && bridge.readyState < WebSocket.CLOSING) bridge.close(1000, 'Adapter shutting down');
+      bridge = null;
+      udp.close();
+      update({ bridge: 'disconnected', tempest2d: 'closed' });
     }
   };
 }

@@ -168,6 +168,191 @@ test('reports adapter identity, capabilities, and published health on the connec
   assert.equal(body.connections[0].status.recording, true);
   assert.equal(body.connections[0].status.activeLeases, 1);
   assert.deepEqual(body.connections[0].status.canvasProfile, { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 });
+  const dualFormat = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
+  assert.equal(dualFormat.state, 'update-required');
+  assert.equal(dualFormat.ready, false);
+});
+
+test('guards and dispatches production Twitch Dual Format controls', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-dual-format-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const offline = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
+  assert.equal(offline.state, 'broadcast-offline');
+
+  const socket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
+  context.after(() => socket.close());
+  await new Promise((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+  socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'hello', source: 'com.tempestmainframe.tempest-broadcast',
+    payload: {
+      applicationId: 'com.tempestmainframe.tempest-broadcast', version: '0.22.0',
+      capabilities: ['broadcast.status', 'broadcast.dual-format.configure', 'broadcast.dual-format.preview']
+    }
+  })));
+  const publishStatus = (streaming) => socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'publish', source: 'com.tempestmainframe.tempest-broadcast', topic: 'broadcast.status',
+    payload: {
+      ready: true, streaming, recording: false,
+      dualFormat: {
+        supported: true, enabled: true, enhancedBroadcastingEnabled: true, additionalCanvasSelected: true,
+        canvas: { id: 'vertical-canvas', name: 'Mobile Main', baseWidth: 1080, baseHeight: 1920, outputWidth: 1080, outputHeight: 1920, fpsNumerator: 60, fpsDenominator: 1 },
+        sceneLinksReady: true, linkedScenes: 4, totalScenes: 4, audioReady: true, browserSourcesReady: true, previewAvailable: true
+      }
+    }
+  })));
+  publishStatus(false);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const ready = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
+  assert.equal(ready.state, 'ready');
+  assert.equal(ready.ready, true);
+  assert.equal(ready.canvas.outputWidth, 1080);
+  assert.ok(ready.checks.every((check) => check.ready));
+
+  const configureCommand = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Dual Format configuration command was not delivered.')), 1000);
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== 'broadcast.dual-format.configure') return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+  const configured = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format/configure`, {
+    method: 'POST', headers, body: JSON.stringify({ enabled: true, canvasPreset: '720x1280', canvasName: 'Vertical Test' })
+  });
+  assert.equal(configured.status, 202);
+  const command = await configureCommand;
+  assert.equal(command.payload.arguments.enabled, true);
+  assert.equal(command.payload.arguments.enhancedBroadcasting, true);
+  assert.equal(command.payload.arguments.additionalCanvas.outputWidth, 720);
+  assert.equal(command.payload.arguments.additionalCanvas.outputHeight, 1280);
+  assert.equal(command.payload.arguments.additionalCanvas.fps, 'follow-main');
+  assert.equal(command.payload.arguments.verticalBrowserSources.twitchAlerts.url, `${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`);
+  assert.equal(command.payload.arguments.verticalBrowserSources.twitchAlerts.audio, false);
+  assert.equal(command.payload.arguments.verticalBrowserSources.chatOverlay, null);
+
+  const previewCommand = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Dual Format preview command was not delivered.')), 1000);
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== 'broadcast.dual-format.preview') return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format/preview`, { method: 'POST', headers, body: '{}' })).status, 202);
+  assert.equal((await previewCommand).payload.arguments.orientation, 'vertical');
+
+  publishStatus(true);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const blocked = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format/configure`, {
+    method: 'POST', headers, body: JSON.stringify({ enabled: false })
+  });
+  assert.equal(blocked.status, 409);
+  assert.match((await blocked.json()).error, /Stop streaming/);
+});
+
+test('guards and dispatches coordinated Twitch and Kick simulcast controls without returning the stream key', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-simulcast-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const socket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
+  context.after(() => socket.close());
+  await new Promise((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+  socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'hello', source: 'com.tempestmainframe.tempest-broadcast',
+    payload: {
+      applicationId: 'com.tempestmainframe.tempest-broadcast', version: '0.22.0',
+      capabilities: ['broadcast.status', 'broadcast.simulcast.configure', 'broadcast.simulcast.preflight', 'broadcast.simulcast.retry-kick', 'broadcast.simulcast.start', 'broadcast.simulcast.stop']
+    }
+  })));
+  const publishStatus = (overrides = {}) => socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'publish', source: 'com.tempestmainframe.tempest-broadcast', topic: 'broadcast.status',
+    payload: {
+      ready: true, streaming: false, recording: false,
+      simulcast: {
+        supported: true, enabled: true, configured: true, credentialsStored: true,
+        secureStorageAvailable: true, kickServerConfigured: true, twitchServiceReady: true,
+        dualFormatReady: true, sharedEncoder: true, uploadCapacityKbps: 30000,
+        uploadCapacityConfigured: true, estimatedRequiredKbps: 18000, uploadHeadroomReady: true, recordingWithStream: false,
+        lastPreflightPassed: true, lastPreflightAt: new Date().toISOString(),
+        twitch: { state: 'offline', active: false }, kick: { state: 'offline', active: false },
+        ...overrides
+      }
+    }
+  })));
+  publishStatus();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const ready = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast`, { headers }).then((response) => response.json());
+  assert.equal(ready.state, 'ready');
+  assert.equal(ready.ready, true);
+  assert.ok(Number.isFinite(Date.parse(ready.statusReportedAt)));
+  assert.ok(ready.checks.every((check) => check.ready));
+
+  publishStatus({ lastPreflightAt: new Date(Date.now() - (4 * 60 * 60 * 1000) - 1000).toISOString() });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const expired = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast`, { headers }).then((response) => response.json());
+  assert.equal(expired.preflightReady, false);
+  assert.equal(expired.ready, false);
+  publishStatus();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const configureCommand = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Simulcast configuration command was not delivered.')), 1000);
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== 'broadcast.simulcast.configure') return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+  const configured = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/configure`, {
+    method: 'POST', headers, body: JSON.stringify({ enabled: true, kickServer: 'rtmps://ingest.example.test/app', kickStreamKey: 'live_key_not_returned', uploadCapacityKbps: 30000 })
+  });
+  assert.equal(configured.status, 202);
+  const configuredBody = await configured.json();
+  assert.doesNotMatch(JSON.stringify(configuredBody), /live_key_not_returned/);
+  assert.equal((await configureCommand).payload.arguments.kickStreamKey, 'live_key_not_returned');
+
+  const nextCommand = (topic) => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${topic} was not delivered.`)), 1000);
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== topic) return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+  const startCommand = nextCommand('broadcast.simulcast.start');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/start`, { method: 'POST', headers, body: JSON.stringify({ recording: true, operatorChecklistAccepted: true }) })).status, 202);
+  assert.equal((await startCommand).payload.arguments.recording, true);
+  const stopCommand = nextCommand('broadcast.simulcast.stop');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/stop`, { method: 'POST', headers, body: JSON.stringify({ scope: 'kick', force: false }) })).status, 202);
+  assert.equal((await stopCommand).payload.arguments.scope, 'kick');
+
+  const preflightCommand = nextCommand('broadcast.simulcast.preflight');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/preflight`, { method: 'POST', headers, body: '{}' })).status, 202);
+  await preflightCommand;
+  publishStatus({ twitch: { state: 'live', active: true }, kick: { state: 'error', active: false } });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const retryCommand = nextCommand('broadcast.simulcast.retry-kick');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/retry-kick`, { method: 'POST', headers, body: '{}' })).status, 202);
+  await retryCommand;
+
+  publishStatus({ uploadHeadroomReady: false });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const blocked = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/start`, { method: 'POST', headers, body: JSON.stringify({ operatorChecklistAccepted: true }) });
+  assert.equal(blocked.status, 409);
 });
 
 test('owns a free Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
@@ -262,6 +447,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const overlayStatus = await fetch(`${runtime.baseUrl}/v1/visual-alerts`, { headers }).then((response) => response.json());
   assert.equal(overlayStatus.interaction.url, `${runtime.baseUrl}/visual-alerts/interactions`);
   assert.equal(overlayStatus.twitch.url, `${runtime.baseUrl}/visual-alerts/twitch`);
+  assert.equal(overlayStatus.vertical.twitchUrl, `${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`);
+  assert.equal(overlayStatus.vertical.interactionUrl, `${runtime.baseUrl}/visual-alerts/interactions?orientation=vertical`);
+  assert.equal(overlayStatus.vertical.audio, 'muted');
   assert.equal(overlayStatus.interaction.state, 'showing');
   assert.equal(overlayStatus.twitch.state, 'ready');
   assert.equal(overlayStatus.interaction.activeAlert.name, 'Hype Pulse');
@@ -345,6 +533,12 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const twitchOverlayPage = await fetch(`${runtime.baseUrl}/visual-alerts/twitch`);
   assert.equal(twitchOverlayPage.status, 200);
   assert.match(await twitchOverlayPage.text(), /new EventSource\("\/visual-alerts\/twitch\/events"\)/);
+  const verticalTwitchOverlayPage = await fetch(`${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`);
+  const verticalTwitchOverlayMarkup = await verticalTwitchOverlayPage.text();
+  assert.equal(verticalTwitchOverlayPage.status, 200);
+  assert.match(verticalTwitchOverlayMarkup, /data-orientation="vertical"/);
+  assert.match(verticalTwitchOverlayMarkup, /orientation==='vertical'\|\|revision!==current/);
+  assert.match(verticalTwitchOverlayMarkup, /Math\.min\(62/);
 
   const twitchVisualCatalog = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, { headers }).then((response) => response.json());
   assert.equal(twitchVisualCatalog.alerts.length, 6);
@@ -648,6 +842,8 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(interactionAlert.accent, '#123ABC');
   assert.equal(interactionAlert.warudoEnabled, false);
   assert.equal(interactionAlert.vtubeStudioEnabled, false);
+  assert.equal(interactionAlert.tempest2dEnabled, false);
+  assert.equal(interactionAlert.tempest2dAction, '');
   assert.equal(interactionAlert.design.position, 'custom');
   assert.equal(interactionAlert.audioUri, pathToFileURL(packedAudioPath).href);
   assert.equal(interactionAlert.visualUri, pathToFileURL(packedVisualPath).href);
@@ -664,6 +860,8 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
       warudoEnabled: true,
       vtubeStudioEnabled: true,
       vtubeStudioHotkey: 'hotkey-dance',
+      tempest2dEnabled: true,
+      tempest2dAction: 'expression:Happy',
       design: { ...interactionAlert.design, position: 'custom', customPositionX: 27.5, customPositionY: 41.25, scale: 1.2 }
     })
   });
@@ -672,6 +870,8 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(updatedInteractionAlert.warudoEnabled, true);
   assert.equal(updatedInteractionAlert.vtubeStudioEnabled, true);
   assert.equal(updatedInteractionAlert.vtubeStudioHotkey, 'hotkey-dance');
+  assert.equal(updatedInteractionAlert.tempest2dEnabled, true);
+  assert.equal(updatedInteractionAlert.tempest2dAction, 'expression:Happy');
   assert.equal(updatedInteractionAlert.design.customPositionX, 27.5);
   assert.equal(updatedInteractionAlert.design.customPositionY, 41.25);
 
@@ -701,6 +901,7 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   try {
     const interactions = await fetch(`${runtime.baseUrl}/v1/sound-alerts`, { headers }).then((response) => response.json());
     assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.vtubeStudioEnabled && alert.vtubeStudioHotkey === 'hotkey-dance' && alert.design.customPositionX === 27.5));
+    assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.tempest2dEnabled && alert.tempest2dAction === 'expression:Happy' && alert.design.customPositionX === 27.5));
     const twitchAlerts = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, { headers }).then((response) => response.json());
     assert.ok(twitchAlerts.alerts.some((alert) => alert.id === twitchAlert.id && alert.custom));
 
@@ -813,11 +1014,13 @@ test('runs simulated workflows, expires leases, and exposes the safety control',
   });
   assert.equal(soundAlert.status, 202);
   const soundRun = (await soundAlert.json()).run;
-  assert.equal(soundRun.actions.length, 4);
+  assert.equal(soundRun.actions.length, 5);
   assert.equal(soundRun.actions[0].capability, 'avatar.performance.apply');
-  assert.equal(soundRun.actions[1].releaseCapability, 'broadcast.reaction.clear');
-  assert.equal(soundRun.actions[2].capability, 'broadcast.audio.play');
-  assert.equal(soundRun.actions[3].releaseCapability, 'broadcast.visual.hide');
+  assert.equal(soundRun.actions[1].capability, 'avatar.performance.apply');
+  assert.equal(soundRun.actions[1].state, 'scheduled');
+  assert.equal(soundRun.actions[2].releaseCapability, 'broadcast.reaction.clear');
+  assert.equal(soundRun.actions[3].capability, 'broadcast.audio.play');
+  assert.equal(soundRun.actions[4].releaseCapability, 'broadcast.visual.hide');
   assert.equal(new Date(soundRun.endsAt).getTime() - new Date(soundRun.startedAt).getTime(), 1000);
 
   const unmappedCheer = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {

@@ -115,6 +115,16 @@ export const soundAlertPerformanceWorkflow: TempestWorkflowDefinition = {
       lease: { durationMs: 60000, durationInput: 'durationMs' }
     },
     {
+      id: 'tempest2d-performance',
+      name: 'Tempest 2D avatar control',
+      target: 'com.tempestmainframe.tempest2d',
+      capability: 'avatar.performance.apply',
+      arguments: { source: 'sound-alerts' },
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'tempest2dEnabled', equals: true },
+      lease: { durationMs: 60000, durationInput: 'durationMs', fadeOutMs: 500 }
+    },
+    {
       id: 'broadcast-performance',
       name: 'Broadcast performance reaction',
       target: 'com.tempestmainframe.tempest-broadcast',

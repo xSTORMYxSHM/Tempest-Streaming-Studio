@@ -11,13 +11,19 @@ import {
   TEMPEST_STUDIO_VERSION,
   TempestBridgeHealth,
   TempestBridgeMessage,
+  TempestBroadcastStatus,
   TempestInteractionRequest,
+  TempestNormalizedChatEvent,
   TempestNormalizedTwitchEvent,
   TempestSoundAlertPlaybackCommand,
   TempestSoundAlertTriggerRequest,
   TempestTwitchVisualAlertDefinition,
   createBridgeMessage,
-  validateBridgeMessage
+  validateBridgeMessage,
+  validateDualFormatConfigureRequest,
+  validateSimulcastConfigureRequest,
+  validateSimulcastStartRequest,
+  validateSimulcastStopRequest
 } from '@tempest/contracts';
 import { TempestRegistry } from './registry';
 import { blackHoleWorkflow, soundAlertPerformanceWorkflow, twitchAlertReactionWorkflow, TempestWorkflowEngine } from './workflow-engine';
@@ -38,8 +44,11 @@ import {
   TempestExtensionRelayClient
 } from './extension-relay';
 import { ChatbotDispatch, TwitchChatbot } from './chatbot';
+import { KickIntegrationGateway, type KickCredentialStore } from './kick-integration';
 
 export type { TwitchCredentialStore, TwitchTokenSet } from './twitch-integration';
+export type { KickCredentialSet, KickCredentialStore, KickIntegrationStatus } from './kick-integration';
+export { KickIntegrationGateway } from './kick-integration';
 export type { ChatbotCommand, ChatbotStatus } from './chatbot';
 export {
   extensionRelayOptionsFromEnvironment,
@@ -54,8 +63,11 @@ export interface StartBridgeOptions {
   token?: string;
   twitchCredentialStore?: TwitchCredentialStore;
   chatbotCredentialStore?: TwitchCredentialStore;
+  kickCredentialStore?: KickCredentialStore;
   chatbotFetchImplementation?: typeof fetch;
   emoteProviderFetchImplementation?: typeof fetch;
+  kickFetchImplementation?: typeof fetch;
+  kickWebhookUrl?: string;
   extensionRelay?: ExtensionRelayOptions;
   soundAlertPlayback?: (command: TempestSoundAlertPlaybackCommand) => void | Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
@@ -77,6 +89,7 @@ interface BridgeClient {
   version?: string;
   capabilities: string[];
   status?: Record<string, unknown>;
+  statusReportedAt?: string;
   connectedAt: string;
   lastSeenAt: string;
   subscriptions: Set<string>;
@@ -84,6 +97,177 @@ interface BridgeClient {
 }
 
 const maximumBodyBytes = 2 * 1024 * 1024;
+const broadcastApplicationId = 'com.tempestmainframe.tempest-broadcast';
+const dualFormatConfigureCapability = 'broadcast.dual-format.configure';
+const dualFormatPreviewCapability = 'broadcast.dual-format.preview';
+const simulcastConfigureCapability = 'broadcast.simulcast.configure';
+const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
+const simulcastStartCapability = 'broadcast.simulcast.start';
+const simulcastStopCapability = 'broadcast.simulcast.stop';
+const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function dualFormatSnapshot(connection?: BridgeClient): Record<string, unknown> {
+  const broadcastStatus = (connection?.status || {}) as TempestBroadcastStatus;
+  const reported = isRecord(broadcastStatus.dualFormat) ? broadcastStatus.dualFormat : undefined;
+  const canvas = reported && isRecord(reported.canvas) ? reported.canvas : undefined;
+  const width = Number(canvas?.outputWidth || canvas?.baseWidth || 0);
+  const height = Number(canvas?.outputHeight || canvas?.baseHeight || 0);
+  const verticalCanvasReady = (width === 1080 && height === 1920) || (width === 720 && height === 1280);
+  const connected = Boolean(connection);
+  const controllerSupported = Boolean(connection?.capabilities.includes(dualFormatConfigureCapability)) && reported?.supported !== false;
+  const previewSupported = Boolean(connection?.capabilities.includes(dualFormatPreviewCapability)) && reported?.previewAvailable !== false;
+  const statusReported = Boolean(reported);
+  const enhancedBroadcastingEnabled = reported?.enhancedBroadcastingEnabled === true;
+  const enabled = reported?.enabled === true;
+  const additionalCanvasSelected = reported?.additionalCanvasSelected === true;
+  const sceneLinksReady = reported?.sceneLinksReady === true;
+  const audioReady = reported?.audioReady === true;
+  const browserSourcesReady = reported?.browserSourcesReady === true;
+  const ready = connected && controllerSupported && statusReported && enabled && enhancedBroadcastingEnabled
+    && verticalCanvasReady && additionalCanvasSelected && sceneLinksReady && audioReady && browserSourcesReady;
+  const streaming = broadcastStatus.streaming === true;
+  const lastError = typeof reported?.lastError === 'string' ? reported.lastError.slice(0, 400) : undefined;
+  const state = !connected ? 'broadcast-offline'
+    : !controllerSupported || !statusReported ? 'update-required'
+      : lastError ? 'error'
+        : ready && streaming ? 'live'
+          : ready ? 'ready' : 'setup-required';
+  return {
+    state,
+    connected,
+    controllerSupported,
+    previewSupported,
+    statusReported,
+    ready,
+    streaming,
+    recording: broadcastStatus.recording === true,
+    enabled,
+    enhancedBroadcastingEnabled,
+    additionalCanvasSelected,
+    sceneLinksReady,
+    audioReady,
+    browserSourcesReady,
+    canvas: canvas ? {
+      id: typeof canvas.id === 'string' ? canvas.id : '',
+      name: typeof canvas.name === 'string' ? canvas.name : 'Vertical canvas',
+      baseWidth: Number(canvas.baseWidth || 0),
+      baseHeight: Number(canvas.baseHeight || 0),
+      outputWidth: width,
+      outputHeight: height,
+      fpsNumerator: Number(canvas.fpsNumerator || 0),
+      fpsDenominator: Number(canvas.fpsDenominator || 1)
+    } : undefined,
+    lastError,
+    requirements: { enhancedBroadcasting: true, recommendedCanvas: { width: 1080, height: 1920 }, supportedPresets: ['1080x1920', '720x1280'] },
+    checks: [
+      { id: 'broadcast', label: 'Tempest Broadcast connected', ready: connected },
+      { id: 'controller', label: 'Dual Format controller available', ready: controllerSupported && statusReported },
+      { id: 'enhanced-broadcasting', label: 'Enhanced Broadcasting enabled', ready: enhancedBroadcastingEnabled },
+      { id: 'vertical-canvas', label: 'Supported 9:16 canvas selected', ready: verticalCanvasReady && additionalCanvasSelected },
+      { id: 'scene-links', label: 'Horizontal and vertical scenes linked', ready: sceneLinksReady },
+      { id: 'audio', label: 'Program audio routed to both formats', ready: audioReady },
+      { id: 'browser-sources', label: 'Vertical alert sources installed', ready: browserSourcesReady }
+    ]
+  };
+}
+
+function simulcastSnapshot(connection?: BridgeClient): Record<string, unknown> {
+  const broadcastStatus = (connection?.status || {}) as TempestBroadcastStatus;
+  const reported = isRecord(broadcastStatus.simulcast) ? broadcastStatus.simulcast : undefined;
+  const twitch: Record<string, unknown> = reported && isRecord(reported.twitch) ? reported.twitch : {};
+  const kick: Record<string, unknown> = reported && isRecord(reported.kick) ? reported.kick : {};
+  const connected = Boolean(connection);
+  const controllerSupported = Boolean(connection?.capabilities.includes(simulcastConfigureCapability)
+    && connection?.capabilities.includes(simulcastPreflightCapability)
+    && connection?.capabilities.includes(simulcastStartCapability)
+    && connection?.capabilities.includes(simulcastStopCapability)
+    && connection?.capabilities.includes(simulcastRetryKickCapability)) && reported?.supported !== false;
+  const configured = reported?.configured === true;
+  const enabled = reported?.enabled === true;
+  const credentialsStored = reported?.credentialsStored === true;
+  const twitchServiceReady = reported?.twitchServiceReady === true;
+  const dualFormatReady = reported?.dualFormatReady === true;
+  const kickServerConfigured = reported?.kickServerConfigured === true;
+  const secureStorageAvailable = reported?.secureStorageAvailable === true;
+  const uploadCapacityConfigured = reported?.uploadCapacityConfigured === true;
+  const uploadHeadroomReady = reported?.uploadHeadroomReady !== false;
+  const lastPreflightAt = typeof reported?.lastPreflightAt === 'string' ? reported.lastPreflightAt : undefined;
+  const lastPreflightTime = lastPreflightAt ? Date.parse(lastPreflightAt) : Number.NaN;
+  const preflightAge = Date.now() - lastPreflightTime;
+  const preflightReady = reported?.lastPreflightPassed === true && Number.isFinite(lastPreflightTime)
+    && preflightAge >= 0 && preflightAge <= 4 * 60 * 60 * 1000;
+  const ready = connected && controllerSupported && configured && enabled && credentialsStored
+    && twitchServiceReady && dualFormatReady && kickServerConfigured && secureStorageAvailable
+    && uploadCapacityConfigured && uploadHeadroomReady && preflightReady;
+  const twitchActive = twitch.active === true;
+  const kickActive = kick.active === true;
+  const lastError = typeof reported?.lastError === 'string' ? reported.lastError.slice(0, 400) : undefined;
+  const state = !connected ? 'broadcast-offline'
+    : !controllerSupported || !reported ? 'update-required'
+      : lastError && !twitchActive && !kickActive ? 'error'
+        : twitchActive && kickActive ? 'live'
+          : twitchActive || kickActive ? 'degraded-live'
+            : ready ? 'ready' : 'setup-required';
+  return {
+    state,
+    connected,
+    controllerSupported,
+    statusReported: Boolean(reported),
+    statusReportedAt: connection?.statusReportedAt,
+    ready,
+    enabled,
+    configured,
+    credentialsStored,
+    secureStorageAvailable,
+    kickServerConfigured,
+    twitchServiceReady,
+    dualFormatReady,
+    sharedEncoder: reported?.sharedEncoder === true,
+    uploadCapacityConfigured,
+    uploadCapacityKbps: Number(reported?.uploadCapacityKbps || 0),
+    estimatedRequiredKbps: Number(reported?.estimatedRequiredKbps || 0),
+    uploadHeadroomReady,
+    recordingWithStream: reported?.recordingWithStream === true,
+    lastPreflightAt,
+    lastPreflightPassed: reported?.lastPreflightPassed === true,
+    preflightReady,
+    ...(typeof reported?.lastPreflightError === 'string' ? { lastPreflightError: reported.lastPreflightError.slice(0, 400) } : {}),
+    recording: broadcastStatus.recording === true,
+    twitch: {
+      state: typeof twitch.state === 'string' ? twitch.state : twitchActive ? 'live' : 'offline',
+      active: twitchActive,
+      bytesSent: Number(twitch.bytesSent || 0),
+      droppedFrames: Number(twitch.droppedFrames || 0),
+      totalFrames: Number(twitch.totalFrames || 0),
+      congestion: Number(twitch.congestion || 0),
+      ...(typeof twitch.lastError === 'string' ? { lastError: twitch.lastError.slice(0, 400) } : {})
+    },
+    kick: {
+      state: typeof kick.state === 'string' ? kick.state : kickActive ? 'live' : 'offline',
+      active: kickActive,
+      bytesSent: Number(kick.bytesSent || 0),
+      droppedFrames: Number(kick.droppedFrames || 0),
+      totalFrames: Number(kick.totalFrames || 0),
+      congestion: Number(kick.congestion || 0),
+      ...(typeof kick.lastError === 'string' ? { lastError: kick.lastError.slice(0, 400) } : {})
+    },
+    lastError,
+    checks: [
+      { id: 'broadcast', label: 'Tempest Broadcast connected', ready: connected },
+      { id: 'controller', label: 'Production simulcast controller available', ready: controllerSupported && Boolean(reported) },
+      { id: 'twitch', label: 'Twitch output service ready', ready: twitchServiceReady },
+      { id: 'dual-format', label: 'Twitch horizontal + vertical ready', ready: dualFormatReady },
+      { id: 'kick-server', label: 'Kick ingest server configured', ready: kickServerConfigured },
+      { id: 'kick-key', label: 'Kick stream key stored securely', ready: credentialsStored && secureStorageAvailable },
+      { id: 'upload', label: 'Upload budget has production headroom', ready: uploadCapacityConfigured && uploadHeadroomReady },
+      { id: 'preflight', label: 'Local production preflight passed', ready: preflightReady }
+    ]
+  };
+}
 
 async function loadOrCreateToken(dataDirectory: string, supplied?: string): Promise<string> {
   if (supplied?.trim()) return supplied.trim();
@@ -112,6 +296,16 @@ function sendJson(response: ServerResponse, statusCode: number, data: unknown): 
   setCommonHeaders(response);
   response.statusCode = statusCode;
   response.end(JSON.stringify(data));
+}
+
+function sendOAuthPage(response: ServerResponse, statusCode: number, title: string, message: string): void {
+  const escape = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] as string);
+  response.statusCode = statusCode;
+  response.setHeader('Content-Type', 'text/html; charset=utf-8');
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.end(`<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;color:#dff;background:#070d13;font:16px Segoe UI,sans-serif}main{max-width:560px;padding:32px;border:1px solid #24505a;border-radius:12px;background:#0a151d}h1{color:#54f2eb}p{line-height:1.55}</style></head><body><main><h1>${escape(title)}</h1><p>${escape(message)}</p><p>You may close this browser tab and return to Tempest Streaming Studio.</p></main></body></html>`);
 }
 
 function isLoopbackRequest(request: IncomingMessage): boolean {
@@ -171,19 +365,42 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const startedAt = new Date().toISOString();
   const clients = new Map<string, BridgeClient>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumBodyBytes });
-  let ingestChatEvent: (event: TempestNormalizedTwitchEvent) => Promise<void> = async () => {};
+  let ingestChatEvent: (event: TempestNormalizedChatEvent) => Promise<void> = async () => {};
   const twitchGateway = new TwitchIntegrationGateway({ dataDirectory: options.dataDirectory, credentialStore: options.twitchCredentialStore, onEvent: (event) => ingestChatEvent(event) });
   await twitchGateway.initialize();
+  const connectedBroadcast = (): BridgeClient | undefined => [...clients.values()].find((client) => client.applicationId === broadcastApplicationId);
+  const sendBroadcastCommand = (client: BridgeClient, topic: string, commandArguments: Record<string, unknown>): string => {
+    const message = createBridgeMessage({
+      kind: 'command',
+      source: 'tempest.studio',
+      target: broadcastApplicationId,
+      topic,
+      payload: { requestedBy: 'studio.operator', arguments: commandArguments }
+    });
+    sendSocket(client.socket, message);
+    return message.id;
+  };
   let dispatchChatCommand: (dispatch: ChatbotDispatch) => Promise<void> = async () => {};
+  let kickGateway!: KickIntegrationGateway;
   const chatbot = new TwitchChatbot({
     dataDirectory: options.dataDirectory,
     credentialStore: options.chatbotCredentialStore,
     fetchImplementation: options.chatbotFetchImplementation,
     onEvent: (event) => ingestChatEvent(event),
     onCommand: (dispatch) => dispatchChatCommand(dispatch),
+    sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
     onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); }
   });
   await chatbot.initialize(twitchGateway.status().clientId || '');
+  kickGateway = new KickIntegrationGateway({
+    dataDirectory: options.dataDirectory,
+    defaultRedirectUri: `http://localhost:${requestedPort || 4765}/v1/integrations/kick/oauth/callback`,
+    webhookUrl: options.kickWebhookUrl,
+    credentialStore: options.kickCredentialStore,
+    fetchImplementation: options.kickFetchImplementation,
+    onChatEvent: async (event) => { await chatbot.processChatEvent(event); }
+  });
+  await kickGateway.initialize();
   const soundAlerts = new TempestSoundAlertCatalog(options.dataDirectory);
   await soundAlerts.initialize();
   const visualAlerts = new TempestVisualAlertOverlay();
@@ -236,6 +453,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       connectedClients: interaction.connectedClients + twitch.connectedClients,
       interaction,
       twitch,
+      vertical: {
+        twitchUrl: `${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`,
+        interactionUrl: `${runtime.baseUrl}/visual-alerts/interactions?orientation=vertical`,
+        orientation: 'vertical',
+        audio: 'muted'
+      },
       ...(alertQueue ? { queue: alertQueue.status() } : {})
     };
   };
@@ -389,22 +612,26 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   };
 
   ingestChatEvent = async (event) => {
-    const ingestion = twitchGateway.ingest(event);
-    if (ingestion.duplicate) {
-      workflowEngine!.recordExternalEvent('integration.event.duplicate', 'info', `Duplicate Twitch event ${event.id} was ignored.`, { eventId: event.id, topic: event.topic });
-      return;
+    if (event.source === 'twitch') {
+      const ingestion = twitchGateway.ingest(event);
+      if (ingestion.duplicate) {
+        workflowEngine!.recordExternalEvent('integration.event.duplicate', 'info', `Duplicate Twitch event ${event.id} was ignored.`, { eventId: event.id, topic: event.topic });
+        return;
+      }
     }
-    workflowEngine!.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
+    workflowEngine!.recordExternalEvent(event.topic, 'info', `${event.topic} received from ${event.source === 'kick' ? 'Kick' : 'Twitch'}.`, { event });
     broadcastSystemEvent(event.topic, event);
     chatOverlay.push(event);
-    emoteWall.push(event);
-    twitchExperiences.ingest(event);
-    if (event.topic === 'viewer.raid.received') {
+    if (event.source === 'twitch' && event.topic === 'viewer.raid.received') {
       const raidAutomation = await chatbot.processRaidEvent(event);
       workflowEngine!.recordExternalEvent('chatbot.raid-automation', raidAutomation.error ? 'warning' : 'success', raidAutomation.error || `Raid automation handled ${event.payload.fromBroadcasterName}.`, { raidAutomation });
     }
-    const twitchVisual = twitchVisualAlerts.findForEvent(event);
-    if (twitchVisual?.enabled) await queueTwitchAlert(twitchVisual, event, 'twitch.chat');
+    if (event.source === 'twitch') {
+      emoteWall.push(event);
+      twitchExperiences.ingest(event);
+      const twitchVisual = twitchVisualAlerts.findForEvent(event);
+      if (twitchVisual?.enabled) await queueTwitchAlert(twitchVisual, event, 'twitch.chat');
+    }
   };
 
   dispatchChatCommand = async ({ command, event, arguments: commandArguments, simulated }) => {
@@ -412,7 +639,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     const workflow = registry.listWorkflows().find((entry) => entry.id === command.workflowId && entry.enabled);
     if (!workflow) throw new Error(`Workflow ${command.workflowId} is not available.`);
     const run = await workflowEngine!.trigger(workflow.id, {
-      source: simulated ? 'studio.simulator' : 'twitch.chat',
+      source: simulated ? 'studio.simulator' : event.source === 'kick' ? 'kick.chat' : 'twitch.chat',
       eventId: event.id,
       viewerId: event.viewer?.id,
       viewerName: event.viewer?.displayName || event.viewer?.login,
@@ -501,6 +728,15 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return response.end();
       }
       if (request.method === 'GET' && requestUrl.pathname === '/health') return sendJson(response, 200, health());
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/kick/oauth/callback') {
+        if (!isLoopbackRequest(request)) return sendOAuthPage(response, 403, 'Kick connection blocked', 'This OAuth callback is accepted only on the computer running Studio.');
+        try {
+          await kickGateway.completeAuthorization({ code: requestUrl.searchParams.get('code'), state: requestUrl.searchParams.get('state'), error: requestUrl.searchParams.get('error') });
+          return sendOAuthPage(response, 200, 'Kick connected', 'Kick chat authorization completed successfully.');
+        } catch (error) {
+          return sendOAuthPage(response, 400, 'Kick connection failed', (error as Error).message);
+        }
+      }
       const visualAlertPageRoute = requestUrl.pathname === '/visual-alerts' || requestUrl.pathname === '/visual-alerts/interactions'
         ? { overlay: visualAlerts, eventsPath: '/visual-alerts/interactions/events' }
         : requestUrl.pathname === '/visual-alerts/twitch'
@@ -661,6 +897,141 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return;
       }
       if (requestToken(request, requestUrl) !== token) return sendJson(response, 401, { error: 'A valid Tempest Bridge token is required.' });
+
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/broadcast/simulcast') {
+        return sendJson(response, 200, simulcastSnapshot(connectedBroadcast()));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/configure') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(simulcastConfigureCapability)) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build does not provide simulcast configuration.' });
+        }
+        const currentStatus = (client.status as TempestBroadcastStatus | undefined);
+        const reported = isRecord(currentStatus?.simulcast) ? currentStatus.simulcast : undefined;
+        if (currentStatus?.streaming === true || (isRecord(reported?.kick) && reported.kick.active === true)) {
+          return sendJson(response, 409, { error: 'Stop Twitch and Kick outputs before changing simulcast configuration.' });
+        }
+        const validation = validateSimulcastConfigureRequest(await readJson(request));
+        if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
+        const commandId = sendBroadcastCommand(client, simulcastConfigureCapability, validation.value as unknown as Record<string, unknown>);
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.configuration-requested', 'info', validation.value.enabled ? 'Production simulcast setup requested from Broadcast.' : 'Simulcast disable requested from Broadcast.', { commandId });
+        return sendJson(response, 202, { accepted: true, commandId, status: simulcastSnapshot(client) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/start') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(simulcastStartCapability)) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build does not provide coordinated Go Live control.' });
+        }
+        const status = simulcastSnapshot(client);
+        if (status.ready !== true) return sendJson(response, 409, { error: 'Simulcast readiness checks must pass before going live.', status });
+        const validation = validateSimulcastStartRequest(await readJson(request));
+        if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
+        if (validation.value.operatorChecklistAccepted !== true) return sendJson(response, 409, { error: 'Complete and accept the operator rehearsal checklist before going live.' });
+        const commandId = sendBroadcastCommand(client, simulcastStartCapability, validation.value as Record<string, unknown>);
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.start-requested', 'warning', 'Coordinated Twitch and Kick Go Live requested by the operator.', { commandId });
+        return sendJson(response, 202, { accepted: true, commandId, status });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/preflight') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(simulcastPreflightCapability)) return sendJson(response, 409, { error: 'The connected Broadcast build does not provide the production preflight.' });
+        const currentStatus = (client.status as TempestBroadcastStatus | undefined);
+        const reported = isRecord(currentStatus?.simulcast) ? currentStatus.simulcast : undefined;
+        if (currentStatus?.streaming === true || (isRecord(reported?.kick) && reported.kick.active === true)) return sendJson(response, 409, { error: 'Run preflight while Twitch and Kick outputs are stopped.' });
+        const commandId = sendBroadcastCommand(client, simulcastPreflightCapability, {});
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.preflight-requested', 'info', 'Local production output preflight requested.', { commandId });
+        return sendJson(response, 202, { accepted: true, commandId });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/retry-kick') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(simulcastRetryKickCapability)) return sendJson(response, 409, { error: 'The connected Broadcast build does not provide Kick recovery control.' });
+        const status = simulcastSnapshot(client);
+        const twitch = isRecord(status.twitch) ? status.twitch : {};
+        const kick = isRecord(status.kick) ? status.kick : {};
+        if (twitch.active !== true || kick.active === true) return sendJson(response, 409, { error: 'Kick recovery is available only while Twitch is live and Kick is offline.', status });
+        const commandId = sendBroadcastCommand(client, simulcastRetryKickCapability, {});
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.kick-retry-requested', 'warning', 'Kick output recovery requested while Twitch remains live.', { commandId });
+        return sendJson(response, 202, { accepted: true, commandId, status });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/stop') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(simulcastStopCapability)) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build does not provide simulcast stop control.' });
+        }
+        const validation = validateSimulcastStopRequest(await readJson(request));
+        if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
+        const commandId = sendBroadcastCommand(client, simulcastStopCapability, validation.value as Record<string, unknown>);
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.stop-requested', 'warning', validation.value.scope === 'kick' ? 'Kick output stop requested; Twitch will remain live.' : 'Emergency stop requested for Twitch and Kick outputs.', { commandId, scope: validation.value.scope });
+        return sendJson(response, 202, { accepted: true, commandId, status: simulcastSnapshot(client) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/refresh') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes('broadcast.status')) return sendJson(response, 409, { error: 'Broadcast status refresh is unavailable.' });
+        const commandId = sendBroadcastCommand(client, 'broadcast.status', {});
+        return sendJson(response, 202, { accepted: true, commandId });
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/broadcast/dual-format') {
+        return sendJson(response, 200, dualFormatSnapshot(connectedBroadcast()));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/dual-format/configure') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(dualFormatConfigureCapability)) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build does not provide Dual Format configuration.' });
+        }
+        if ((client.status as TempestBroadcastStatus | undefined)?.streaming === true) {
+          return sendJson(response, 409, { error: 'Stop streaming before changing Dual Format configuration.' });
+        }
+        const validation = validateDualFormatConfigureRequest(await readJson(request));
+        if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
+        const { enabled, canvasPreset, canvasName } = validation.value;
+        const [width, height] = canvasPreset!.split('x').map(Number);
+        const commandId = sendBroadcastCommand(client, dualFormatConfigureCapability, {
+          enabled,
+          enhancedBroadcasting: enabled,
+          additionalCanvas: enabled ? {
+            name: canvasName,
+            baseWidth: width,
+            baseHeight: height,
+            outputWidth: width,
+            outputHeight: height,
+            fps: 'follow-main'
+          } : null,
+          selectAsAdditionalCanvas: enabled,
+          preserveCanvasWhenDisabled: true,
+          verticalBrowserSources: {
+            twitchAlerts: { url: `${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`, audio: false },
+            interactionAlerts: { url: `${runtime.baseUrl}/visual-alerts/interactions?orientation=vertical`, audio: false },
+            chatOverlay: null
+          }
+        });
+        workflowEngine!.recordExternalEvent('broadcast.dual-format.configuration-requested', 'info', enabled ? 'Dual Format setup requested from Broadcast.' : 'Dual Format disable requested from Broadcast.', { commandId, canvasPreset });
+        return sendJson(response, 202, { accepted: true, commandId, status: dualFormatSnapshot(client) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/dual-format/preview') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes(dualFormatPreviewCapability)) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build does not provide a vertical preview command.' });
+        }
+        const commandId = sendBroadcastCommand(client, dualFormatPreviewCapability, { orientation: 'vertical' });
+        return sendJson(response, 202, { accepted: true, commandId });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/dual-format/refresh') {
+        const client = connectedBroadcast();
+        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
+        if (!client.capabilities.includes('broadcast.status')) {
+          return sendJson(response, 409, { error: 'The connected Broadcast build cannot refresh its status.' });
+        }
+        const commandId = sendBroadcastCommand(client, 'broadcast.status', {});
+        return sendJson(response, 202, { accepted: true, commandId });
+      }
 
       if (request.method === 'GET' && requestUrl.pathname === '/v1/applications') {
         return sendJson(response, 200, { applications: registry.listApplications() });
@@ -1029,6 +1400,25 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         await syncChatbotConnection();
         return sendJson(response, 200, status);
       }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/kick') {
+        return sendJson(response, 200, kickGateway.status());
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/configuration') {
+        return sendJson(response, 200, await kickGateway.configure(await readJson(request)));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/oauth/start') {
+        return sendJson(response, 201, await kickGateway.startAuthorization());
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/oauth/validate') {
+        return sendJson(response, 200, await kickGateway.validateAuthorization());
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/integrations/kick/oauth') {
+        return sendJson(response, 200, await kickGateway.disconnect());
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/events') {
+        const body = await readJson(request) as { event?: unknown; eventId?: unknown; occurredAt?: unknown };
+        return sendJson(response, 202, await kickGateway.ingestWebhook(body.event ?? body, String(body.eventId || ''), String(body.occurredAt || '')));
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/chatbot') {
         return sendJson(response, 200, chatbot.status());
       }
@@ -1066,6 +1456,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/raid/test') {
         return sendJson(response, 200, await chatbot.testRaidAutomation(await readJson(request)));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/messages') {
+        const body = await readJson(request) as { platform?: unknown };
+        return sendJson(response, 202, body.platform === 'kick' ? await kickGateway.postMessage(body) : await chatbot.postMessage(body));
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/chatbot/messages') {
+        return sendJson(response, 200, chatbot.clearMessages());
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/twitch/events') {
         const ingestion = twitchGateway.ingest(await readJson(request));
@@ -1198,6 +1595,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         } else if (message.kind === 'publish' || message.kind === 'command' || message.kind === 'response') {
           if (message.kind === 'publish' && message.topic === 'broadcast.status' && message.payload && typeof message.payload === 'object') {
             client.status = message.payload as Record<string, unknown>;
+            client.statusReportedAt = new Date().toISOString();
           }
           for (const recipient of clients.values()) {
             const targeted = !message.target || message.target === recipient.applicationId || message.target === recipient.id;
@@ -1241,6 +1639,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       },
       async handler(event) {
         const response = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token },
+          body: JSON.stringify(event)
+        });
+        return { status: response.status, body: await response.json().catch(() => ({})) };
+      },
+      async kickEventHandler(event) {
+        const response = await fetch(`${runtime.baseUrl}/v1/integrations/kick/events`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token },
           body: JSON.stringify(event)

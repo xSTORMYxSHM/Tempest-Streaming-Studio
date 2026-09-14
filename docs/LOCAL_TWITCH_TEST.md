@@ -14,6 +14,12 @@ Use **Twitch Gateway → Single-channel Extension → Prepare Certificate**. Stu
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Trust
 ```
 
+When local Twitch testing is finished, remove the generated certificate files and the matching certificates from the current user's Personal and Trusted Root stores:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Untrust
+```
+
 In Warudo, copy `integrations/warudo/TempestPerformanceNode.cs` into the Playground folder and add **Tempest Performance Cue** to the Sound Alert blueprint. Set an exact cue, a comma-separated cue list, or a trailing wildcard such as `sound-alert.*` in **Cue Filter**. Connect Activate to the performance and Release to the restore animation. Use the node's **Test Activate** and **Test Release** buttons to validate those two flows inside Warudo before involving Studio or Twitch. The node status reports the last received cue and whether the filter accepted it; **Connections → Connect Warudo** in Studio shows the live socket status.
 
 In Tempest Broadcast, create or reuse these sources in the scene that will be active during the test:

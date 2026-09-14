@@ -43,6 +43,12 @@ powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 
 
 The `-Trust` switch changes the current user's Windows certificate trust store. The generated PFX and certificate are local development artifacts under `.tempest-extension/` and are excluded from source control.
 
+Remove the local certificate and its trust entry when testing is complete:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Untrust
+```
+
 Start the HTTPS server:
 
 ```powershell

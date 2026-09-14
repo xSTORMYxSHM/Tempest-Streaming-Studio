@@ -43,6 +43,40 @@ const unpackedResources = path.join(releaseDirectory, 'win-unpacked', 'resources
 for (const relativePath of ['app.asar', 'twitch-extension/panel.html', 'tools/create-extension-certificate.ps1', 'avatar-controllers/warudo/TempestPerformanceNode.cs']) {
   if (!(await stat(path.join(unpackedResources, relativePath))).isFile()) throw new Error(`Packaged resource ${relativePath} is missing.`);
 }
+
+const asarPath = path.join(unpackedResources, 'app.asar');
+const asarBytes = await readFile(asarPath);
+const asarHeaderLength = asarBytes.readUInt32LE(12);
+const asarHeader = JSON.parse(asarBytes.subarray(16, 16 + asarHeaderLength).toString('utf8').replace(/\0+$/, ''));
+const asarEntries = [];
+const collectAsarEntries = (entries, prefix = '') => {
+  for (const [name, metadata] of Object.entries(entries || {})) {
+    const entryPath = prefix ? `${prefix}/${name}` : name;
+    if (metadata && typeof metadata === 'object' && metadata.files) collectAsarEntries(metadata.files, entryPath);
+    else asarEntries.push(entryPath);
+  }
+};
+collectAsarEntries(asarHeader.files);
+const forbiddenAsarEntries = asarEntries.filter((entry) => (
+  (!entry.startsWith('node_modules/') && /(^|\/)(?:src|test|tests)(?:\/|$)/i.test(entry))
+  || /\.map$/i.test(entry)
+  || /(^|\/)\.env/i.test(entry)
+  || /(^|\/)Dockerfile/i.test(entry)
+  || /(^|\/)tsconfig[^/]*\.json$/i.test(entry)
+));
+if (forbiddenAsarEntries.length) throw new Error(`app.asar contains development-only files: ${forbiddenAsarEntries.slice(0, 20).join(', ')}`);
+
+const executablePath = path.join(releaseDirectory, 'win-unpacked', 'Tempest Streaming Studio.exe');
+const executableBytes = await readFile(executablePath);
+const fuseSentinel = Buffer.from('dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX', 'ascii');
+const fuseOffset = executableBytes.indexOf(fuseSentinel);
+if (fuseOffset < 0) throw new Error('Electron fuse wire was not found in the packaged executable.');
+const fuseVersionOffset = fuseOffset + fuseSentinel.length;
+const fuseVersion = executableBytes[fuseVersionOffset];
+const fuseLength = executableBytes[fuseVersionOffset + 1];
+const fuseWire = executableBytes.subarray(fuseVersionOffset + 2, fuseVersionOffset + 2 + fuseLength).toString('ascii');
+if (fuseVersion !== 1 || fuseWire !== '010011001') throw new Error(`Packaged Electron fuses are not hardened; found v${fuseVersion} ${fuseWire}.`);
+
 const forbidden = [];
 const walk = async (directory) => {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -68,7 +102,8 @@ const readAuthenticodeSignature = (filePath) => {
     '$securityModule = Join-Path $env:SystemRoot "System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1"',
     'Import-Module $securityModule',
     '$signature = Get-AuthenticodeSignature -LiteralPath $env:TEMPEST_SIGNATURE_TARGET',
-    '$result = [pscustomobject]@{ status = [string]$signature.Status; subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }; thumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { "" }; timestamped = $null -ne $signature.TimeStamperCertificate }',
+    '$embedded = try { [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($env:TEMPEST_SIGNATURE_TARGET)) } catch { $null }',
+    '$result = [pscustomobject]@{ status = [string]$signature.Status; subject = if ($embedded) { $embedded.Subject } else { "" }; thumbprint = if ($embedded) { $embedded.Thumbprint } else { "" }; timestamped = $null -ne $signature.TimeStamperCertificate }',
     '$result | ConvertTo-Json -Compress'
   ].join('; ');
   const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
@@ -122,6 +157,6 @@ const signed = allSignatures.length > 1 && allSignatures.every((signature) =>
 );
 
 await writeFile(path.join(releaseDirectory, 'SHA256SUMS.txt'), `${artifacts.map((entry) => `${entry.sha256}  ${entry.name}`).join('\n')}\n`);
-await writeFile(path.join(releaseDirectory, 'release-manifest.json'), `${JSON.stringify({ schemaVersion: 1, product: 'Tempest Streaming Studio', version: expectedVersion, platform: 'win32', arch: 'x64', generatedAt: new Date().toISOString(), signed, signatures, artifacts }, null, 2)}\n`);
+await writeFile(path.join(releaseDirectory, 'release-manifest.json'), `${JSON.stringify({ schemaVersion: 1, product: 'Tempest Streaming Studio', version: expectedVersion, platform: 'win32', arch: 'x64', generatedAt: new Date().toISOString(), signed, signatures, electronFuses: fuseWire, artifacts }, null, 2)}\n`);
 if (!signed) throw new Error('Every installer and portable payload executable must have a valid, timestamped Tempest publisher signature.');
-console.log(`TEMPEST_RELEASE_VERIFIED ${expectedVersion} signed=${signed} ${artifacts.map((entry) => `${entry.name}:${entry.size}`).join(' ')}`);
+console.log(`TEMPEST_RELEASE_VERIFIED ${expectedVersion} fuses=${fuseWire} signed=${signed} ${artifacts.map((entry) => `${entry.name}:${entry.size}`).join(' ')}`);

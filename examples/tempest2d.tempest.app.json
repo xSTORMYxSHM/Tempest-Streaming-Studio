@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tempestmainframe.tempest2d",
+  "name": "Tempest 2D",
+  "version": "0.21.0",
+  "apiVersion": "1.0",
+  "description": "In-house Live2D renderer adapter for expressions, motions, and parameter controls.",
+  "state": "development",
+  "capabilities": {
+    "provides": [
+      "avatar.expression.apply",
+      "avatar.performance.apply",
+      "avatar.reaction.apply",
+      "avatar.parameter.apply"
+    ],
+    "consumes": []
+  },
+  "assetTypes": {
+    "reads": [],
+    "writes": []
+  },
+  "health": {
+    "mode": "none"
+  }
+}

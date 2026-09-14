@@ -15,13 +15,15 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 
 Pairing the public Twitch Extension is optional. During pairing, Studio sends the broadcaster's current Twitch OAuth access token to the Tempest Extension Backend Service over HTTPS. The service sends that token to Twitch's validation endpoint to verify the broadcaster account and approved application, then discards it without storing it.
 
-The hosted service stores the broadcaster's numeric Twitch channel ID and login, a random installation ID, a one-way hash of the issued relay credential, pairing/update timestamps, and the viewer-safe signal catalog published by Studio. The catalog contains labels, identifiers, timing, and display colors only; it does not contain local media, file paths, OAuth tokens, or application credentials. Selecting **Revoke Installation** in Studio deletes the hosted installation record and its catalog.
+If you replace the built-in Tempest Signal address with a custom or self-hosted service, that operator receives the OAuth access token and is not covered by Tempest's service controls. Studio displays a native confirmation naming the destination before sending the token.
+
+The hosted service stores the broadcaster's numeric Twitch channel ID and login, an optional linked Kick user ID and username, a random installation ID, a one-way hash of the issued relay credential, pairing/update timestamps, and the viewer-safe signal catalog published by Studio. The catalog contains labels, identifiers, timing, and display colors only; it does not contain local media, file paths, OAuth tokens, client secrets, or application credentials. Selecting **Revoke Installation** in Studio deletes the hosted installation record and its catalog.
 
 Twitch-signed viewer JWTs, opaque viewer identifiers, and request identifiers are processed to authenticate, rate-limit, and deduplicate interactions. They are held in bounded service memory for the active request/replay window and are not written to the installation database. The Extension has no Bits or payment flow.
 
 ## Credentials
 
-Broadcaster OAuth tokens, chatbot OAuth tokens, local Twitch Extension secrets, hosted Extension relay credentials, and the GIPHY API key are encrypted using the operating system's protected storage. They are excluded from Studio backups, Alert Packs, and diagnostics exports. The hosted service stores only the relay credential's SHA-256 hash.
+Broadcaster OAuth tokens, chatbot OAuth tokens, the Kick client secret and OAuth tokens, local Twitch Extension secrets, hosted Extension relay credentials, and the GIPHY API key are encrypted using the operating system's protected storage. The separate Kick stream key used for video simulcast is sent once over the authenticated loopback Bridge and encrypted by Tempest Broadcast with Windows Data Protection; Studio does not store it or receive it back in status. Credentials are excluded from Studio backups, Alert Packs, and diagnostics exports. The hosted service stores only the relay credential's SHA-256 hash and validates—but does not retain—the Kick access token used while linking an account.
 
 ## Discord guest library
 

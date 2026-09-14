@@ -52,7 +52,8 @@ async function findSigningTools() {
 async function alreadySignedByTempest(filePath) {
   const command = [
     '$signature = Get-AuthenticodeSignature -LiteralPath $env:TEMPEST_AZURE_SIGN_FILE',
-    '$result = $signature.Status -eq "Valid" -and $null -ne $signature.TimeStamperCertificate -and $signature.SignerCertificate.Subject -eq $env:TEMPEST_AZURE_SIGN_PUBLISHER',
+    '$embedded = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($env:TEMPEST_AZURE_SIGN_FILE))',
+    '$result = $signature.Status -eq "Valid" -and $null -ne $signature.TimeStamperCertificate -and $embedded.Subject -eq $env:TEMPEST_AZURE_SIGN_PUBLISHER',
     'if ($result) { exit 0 } else { exit 1 }'
   ].join('; ');
   try {

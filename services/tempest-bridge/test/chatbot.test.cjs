@@ -155,6 +155,58 @@ test('filters links and spam with moderator-safe deletes, exemptions, previews, 
   await chatbot.close();
 });
 
+test('monitors Stream Together participants and keeps a native Shared Chat message feed', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-collaboration-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url, options = {}) => {
+      requests.push({ url: String(url), options });
+      if (String(url).includes('/eventsub/subscriptions')) return jsonResponse({}, 202);
+      if (String(url).includes('/shared_chat/session')) return jsonResponse({ data: [{ session_id: 'shared-1', host_broadcaster_id: 'channel-1', participants: [{ broadcaster_id: 'channel-1' }, { broadcaster_id: 'channel-2' }] }] });
+      if (String(url).includes('/helix/users?')) return jsonResponse({ data: [{ id: 'channel-1', login: 'tempest', display_name: 'Tempest' }, { id: 'channel-2', login: 'collaborator', display_name: 'Collaborator' }] });
+      if (String(url).includes('/helix/chat/messages')) return jsonResponse({ data: [{ is_sent: true }] });
+      return jsonResponse({});
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  chatbot.channel = { clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' };
+
+  await chatbot.subscribeToEvents('eventsub-session');
+  const subscriptions = requests.filter((request) => request.url.includes('/eventsub/subscriptions')).map((request) => JSON.parse(request.options.body).type);
+  assert.deepEqual(subscriptions, ['channel.chat.message', 'channel.shared_chat.begin', 'channel.shared_chat.update', 'channel.shared_chat.end']);
+  assert.equal(chatbot.status().sharedChat.state, 'active');
+  assert.equal(chatbot.status().sharedChat.host.login, 'tempest');
+  assert.deepEqual(chatbot.status().sharedChat.participants.map((participant) => participant.login), ['tempest', 'collaborator']);
+
+  await chatbot.processChatEvent({
+    schemaVersion: 1,
+    id: 'source-message-1',
+    topic: 'viewer.chat.message',
+    occurredAt: '2026-09-12T12:00:00.000Z',
+    source: 'twitch',
+    channel: { id: 'channel-1', login: 'tempest' },
+    viewer: { id: 'viewer-1', login: 'viewer', displayName: 'Viewer', roles: ['subscriber'] },
+    payload: { messageId: 'message-1', text: 'Hello from the collaboration!', sharedChat: true, sourceChannelId: 'channel-2', sourceChannelLogin: 'collaborator', sourceChannelDisplayName: 'Collaborator' }
+  });
+  const message = chatbot.status().messages[0];
+  assert.equal(message.text, 'Hello from the collaboration!');
+  assert.equal(message.sourceChannelLogin, 'collaborator');
+  assert.equal(message.sharedChat, true);
+
+  assert.deepEqual(await chatbot.postMessage({ message: 'Studio is monitoring Shared Chat.' }), { sent: true });
+  const sent = requests.find((request) => request.url.includes('/helix/chat/messages'));
+  assert.equal(JSON.parse(sent.options.body).message, 'Studio is monitoring Shared Chat.');
+  assert.equal(chatbot.clearMessages().messages.length, 0);
+
+  chatbot.applySharedChatEvent('channel.shared_chat.end', { session_id: 'shared-1' });
+  assert.equal(chatbot.status().sharedChat.state, 'inactive');
+  assert.equal(chatbot.status().sharedChat.participants.length, 0);
+});
+
 test('authorizes any secondary Twitch identity and derives or customizes its bot name', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-oauth-'));
   const credentials = memoryCredentialStore();

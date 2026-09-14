@@ -45,6 +45,8 @@ export interface TwitchEbsInstallation {
   id: string;
   channelId: string;
   channelLogin: string;
+  kickUserId?: string;
+  kickUsername?: string;
   relayTokenHash: string;
   active: boolean;
   catalog: PublicExtensionCatalog;
@@ -57,6 +59,9 @@ export interface TwitchEbsInstallationStore {
   install(channelId: string, channelLogin: string, relayTokenHash: string): Promise<TwitchEbsInstallation>;
   findActiveByChannelId(channelId: string): Promise<TwitchEbsInstallation | null>;
   findActiveByRelayTokenHash(relayTokenHash: string): Promise<TwitchEbsInstallation | null>;
+  findActiveByKickUserId(kickUserId: string): Promise<TwitchEbsInstallation | null>;
+  linkKick(installationId: string, kickUserId: string, kickUsername: string): Promise<TwitchEbsInstallation>;
+  unlinkKick(installationId: string): Promise<void>;
   updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void>;
   updatePanelDesign(installationId: string, panelDesign: PublicExtensionPanelDesign): Promise<void>;
   revoke(installationId: string): Promise<void>;
@@ -106,6 +111,34 @@ export class MemoryTwitchEbsInstallationStore implements TwitchEbsInstallationSt
     return installation ? copy(installation) : null;
   }
 
+  async findActiveByKickUserId(kickUserId: string): Promise<TwitchEbsInstallation | null> {
+    const installation = [...this.installations.values()].find((entry) => entry.active && entry.kickUserId === kickUserId);
+    return installation ? copy(installation) : null;
+  }
+
+  async linkKick(installationId: string, kickUserId: string, kickUsername: string): Promise<TwitchEbsInstallation> {
+    const installation = this.installations.get(installationId);
+    if (!installation || !installation.active) throw new Error('Installation is not active.');
+    for (const entry of this.installations.values()) {
+      if (entry.id !== installationId && entry.kickUserId === kickUserId) {
+        entry.kickUserId = undefined;
+        entry.kickUsername = undefined;
+      }
+    }
+    installation.kickUserId = kickUserId;
+    installation.kickUsername = kickUsername;
+    installation.updatedAt = new Date().toISOString();
+    return copy(installation);
+  }
+
+  async unlinkKick(installationId: string): Promise<void> {
+    const installation = this.installations.get(installationId);
+    if (!installation || !installation.active) return;
+    installation.kickUserId = undefined;
+    installation.kickUsername = undefined;
+    installation.updatedAt = new Date().toISOString();
+  }
+
   async updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void> {
     const installation = this.installations.get(installationId);
     if (!installation || !installation.active) throw new Error('Installation is not active.');
@@ -139,6 +172,8 @@ interface InstallationRow {
   id: string;
   channel_id: string;
   channel_login: string;
+  kick_user_id: string | null;
+  kick_username: string | null;
   relay_token_hash: string;
   active: boolean;
   catalog: PublicExtensionCatalog;
@@ -151,6 +186,8 @@ function fromRow(row: InstallationRow): TwitchEbsInstallation {
     id: row.id,
     channelId: row.channel_id,
     channelLogin: row.channel_login,
+    kickUserId: row.kick_user_id || undefined,
+    kickUsername: row.kick_username || undefined,
     relayTokenHash: row.relay_token_hash,
     active: row.active,
     catalog: row.catalog || emptyPublicExtensionCatalog(),
@@ -173,6 +210,8 @@ export class PostgresTwitchEbsInstallationStore implements TwitchEbsInstallation
         id uuid PRIMARY KEY,
         channel_id varchar(30) NOT NULL UNIQUE,
         channel_login varchar(80) NOT NULL,
+        kick_user_id varchar(30) UNIQUE,
+        kick_username varchar(120),
         relay_token_hash char(64) NOT NULL UNIQUE,
         active boolean NOT NULL DEFAULT true,
         catalog jsonb NOT NULL DEFAULT '{"schemaVersion":1,"updatedAt":"1970-01-01T00:00:00.000Z","items":[]}'::jsonb,
@@ -180,6 +219,8 @@ export class PostgresTwitchEbsInstallationStore implements TwitchEbsInstallation
         updated_at timestamptz NOT NULL DEFAULT now()
       )
     `);
+    await this.pool.query('ALTER TABLE tempest_extension_installations ADD COLUMN IF NOT EXISTS kick_user_id varchar(30) UNIQUE');
+    await this.pool.query('ALTER TABLE tempest_extension_installations ADD COLUMN IF NOT EXISTS kick_username varchar(120)');
   }
 
   async install(channelId: string, channelLogin: string, relayTokenHash: string): Promise<TwitchEbsInstallation> {
@@ -204,6 +245,32 @@ export class PostgresTwitchEbsInstallationStore implements TwitchEbsInstallation
   async findActiveByRelayTokenHash(relayTokenHash: string): Promise<TwitchEbsInstallation | null> {
     const result = await this.pool.query<InstallationRow>('SELECT * FROM tempest_extension_installations WHERE relay_token_hash = $1 AND active = true LIMIT 1', [relayTokenHash]);
     return result.rows[0] ? fromRow(result.rows[0]) : null;
+  }
+
+  async findActiveByKickUserId(kickUserId: string): Promise<TwitchEbsInstallation | null> {
+    const result = await this.pool.query<InstallationRow>('SELECT * FROM tempest_extension_installations WHERE kick_user_id = $1 AND active = true LIMIT 1', [kickUserId]);
+    return result.rows[0] ? fromRow(result.rows[0]) : null;
+  }
+
+  async linkKick(installationId: string, kickUserId: string, kickUsername: string): Promise<TwitchEbsInstallation> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE tempest_extension_installations SET kick_user_id = NULL, kick_username = NULL, updated_at = now() WHERE kick_user_id = $1 AND id <> $2', [kickUserId, installationId]);
+      const result = await client.query<InstallationRow>('UPDATE tempest_extension_installations SET kick_user_id = $2, kick_username = $3, updated_at = now() WHERE id = $1 AND active = true RETURNING *', [installationId, kickUserId, kickUsername]);
+      if (!result.rows[0]) throw new Error('Installation is not active.');
+      await client.query('COMMIT');
+      return fromRow(result.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async unlinkKick(installationId: string): Promise<void> {
+    await this.pool.query('UPDATE tempest_extension_installations SET kick_user_id = NULL, kick_username = NULL, updated_at = now() WHERE id = $1 AND active = true', [installationId]);
   }
 
   async updateCatalog(installationId: string, catalog: PublicExtensionCatalog): Promise<void> {

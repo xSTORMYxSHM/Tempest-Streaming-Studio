@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.4.0 — Twitch + Kick production control
+
+- Added a production Twitch + Kick Go Live page that coordinates output through Tempest Broadcast while keeping all video, canvas, encoder, and stream-key ownership in Broadcast.
+- Added guarded Twitch Dual Format preparation and vertical-preview controls for Twitch's mobile-first 9:16 presentation, with live readiness and horizontal/vertical telemetry.
+- Added off-air simulcast preflight, a session-only operator checklist, Kick-only retry and stop controls, emergency output stop, upload-headroom checks, and a Studio live-operations supervisor.
+- Added a native Stream Together Collaboration Center with Shared Chat session detection, host and participant visibility, an in-memory chat feed, and bot-account posting without a separate browser window.
+- Added Kick OAuth, signed-webhook relay delivery, encrypted credentials, and one combined Twitch/Shared Chat/Kick monitor while keeping replies on their originating platform.
+- Added data-version compatibility for existing 1.3.x profiles and expanded automated coverage for the new production contracts, chat paths, credential boundaries, and recovery behavior.
+
 ## 1.3.1 — Reliable Browser Source alert audio
 
 - Replaced the stalled Chromium media-element path for Twitch and Interaction Alert sounds with Web Audio fetch and decoding, while retaining a bounded media-element fallback for compatibility.

@@ -303,3 +303,59 @@ test('exchanges Discord RPC authorization codes without exposing the client secr
   const wrongClient = await fetch(`${runtime.baseUrl}/v1/discord/oauth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grantType: 'authorization_code', clientId: 'wrong', code: 'one-time-code' }) });
   assert.equal(wrongClient.status, 400);
 });
+
+test('links a verified Kick broadcaster and relays signed chat webhooks to its paired Studio', async (context) => {
+  const secret = randomBytes(32);
+  const runtime = await startTwitchEbs({
+    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [secret.toString('base64')],
+    installationStore: new MemoryTwitchEbsInstallationStore(),
+    validateTwitchOAuthToken: async () => ({ clientId: 'publicclient123', userId: '123456', login: 'creator', scopes: [], expiresIn: 3600 }),
+    validateKickOAuthToken: async (token) => {
+      assert.equal(token, 'kick-user-token');
+      return { userId: '445566', username: 'kickcreator' };
+    },
+    verifyKickWebhook: (messageId, timestamp, rawBody, signature) => {
+      assert.equal(messageId, '01KICKEVENT000000000000001');
+      assert.equal(timestamp, '2026-09-12T12:00:00Z');
+      assert.equal(signature, 'verified-test-signature');
+      assert.match(rawBody.toString('utf8'), /kick-message-1/);
+      return true;
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+  const pairing = await fetch(`${runtime.baseUrl}/v1/installations/pair`, { method: 'POST', headers: { 'X-Twitch-OAuth': 'twitch-user-token' } });
+  const installation = await pairing.json();
+  const linked = await fetch(`${runtime.baseUrl}/v1/installations/current/kick`, { method: 'PUT', headers: { Authorization: `Bearer ${installation.relayToken}`, 'X-Kick-OAuth': 'kick-user-token' } });
+  assert.equal(linked.status, 200);
+  assert.equal((await linked.json()).kick.username, 'kickcreator');
+
+  const studio = await connectStudio(runtime, installation.relayToken);
+  context.after(() => studio.close());
+  const relayed = new Promise((resolve, reject) => {
+    studio.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.type !== 'kick.event') return;
+      studio.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId: message.requestId, status: 202, body: { accepted: true, eventId: 'kick:kick-message-1' } }));
+      resolve(message);
+    });
+    studio.on('error', reject);
+  });
+  const payload = {
+    message_id: 'kick-message-1', content: '!studio', created_at: '2026-09-12T12:00:00Z',
+    broadcaster: { user_id: 445566, username: 'kickcreator', channel_slug: 'kickcreator' },
+    sender: { user_id: 778899, username: 'viewer', channel_slug: 'viewer', identity: { badges: [] } }
+  };
+  const response = await fetch(`${runtime.baseUrl}/v1/kick/events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json', 'Kick-Event-Message-Id': '01KICKEVENT000000000000001',
+      'Kick-Event-Message-Timestamp': '2026-09-12T12:00:00Z', 'Kick-Event-Signature': 'verified-test-signature',
+      'Kick-Event-Type': 'chat.message.sent', 'Kick-Event-Version': '1'
+    },
+    body: JSON.stringify(payload)
+  });
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).eventId, 'kick:kick-message-1');
+  assert.equal((await relayed).event.event.message_id, 'kick-message-1');
+});

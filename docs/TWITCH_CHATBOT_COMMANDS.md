@@ -17,6 +17,12 @@ Clean installations include these public-safe commands. They allow Shared Chat b
 
 Stream status is cached for 30 seconds, channel information for one minute, and schedules for five minutes. Provider failures produce a short chat-safe fallback instead of triggering a workflow or exposing an HTTP error.
 
+## Stream Together Collaboration Center
+
+The Chatbot page monitors Twitch chat directly through the bot account's EventSub connection. It subscribes to Shared Chat session begin, update, and end events, restores the active session after reconnecting, and shows the current host and participating channels. Messages retain their source-channel identity and Twitch source message ID so duplicated Shared Chat deliveries cannot execute a command twice.
+
+The in-app message history is memory-only, limited to the latest 100 visible messages in the renderer and 100 retained messages in the service, and is cleared when Studio closes. Operators can clear the view manually and can send a normal channel message through the authorized bot account. Twitch still owns the Stream Together audio/video Backstage call and its guest media permissions.
+
 ## Optional response providers
 
 The Chatbot page can configure a United States National Weather Service location and an AzuraCast now-playing station. After a provider is configured, its response handler becomes available to new or existing commands such as `!weather` or `!song`. Provider URLs and locations are installation settings; they are not embedded public defaults. NWS forecasts are cached for ten minutes and AzuraCast readings for 15 seconds.

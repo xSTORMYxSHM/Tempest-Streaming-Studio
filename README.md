@@ -3,6 +3,7 @@
 Current release: **1.3.1**
 
 Tempest Streaming Studio is the interaction hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed actions across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Creative rendering, shared asset libraries, and live production stay inside their focused applications.
+Tempest Streaming Studio is the interaction and orchestration hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed workflows across Tempest 2D, Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Studio also manages application registrations and shared assets, while creative rendering and live production stay inside focused applications.
 
 ## Workspace
 
@@ -10,12 +11,13 @@ Tempest Streaming Studio is the interaction hub for connected streaming tools. I
 - `apps/twitch-extension` — Video Component, Mobile viewer interface, configuration view, and local HTTPS test server.
 - `services/tempest-bridge` — local authenticated API, interaction workflows, cooldowns, safety leases, application discovery, commands, and events.
 - `services/twitch-ebs` — public Twitch JWT boundary, request rate/replay protection, and channel-bound Studio relay.
-- `services/warudo-adapter` — local Bridge-to-Warudo blueprint cue adapter.
+- `services/warudo-adapter` — local Bridge adapters for Warudo blueprint cues and direct Tempest 2D controls.
 - `packages/tempest-contracts` — versioned manifests, workflow definitions, event envelopes, and runtime validation.
 - `examples` — manifests showing how current and future Tempest applications register.
 - `docs` — architecture and integration guidance.
 
 The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Warudo and compatible broadcast reactions are optional per alert. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript. Each alert can keep a global placement plus named overrides that automatically follow Broadcast’s active scene. Grid/safe-edge snapping, exact center controls, arrow-key nudging, and a silent **Show on Canvas** mode make it possible to arrange an unsaved design against the real Broadcast scene.
+The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Tempest 2D, Warudo, and compatible broadcast reactions are optional per alert. A Tempest 2D action can select an expression, motion, or Live2D parameter directly. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript.
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 
@@ -25,9 +27,17 @@ The **Chat + Emotes** page replaces hosted chat effects with two independent loc
 
 The **Discord Guests** page provides a local Reactive Images-style source at `http://127.0.0.1:4765/discord-voice`. Each voice participant is saved to an editable local library keyed by Discord User ID, so streamers can assign separate idle, speaking, muted, and deafened PNGs or GIFs while the guest is offline or create their profile by ID before they join. Assigned artwork appears in the person's Studio profile, Discord avatars remain the fallback, and a canvas-sized preview supports per-person drag placement. The overlay also includes automatic layouts, names, status indicators, per-person visibility, and a dedicated option to hide the streamer's own profile. Only people currently in the selected voice channel appear in the Browser Source. The desktop connector uses supported local RPC and never uses a self-bot. See `docs/DISCORD_VOICE_OVERLAY.md`.
 
+The **Chatbot** page includes a native Stream Together Collaboration Center. Studio monitors home-channel and Shared Chat messages through EventSub, detects Shared Chat session changes, shows the host and participating channels, and can post through the connected bot account. The live monitor is memory-only and removes the need to keep a separate browser open just to watch Shared Chat; Twitch continues to own the audio/video Backstage call.
+
+The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
+
+The **Go Live** page coordinates that Twitch Dual Format output with a separate Kick horizontal output. Broadcast encrypts the Kick stream key with Windows Data Protection, shares the already-running horizontal encoder, applies the OBS reconnect policy, and reports each destination independently. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, Kick-only recovery/stop, emergency stop, and a session-only live-operations timeline without retaining or displaying the key. See [docs/TWITCH_KICK_SIMULCAST.md](docs/TWITCH_KICK_SIMULCAST.md).
+
+The same Collaboration Center now supports production Kick chat through Kick's official OAuth 2.1 API and signed webhooks. Messages are labeled by platform, commands share one policy and cooldown engine, and replies stay on the platform where the command originated. See [Kick Chat Integration](docs/KICK_CHATBOT.md) for the developer-app and hosted-relay setup.
+
 The **Panel Designer** creates a channel-specific appearance for the universal Twitch Extension with a real 318 by 496 preview, safe theme controls, local persistence, and runtime delivery to the Local Panel. Hosted releases use the same validated theme model as per-broadcaster configuration, so streamers customize one shared Extension without supplying viewer-facing code.
 
-The **Connections** page makes optional compatible applications explicit. Studio discovers broadcast canvas/source capabilities, starts the optional Warudo adapter automatically, and walks the operator through wiring Activate and Release into a blueprint.
+The **Connections** page makes optional compatible applications explicit. Studio discovers broadcast canvas/source capabilities and starts the Warudo and Tempest 2D adapters automatically. Tempest 2D receives timed controls on loopback UDP `127.0.0.1:19193`, so its chroma-keyed or transparent OBS output does not need to pass through Warudo.
 
 Portable `.tempest-alert-pack` files contain one alert, its variants and verified local media. `.tempest-studio-backup` files preserve settings and portable media while deliberately excluding OAuth tokens, Extension secrets, API keys, application launch paths, and playback history. Settings + About can export a redacted diagnostics report for support.
 

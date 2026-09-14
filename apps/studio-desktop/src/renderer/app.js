@@ -10,8 +10,12 @@
     discordvoice: { title: 'Discord Guests', kicker: 'LOCAL VOICE OVERLAY' },
     twitch: { title: 'Twitch Setup', kicker: 'CONNECT YOUR CHANNEL' },
     extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
-    chatbot: { title: 'Chatbot', kicker: 'TWITCH CHAT' },
+    chatbot: { title: 'Chatbot', kicker: 'TWITCH + KICK CHAT' },
+    dualformat: { title: 'Twitch Dual Format', kicker: 'MOBILE-FIRST OUTPUT' },
+    simulcast: { title: 'Twitch + Kick Go Live', kicker: 'PRODUCTION OUTPUT CONTROL' },
     api: { title: 'Avatar Apps', kicker: 'OPTIONAL CONNECTIONS' },
+    software: { title: 'Software Management', kicker: 'SUITE REGISTRY' },
+    assets: { title: 'Asset Control', kicker: 'ASSET LIBRARY' },
     settings: { title: 'Settings', kicker: 'STUDIO SETTINGS' }
   };
   const targetNames = {
@@ -28,6 +32,8 @@
     safety: { armed: false, activeRuns: 0 },
     applications: [],
     connections: [],
+    dualFormat: null,
+    simulcast: null,
     workflows: [],
     runs: [],
     events: [],
@@ -43,6 +49,8 @@
     discordVoice: null,
     discordRpc: null,
     twitch: null,
+    kick: null,
+    kickRelayLinked: false,
     chatbot: null,
     localExtension: null,
     hostedExtension: null,
@@ -79,6 +87,13 @@
   let alertDesignSceneScope = '';
   const twitchExperienceDraftMedia = Object.create(null);
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
+  const simulcastChecklistStorageKey = 'tempest.streaming-studio.simulcast-checklist.v1';
+  const simulcastOperationsStorageKey = 'tempest.streaming-studio.simulcast-operations.v1';
+  let simulcastOperations = {
+    active: false, startedAt: null, endedAt: null, incidents: [],
+    previousTwitchActive: false, previousKickActive: false,
+    previousTwitchDropped: 0, previousKickDropped: 0, lastHealth: 'standing-by'
+  };
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
     { title: 'Twitch Accounts', short: 'Broadcaster + bot' },
@@ -90,6 +105,129 @@
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
   const activeRun = (run) => run.state === 'running' || run.state === 'pending';
+
+  function formatElapsed(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+  }
+
+  function saveSimulcastOperations() {
+    sessionStorage.setItem(simulcastOperationsStorageKey, JSON.stringify(simulcastOperations));
+  }
+
+  function restoreSimulcastOperations() {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(simulcastOperationsStorageKey) || 'null');
+      if (!stored || typeof stored !== 'object' || !Array.isArray(stored.incidents)) return;
+      simulcastOperations = {
+        ...simulcastOperations,
+        ...stored,
+        incidents: stored.incidents.filter((incident) => incident && typeof incident.message === 'string').slice(-30)
+      };
+    } catch { /* Session history is optional and never leaves this window. */ }
+  }
+
+  function addSimulcastIncident(level, message, now = Date.now()) {
+    simulcastOperations.incidents.push({ at: new Date(now).toISOString(), level, message: String(message).slice(0, 240) });
+    simulcastOperations.incidents = simulcastOperations.incidents.slice(-30);
+  }
+
+  function simulcastSupervisorState(status, now = Date.now()) {
+    const reportedAt = Date.parse(status.statusReportedAt || '');
+    const ageMs = Number.isFinite(reportedAt) ? Math.max(0, now - reportedAt) : Number.POSITIVE_INFINITY;
+    const twitchActive = status.twitch?.active === true;
+    const kickActive = status.kick?.active === true;
+    const maxCongestion = Math.max(Number(status.twitch?.congestion || 0), Number(status.kick?.congestion || 0));
+    if (!status.connected || ageMs > 30000) return { level: 'critical', label: 'SIGNAL LOST', guidance: 'Check the Studio Integration connection in Broadcast.', ageMs };
+    if (ageMs > 15000) return { level: 'warning', label: 'SIGNAL DELAYED', guidance: 'Broadcast telemetry is arriving slowly; keep the platform dashboards visible.', ageMs };
+    if (twitchActive && !kickActive) return { level: 'critical', label: 'DEGRADED LIVE', guidance: 'Twitch is live and Kick is offline. Inspect the error, then use Retry Kick if safe.', ageMs };
+    if (!twitchActive && kickActive) return { level: 'critical', label: 'KICK ONLY', guidance: 'Twitch is offline while Kick remains active. Use Emergency Stop All Outputs if this is unintended.', ageMs };
+    if (twitchActive && kickActive && maxCongestion >= 0.25) return { level: 'critical', label: 'HIGH CONGESTION', guidance: 'Sustained congestion is critical. Check platform health and prepare to stop the affected output.', ageMs };
+    if (twitchActive && kickActive && maxCongestion >= 0.1) return { level: 'warning', label: 'CONGESTION', guidance: 'Watch dropped frames and both platform dashboards closely.', ageMs };
+    if (twitchActive && kickActive) return { level: 'healthy', label: 'HEALTHY', guidance: 'Both destinations are live and telemetry is current.', ageMs };
+    return { level: 'standing-by', label: 'STANDING BY', guidance: 'Waiting for a live session.', ageMs };
+  }
+
+  function updateSimulcastOperations(status) {
+    const now = Date.now();
+    const twitchActive = status.twitch?.active === true;
+    const kickActive = status.kick?.active === true;
+    const twitchDropped = Number(status.twitch?.droppedFrames || 0);
+    const kickDropped = Number(status.kick?.droppedFrames || 0);
+    const supervisor = simulcastSupervisorState(status, now);
+    const reportFresh = status.connected && status.statusReported && Number.isFinite(supervisor.ageMs) && supervisor.ageMs <= 30000;
+    let changed = false;
+    let startedNow = false;
+
+    if (twitchActive && !simulcastOperations.active && reportFresh) {
+      simulcastOperations = {
+        active: true, startedAt: new Date(now).toISOString(), endedAt: null, incidents: [],
+        previousTwitchActive: true, previousKickActive: kickActive,
+        previousTwitchDropped: twitchDropped, previousKickDropped: kickDropped, lastHealth: 'standing-by'
+      };
+      addSimulcastIncident('info', 'Twitch reported live; Studio session supervision started.', now);
+      if (kickActive) addSimulcastIncident('info', 'Kick reported live.', now);
+      changed = true;
+      startedNow = true;
+    } else if (!twitchActive && simulcastOperations.active && reportFresh) {
+      addSimulcastIncident(kickActive ? 'critical' : 'info', kickActive
+        ? 'Twitch reported offline while Kick remained live; the supervised Twitch session ended.'
+        : 'Twitch reported offline; the supervised live session ended.', now);
+      simulcastOperations.active = false;
+      simulcastOperations.endedAt = new Date(now).toISOString();
+      changed = true;
+    }
+
+    if (simulcastOperations.active && !startedNow && reportFresh) {
+      if (kickActive && !simulcastOperations.previousKickActive) {
+        addSimulcastIncident('info', 'Kick output recovered and reported live.', now);
+        changed = true;
+      } else if (!kickActive && simulcastOperations.previousKickActive) {
+        addSimulcastIncident('critical', `Kick output left live state${status.kick?.lastError ? `: ${status.kick.lastError}` : '.'}`, now);
+        changed = true;
+      }
+      if (twitchDropped > simulcastOperations.previousTwitchDropped) {
+        addSimulcastIncident('warning', `Twitch reported ${twitchDropped - simulcastOperations.previousTwitchDropped} additional dropped frame${twitchDropped - simulcastOperations.previousTwitchDropped === 1 ? '' : 's'}.`, now);
+        changed = true;
+      }
+      if (kickDropped > simulcastOperations.previousKickDropped) {
+        addSimulcastIncident('warning', `Kick reported ${kickDropped - simulcastOperations.previousKickDropped} additional dropped frame${kickDropped - simulcastOperations.previousKickDropped === 1 ? '' : 's'}.`, now);
+        changed = true;
+      }
+    }
+
+    if (simulcastOperations.active && supervisor.level !== simulcastOperations.lastHealth) {
+      if (supervisor.level === 'healthy' && simulcastOperations.lastHealth !== 'standing-by') addSimulcastIncident('info', 'Destination health returned to normal.', now);
+      else if (supervisor.level === 'warning' || supervisor.level === 'critical') addSimulcastIncident(supervisor.level, `${supervisor.label}: ${supervisor.guidance}`, now);
+      changed = true;
+    }
+    if (reportFresh) {
+      simulcastOperations.previousTwitchActive = twitchActive;
+      simulcastOperations.previousKickActive = kickActive;
+      simulcastOperations.previousTwitchDropped = twitchDropped;
+      simulcastOperations.previousKickDropped = kickDropped;
+    }
+    simulcastOperations.lastHealth = supervisor.level;
+    if (changed) saveSimulcastOperations();
+
+    const startedAt = Date.parse(simulcastOperations.startedAt || '');
+    const endedAt = Date.parse(simulcastOperations.endedAt || '');
+    $('#simulcastSessionClock').textContent = simulcastOperations.active && Number.isFinite(startedAt)
+      ? formatElapsed(now - startedAt)
+      : Number.isFinite(startedAt) && Number.isFinite(endedAt) ? `LAST ${formatElapsed(endedAt - startedAt)}` : 'STANDING BY';
+    $('#simulcastSessionClockNote').textContent = simulcastOperations.active ? `Started ${new Date(startedAt).toLocaleTimeString()}` : 'Starts when Twitch reports live';
+    $('#simulcastTelemetryFreshness').textContent = Number.isFinite(supervisor.ageMs) ? `${Math.floor(supervisor.ageMs / 1000)}s AGO` : 'NO SIGNAL';
+    $('#simulcastSupervisorHealth').textContent = supervisor.label;
+    $('#simulcastSupervisorGuidance').textContent = supervisor.guidance;
+    const timeline = $('#simulcastIncidentTimeline');
+    timeline.classList.toggle('empty-state', simulcastOperations.incidents.length === 0);
+    timeline.innerHTML = simulcastOperations.incidents.length
+      ? [...simulcastOperations.incidents].reverse().map((incident) => `<div class="simulcast-incident ${escapeHtml(incident.level)}"><time>${new Date(incident.at).toLocaleTimeString()}</time><b>${escapeHtml(incident.level.toUpperCase())}</b><span>${escapeHtml(incident.message)}</span></div>`).join('')
+      : 'No live-session incidents recorded in this Studio window.';
+  }
 
   function copyButton(value, label) {
     const safeLabel = escapeHtml(label || 'value');
@@ -943,6 +1081,235 @@
     audio.play().catch((error) => { finish(); toast(`Could not play ${command.alert.name}: ${error.message}`, true); });
   }
 
+  function renderDualFormat() {
+    const status = state.dualFormat;
+    if (!status) return;
+    const labels = {
+      'broadcast-offline': 'BROADCAST OFFLINE',
+      'update-required': 'UPDATE REQUIRED',
+      'setup-required': 'SETUP REQUIRED',
+      ready: 'READY', live: 'LIVE', error: 'NEEDS ATTENTION'
+    };
+    const stateLabel = labels[status.state] || String(status.state || 'checking').replaceAll('-', ' ').toUpperCase();
+    $('#dualFormatBadge').textContent = stateLabel;
+    $('#dualFormatBadge').classList.toggle('offline', !status.ready);
+    $('#dualFormatStateMetric').textContent = status.streaming && status.ready ? 'LIVE' : status.ready ? 'READY' : status.enabled ? 'INCOMPLETE' : 'OFF';
+    $('#dualFormatStateNote').textContent = status.streaming ? 'Broadcast is currently live' : status.connected ? 'Safe to configure while off air' : 'Waiting for Broadcast';
+    const horizontal = broadcastCanvasProfile();
+    $('#dualFormatHorizontalMetric').textContent = horizontal ? `${horizontal.outputWidth} × ${horizontal.outputHeight}` : '—';
+    const vertical = status.canvas;
+    $('#dualFormatVerticalMetric').textContent = vertical?.outputWidth && vertical?.outputHeight ? `${vertical.outputWidth} × ${vertical.outputHeight}` : '—';
+    $('#dualFormatEnhancedMetric').textContent = status.enhancedBroadcastingEnabled ? 'ON' : 'OFF';
+
+    const detailById = {
+      broadcast: status.connected ? 'Broadcast is reporting to Studio.' : 'Open Broadcast and connect its Studio Integration dock.',
+      controller: status.controllerSupported && status.statusReported ? 'The production control contract is available.' : 'Install a Broadcast build with Dual Format control support.',
+      'enhanced-broadcasting': status.enhancedBroadcastingEnabled ? 'Twitch multitrack output is enabled.' : 'Enhanced Broadcasting must be enabled in Broadcast.',
+      'vertical-canvas': status.additionalCanvasSelected && vertical ? `${vertical.name || 'Vertical canvas'} · ${vertical.outputWidth} × ${vertical.outputHeight}.` : 'Select a 1080 × 1920 or 720 × 1280 additional canvas.',
+      'scene-links': status.sceneLinksReady ? 'Primary scene changes will follow on the vertical canvas.' : 'Link the horizontal and vertical versions of on-air scenes.',
+      audio: status.audioReady ? 'Program audio is available in both orientations.' : 'Confirm microphone and program audio reach the vertical output.',
+      'browser-sources': status.browserSourcesReady ? 'Portrait-safe alert sources are present without duplicate audio.' : 'Add the visual-only vertical alert sources shown beside this checklist.'
+    };
+    const checks = Array.isArray(status.checks) ? status.checks : [];
+    const checkList = $('#dualFormatChecks');
+    checkList.classList.toggle('empty-state', !checks.length);
+    checkList.innerHTML = checks.length ? checks.map((check) => `<div class="dual-format-check ${check.ready ? 'ready' : ''}"><i>${check.ready ? '✓' : '!'}</i><div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(detailById[check.id] || '')}</small></div></div>`).join('') : 'Connect Tempest Broadcast to inspect Dual Format readiness.';
+
+    const messages = {
+      'broadcast-offline': 'Open Tempest Broadcast, then connect its Studio Integration dock.',
+      'update-required': 'The connected Broadcast build reports ordinary output but not the Dual Format production contract.',
+      'setup-required': 'Broadcast is connected. Complete the unchecked items before going live.',
+      ready: 'Both Twitch orientations are configured and ready for an off-air verification.',
+      live: 'Dual Format is live. Configuration controls remain locked until streaming stops.',
+      error: status.lastError || 'Broadcast reported a Dual Format error.'
+    };
+    $('#dualFormatStatusMessage').textContent = messages[status.state] || 'Checking Broadcast Dual Format status.';
+    if (document.activeElement !== $('#dualFormatCanvasName') && vertical?.name) $('#dualFormatCanvasName').value = vertical.name;
+    const blocked = !status.connected || !status.controllerSupported || status.streaming;
+    $('#prepareDualFormatButton').disabled = blocked;
+    $('#disableDualFormatButton').disabled = blocked || !status.enabled;
+    $('#previewDualFormatButton').disabled = !status.connected || !status.previewSupported || !status.canvas;
+    $('#refreshDualFormatButton').disabled = !status.connected;
+    const verticalSources = state.visualAlerts?.vertical;
+    const sourceList = $('#verticalAlertSources');
+    sourceList.classList.toggle('empty-state', !verticalSources);
+    sourceList.innerHTML = verticalSources ? `<span>VERTICAL-SAFE BROWSER SOURCES · VISUAL ONLY</span><div><small>Twitch Alerts</small><code>${escapeHtml(verticalSources.twitchUrl)}</code>${copyButton(verticalSources.twitchUrl, 'vertical Twitch Alert source')}</div><div><small>Interaction Alerts</small><code>${escapeHtml(verticalSources.interactionUrl)}</code>${copyButton(verticalSources.interactionUrl, 'vertical Interaction Alert source')}</div><p>These variants keep alerts above Twitch's mobile chat area and mute duplicate alert audio. Keep the horizontal Browser Sources as the only audio-producing copies.</p>` : 'Vertical-safe alert sources will appear when Studio is online.';
+  }
+
+  async function configureDualFormat(enabled) {
+    try {
+      if (!enabled && !confirm('Disable Twitch Dual Format output? Broadcast will keep the vertical canvas but stop selecting it for streaming.')) return;
+      const canvasName = $('#dualFormatCanvasName').value.trim();
+      if (enabled && !canvasName) throw new Error('Enter a name for the vertical canvas.');
+      await api('/v1/broadcast/dual-format/configure', {
+        method: 'POST',
+        body: { enabled, canvasPreset: $('#dualFormatCanvasPreset').value, canvasName: canvasName || 'Tempest Vertical' }
+      });
+      toast(enabled ? 'Dual Format setup requested. Waiting for Broadcast status…' : 'Dual Format disable requested.');
+      await refreshRuntime();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewDualFormat() {
+    try {
+      await api('/v1/broadcast/dual-format/preview', { method: 'POST', body: {} });
+      toast('Vertical preview requested in Broadcast.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function refreshDualFormat() {
+    try {
+      await api('/v1/broadcast/dual-format/refresh', { method: 'POST', body: {} });
+      toast('Broadcast status refresh requested.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function renderSimulcast() {
+    const status = state.simulcast || { state: 'broadcast-offline', twitch: {}, kick: {}, checks: [] };
+    const labels = {
+      'broadcast-offline': 'BROADCAST OFFLINE', 'update-required': 'UPDATE REQUIRED',
+      'setup-required': 'SETUP REQUIRED', ready: 'READY', live: 'LIVE',
+      'degraded-live': 'DEGRADED LIVE', error: 'OUTPUT ERROR'
+    };
+    const badge = $('#simulcastBadge');
+    badge.textContent = labels[status.state] || 'CHECKING';
+    badge.className = `status-badge ${status.state === 'live' ? 'online' : status.state === 'ready' ? 'armed' : status.state === 'degraded-live' || status.state === 'error' ? 'stopped' : 'offline'}`;
+    $('#simulcastTwitchMetric').textContent = String(status.twitch?.state || 'offline').toUpperCase();
+    $('#simulcastKickMetric').textContent = String(status.kick?.state || 'offline').toUpperCase();
+    const capacity = Number(status.uploadCapacityKbps || 0);
+    const required = Number(status.estimatedRequiredKbps || 0);
+    $('#simulcastUploadMetric').textContent = capacity ? `${Math.round(capacity / 100) / 10} Mbps` : 'NOT SET';
+    $('#simulcastUploadNote').textContent = required ? `Estimated ${Math.round(required / 100) / 10} Mbps · 20% reserve required` : 'Set measured sustained capacity';
+    $('#simulcastRecordingMetric').textContent = status.recording ? 'RECORDING' : status.recordingWithStream ? 'ARMED' : 'OFF';
+    const telemetry = (name, output) => `<div><b>${name}</b><strong>${(Number(output?.bytesSent || 0) / 1048576).toFixed(1)} MB</strong><small>${Number(output?.droppedFrames || 0).toLocaleString()} dropped / ${Number(output?.totalFrames || 0).toLocaleString()} · ${Math.round(Number(output?.congestion || 0) * 100)}% congestion</small></div>`;
+    $('#simulcastOutputTelemetry').innerHTML = telemetry('TWITCH', status.twitch) + telemetry('KICK', status.kick);
+
+    const detailById = {
+      broadcast: status.connected ? 'Broadcast is reporting destination health.' : 'Open Broadcast and connect its Studio Integration dock.',
+      controller: status.controllerSupported && status.statusReported ? 'Coordinated output control is available.' : 'Install a Broadcast build with production simulcast support.',
+      twitch: status.twitchServiceReady ? 'The primary output is configured for Twitch.' : 'Select Twitch as the primary streaming service in Broadcast.',
+      'dual-format': status.dualFormatReady ? 'Twitch horizontal and vertical routes are prepared.' : 'Complete the Dual Format readiness checklist first.',
+      'kick-server': status.kickServerConfigured ? 'A Kick RTMP/RTMPS ingest destination is stored in Broadcast.' : 'Paste the ingest URL from the Kick creator dashboard.',
+      'kick-key': status.credentialsStored && status.secureStorageAvailable ? 'The key is protected with Windows user encryption.' : 'Enter the Kick stream key so Broadcast can encrypt it.',
+      upload: !status.uploadCapacityConfigured ? 'Enter measured sustained upload capacity before Go Live.' : status.uploadHeadroomReady ? 'The configured budget keeps at least 20% headroom.' : 'Measured upload capacity is below the estimated output budget plus reserve.',
+      preflight: status.preflightReady ? `Passed ${new Date(status.lastPreflightAt).toLocaleString()}; valid for four hours.` : status.lastPreflightError || 'Run the local preflight after configuration changes or a Broadcast restart.'
+    };
+    const checks = Array.isArray(status.checks) ? status.checks : [];
+    const checkList = $('#simulcastChecks');
+    checkList.classList.toggle('empty-state', !checks.length);
+    checkList.innerHTML = checks.length ? checks.map((check) => `<div class="dual-format-check ${check.ready ? 'ready' : ''}"><i>${check.ready ? '✓' : '!'}</i><div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(detailById[check.id] || '')}</small></div></div>`).join('') : 'Connect Tempest Broadcast to inspect output readiness.';
+    const messages = {
+      'broadcast-offline': 'Open Tempest Broadcast and connect the Studio Integration dock.',
+      'update-required': 'The connected Broadcast build does not yet provide the production simulcast controller.',
+      'setup-required': 'Complete the unchecked items. No output can start until the full preflight passes.',
+      ready: 'Twitch Dual Format and Kick are ready for coordinated Go Live.',
+      live: 'Twitch and Kick are live. Monitor both destination health indicators.',
+      'degraded-live': 'One destination is live without the other. Check the error and use the independent stop controls if needed.',
+      error: status.lastError || 'Broadcast reported an output error.'
+    };
+    $('#simulcastStatusMessage').textContent = status.lastError && status.state !== 'live' ? status.lastError : messages[status.state] || 'Checking output status.';
+    if (document.activeElement !== $('#simulcastUploadCapacity') && capacity) $('#simulcastUploadCapacity').value = String(capacity);
+    if (document.activeElement !== $('#simulcastRecordingWithStream')) $('#simulcastRecordingWithStream').checked = status.recordingWithStream === true;
+    $('#simulcastKickServer').placeholder = status.kickServerConfigured ? 'Configured in Broadcast — leave blank to keep' : 'rtmps://…/app';
+    $('#simulcastKickStreamKey').placeholder = status.credentialsStored ? 'Stored securely — leave blank to keep' : 'Paste stream key from Kick';
+    const live = status.twitch?.active || status.kick?.active;
+    const transitioning = ['starting', 'stopping', 'reconnecting'].includes(status.twitch?.state) || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
+    const manualChecks = [...document.querySelectorAll('.simulcast-manual-check')];
+    const completedChecks = manualChecks.filter((input) => input.checked).length;
+    const operatorReady = manualChecks.length > 0 && completedChecks === manualChecks.length;
+    $('#simulcastChecklistStatus').textContent = !status.preflightReady
+      ? 'Run and pass the automatic preflight, then complete all operator checks.'
+      : operatorReady ? `Automatic preflight passed ${new Date(status.lastPreflightAt).toLocaleTimeString()}. Operator sign-off is complete for this Studio session.`
+        : `Automatic preflight passed. Complete ${manualChecks.length - completedChecks} remaining operator check${manualChecks.length - completedChecks === 1 ? '' : 's'}.`;
+    $('#saveSimulcastButton').disabled = !status.connected || !status.controllerSupported || live || transitioning;
+    $('#disableSimulcastButton').disabled = !status.connected || !status.controllerSupported || live || transitioning || !status.enabled;
+    $('#runSimulcastPreflightButton').disabled = !status.connected || !status.controllerSupported || live || transitioning || !status.configured;
+    $('#startSimulcastButton').disabled = !status.ready || !operatorReady || live || transitioning;
+    $('#retryKickOutputButton').disabled = !status.twitch?.active || status.kick?.active || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
+    $('#stopKickOutputButton').disabled = !status.kick?.active;
+    $('#stopAllOutputsButton').disabled = !live && !status.recording && !transitioning;
+    ['#simulcastKickServer', '#simulcastKickStreamKey', '#simulcastUploadCapacity', '#simulcastRecordingWithStream'].forEach((selector) => { $(selector).disabled = live || transitioning; });
+    updateSimulcastOperations(status);
+  }
+
+  async function configureSimulcast(enabled) {
+    const streamKeyInput = $('#simulcastKickStreamKey');
+    try {
+      if (!enabled && !confirm('Disable coordinated Twitch + Kick simulcast? Stored credentials will remain encrypted in Broadcast.')) return;
+      const kickServer = $('#simulcastKickServer').value.trim();
+      const kickStreamKey = streamKeyInput.value.trim();
+      const capacity = Number($('#simulcastUploadCapacity').value || 0);
+      if (enabled && !kickServer && !state.simulcast?.kickServerConfigured) throw new Error('Enter the Kick ingest URL from the creator dashboard.');
+      if (enabled && !kickStreamKey && !state.simulcast?.credentialsStored) throw new Error('Enter the Kick stream key from the creator dashboard.');
+      if (capacity && (capacity < 1000 || capacity > 1000000)) throw new Error('Upload capacity must be between 1,000 and 1,000,000 Kbps.');
+      await api('/v1/broadcast/simulcast/configure', {
+        method: 'POST',
+        body: {
+          enabled,
+          ...(kickServer ? { kickServer } : {}),
+          ...(kickStreamKey ? { kickStreamKey } : {}),
+          keepStoredKey: true,
+          ...(capacity ? { uploadCapacityKbps: capacity } : {}),
+          recordingWithStream: $('#simulcastRecordingWithStream').checked
+        }
+      });
+      $('#simulcastKickServer').value = '';
+      toast(enabled ? 'Simulcast setup sent to Broadcast. The Kick key field has been cleared.' : 'Simulcast disabled; encrypted credentials were retained.');
+      await refreshRuntime();
+    } catch (error) { toast(error.message, true); }
+    finally { streamKeyInput.value = ''; }
+  }
+
+  async function startSimulcast() {
+    const operatorChecklistAccepted = [...document.querySelectorAll('.simulcast-manual-check')].every((input) => input.checked);
+    if (!operatorChecklistAccepted) return toast('Complete every operator rehearsal check before going live.', true);
+    if (!confirm('Go live now on Twitch (horizontal + vertical) and Kick (horizontal)?')) return;
+    try {
+      await api('/v1/broadcast/simulcast/start', { method: 'POST', body: { recording: $('#simulcastRecordingWithStream').checked, operatorChecklistAccepted } });
+      toast('Coordinated Go Live sent to Broadcast. Twitch will connect before Kick.');
+      await refreshRuntime();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function runSimulcastPreflight() {
+    try {
+      await api('/v1/broadcast/simulcast/preflight', { method: 'POST', body: {} });
+      toast('Production preflight requested. Waiting for Broadcast results…');
+      setTimeout(() => { void refreshRuntime({ quiet: false }); }, 400);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function retryKickOutput() {
+    try {
+      await api('/v1/broadcast/simulcast/retry-kick', { method: 'POST', body: {} });
+      toast('Kick recovery requested. Twitch remains live.');
+      await refreshRuntime();
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function saveSimulcastChecklist() {
+    const selected = [...document.querySelectorAll('.simulcast-manual-check')].filter((input) => input.checked).map((input) => input.value);
+    sessionStorage.setItem(simulcastChecklistStorageKey, JSON.stringify(selected));
+    renderSimulcast();
+  }
+
+  function restoreSimulcastChecklist() {
+    let selected = [];
+    try { selected = JSON.parse(sessionStorage.getItem(simulcastChecklistStorageKey) || '[]'); } catch { selected = []; }
+    if (!Array.isArray(selected)) selected = [];
+    document.querySelectorAll('.simulcast-manual-check').forEach((input) => { input.checked = selected.includes(input.value); });
+  }
+
+  async function stopSimulcast(scope, force = false) {
+    const prompt = scope === 'kick' ? 'Stop only the Kick output and leave Twitch live?' : 'Emergency stop Twitch, Kick, and any recording started by this controller?';
+    if (!confirm(prompt)) return;
+    try {
+      await api('/v1/broadcast/simulcast/stop', { method: 'POST', body: { scope, force } });
+      toast(scope === 'kick' ? 'Kick stop requested. Twitch remains live.' : 'Emergency stop sent to all coordinated outputs.');
+      await refreshRuntime();
+    } catch (error) { toast(error.message, true); }
+  }
+
   function renderApi() {
     $('#apiConnectionCount').textContent = state.connections.length;
     const list = $('#connectionList');
@@ -1089,10 +1456,11 @@
     const label = (value) => String(value || 'unknown').replaceAll('-', ' ').toUpperCase();
     const authorized = chatbot.oauth?.state === 'authorized';
     const connected = chatbot.connections?.eventSub === 'connected' && chatbot.connections?.chat === 'connected';
+    const kickConnected = state.kick?.oauth?.state === 'authorized' && state.kick?.events?.state === 'connected';
     const account = chatbot.oauth?.account;
     const botName = chatbot.botName || account?.login || 'Chat Bot';
-    $('#chatbotOverallBadge').textContent = connected ? 'ONLINE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
-    $('#chatbotOverallBadge').classList.toggle('offline', !connected);
+    $('#chatbotOverallBadge').textContent = connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : kickConnected ? 'KICK LIVE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
+    $('#chatbotOverallBadge').classList.toggle('offline', !connected && !kickConnected);
     $('#chatbotIdentityMetric').textContent = botName.toUpperCase();
     $('#chatbotEventSubMetric').textContent = label(chatbot.connections?.eventSub);
     $('#chatbotChatMetric').textContent = label(chatbot.connections?.chat);
@@ -1100,6 +1468,42 @@
     $('#chatbotCommandCountNote').textContent = `${(chatbot.commands || []).filter((command) => command.enabled).length} enabled`;
     $('#chatbotTriggerCount').textContent = chatbot.commandsTriggered || 0;
     $('#chatbotLastMessage').textContent = chatbot.lastMessageAt ? `Last message ${new Date(chatbot.lastMessageAt).toLocaleTimeString()}` : 'No messages received';
+    const sharedChat = chatbot.sharedChat || { state: 'inactive', participants: [] };
+    const sharedChatActive = sharedChat.state === 'active';
+    $('#sharedChatBadge').textContent = !connected ? 'NOT CONNECTED' : sharedChatActive ? 'SHARED CHAT LIVE' : sharedChat.state === 'unavailable' ? 'MONITOR UNAVAILABLE' : 'HOME CHAT LIVE';
+    $('#sharedChatBadge').classList.toggle('offline', !connected || sharedChat.state === 'unavailable');
+    $('#sharedChatSessionTitle').textContent = !connected ? 'Connect the chatbot' : sharedChatActive
+      ? `${sharedChat.participants?.length || 0} participating channel${sharedChat.participants?.length === 1 ? '' : 's'}`
+      : sharedChat.state === 'unavailable' ? 'Shared Chat monitoring unavailable' : 'Home channel chat';
+    $('#sharedChatSessionDetail').textContent = sharedChat.lastError || (sharedChatActive
+      ? `${sharedChat.host?.login ? `Hosted by @${sharedChat.host.login}. ` : ''}Studio is monitoring the complete Stream Together chat without a separate browser window.`
+      : connected ? 'Studio is monitoring your home channel and will detect Stream Together automatically.' : 'Studio will detect Shared Chat automatically after EventSub connects.');
+    const participants = sharedChat.participants || [];
+    const participantList = $('#sharedChatParticipants');
+    participantList.classList.toggle('empty-state', !participants.length);
+    participantList.innerHTML = participants.length ? participants.map((participant) => `<span class="shared-chat-participant ${participant.host ? 'host' : ''}"><i></i>${participant.host ? 'HOST · ' : ''}@${escapeHtml(participant.login || participant.displayName || participant.userId)}</span>`).join('') : (sharedChatActive ? 'Participant identities are loading…' : 'No active Stream Together session.');
+    const liveMessages = (chatbot.messages || []).slice(-100);
+    const messageList = $('#sharedChatMessages');
+    const messageSignature = liveMessages.map((message) => message.id).join('|');
+    if (messageList.dataset.signature !== messageSignature) {
+      const stayAtBottom = !messageList.dataset.signature || messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight < 48;
+      messageList.dataset.signature = messageSignature;
+      messageList.classList.toggle('empty-state', !liveMessages.length);
+      messageList.innerHTML = liveMessages.length ? liveMessages.map((message) => {
+        const platform = message.platform === 'kick' ? 'KICK' : 'TWITCH';
+        const origin = message.platform === 'kick' ? `@${message.sourceChannelLogin || state.kick?.oauth?.account?.username || 'kick'}` : message.sharedChat ? `@${message.sourceChannelLogin || message.sourceChannelDisplayName || 'collaborator'}` : `@${chatbot.channel?.login || 'home'}`;
+        return `<article class="shared-chat-message ${message.sharedChat ? 'shared' : ''} ${message.platform === 'kick' ? 'kick' : ''}"><strong>${escapeHtml(message.viewerName || message.viewerLogin || 'Viewer')}</strong><p>${escapeHtml(message.text)}</p><small><span class="origin">${platform} · ${escapeHtml(origin)}</span> · ${new Date(message.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></article>`;
+      }).join('') : 'Chat messages will appear here while Studio is connected.';
+      if (stayAtBottom) messageList.scrollTop = messageList.scrollHeight;
+    }
+    const selectedPlatform = $('#sharedChatPlatform').value;
+    const selectedPlatformConnected = selectedPlatform === 'kick' ? kickConnected : connected;
+    $('#sharedChatPlatform').querySelector('[value="twitch"]').disabled = !connected;
+    $('#sharedChatPlatform').querySelector('[value="kick"]').disabled = !kickConnected;
+    if (!selectedPlatformConnected && (connected || kickConnected)) $('#sharedChatPlatform').value = connected ? 'twitch' : 'kick';
+    $('#sharedChatMessage').disabled = !connected && !kickConnected;
+    $('#sendSharedChatMessage').disabled = !connected && !kickConnected;
+    $('#clearSharedChatMessages').disabled = !liveMessages.length;
     $('#chatbotAccountBadge').textContent = account ? `@${account.login}` : label(chatbot.oauth?.state);
     $('#chatbotAccountBadge').classList.toggle('offline', !authorized);
     $('#chatbotIdentityTitle').textContent = account ? `${botName} · @${account.login}` : `Connect ${botName}`;
@@ -1224,6 +1628,37 @@
     const activityList = $('#chatbotActivity');
     activityList.classList.toggle('empty-state', !activity.length);
     activityList.innerHTML = activity.length ? activity.slice(0, 10).map((entry) => `<div class="compact-row event-${escapeHtml(entry.state === 'accepted' ? 'success' : entry.state === 'error' ? 'error' : 'warning')}"><div><strong>${escapeHtml(entry.message)}</strong><small>${new Date(entry.timestamp).toLocaleTimeString()}${entry.command ? ` · ${escapeHtml(chatbot.prefix || '!')}${escapeHtml(entry.command)}` : ''}${entry.sharedChat ? ` · via @${escapeHtml(entry.sourceChannelLogin || 'shared-chat-participant')}` : ''}</small></div><i class="event-dot"></i></div>`).join('') : 'No chatbot activity recorded.';
+    renderKick();
+  }
+
+  function renderKick() {
+    const kick = state.kick;
+    if (!kick || !$('#kickChatBadge')) return;
+    const label = (value) => String(value || 'unknown').replaceAll('-', ' ').toUpperCase();
+    const authorized = kick.oauth?.state === 'authorized';
+    const eventsConnected = kick.events?.state === 'connected';
+    $('#kickChatBadge').textContent = authorized && eventsConnected ? 'CHAT LIVE' : authorized ? 'AUTHORIZED' : kick.configured ? label(kick.oauth?.state) : 'NOT CONFIGURED';
+    $('#kickChatBadge').classList.toggle('offline', !authorized || !eventsConnected);
+    if (document.activeElement !== $('#kickClientId')) $('#kickClientId').value = kick.clientId || '';
+    $('#kickClientSecret').placeholder = kick.configured ? 'Stored with Windows encryption — leave blank to keep' : 'Paste once; stored with Windows encryption';
+    $('#kickRedirectUri').value = kick.redirectUri || '';
+    $('#kickWebhookUrl').value = kick.webhookUrl || '';
+    $('#copyKickRedirectUri').innerHTML = copyIcon;
+    $('#copyKickWebhookUrl').innerHTML = copyIcon;
+    $('#kickAccountState').textContent = kick.oauth?.account?.username ? `@${kick.oauth.account.username}` : '—';
+    $('#kickOauthState').textContent = label(kick.oauth?.state);
+    $('#kickEventState').textContent = label(kick.events?.state);
+    $('#saveKickConfiguration').disabled = kick.oauth?.storage === 'unavailable';
+    $('#connectKickButton').disabled = !kick.configured || authorized || kick.oauth?.state === 'authorization-pending';
+    $('#validateKickButton').disabled = !authorized;
+    $('#linkKickRelayButton').disabled = !authorized || !state.hostedExtension?.paired;
+    $('#disconnectKickButton').disabled = !authorized && kick.oauth?.state !== 'error';
+    $('#kickSetupMessage').textContent = kick.lastError || (authorized && eventsConnected
+      ? `@${kick.oauth.account?.username || 'Kick broadcaster'} is connected. Signed chat webhooks and platform-local replies are active.`
+      : authorized ? 'The Kick account is authorized, but the chat webhook subscription needs attention. Confirm the webhook URL in the Kick developer app and validate again.'
+        : kick.oauth?.state === 'authorization-pending' ? 'Complete authorization in the Kick browser tab. Studio will receive the callback automatically.'
+          : kick.configured ? 'Kick application saved. Connect the broadcaster account to activate chat.'
+            : 'Create a Kick developer application, register both URLs shown here, then save its Client ID and secret.');
   }
 
   function renderHostedExtension() {
@@ -1414,6 +1849,68 @@
       state.chatbot = await api('/v1/chatbot/oauth', { method: 'DELETE', body: {} });
       renderChatbot();
       toast(`${botName} disconnected. Saved commands were preserved.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveKickConfiguration({ quiet = false } = {}) {
+    try {
+      state.kick = await api('/v1/integrations/kick/configuration', { method: 'POST', body: { clientId: $('#kickClientId').value.trim(), clientSecret: $('#kickClientSecret').value, redirectUri: $('#kickRedirectUri').value } });
+      $('#kickClientSecret').value = '';
+      renderChatbot();
+      if (!quiet) toast('Kick developer application saved with Windows-encrypted credentials.');
+      return state.kick;
+    } catch (error) {
+      renderChatbot();
+      if (!quiet) toast(error.message, true);
+      if (quiet) throw error;
+      return null;
+    }
+  }
+
+  async function connectKick() {
+    try {
+      await saveKickConfiguration({ quiet: true });
+      const authorization = await api('/v1/integrations/kick/oauth/start', { method: 'POST', body: {} });
+      state.kick = authorization.status;
+      renderChatbot();
+      await window.tempestStudio.openExternal(authorization.authorizationUri);
+      toast('Kick authorization opened in your browser.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function validateKick() {
+    try {
+      state.kick = await api('/v1/integrations/kick/oauth/validate', { method: 'POST', body: {} });
+      if (state.hostedExtension?.paired) await linkKickRelay({ quiet: true });
+      renderChatbot();
+      toast(state.kick.events?.state === 'connected' ? 'Kick account and chat webhook are active.' : 'Kick account is valid; webhook subscription needs attention.', state.kick.events?.state !== 'connected');
+    } catch (error) { await refresh({ quiet: true }); toast(error.message, true); }
+  }
+
+  async function linkKickRelay({ quiet = false } = {}) {
+    try {
+      const result = await window.tempestStudio.linkHostedKick();
+      state.kickRelayLinked = Boolean(result?.linked);
+      renderChatbot();
+      if (!quiet) toast(`Kick webhook relay linked to @${result?.kick?.username || 'the connected account'}.`);
+      return result;
+    } catch (error) {
+      state.kickRelayLinked = false;
+      if (!quiet) toast(error.message, true);
+      if (quiet) throw error;
+      return null;
+    }
+  }
+
+  async function disconnectKick() {
+    if (!confirm('Disconnect Kick chat and remove the encrypted Kick secret and tokens from this device?')) return;
+    try {
+      await window.tempestStudio.unlinkHostedKick().catch(() => ({ unlinked: false }));
+      state.kick = await api('/v1/integrations/kick/oauth', { method: 'DELETE', body: {} });
+      state.kickRelayLinked = false;
+      $('#kickClientSecret').value = '';
+      renderChatbot();
+      toast('Kick chat disconnected. Twitch chat remains unchanged.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -1622,6 +2119,26 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function sendSharedChatMessage(event) {
+    event.preventDefault();
+    const input = $('#sharedChatMessage');
+    const message = input.value.trim();
+    if (!message) return;
+    try {
+      const platform = $('#sharedChatPlatform').value;
+      await api('/v1/chatbot/messages', { method: 'POST', body: { platform, message } });
+      input.value = '';
+      toast(`Message sent to ${platform === 'kick' ? 'Kick' : 'Twitch'} chat.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearSharedChatMessages() {
+    try {
+      state.chatbot = await api('/v1/chatbot/messages', { method: 'DELETE' });
+      renderChatbot();
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function pairHostedExtension() {
     try {
       state.hostedExtension = await window.tempestStudio.pairHostedExtension({});
@@ -1686,7 +2203,6 @@
   }
 
   async function prepareLocalExtensionCertificate() {
-    if (!confirm('Prepare and trust the localhost development certificate for the current Windows user?')) return;
     try {
       state.localExtension = await window.tempestStudio.prepareLocalExtensionCertificate();
       renderLocalExtension();
@@ -1883,6 +2399,8 @@
     renderDiscordVoice({ settings: true });
     renderWarudo();
     renderVTubeStudio();
+    renderDualFormat();
+    renderSimulcast();
     renderApi();
     renderTwitch();
     renderChatbot();
@@ -1894,13 +2412,16 @@
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, runs, events, safety, chatbot, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       state.health = health;
       state.connections = connections.connections || [];
+      state.dualFormat = dualFormat;
+      state.simulcast = simulcast;
       state.runs = runs.runs || [];
       state.events = events.events || [];
       state.safety = safety;
       state.chatbot = chatbot;
+      state.kick = kick;
       state.visualAlerts = visualAlerts;
       state.chatOverlay = chatOverlay;
       state.emoteWall = emoteWall;
@@ -1925,6 +2446,8 @@
       renderDiscordVoice();
       renderWarudo();
       renderVTubeStudio();
+      renderDualFormat();
+      renderSimulcast();
       renderLocalExtension();
       renderHostedExtension();
       renderChatbot();
@@ -1937,8 +2460,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, workflows, runs, events, safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -2060,6 +2583,7 @@
     $('#newInteractionWarudoOptions').hidden = true;
     $('#newInteractionVTubeStudioOptions').hidden = true;
     $('#newInteractionVTubeStudioHotkey').innerHTML = vtubeStudioHotkeyOptions();
+    $('#newInteractionTempest2DOptions').hidden = true;
     updateInteractionCuePreview();
     $('#interactionAlertDialog').showModal();
     $('#newInteractionAlertName').focus();
@@ -3928,6 +4452,28 @@
     $('#discordVoiceCanvasPreview').addEventListener('pointercancel', endDiscordCanvasDrag);
     $('#forgetDiscordVoice').addEventListener('click', forgetDiscordVoice);
     $('#discordGuestUserId').addEventListener('keydown', (event) => { if (event.key === 'Enter') addDiscordVoiceProfile(); });
+    $('#prepareDualFormatButton').addEventListener('click', () => { void configureDualFormat(true); });
+    $('#disableDualFormatButton').addEventListener('click', () => { void configureDualFormat(false); });
+    $('#previewDualFormatButton').addEventListener('click', () => { void previewDualFormat(); });
+    $('#refreshDualFormatButton').addEventListener('click', () => { void refreshDualFormat(); });
+    $('#saveSimulcastButton').addEventListener('click', () => { void configureSimulcast(true); });
+    $('#disableSimulcastButton').addEventListener('click', () => { void configureSimulcast(false); });
+    $('#runSimulcastPreflightButton').addEventListener('click', () => { void runSimulcastPreflight(); });
+    $('#refreshSimulcastButton').addEventListener('click', () => { void api('/v1/broadcast/simulcast/refresh', { method: 'POST', body: {} }).then(() => refreshRuntime()).catch((error) => toast(error.message, true)); });
+    $('#startSimulcastButton').addEventListener('click', () => { void startSimulcast(); });
+    $('#retryKickOutputButton').addEventListener('click', () => { void retryKickOutput(); });
+    $('#stopKickOutputButton').addEventListener('click', () => { void stopSimulcast('kick'); });
+    $('#stopAllOutputsButton').addEventListener('click', () => { void stopSimulcast('all', true); });
+    document.querySelectorAll('.simulcast-manual-check').forEach((input) => input.addEventListener('change', saveSimulcastChecklist));
+    $('#resetSimulcastChecklistButton').addEventListener('click', () => {
+      document.querySelectorAll('.simulcast-manual-check').forEach((input) => { input.checked = false; });
+      saveSimulcastChecklist();
+    });
+    $('#clearSimulcastTimelineButton').addEventListener('click', () => {
+      simulcastOperations.incidents = [];
+      saveSimulcastOperations();
+      renderSimulcast();
+    });
     $('#emergencyStopButton').addEventListener('click', toggleSafety);
     $('#eventSearch').addEventListener('input', renderEvents);
     $('#eventLevelFilter').addEventListener('change', renderEvents);
@@ -4010,6 +4556,13 @@
     $('#saveChatbotIdentity').addEventListener('click', () => { void saveChatbotIdentity(); });
     $('#validateChatbotButton').addEventListener('click', validateChatbot);
     $('#disconnectChatbotButton').addEventListener('click', disconnectChatbot);
+    $('#saveKickConfiguration').addEventListener('click', () => { void saveKickConfiguration(); });
+    $('#connectKickButton').addEventListener('click', connectKick);
+    $('#validateKickButton').addEventListener('click', validateKick);
+    $('#linkKickRelayButton').addEventListener('click', () => { void linkKickRelay(); });
+    $('#disconnectKickButton').addEventListener('click', disconnectKick);
+    $('#copyKickRedirectUri').addEventListener('click', (event) => copyToClipboard($('#kickRedirectUri').value, event.currentTarget));
+    $('#copyKickWebhookUrl').addEventListener('click', (event) => copyToClipboard($('#kickWebhookUrl').value, event.currentTarget));
     $('#openChatbotIsolatedAuthorization').addEventListener('click', openChatbotIsolatedAuthorization);
     $('#copyChatbotAuthorizationCode').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.userCode, event.currentTarget));
     $('#copyChatbotAuthorizationLink').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.verificationUri, event.currentTarget));
@@ -4028,6 +4581,9 @@
     $('#deleteChatbotCommand').addEventListener('click', deleteChatbotCommand);
     $('#chatbotPrefix').addEventListener('change', saveChatbotPrefix);
     $('#testChatbotCommand').addEventListener('click', testChatbotCommand);
+    $('#sharedChatComposer').addEventListener('submit', sendSharedChatMessage);
+    $('#sharedChatPlatform').addEventListener('change', renderChatbot);
+    $('#clearSharedChatMessages').addEventListener('click', clearSharedChatMessages);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
     $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
     $('#switchHostedExtensionToOfficialTwitch').addEventListener('click', switchHostedExtensionToOfficialTwitch);
@@ -4098,6 +4654,8 @@
   async function initialize() {
     bindEvents();
     renderInterfaceMode();
+    restoreSimulcastChecklist();
+    restoreSimulcastOperations();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
     window.tempestStudio.onUpdateStatus((update) => { state.update = update; renderUpdateStatus(); });
     [state.config, state.panelDesign, state.appInfo, state.privacy, state.update] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus()]);
@@ -4122,6 +4680,7 @@
   }
 
   initialize().catch((error) => {
+    console.error('Studio initialization failed:', error);
     renderBridgeStatus(false);
     toast(`Studio initialization failed: ${error.message}`, true);
   });

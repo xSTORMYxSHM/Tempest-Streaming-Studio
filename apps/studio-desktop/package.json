@@ -1,6 +1,6 @@
 {
   "name": "@tempest/studio-desktop",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "author": "Storm Horizon Media",
   "private": true,
   "description": "Desktop streaming control plane for Tempest Streaming Studio.",
@@ -10,7 +10,8 @@
     "start": "electron .",
     "test": "node --check dist/renderer/app.js && node --test test/*.test.cjs",
     "package:dir": "electron-builder --win dir --x64 --publish never",
-    "package:win": "node tools/prepare-windows-packaging.cjs && electron-builder --win nsis zip --x64 --publish never"
+    "package:win": "node tools/prepare-windows-packaging.cjs && electron-builder --win nsis zip --x64 --publish never",
+    "package:win:unsigned": "electron-builder --win nsis zip --x64 --publish never"
   },
   "dependencies": {
     "@tempest/bridge": "workspace:*",
@@ -21,7 +22,8 @@
     "electron-updater": "6.8.9"
   },
   "devDependencies": {
-    "electron": "^37.2.6",
+    "@electron/fuses": "2.1.3",
+    "electron": "44.0.0",
     "electron-builder": "26.15.7"
   },
   "build": {
@@ -37,8 +39,15 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/test{,/**}",
+      "!**/tests{,/**}",
+      "!**/.env*",
+      "!**/Dockerfile*",
+      "!**/tsconfig*.json"
     ],
+    "afterPack": "tools/after-pack-fuses.cjs",
     "extraResources": [
       {
         "from": "../twitch-extension/dist",

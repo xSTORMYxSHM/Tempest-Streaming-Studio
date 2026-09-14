@@ -13,6 +13,7 @@ test('migrates legacy Twitch Alert data after creating a safe snapshot', async (
   const result = await runStudioDataMigrations({ userDataDirectory: root, productVersion: '0.20.0' });
   assert.equal(result.dataVersion, CURRENT_STUDIO_DATA_VERSION);
   assert.equal(result.migrated, true);
+  assert.ok(result.appliedMigrations.includes('4: register Twitch Experiences settings'));
   assert.ok(result.snapshotDirectory);
   assert.deepEqual(JSON.parse(await readFile(path.join(bridge, 'twitch-visual-alerts.json'), 'utf8')).alerts[0], { id: 'twitch.follow', name: 'Follow', alertVariants: [] });
   assert.deepEqual(await readdir(result.snapshotDirectory), ['twitch-alerts.json']);
