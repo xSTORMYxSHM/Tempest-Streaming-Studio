@@ -17,17 +17,20 @@
         <nav aria-label="Studio sections">
           <p class="nav-group">START</p>
           <button class="nav-button active" data-section="overview">Studio Home</button>
-          <p class="nav-group">CREATE</p>
+          <p class="nav-group">TWITCH</p>
+          <button class="nav-button" data-section="twitch">Twitch</button>
           <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
+          <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
+          <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
+          <p class="nav-group">KICK</p>
+          <button class="nav-button" data-section="kick">Kick</button>
+          <p class="nav-group">PRODUCTION</p>
+          <button class="nav-button" data-section="simulcast">Go Live</button>
+          <button class="nav-button" data-section="chatbot">Chatbot + Live Chat</button>
+          <p class="nav-group">CREATE</p>
           <button class="nav-button" data-section="soundalerts">Viewer Interactions</button>
           <button class="nav-button" data-section="chatoverlay">Chat Overlay</button>
           <button class="nav-button" data-section="discordvoice">Discord Guests</button>
-          <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
-          <p class="nav-group">CHANNEL</p>
-          <button class="nav-button" data-section="chatbot">Chatbot</button>
-          <button class="nav-button" data-section="twitch">Twitch Setup</button>
-          <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
-          <button class="nav-button" data-section="simulcast">Twitch + Kick Go Live</button>
           <button class="nav-button" data-section="api">Avatar Apps</button>
           <p class="nav-group" data-advanced>ADVANCED</p>
           <button class="nav-button" data-section="events" data-advanced>Activity &amp; Diagnostics</button>
@@ -66,15 +69,16 @@
           <div class="home-menu-heading"><div><p class="eyebrow">MAIN MENU</p><h3>What would you like to work on?</h3></div><p>Choose a task to jump directly into its workspace.</p></div>
           <div class="home-menu-grid">
             <button class="home-menu-card" data-go="api"><b>OPTIONAL</b><strong>Avatar Apps</strong><span>Connect Warudo or VTube Studio for avatar reactions.</span><i>CONNECT AN AVATAR →</i></button>
-            <button class="home-menu-card" data-go="twitch"><b>SETUP 02</b><strong>Twitch</strong><span>Sign in to connect alerts, rewards, chat, and your viewer panel.</span><i>OPEN TWITCH →</i></button>
-            <button class="home-menu-card" data-go="extensiondesigner"><b>SETUP 03</b><strong>Twitch Panel</strong><span>Style the viewer panel to match your channel.</span><i>DESIGN PANEL →</i></button>
+            <button class="home-menu-card" data-go="twitch"><b>PLATFORM 01</b><strong>Twitch</strong><span>Manage Twitch sign-in, viewer tools, alerts, mobile output, and platform settings.</span><i>OPEN TWITCH →</i></button>
+            <button class="home-menu-card" data-go="kick"><b>PLATFORM 02</b><strong>Kick</strong><span>Manage Kick authorization, chat delivery, ingest destination, and stream credentials.</span><i>OPEN KICK →</i></button>
+            <button class="home-menu-card" data-go="extensiondesigner"><b>TWITCH TOOL</b><strong>Twitch Panel</strong><span>Style the viewer panel to match your channel.</span><i>DESIGN PANEL →</i></button>
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Viewer Interactions</strong><span>Create sounds, visuals, and optional avatar reactions for viewer commands.</span><i>BUILD INTERACTIONS →</i></button>
             <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAYS →</i></button>
             <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 04</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>CHANNEL 01</b><strong>Chatbot</strong><span>Create commands, replies, and simple viewer triggers.</span><i>MANAGE CHATBOT →</i></button>
-            <button class="home-menu-card" data-go="dualformat"><b>SETUP 03</b><strong>Dual Format</strong><span>Prepare and monitor Twitch horizontal and mobile-first vertical output.</span><i>CHECK MOBILE OUTPUT →</i></button>
-            <button class="home-menu-card" data-go="simulcast"><b>ON AIR 00</b><strong>Go Live</strong><span>Start and monitor Twitch Dual Format plus Kick horizontal output from one production control.</span><i>OPEN OUTPUT CONTROL →</i></button>
+            <button class="home-menu-card" data-go="dualformat"><b>TWITCH OUTPUT</b><strong>Dual Format</strong><span>Prepare and monitor Twitch horizontal and mobile-first vertical output.</span><i>CHECK MOBILE OUTPUT →</i></button>
+            <button class="home-menu-card" data-go="simulcast"><b>ON AIR</b><strong>Go Live</strong><span>Run preflight, start, and monitor Twitch plus Kick after each platform is configured.</span><i>OPEN OUTPUT CONTROL →</i></button>
           </div>
           <div class="home-runtime-heading"><div><p class="eyebrow">LIVE STATUS</p><h3>Studio right now</h3></div><button data-go="events" class="text-button" data-advanced>Open Diagnostics</button></div>
           <div class="metric-grid home-runtime-metrics">
@@ -323,7 +327,13 @@
         </section>
 
         <section id="twitchSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">TWITCH ACCOUNT</p><h2>Twitch Setup</h2><p>Sign in to receive channel events, power alerts, and connect your viewer panel.</p></div><span id="twitchOwnerBadge" class="status-badge" data-advanced>STUDIO OWNED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">TWITCH PLATFORM</p><h2>Twitch</h2><p>Manage your Twitch account, viewer tools, alerts, Stream Together chat, and horizontal plus mobile output from one platform home.</p></div><span id="twitchOwnerBadge" class="status-badge" data-advanced>STUDIO OWNED</span></div>
+          <div class="platform-tool-grid" aria-label="Twitch tools">
+            <button class="platform-tool-card" data-go="visualalerts"><span>ALERTS</span><strong>Twitch Alerts</strong><small>Follows, subscriptions, Bits, raids, rewards, and experiences.</small></button>
+            <button class="platform-tool-card" data-go="extensiondesigner"><span>VIEWER PANEL</span><strong>Twitch Panel</strong><small>Pair and style the channel-specific viewer interaction panel.</small></button>
+            <button class="platform-tool-card" data-go="dualformat"><span>STREAM OUTPUT</span><strong>Dual Format</strong><small>Horizontal desktop delivery and mobile-first vertical video.</small></button>
+            <button class="platform-tool-card" data-go="chatbot"><span>STREAM TOGETHER</span><strong>Shared Chat</strong><small>Open the combined live monitor, bot account, and command tools.</small></button>
+          </div>
           <div class="metric-grid five-up twitch-metrics" data-advanced>
             <article><span>OAUTH LIFECYCLE</span><strong id="twitchOauthState">—</strong><small>Tokens stay in the OS credential vault</small></article>
             <article><span>EVENTSUB</span><strong id="twitchEventSubState">—</strong><small>Events and channel points</small></article>
@@ -422,8 +432,43 @@
           </div>
         </section>
 
+        <section id="kickSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">KICK PLATFORM</p><h2>Kick</h2><p>Keep Kick authorization, chat delivery, ingest destination, and Broadcast-owned stream credentials together.</p></div><span id="kickChatBadge" class="status-badge offline">NOT CONFIGURED</span></div>
+
+          <article class="panel kick-chat-panel">
+            <div class="panel-header"><div><span>ACCOUNT + CHAT</span><h3>Kick connection</h3><p>Authorize the Kick broadcaster account so the shared command directory and live monitor can operate on both platforms.</p></div></div>
+            <div class="twitch-setup-grid">
+              <div class="twitch-form-stack">
+                <label>Kick Client ID<input id="kickClientId" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Kick developer application Client ID" /></label>
+                <label>Kick Client Secret<input id="kickClientSecret" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" placeholder="Paste once; stored with Windows encryption" /><small>Studio never writes the secret to its ordinary settings file or diagnostics.</small></label>
+                <label>OAuth Redirect URL<div class="copyable-field"><input id="kickRedirectUri" readonly /><button id="copyKickRedirectUri" class="copy-button" type="button" aria-label="Copy Kick OAuth redirect URL" title="Copy Kick OAuth redirect URL"></button></div><small>Register this exact URL in your Kick developer application.</small></label>
+                <label>Signed Webhook URL<div class="copyable-field"><input id="kickWebhookUrl" readonly /><button id="copyKickWebhookUrl" class="copy-button" type="button" aria-label="Copy Kick webhook URL" title="Copy Kick webhook URL"></button></div><small>Register this URL as the app webhook endpoint before subscribing.</small></label>
+                <div class="twitch-setup-actions"><button id="saveKickConfiguration" class="secondary-button" type="button">Save Kick App</button><button id="connectKickButton" class="primary-button" type="button">Connect Kick</button><button id="validateKickButton" class="secondary-button" type="button">Validate + Subscribe</button><button id="linkKickRelayButton" class="secondary-button" type="button">Link Hosted Relay</button><button id="disconnectKickButton" class="secondary-button danger-outline" type="button">Disconnect</button></div>
+              </div>
+              <div class="twitch-auth-summary"><span>CONNECTION STATUS</span><p id="kickSetupMessage">Create a Kick developer application, then save its Client ID and secret here.</p><div class="local-extension-status"><div><small>ACCOUNT</small><strong id="kickAccountState">—</strong></div><div><small>OAUTH</small><strong id="kickOauthState">NOT CONFIGURED</strong></div><div><small>WEBHOOK</small><strong id="kickEventState">DISCONNECTED</strong></div></div><div class="scope-list"><code>user:read</code><code>chat:write</code><code>events:subscribe</code></div><p>Kick chat arrives through the hosted Tempest relay because Kick delivers chat events as signed public webhooks. Replies are posted only to the platform where the command originated.</p></div>
+            </div>
+          </article>
+
+          <article class="panel dual-format-control-panel kick-output-panel">
+            <div class="panel-header"><div><span>STREAM OUTPUT</span><h3>Kick destination in Tempest Broadcast</h3><p>These output credentials belong to Kick and remain encrypted inside Broadcast.</p></div><span class="state-chip installed">WINDOWS ENCRYPTED</span></div>
+            <div class="simulcast-config-grid">
+              <label>Kick ingest URL<input id="simulcastKickServer" maxlength="500" placeholder="rtmps://…/app" /></label>
+              <label>Kick stream key<input id="simulcastKickStreamKey" type="password" maxlength="512" autocomplete="new-password" placeholder="Leave blank to keep stored key" /></label>
+              <label>Measured upload capacity (Kbps)<input id="simulcastUploadCapacity" type="number" min="1000" max="1000000" step="100" placeholder="25000" /></label>
+              <label class="checkbox-row"><input id="simulcastRecordingWithStream" type="checkbox" /> Start a local recording with the stream</label>
+            </div>
+            <div class="dual-format-actions"><button id="saveSimulcastButton" class="secondary-button" disabled>Save Kick Output</button><button id="disableSimulcastButton" class="secondary-button danger-outline" disabled>Disable Kick Simulcast</button><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></div>
+            <small>The stream key is sent once over the authenticated loopback bridge and encrypted by Windows inside Broadcast. Studio never saves it or returns it in status.</small>
+          </article>
+
+          <div class="platform-tool-grid" aria-label="Kick tools">
+            <button class="platform-tool-card" data-go="chatbot"><span>LIVE CHAT</span><strong>Chatbot + Live Chat</strong><small>Monitor Kick beside Twitch and keep replies on their originating platform.</small></button>
+            <button class="platform-tool-card" data-go="simulcast"><span>PRODUCTION</span><strong>Go Live</strong><small>Run preflight and monitor independent Twitch and Kick destination health.</small></button>
+          </div>
+        </section>
+
         <section id="chatbotSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">TWITCH CHAT</p><h2>Chatbot</h2><p>Connect a bot account, choose commands, and test replies before using them in chat.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">SHARED CHAT TOOLS</p><h2>Chatbot + Live Chat</h2><p>Monitor Twitch, Stream Together Shared Chat, and Kick together; manage one command directory while replies stay on their originating platform.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
           <div class="metric-grid five-up chatbot-metrics" data-advanced>
             <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
             <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
@@ -494,20 +539,6 @@
             </div>
             <div class="dialog-actions"><button class="primary-button" type="submit">Save Assigned Creators</button></div>
           </form>
-
-          <article class="panel kick-chat-panel">
-            <div class="panel-header"><div><span>SECOND PLATFORM</span><h3>Kick Chat Connection</h3><p>Authorize the Kick broadcaster account so the same command directory and live monitor can operate on both platforms.</p></div><span id="kickChatBadge" class="status-badge offline">NOT CONFIGURED</span></div>
-            <div class="twitch-setup-grid">
-              <div class="twitch-form-stack">
-                <label>Kick Client ID<input id="kickClientId" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Kick developer application Client ID" /></label>
-                <label>Kick Client Secret<input id="kickClientSecret" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" placeholder="Paste once; stored with Windows encryption" /><small>Studio never writes the secret to its ordinary settings file or diagnostics.</small></label>
-                <label>OAuth Redirect URL<div class="copyable-field"><input id="kickRedirectUri" readonly /><button id="copyKickRedirectUri" class="copy-button" type="button" aria-label="Copy Kick OAuth redirect URL" title="Copy Kick OAuth redirect URL"></button></div><small>Register this exact URL in your Kick developer application.</small></label>
-                <label>Signed Webhook URL<div class="copyable-field"><input id="kickWebhookUrl" readonly /><button id="copyKickWebhookUrl" class="copy-button" type="button" aria-label="Copy Kick webhook URL" title="Copy Kick webhook URL"></button></div><small>Register this URL as the app webhook endpoint before subscribing.</small></label>
-                <div class="twitch-setup-actions"><button id="saveKickConfiguration" class="secondary-button" type="button">Save Kick App</button><button id="connectKickButton" class="primary-button" type="button">Connect Kick</button><button id="validateKickButton" class="secondary-button" type="button">Validate + Subscribe</button><button id="linkKickRelayButton" class="secondary-button" type="button">Link Hosted Relay</button><button id="disconnectKickButton" class="secondary-button danger-outline" type="button">Disconnect</button></div>
-              </div>
-              <div class="twitch-auth-summary"><span>CONNECTION STATUS</span><p id="kickSetupMessage">Create a Kick developer application, then save its Client ID and secret here.</p><div class="local-extension-status"><div><small>ACCOUNT</small><strong id="kickAccountState">—</strong></div><div><small>OAUTH</small><strong id="kickOauthState">NOT CONFIGURED</strong></div><div><small>WEBHOOK</small><strong id="kickEventState">DISCONNECTED</strong></div></div><div class="scope-list"><code>user:read</code><code>chat:write</code><code>events:subscribe</code></div><p>Kick chat arrives through the hosted Tempest relay because Kick delivers chat events as signed public webhooks. Replies are posted only to the platform where the command originated.</p></div>
-            </div>
-          </article>
 
           <form id="chatbotProvidersForm" class="panel chatbot-provider-panel" data-advanced>
             <div class="panel-header"><div><span>OPTIONAL RESPONSE PROVIDERS</span><h3>Local weather + now playing</h3><p>These stay hidden from command choices until configured. No API key is required for NWS or public AzuraCast metadata.</p></div><button class="primary-button" type="submit">Save Providers</button></div>
@@ -583,7 +614,7 @@
         </section>
 
         <section id="simulcastSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">PRODUCTION OUTPUT CONTROL</p><h2>Twitch + Kick Go Live</h2><p>Coordinate Twitch horizontal and vertical delivery with a separate Kick horizontal output owned by Tempest Broadcast.</p></div><span id="simulcastBadge" class="status-badge offline">BROADCAST OFFLINE</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">PRODUCTION OUTPUT CONTROL</p><h2>Go Live</h2><p>Run shared preflight, start, recovery, and monitoring after Twitch and Kick are configured on their own platform pages.</p></div><span id="simulcastBadge" class="status-badge offline">BROADCAST OFFLINE</span></div>
           <div class="metric-grid simulcast-metrics">
             <article><span>TWITCH</span><strong id="simulcastTwitchMetric">OFFLINE</strong><small>Horizontal + vertical</small></article>
             <article><span>KICK</span><strong id="simulcastKickMetric">OFFLINE</strong><small>Horizontal shared encoder</small></article>
@@ -598,16 +629,10 @@
               <p id="simulcastStatusMessage" class="dual-format-status-message">Studio is waiting for Broadcast output status.</p>
             </article>
 
-            <article class="panel dual-format-control-panel">
-              <div class="panel-header"><div><span>BROADCAST-OWNED CREDENTIALS</span><h3>Kick destination</h3></div><span class="state-chip installed">WINDOWS ENCRYPTED</span></div>
-              <div class="simulcast-config-grid">
-                <label>Kick ingest URL<input id="simulcastKickServer" maxlength="500" placeholder="rtmps://…/app" /></label>
-                <label>Kick stream key<input id="simulcastKickStreamKey" type="password" maxlength="512" autocomplete="new-password" placeholder="Leave blank to keep stored key" /></label>
-                <label>Measured upload capacity (Kbps)<input id="simulcastUploadCapacity" type="number" min="1000" max="1000000" step="100" placeholder="25000" /></label>
-                <label class="checkbox-row"><input id="simulcastRecordingWithStream" type="checkbox" /> Start a local recording with the stream</label>
-              </div>
-              <div class="dual-format-actions"><button id="saveSimulcastButton" class="secondary-button" disabled>Save Output Setup</button><button id="disableSimulcastButton" class="secondary-button danger-outline" disabled>Disable Simulcast</button></div>
-              <small>The stream key is sent once over the authenticated loopback bridge and encrypted by Windows inside Broadcast. Studio never saves it or returns it in status.</small>
+            <article class="panel platform-routing-panel">
+              <div class="panel-header"><div><span>PLATFORM SETUP</span><h3>Configuration stays with each platform</h3></div></div>
+              <p>Use Twitch for account, viewer, and Dual Format settings. Use Kick for OAuth, chat delivery, ingest, and stream credentials. Return here for preflight and live operations.</p>
+              <div class="dual-format-actions"><button class="secondary-button" data-go="twitch" type="button">Open Twitch</button><button class="secondary-button" data-go="kick" type="button">Open Kick</button></div>
             </article>
           </div>
 

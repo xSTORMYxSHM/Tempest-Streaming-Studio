@@ -75,8 +75,10 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /selectTwitchExperienceMedia/);
   assert.match(renderer, /Twitch Experiences browser-source URL/);
   assert.doesNotMatch(html, /class="nav-button[^>]*>\s*<span>\d+/);
+  assert.match(html, /<p class="nav-group">TWITCH<\/p>/);
+  assert.match(html, /<p class="nav-group">KICK<\/p>/);
+  assert.match(html, /<p class="nav-group">PRODUCTION<\/p>/);
   assert.match(html, /<p class="nav-group">CREATE<\/p>/);
-  assert.match(html, /<p class="nav-group">CHANNEL<\/p>/);
   assert.match(html, /<p class="nav-group" data-advanced>ADVANCED<\/p>/);
   assert.match(html, /data-go="visualalerts"/);
   assert.match(html, /data-go="soundalerts"/);
@@ -90,7 +92,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.doesNotMatch(renderer, /renderWorkflows|renderSoftware|renderAssets/);
   assert.doesNotMatch(renderer, /\/v1\/assets/);
   assert.match(html, /Event Log/);
-  assert.match(html, /Twitch Setup/);
+  assert.match(html, /TWITCH PLATFORM/);
   assert.match(html, /id="advancedInterfaceMode"/);
   assert.match(html, /id="saveInterfaceMode"/);
   assert.match(renderer, /advancedMode/);
@@ -302,7 +304,10 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="sharedChatComposer"/);
   assert.match(renderer, /channel.*SHARED CHAT LIVE/is);
   assert.match(renderer, /\/v1\/chatbot\/messages/);
-  assert.match(html, /Kick Chat Connection/);
+  assert.match(html, /data-section="kick"/);
+  assert.match(html, /id="kickSection"/);
+  assert.match(html, /Kick connection/);
+  assert.match(html, /Kick destination in Tempest Broadcast/);
   assert.match(html, /id="kickClientSecret" type="password"/);
   assert.match(html, /id="kickWebhookUrl"/);
   assert.match(html, /id="sharedChatPlatform"/);
@@ -325,7 +330,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(styles, /\.vertical-phone-frame/);
   assert.match(html, /data-section="simulcast"/);
   assert.match(html, /id="simulcastSection"/);
-  assert.match(html, /Twitch \+ Kick Go Live/);
+  assert.match(html, /<h2>Go Live<\/h2>/);
   assert.match(html, /id="simulcastKickStreamKey" type="password"/);
   assert.match(html, /WINDOWS ENCRYPTED/);
   assert.match(html, /id="startSimulcastButton"/);
