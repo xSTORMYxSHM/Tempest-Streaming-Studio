@@ -1,4 +1,4 @@
-# 1.4.0 release checklist
+# 1.4.1 release checklist
 
 ## Automated gates
 
@@ -47,5 +47,5 @@
 - [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
 - [x] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
 - [x] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From 1.3.1, check, download, verify, restart, migrate data, and confirm version 1.4.0 in **Settings + About**.
+- [ ] From 1.4.0, check, download, verify, restart, retain platform settings, and confirm version 1.4.1 in **Settings + About**.
 - [x] Configure an Authenticode signing identity before running `pnpm package:win`; the release verifier rejects unsigned installers and application executables. Use `pnpm package:win:unsigned` only for local unsigned packaging tests.

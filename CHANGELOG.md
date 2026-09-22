@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.4.1 — Platform-centered navigation
+
 - Reorganized Studio around dedicated Twitch and Kick platform homes. Twitch now links its account, alerts, viewer panel, Dual Format, and Stream Together tools from one place; Kick now keeps OAuth, signed-webhook chat, ingest, stream-key, and Broadcast destination settings together.
 - Simplified Go Live into a shared production workspace for preflight, coordinated start, destination health, and recovery after each platform is configured on its own page.
 - Renamed the shared chat workspace to Chatbot + Live Chat and clarified that Twitch, Stream Together, and Kick are monitored together while replies remain platform-local.
