@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.4.2 — Streaming performance cleanup
+
+- Reduced Studio renderer work by updating only the visible workspace during one-second live refreshes while preserving the existing full-state compatibility refresh.
+- Suspended renderer polling while Studio is minimized and refreshes current state immediately when the window becomes visible again.
+- Removed alert history and media diagnostics from the fast polling path unless Activity & Diagnostics is open, and cached alert media availability checks for 30 seconds.
+- Stopped the Emote Wall animation loop whenever no emotes are active, the overlay is disabled, or its browser source is hidden.
+
 ## 1.4.1 — Platform-centered navigation
 
 - Reorganized Studio around dedicated Twitch and Kick platform homes. Twitch now links its account, alerts, viewer panel, Dual Format, and Stream Together tools from one place; Kick now keeps OAuth, signed-webhook chat, ingest, stream-key, and Broadcast destination settings together.

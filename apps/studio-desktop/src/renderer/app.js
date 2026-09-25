@@ -2409,11 +2409,40 @@
     renderUpdateStatus();
   }
 
+  function renderRuntimeSection() {
+    const activeSection = document.querySelector('.page.active')?.id;
+    if (activeSection === 'overviewSection') renderOverview();
+    else if (activeSection === 'eventsSection') {
+      renderEvents();
+      renderAlertHistory();
+    } else if (activeSection === 'soundalertsSection') renderVisualAlertStatus();
+    else if (activeSection === 'visualalertsSection') {
+      renderVisualAlertStatus();
+      renderTwitchExperiences();
+    } else if (activeSection === 'chatoverlaySection') {
+      renderChatOverlay();
+      renderEmoteWall();
+    } else if (activeSection === 'discordvoiceSection') renderDiscordVoice();
+    else if (activeSection === 'twitchSection') {
+      renderLocalExtension();
+      renderHostedExtension();
+    } else if (activeSection === 'kickSection') renderKick();
+    else if (activeSection === 'chatbotSection') renderChatbot();
+    else if (activeSection === 'dualformatSection') renderDualFormat();
+    else if (activeSection === 'simulcastSection') renderSimulcast();
+    else if (activeSection === 'apiSection') {
+      renderWarudo();
+      renderVTubeStudio();
+      renderApi();
+    }
+  }
+
   async function refreshRuntime({ quiet = true } = {}) {
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      const diagnosticsVisible = $('#eventsSection').classList.contains('active');
+      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), diagnosticsVisible ? api('/v1/alert-history?limit=200') : Promise.resolve(state.alertHistory), diagnosticsVisible ? api('/v1/alert-diagnostics') : Promise.resolve(state.alertDiagnostics)]);
       state.health = health;
       state.connections = connections.connections || [];
       state.dualFormat = dualFormat;
@@ -2437,22 +2466,7 @@
       state.alertDiagnostics = alertDiagnostics;
       renderBridgeStatus(true);
       renderSafety();
-      renderOverview();
-      renderEvents();
-      renderAlertHistory();
-      renderVisualAlertStatus();
-      renderChatOverlay();
-      renderEmoteWall();
-      renderTwitchExperiences();
-      renderDiscordVoice();
-      renderWarudo();
-      renderVTubeStudio();
-      renderDualFormat();
-      renderSimulcast();
-      renderLocalExtension();
-      renderHostedExtension();
-      renderChatbot();
-      renderApi();
+      renderRuntimeSection();
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
@@ -4675,8 +4689,11 @@
       onboardingAutoOpened = true;
       openOnboarding({ firstIncomplete: true });
     }
-    setInterval(() => refreshRuntime(), 1000);
-    setInterval(() => refresh({ quiet: true }), 15000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) void refresh({ quiet: true });
+    });
+    setInterval(() => { if (!document.hidden) void refreshRuntime(); }, 1000);
+    setInterval(() => { if (!document.hidden) void refresh({ quiet: true }); }, 15000);
     window.__tempestStudioReady = true;
   }
 

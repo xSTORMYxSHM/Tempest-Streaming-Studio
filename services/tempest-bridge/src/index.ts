@@ -463,6 +463,21 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     };
   };
 
+  const alertAssetAvailabilityCache = new Map<string, { available: boolean; checkedAt: number }>();
+  const alertAssetAvailabilityCacheTtlMs = 30_000;
+  const alertAssetAvailable = async (uri: string): Promise<boolean> => {
+    const now = Date.now();
+    const cached = alertAssetAvailabilityCache.get(uri);
+    if (cached && now - cached.checkedAt < alertAssetAvailabilityCacheTtlMs) return cached.available;
+    let available = false;
+    try {
+      const details = await stat(fileURLToPath(uri));
+      available = details.isFile();
+    } catch { /* Missing or invalid alert media is reported by diagnostics below. */ }
+    alertAssetAvailabilityCache.set(uri, { available, checkedAt: now });
+    return available;
+  };
+
   const alertDiagnostics = async () => {
     const interactionAlerts = soundAlerts.list();
     const twitchAlerts = twitchVisualAlerts.list();
@@ -479,12 +494,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (variant.visualUri) assets.push({ kind: 'twitch', alertId: alert.id, alertName: alert.name, variantId: variant.id, role: 'visual', uri: variant.visualUri });
       }
     }
+    const assignedUris = new Set(assets.map((asset) => asset.uri));
+    for (const uri of alertAssetAvailabilityCache.keys()) if (!assignedUris.has(uri)) alertAssetAvailabilityCache.delete(uri);
     const issues: Array<{ severity: 'error'; kind: 'interaction' | 'twitch'; alertId: string; alertName: string; variantId?: string; role: 'audio' | 'visual'; message: string }> = [];
     await Promise.all(assets.map(async (asset) => {
-      try {
-        const details = await stat(fileURLToPath(asset.uri));
-        if (!details.isFile()) throw new Error('not a file');
-      } catch {
+      if (!await alertAssetAvailable(asset.uri)) {
         issues.push({ severity: 'error', kind: asset.kind, alertId: asset.alertId, alertName: asset.alertName, ...(asset.variantId ? { variantId: asset.variantId } : {}), role: asset.role, message: `${asset.role === 'audio' ? 'Sound' : 'Visual'} file is unavailable.` });
       }
     }));
