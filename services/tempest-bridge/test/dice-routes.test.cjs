@@ -53,7 +53,7 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const client = await fetch(`${runtime.baseUrl}/dice-overlay/client.js`);
   assert.equal(client.status, 200);
   const clientBody = await client.text();
-  assert.match(clientBody, /window\.__tempestDiceEvents = new EventSource/);
+  assert.match(clientBody, /window\.__tempestDiceEvents = obsRuntime \? null : new EventSource/);
   assert.match(clientBody, /new DiceBoxClass/);
   const vendor = await fetch(`${runtime.baseUrl}/dice-overlay/vendor/dice-box.es.min.js`);
   assert.equal(vendor.status, 200);

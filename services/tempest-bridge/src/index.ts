@@ -1018,7 +1018,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/poll') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice polling is available only on this computer.' });
-        return sendJson(response, 200, diceOverlay.poll(await readJson(request)));
+        return sendJson(response, 200, await diceOverlay.pollAsync(await readJson(request)));
       }
       if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/result') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice results are accepted only from this computer.' });

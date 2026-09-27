@@ -73,8 +73,10 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.doesNotMatch(page, /Dice sound failed/);
   assert.doesNotMatch(page, /window\.__tempestDiceEvents = new EventSource/);
   assert.doesNotMatch(page, /type="module"/);
-  assert.match(browserClient, /window\.__tempestDiceEvents = new EventSource/);
-  assert.match(browserClient, /window\.__tempestDiceEvents \|\| new EventSource/);
+  assert.match(browserClient, /window\.__tempestDiceEvents = obsRuntime \? null : new EventSource/);
+  assert.match(browserClient, /obsBrowserRuntime \? null : \(window\.__tempestDiceEvents \|\| new EventSource/);
+  assert.match(browserClient, /if \(obsBrowserRuntime\) void runPollFallback\(\)/);
+  assert.match(browserClient, /else \{\s*startPollingFallback\(\);\s*\}/);
   assert.match(browserClient, /import\('\/dice-overlay\/vendor\/dice-box\.es\.min\.js'\)/);
   assert.match(browserClient, /diceBox\.roll/);
   assert.match(browserClient, /diceBox\.reroll\(rejected/);
@@ -141,8 +143,10 @@ test('keeps rolls and audio controls working through the OBS polling fallback', 
   assert.equal(registered.events[0].type, 'init');
   overlay.reportClient({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' });
 
+  const commandWait = overlay.pollAsync({ clientId: registered.clientId, after: registered.revision });
+  await new Promise((resolve) => setImmediate(resolve));
   const rolling = overlay.roll({ expression: '1d6', rollerName: 'OBS Poll' });
-  const commands = overlay.poll({ clientId: registered.clientId, after: registered.revision });
+  const commands = await commandWait;
   const request = commands.events.find((event) => event.type === 'roll-request').payload;
   overlay.complete({ id: request.id, token: request.token, values: [5] });
   assert.equal((await rolling).total, 5);

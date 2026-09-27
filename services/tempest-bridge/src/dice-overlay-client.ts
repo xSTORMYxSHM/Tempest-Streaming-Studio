@@ -354,7 +354,7 @@ function clearPresentation() {
   if (box) box.clear();
 }
 
-const events = window.__tempestDiceEvents || new EventSource('/dice-overlay/events');
+const events = obsBrowserRuntime ? null : (window.__tempestDiceEvents || new EventSource('/dice-overlay/events'));
 let pollClientId = '';
 let pollRevision = 0;
 let pollStarted = false;
@@ -401,7 +401,8 @@ async function runPollFallback() {
   } catch (error) {
     console.error('Tempest dice polling fallback failed.', error);
   } finally {
-    setTimeout(runPollFallback, 250);
+    if (obsBrowserRuntime) void runPollFallback();
+    else setTimeout(runPollFallback, 250);
   }
 }
 function startPollingFallback() {
@@ -409,15 +410,19 @@ function startPollingFallback() {
   pollStarted = true;
   runPollFallback();
 }
-events.addEventListener('init', handleInit);
+if (events) events.addEventListener('init', handleInit);
 if (window.__tempestDiceRuntime?.initData) handleInit({ data: window.__tempestDiceRuntime.initData });
-events.addEventListener('settings', (event) => apply(JSON.parse(event.data)).catch((error) => showError(error.message)));
-events.addEventListener('roll-request', (event) => performRoll(JSON.parse(event.data)));
-events.addEventListener('roll-result', (event) => showResult(JSON.parse(event.data)));
-events.addEventListener('roll-error', (event) => showError(JSON.parse(event.data).message));
-events.addEventListener('audio-test', (event) => playImpact({ force: true, testId: JSON.parse(event.data).id }).catch((error) => showError(error.message)));
-events.addEventListener('clear', clearPresentation);
-events.onerror = () => { if (!pollClientId) clientId = ''; startPollingFallback(); };
-setTimeout(() => { if (!clientId) startPollingFallback(); }, 750);
+if (events) {
+  events.addEventListener('settings', (event) => apply(JSON.parse(event.data)).catch((error) => showError(error.message)));
+  events.addEventListener('roll-request', (event) => performRoll(JSON.parse(event.data)));
+  events.addEventListener('roll-result', (event) => showResult(JSON.parse(event.data)));
+  events.addEventListener('roll-error', (event) => showError(JSON.parse(event.data).message));
+  events.addEventListener('audio-test', (event) => playImpact({ force: true, testId: JSON.parse(event.data).id }).catch((error) => showError(error.message)));
+  events.addEventListener('clear', clearPresentation);
+  events.onerror = () => { if (!pollClientId) clientId = ''; startPollingFallback(); };
+  setTimeout(() => { if (!clientId) startPollingFallback(); }, 750);
+} else {
+  startPollingFallback();
+}
 window.addEventListener('beforeunload', () => { stopImpact(); if (impactUrl) URL.revokeObjectURL(impactUrl); if (impactAudioContext && impactAudioContext.state !== 'closed') impactAudioContext.close().catch(() => {}); });
 `;

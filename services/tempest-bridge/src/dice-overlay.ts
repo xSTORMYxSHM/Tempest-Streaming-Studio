@@ -153,16 +153,17 @@ const builtInThemes: TempestDiceThemeOption[] = [
 const diceOverlayBootstrap = String.raw`
 (() => {
   const runtime = window.__tempestDiceRuntime = { clientId: '', initData: '', error: '' };
-  const events = window.__tempestDiceEvents = new EventSource('/dice-overlay/events');
+  const obsRuntime = /(?:^|\\s)OBS\\/\\d/i.test(navigator.userAgent);
+  const events = window.__tempestDiceEvents = obsRuntime ? null : new EventSource('/dice-overlay/events');
   const reportFailure = () => {
     if (!runtime.clientId || !runtime.error) return;
     fetch('/dice-overlay/client-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: runtime.clientId, state: 'failed', renderer: 'fallback', error: runtime.error.slice(0, 500) }), cache: 'no-store' }).catch(() => {});
   };
-  events.addEventListener('init', (event) => {
-    runtime.initData = event.data;
-    try { runtime.clientId = String(JSON.parse(event.data).clientId || ''); } catch {}
-    reportFailure();
-  });
+  if (events) events.addEventListener('init', (event) => {
+      runtime.initData = event.data;
+      try { runtime.clientId = String(JSON.parse(event.data).clientId || ''); } catch {}
+      reportFailure();
+    });
   window.addEventListener('error', (event) => { runtime.error = 'Dice client script error: ' + String(event.message || event.error || 'unknown error'); reportFailure(); });
   window.addEventListener('unhandledrejection', (event) => { runtime.error = 'Dice client promise rejection: ' + String(event.reason?.message || event.reason || 'unknown error'); reportFailure(); });
 })();`;
@@ -247,10 +248,12 @@ export class TempestDiceOverlay {
   private clientHeartbeats = new Map<ServerResponse, NodeJS.Timeout>();
   private pending?: PendingRoll;
   private pendingAudioTest?: PendingAudioTest;
+  private presentationClearTimer?: NodeJS.Timeout;
   private audioStatus: TempestDiceAudioStatus = { state: 'untested' };
   private completedRolls = new Map<string, { token: string; roll: TempestStudioDiceRoll }>();
   private eventRevision = 0;
   private browserEvents: Array<{ revision: number; type: string; payload: unknown }> = [];
+  private pollWaiters = new Set<() => void>();
   private requests = { pageLoads: 0, clientLoads: 0, eventConnections: 0, lastPageLoadedAt: '', lastClientLoadedAt: '', lastEventConnectedAt: '' };
   private readonly documentPath: string;
   private readonly customThemeDirectory: string;
@@ -368,6 +371,25 @@ export class TempestDiceOverlay {
     return { clientId, revision: this.eventRevision, events: structuredClone(events) };
   }
 
+  async pollAsync(input: unknown): Promise<{ clientId: string; revision: number; events: Array<{ revision: number; type: string; payload: unknown }> }> {
+    const initial = this.poll(input);
+    if (initial.events.length) return initial;
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        this.pollWaiters.delete(finish);
+        resolve();
+      };
+      const timeout = setTimeout(finish, 1500);
+      timeout.unref?.();
+      this.pollWaiters.add(finish);
+    });
+    return this.poll({ ...(input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {}), clientId: initial.clientId });
+  }
+
   reportClient(input: unknown): DiceClientStatus {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice Browser Source status must be an object.');
     const report = input as Record<string, unknown>;
@@ -439,6 +461,10 @@ export class TempestDiceOverlay {
     const authorityStatus = this.clientStatuses.get(this.authorityClientId() || '');
     if (authorityStatus?.state === 'failed') throw new Error(`The 3D Dice Browser Source engine failed${authorityStatus.error ? `: ${authorityStatus.error}` : '.'}`);
     if (this.pending) throw new Error('Wait for the current 3D dice roll to settle before starting another.');
+    if (this.presentationClearTimer) {
+      clearTimeout(this.presentationClearTimer);
+      this.presentationClearTimer = undefined;
+    }
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice roll request must be an object.');
     const request = input as Record<string, unknown>;
     const parsed = parseStudioDiceExpression(request.expression);
@@ -496,6 +522,11 @@ export class TempestDiceOverlay {
     this.completedRolls.set(roll.id, { token: pending.request.token, roll: structuredClone(roll) });
     while (this.completedRolls.size > 20) this.completedRolls.delete(this.completedRolls.keys().next().value as string);
     this.broadcast('roll-result', roll);
+    this.presentationClearTimer = setTimeout(() => {
+      this.presentationClearTimer = undefined;
+      this.broadcast('clear', {});
+    }, this.settings.durationMs);
+    this.presentationClearTimer.unref?.();
     pending.resolve(structuredClone(roll));
     return structuredClone(roll);
   }
@@ -523,6 +554,10 @@ export class TempestDiceOverlay {
   }
 
   clear(): void {
+    if (this.presentationClearTimer) {
+      clearTimeout(this.presentationClearTimer);
+      this.presentationClearTimer = undefined;
+    }
     if (this.pending) {
       clearTimeout(this.pending.timeout);
       this.pending.reject(new Error('The 3D dice roll was cleared before it settled.'));
@@ -549,12 +584,16 @@ export class TempestDiceOverlay {
   close(): void {
     this.rejectPending('The 3D Dice overlay closed before the roll settled.', false);
     this.resolveAudioFailure('The 3D Dice overlay closed during its sound test.');
+    if (this.presentationClearTimer) clearTimeout(this.presentationClearTimer);
+    this.presentationClearTimer = undefined;
     for (const timer of this.clientHeartbeats.values()) clearInterval(timer);
     this.clientHeartbeats.clear();
     for (const client of this.clients.keys()) client.end();
     this.clients.clear();
     this.pollClients.clear();
     this.clientStatuses.clear();
+    for (const finish of this.pollWaiters) finish();
+    this.pollWaiters.clear();
   }
 
   private authorityClient(): [ServerResponse, string] | undefined {
@@ -626,6 +665,7 @@ export class TempestDiceOverlay {
     this.eventRevision++;
     this.browserEvents.push({ revision: this.eventRevision, type, payload: structuredClone(payload) });
     this.browserEvents = this.browserEvents.slice(-40);
+    for (const finish of [...this.pollWaiters]) finish();
   }
 
   private write(response: ServerResponse, type: string, payload: unknown): void {
