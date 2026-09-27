@@ -34,6 +34,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /FrankerFaceZ/);
   assert.match(renderer, /emote-wall\/providers\/refresh/);
   assert.match(renderer, /Emote Wall browser-source URL/);
+  assert.match(renderer, /SOURCE DISCONNECTED/);
+  assert.match(renderer, /Refresh the Emote Wall source in Broadcast, then preview again/);
   assert.match(html, /data-section="dice"/);
   assert.match(html, /id="diceSection"/);
   assert.match(html, /id="diceRollForm"/);

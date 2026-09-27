@@ -969,13 +969,14 @@
   function renderEmoteWall({ settings = false } = {}) {
     const wall = state.emoteWall;
     const configuration = wall?.settings || {};
-    $('#emoteWallStateBadge').textContent = !wall ? 'CHECKING' : configuration.enabled === false ? 'DISABLED' : 'WALL READY';
-    $('#emoteWallStateBadge').classList.toggle('offline', !wall || configuration.enabled === false);
+    const sourceConnected = Number(wall?.connectedClients || 0) > 0;
+    $('#emoteWallStateBadge').textContent = !wall ? 'CHECKING' : configuration.enabled === false ? 'DISABLED' : sourceConnected ? 'SOURCE CONNECTED' : 'SOURCE DISCONNECTED';
+    $('#emoteWallStateBadge').classList.toggle('offline', !wall || configuration.enabled === false || !sourceConnected);
     $('#emoteWallActiveCount').textContent = `${wall?.activeCount || 0} ACTIVE`;
     $('#emoteWallPyramidStatus').textContent = configuration.enablePyramids === false ? 'PYRAMIDS OFF' : wall?.pyramid?.building ? `BUILDING ${wall.pyramid.step}/5` : `${wall?.pyramid?.completed || 0} PYRAMIDS`;
     $('#emoteWallPyramidStatus').classList.toggle('installed', configuration.enablePyramids !== false);
     $('#emoteWallBrowserStatus').innerHTML = wall
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(wall.url)}</code>${copyButton(wall.url, 'Emote Wall browser-source URL')}</span> · ${wall.connectedClients ? `${wall.connectedClients} connected` : 'waiting for Broadcast'}`
+      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(wall.url)}</code>${copyButton(wall.url, 'Emote Wall browser-source URL')}</span> · ${sourceConnected ? `${wall.connectedClients} connected` : 'disconnected — refresh this source in Broadcast if Studio started after Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local Emote Wall.';
     const providerLabels = { seventv: '7TV', bttv: 'BetterTTV', ffz: 'FrankerFaceZ' };
     $('#emoteProviderCatalogCount').textContent = `${wall?.providerCatalogCount || 0} CATALOGED`;
@@ -4204,6 +4205,11 @@
 
   async function previewEmoteWall() {
     try {
+      state.emoteWall = await api('/v1/emote-wall');
+      if (state.emoteWall.settings?.enabled !== false && !Number(state.emoteWall.connectedClients || 0)) {
+        renderEmoteWall();
+        throw new Error('No Emote Wall Browser Source is connected. Refresh the Emote Wall source in Broadcast, then preview again.');
+      }
       await api('/v1/emote-wall/preview', { method: 'POST', body: {} });
       state.emoteWall = await api('/v1/emote-wall');
       renderEmoteWall();
