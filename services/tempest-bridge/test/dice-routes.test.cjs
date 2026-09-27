@@ -84,5 +84,26 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   assert.equal(result.roll.total, 14);
   assert.equal(result.latestRoll.id, result.roll.id);
   assert.equal(result.history.length, 1);
+
+  const failingRoll = fetch(`${runtime.baseUrl}/v1/dice-overlay/roll`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ expression: '1d20' })
+  });
+  const failureRequest = await readSseEvent(reader, decoder, 'roll-request');
+  const failureReport = await fetch(`${runtime.baseUrl}/dice-overlay/error`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: failureRequest.id,
+      token: failureRequest.token,
+      message: 'OBS callback failed.'
+    })
+  });
+  assert.equal(failureReport.status, 200);
+  const failedResponse = await failingRoll;
+  assert.equal(failedResponse.status, 400);
+  assert.match((await failedResponse.json()).error, /OBS callback failed/);
+
   await reader.cancel();
 });

@@ -67,12 +67,30 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(page, /id="diceWorld"/);
   assert.match(page, /\/dice-overlay\/client\.js/);
   assert.match(browserClient, /import DiceBox from '\/dice-overlay\/vendor\/dice-box\.es\.min\.js'/);
-  assert.match(browserClient, /await diceBox\.roll/);
+  assert.match(browserClient, /diceBox\.roll/);
   assert.match(browserClient, /diceBox\.reroll\(rejected/);
+  assert.match(browserClient, /onDieComplete: \(die\) => physicalDieListener/);
+  assert.match(browserClient, /Promise\.race\(\[apiResult, callbackResult\]\)/);
+  assert.match(browserClient, /fetch\('\/dice-overlay\/error'/);
   assert.match(browserClient, /hasOwnProperty\.call\(result, 'value'\)/);
   assert.match(browserClient, /URL\.createObjectURL\(impactWav\(\)\)/);
   assert.match(browserClient, /new Audio\(impactUrl\)/);
   assert.doesNotMatch(browserClient, /Math\.random/);
+  overlay.close();
+});
+
+test('ends a pending roll immediately when the Browser Source reports a failure', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-failure-'));
+  const overlay = new TempestDiceOverlay(directory);
+  await overlay.initialize();
+  const client = connectedClient(overlay);
+  const rolling = overlay.roll({ expression: '1d20' });
+  const rejected = assert.rejects(rolling, /OBS Dice Box callback failed/);
+  const request = latestEvent(client, 'roll-request');
+  overlay.fail({ id: request.id, token: request.token, message: 'OBS Dice Box callback failed.' });
+  await rejected;
+  assert.equal(overlay.status('local').rolling, false);
+  assert.match(latestEvent(client, 'roll-error').message, /OBS Dice Box callback failed/);
   overlay.close();
 });
 

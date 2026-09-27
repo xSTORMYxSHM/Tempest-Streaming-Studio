@@ -880,6 +880,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const roll = diceOverlay.complete(await readJson(request));
         return sendJson(response, 200, { roll });
       }
+      if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/error') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice failures are accepted only from this computer.' });
+        diceOverlay.fail(await readJson(request));
+        return sendJson(response, 200, { ok: true });
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
         response.statusCode = 200;

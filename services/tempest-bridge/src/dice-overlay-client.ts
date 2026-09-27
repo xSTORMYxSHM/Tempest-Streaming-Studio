@@ -12,6 +12,7 @@ let clearTimer = 0;
 let errorTimer = 0;
 let impactAudio;
 let impactUrl;
+let physicalDieListener;
 
 function themeColor() { return colors[settings.theme] || colors.stormglass; }
 
@@ -52,7 +53,8 @@ async function getBox() {
     box = new DiceBox({
       container: '#diceWorld', assetPath: '/dice-overlay/assets/', theme: 'default', themeColor: themeColor(),
       enableShadows: true, shadowTransparency: .72, lightIntensity: 1.15, offscreen: true,
-      scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100))
+      scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)),
+      onDieComplete: (die) => physicalDieListener?.(die)
     });
     await box.init();
     return box;
@@ -75,6 +77,31 @@ function flatten(results) {
   });
 }
 
+async function waitForPhysicalDice(startRoll, expectedCount) {
+  const callbackResult = new Promise((resolve) => {
+    const settled = [];
+    physicalDieListener = (die) => {
+      if (!die || !Object.prototype.hasOwnProperty.call(die, 'value')) return;
+      settled.push(die);
+      if (settled.length >= expectedCount) resolve(settled.slice(0, expectedCount));
+    };
+  });
+  try {
+    const apiResult = Promise.resolve().then(startRoll).then(flatten);
+    return await Promise.race([apiResult, callbackResult]);
+  } finally {
+    physicalDieListener = undefined;
+  }
+}
+
+async function reportRollFailure(request, error) {
+  if (!request?.id || !request?.token) return;
+  await fetch('/dice-overlay/error', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: request.id, token: request.token, message: error instanceof Error ? error.message : String(error) })
+  }).catch(() => {});
+}
+
 async function performRoll(request) {
   try {
     clearTimeout(clearTimer);
@@ -83,7 +110,7 @@ async function performRoll(request) {
     errorBanner.classList.remove('visible');
     const diceBox = await getBox();
     const notation = String(request.count) + 'd' + String(request.physicalSides);
-    let pending = flatten(await diceBox.roll(notation, { themeColor: themeColor() }));
+    let pending = await waitForPhysicalDice(() => diceBox.roll(notation, { themeColor: themeColor() }), Number(request.count));
     const accepted = [];
     let attempts = 0;
     while (pending.length && attempts < 40) {
@@ -95,7 +122,7 @@ async function performRoll(request) {
       }
       if (!rejected.length) break;
       attempts++;
-      pending = flatten(await diceBox.reroll(rejected, { remove: true, newStartPoint: true }));
+      pending = await waitForPhysicalDice(() => diceBox.reroll(rejected, { remove: true, newStartPoint: true }), rejected.length);
     }
     if (accepted.length !== Number(request.count)) throw new Error('Dice Box did not produce the requested number of in-range results.');
     const response = await fetch('/dice-overlay/result', {
@@ -107,6 +134,7 @@ async function performRoll(request) {
   } catch (error) {
     console.error('Tempest Dice Box roll failed.', error);
     showError(error instanceof Error ? error.message : String(error));
+    await reportRollFailure(request, error);
   }
 }
 

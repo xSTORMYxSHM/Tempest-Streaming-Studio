@@ -207,6 +207,19 @@ export class TempestDiceOverlay {
     return structuredClone(roll);
   }
 
+  fail(input: unknown): void {
+    if (!this.pending) throw new Error('There is no active 3D dice roll.');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice failure report must be an object.');
+    const submitted = input as Record<string, unknown>;
+    const pending = this.pending;
+    if (submitted.id !== pending.request.id || submitted.token !== pending.request.token) throw new Error('The 3D dice result token is invalid or expired.');
+    const message = String(submitted.message || 'The Browser Source could not finish the physical dice roll.').trim().slice(0, 240) || 'The Browser Source could not finish the physical dice roll.';
+    clearTimeout(pending.timeout);
+    this.pending = undefined;
+    this.broadcast('roll-error', { id: pending.request.id, message });
+    pending.reject(new Error(message));
+  }
+
   async update(patch: unknown): Promise<TempestDiceOverlaySettings> {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Dice overlay settings must be an object.');
     this.settings = validateSettings({ ...this.settings, ...(patch as Partial<TempestDiceOverlaySettings>), schemaVersion: 1, updatedAt: new Date().toISOString() });
