@@ -66,6 +66,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /\/v1\/discord-voice/);
   assert.match(renderer, /Discord Guests browser-source URL/);
   assert.match(main, /TempestDiscordRpcClient/);
+  assert.match(main, /showInactive\(\)/);
   assert.match(discordRpc, /1546349623701151854/);
   assert.match(main, /discord-rpc-credentials\.bin/);
   assert.match(preload, /studio:connect-discord-voice/);

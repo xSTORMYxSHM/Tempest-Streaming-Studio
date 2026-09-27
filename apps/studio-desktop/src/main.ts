@@ -1407,6 +1407,10 @@ app.whenReady().then(async () => {
     mainWindow.webContents.once('did-finish-load', async () => {
       const ready = mainWindow ? await waitForRendererReady(mainWindow) : false;
       if (!ready || !mainWindow) throw new Error('Studio renderer did not become ready for capture.');
+      // Chromium 44 does not allocate a capturable Viz surface for a window that has never
+      // been shown. Render the capture-only window without taking focus before capturePage().
+      mainWindow.showInactive();
+      await new Promise((resolve) => setTimeout(resolve, 250));
       if (captureOverlay && bridge) {
         await mainWindow.loadURL(`${bridge.baseUrl}/visual-alerts`);
         for (let attempt = 0; attempt < 30; attempt += 1) {
