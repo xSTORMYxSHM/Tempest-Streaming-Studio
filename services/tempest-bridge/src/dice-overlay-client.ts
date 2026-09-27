@@ -45,9 +45,41 @@ function bounded(promise, timeoutMs, message) {
   return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })]).finally(() => clearTimeout(timer));
 }
 
+function postJsonWithXhr(path, body) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', path, true);
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.timeout = 3500;
+    request.onload = () => {
+      let payload = {};
+      try { payload = request.responseText ? JSON.parse(request.responseText) : {}; } catch {}
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(payload.error || 'Studio returned HTTP ' + request.status + '.'));
+        return;
+      }
+      resolve(payload);
+    };
+    request.onerror = () => reject(new Error('Studio Browser Source request failed.'));
+    request.ontimeout = () => reject(new Error('Studio Browser Source request timed out.'));
+    request.onabort = () => reject(new Error('Studio Browser Source request was aborted.'));
+    request.send(JSON.stringify(body));
+  });
+}
+
 async function postJson(path, body, attempts = 4) {
   let latestError;
   for (let attempt = 0; attempt < attempts; attempt++) {
+    if (obsBrowserRuntime) {
+      try { return await postJsonWithXhr(path, body); }
+      catch (error) {
+        latestError = error;
+        // OBS can suspend JavaScript timers for transparent Browser Sources. Retry on the
+        // next promise turn instead of sleeping on a timer that may never be dispatched.
+        if (attempt + 1 < attempts) await Promise.resolve();
+        continue;
+      }
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
     try {
