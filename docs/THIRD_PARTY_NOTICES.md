@@ -6,6 +6,9 @@ Tempest Streaming Studio is built with third-party software including:
 - electron-builder — MIT License — https://github.com/electron-userland/electron-builder
 - electron-updater — MIT License — https://github.com/electron-userland/electron-builder/tree/master/packages/electron-updater
 - ws — MIT License — https://github.com/websockets/ws
+- Dice Box — MIT License, Copyright (c) 2021 3Ddice — https://github.com/3d-dice/dice-box
+- Babylon.js — Apache License 2.0 — https://github.com/BabylonJS/Babylon.js
+- Ammo.js / Bullet Physics — zlib License — https://github.com/kripken/ammo.js
 - TypeScript — Apache License 2.0 — https://github.com/microsoft/TypeScript
 - Node.js type definitions — MIT License — https://github.com/DefinitelyTyped/DefinitelyTyped
 

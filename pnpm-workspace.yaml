@@ -6,5 +6,6 @@ packages:
 onlyBuiltDependencies:
   - electron
 allowBuilds:
+  '@3d-dice/dice-box': false
   electron: true
   electron-winstaller: true

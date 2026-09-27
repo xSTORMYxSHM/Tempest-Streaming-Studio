@@ -108,6 +108,26 @@ const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
 const simulcastStartCapability = 'broadcast.simulcast.start';
 const simulcastStopCapability = 'broadcast.simulcast.stop';
 const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
+const diceBoxDistributionDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-box/package.json')), 'dist');
+const diceBoxAssetsDirectory = path.join(diceBoxDistributionDirectory, 'assets');
+
+const diceBoxMediaTypes: Record<string, string> = {
+  '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.wasm': 'application/wasm', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'
+};
+
+async function serveDiceBoxFile(response: ServerResponse, filePath: string): Promise<void> {
+  const details = await stat(filePath);
+  if (!details.isFile()) throw new Error('The requested Dice Box asset is unavailable.');
+  const contentType = diceBoxMediaTypes[path.extname(filePath).toLowerCase()];
+  if (!contentType) throw new Error('The requested Dice Box asset type is not supported.');
+  response.statusCode = 200;
+  response.setHeader('Content-Type', contentType);
+  response.setHeader('Content-Length', details.size);
+  response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  createReadStream(filePath).pipe(response);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -822,14 +842,43 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         response.statusCode = 200;
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
         response.setHeader('Cache-Control', 'no-store');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src blob:;");
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src blob: data:; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:;");
         response.setHeader('X-Content-Type-Options', 'nosniff');
         return response.end(diceOverlay.page());
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/dice-overlay/client.js') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The 3D Dice overlay is available only on this computer.' });
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        return response.end(diceOverlay.client());
+      }
+      const diceBoxVendorMatch = requestUrl.pathname.match(/^\/dice-overlay\/vendor\/(dice-box\.es(?:\.min)?\.js|Dice(?:\.min)?\.js|world\.(?:offscreen|onscreen|none)(?:\.min)?\.js)$/);
+      if (request.method === 'GET' && diceBoxVendorMatch) {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Dice Box is available only on this computer.' });
+        await serveDiceBoxFile(response, path.join(diceBoxDistributionDirectory, diceBoxVendorMatch[1]));
+        return;
+      }
+      const diceBoxAssetMatch = requestUrl.pathname.match(/^\/dice-overlay\/assets\/(.+)$/);
+      if (request.method === 'GET' && diceBoxAssetMatch) {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Dice Box assets are available only on this computer.' });
+        const relativePath = decodeURIComponent(diceBoxAssetMatch[1]).replace(/\\/g, '/');
+        if (!relativePath || relativePath.split('/').some((segment) => !segment || segment === '.' || segment === '..')) return sendJson(response, 400, { error: 'The Dice Box asset path is invalid.' });
+        const filePath = path.resolve(diceBoxAssetsDirectory, ...relativePath.split('/'));
+        if (!filePath.startsWith(`${path.resolve(diceBoxAssetsDirectory)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        await serveDiceBoxFile(response, filePath);
+        return;
       }
       if (request.method === 'GET' && requestUrl.pathname === '/dice-overlay/events') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The 3D Dice overlay is available only on this computer.' });
         diceOverlay.connect(response);
         return;
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/result') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice results are accepted only from this computer.' });
+        const roll = diceOverlay.complete(await readJson(request));
+        return sendJson(response, 200, { roll });
       }
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
@@ -1154,9 +1203,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return sendJson(response, 200, { settings });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/roll') {
-        const roll = diceOverlay.roll(await readJson(request));
+        const roll = await diceOverlay.roll(await readJson(request));
         workflowEngine!.recordExternalEvent('studio.dice.rolled', 'success', `${roll.rollerName} rolled ${roll.expression}: ${roll.total}.`, { roll });
-        return sendJson(response, 202, { roll, ...diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) });
+        return sendJson(response, 200, { roll, ...diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/clear') {
         diceOverlay.clear();

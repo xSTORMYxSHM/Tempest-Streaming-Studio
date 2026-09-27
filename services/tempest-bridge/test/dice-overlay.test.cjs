@@ -1,51 +1,91 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const { mkdtemp, readFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { TempestDiceOverlay, parseStudioDiceExpression } = require('../dist/dice-overlay');
+const { TempestDiceOverlay, diceBoxPhysicalSides, parseStudioDiceExpression } = require('../dist/dice-overlay');
 
-test('parses bounded Studio dice notation without importing tabletop state', () => {
+function connectedClient(overlay) {
+  const response = new EventEmitter();
+  response.destroyed = false;
+  response.writableEnded = false;
+  response.chunks = [];
+  response.setHeader = () => {};
+  response.flushHeaders = () => {};
+  response.write = (chunk) => { response.chunks.push(String(chunk)); return true; };
+  response.end = () => { response.writableEnded = true; };
+  overlay.connect(response);
+  return response;
+}
+
+function latestEvent(response, name) {
+  const prefix = `event: ${name}\ndata: `;
+  const chunk = [...response.chunks].reverse().find((value) => value.startsWith(prefix));
+  assert.ok(chunk, `expected ${name} event`);
+  return JSON.parse(chunk.slice(prefix.length).trim());
+}
+
+test('parses bounded Studio dice notation and maps custom ranges to bundled Dice Box models', () => {
   assert.deepEqual(parseStudioDiceExpression(' 2D20 kh1 + 3 '), {
     expression: '2d20kh1+3', count: 2, sides: 20, keepMode: 'kh', keepCount: 1, modifier: 3
   });
-  assert.deepEqual(parseStudioDiceExpression('4d6kl2-1'), {
-    expression: '4d6kl2-1', count: 4, sides: 6, keepMode: 'kl', keepCount: 2, modifier: -1
+  assert.deepEqual(parseStudioDiceExpression('1d50'), {
+    expression: '1d50', count: 1, sides: 50, keepMode: undefined, keepCount: undefined, modifier: 0
   });
+  assert.equal(diceBoxPhysicalSides(6), 6);
+  assert.equal(diceBoxPhysicalSides(7), 8);
+  assert.equal(diceBoxPhysicalSides(50), 100);
   assert.throws(() => parseStudioDiceExpression('21d6'), /between 1 and 20/);
+  assert.throws(() => parseStudioDiceExpression('1d101'), /between 2 and 100/);
   assert.throws(() => parseStudioDiceExpression('1d20 + fire'), /dice notation/);
 });
 
-test('resolves one fixed result before the 3D Browser Source replays it', async () => {
+test('records the Dice Box physical result after the on-stream dice settle', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
+  const client = connectedClient(overlay);
 
-  const roll = overlay.roll({ expression: '2d20kh1+3', reason: 'Saving throw', rollerName: 'Storm' });
-  assert.equal(roll.dice.length, 2);
+  const rolling = overlay.roll({ expression: '2d20kh1+3', reason: 'Saving throw', rollerName: 'Storm' });
+  const request = latestEvent(client, 'roll-request');
+  assert.equal(request.physicalSides, 20);
+  overlay.complete({ id: request.id, token: request.token, values: [7, 18] });
+  const roll = await rolling;
+
+  assert.deepEqual(roll.dice.map((die) => die.value), [7, 18]);
   assert.equal(roll.dice.filter((die) => die.kept).length, 1);
-  assert.equal(roll.subtotal, Math.max(...roll.dice.map((die) => die.value)));
-  assert.equal(roll.total, roll.subtotal + 3);
-  assert.ok(roll.dice.every((die) => die.value >= 1 && die.value <= 20));
+  assert.equal(roll.subtotal, 18);
+  assert.equal(roll.total, 21);
   assert.equal(roll.reason, 'Saving throw');
   assert.equal(overlay.status('http://127.0.0.1/dice-overlay').latestRoll.id, roll.id);
+  assert.equal(latestEvent(client, 'roll-result').total, 21);
 
   const page = overlay.page();
+  const browserClient = overlay.client();
   assert.match(page, /Tempest Studio 3D Dice/);
-  assert.match(page, /new EventSource\('\.\/dice-overlay\/events'\)/);
-  assert.match(page, /TEMPEST STUDIO 3D DICE/);
-  assert.match(page, /URL\.createObjectURL\(impactWav\(\)\)/);
-  assert.match(page, /new Audio\(impactUrl\)/);
-  assert.doesNotMatch(page, /Math\.random/);
+  assert.match(page, /id="diceWorld"/);
+  assert.match(page, /\/dice-overlay\/client\.js/);
+  assert.match(browserClient, /import DiceBox from '\/dice-overlay\/vendor\/dice-box\.es\.min\.js'/);
+  assert.match(browserClient, /await diceBox\.roll/);
+  assert.match(browserClient, /diceBox\.reroll\(rejected/);
+  assert.match(browserClient, /hasOwnProperty\.call\(result, 'value'\)/);
+  assert.match(browserClient, /URL\.createObjectURL\(impactWav\(\)\)/);
+  assert.match(browserClient, /new Audio\(impactUrl\)/);
+  assert.doesNotMatch(browserClient, /Math\.random/);
   overlay.close();
 });
 
-test('persists presentation settings separately from roll history', async () => {
+test('persists presentation settings separately from physical roll history', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-settings-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
   await overlay.update({ theme: 'brass', durationMs: 7000, scalePercent: 115, soundEnabled: true });
-  overlay.roll({ expression: '1d6' });
+  const client = connectedClient(overlay);
+  const rolling = overlay.roll({ expression: '1d6' });
+  const request = latestEvent(client, 'roll-request');
+  overlay.complete({ id: request.id, token: request.token, values: [4] });
+  await rolling;
   overlay.close();
 
   const saved = JSON.parse(await readFile(path.join(directory, 'dice-overlay.json'), 'utf8'));
