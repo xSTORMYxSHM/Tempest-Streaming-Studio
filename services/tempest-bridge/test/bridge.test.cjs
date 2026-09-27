@@ -469,9 +469,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(overlayStatus.interaction.activeAlert.viewerName, 'A viewer');
   assert.equal(overlayStatus.interaction.activeAlert.durationMs, 1000);
   assert.equal(overlayStatus.interaction.activeAlert.maximumRuntimeMs, 1000);
-  assert.equal(overlayStatus.interaction.activeAlert.audioUrl, undefined);
-  assert.equal(overlayStatus.interaction.activeAlert.audioDurationMs, undefined);
-  assert.equal(overlayStatus.interaction.activeAlert.volume, undefined);
+  assert.equal(overlayStatus.interaction.activeAlert.audioUrl, '/visual-alerts/audio/sound-alert.hype-pulse');
+  assert.equal(overlayStatus.interaction.activeAlert.audioDurationMs, 1000);
+  assert.equal(overlayStatus.interaction.activeAlert.volume, 0.5);
   const visual = await fetch(`${runtime.baseUrl}/visual-alerts/media/${encodeURIComponent('sound-alert.hype-pulse')}`);
   assert.equal(visual.status, 200);
   assert.equal(visual.headers.get('content-type'), 'image/png');
@@ -505,11 +505,6 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   });
   assert.equal(separateAudioOverride.status, 200);
   assert.equal((await separateAudioOverride.json()).alert.broadcastAudioSource, 'Interaction Song');
-  const clearedSeparateAudioOverride = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
-    method: 'POST', headers, body: JSON.stringify({ broadcastAudioSource: null })
-  });
-  assert.equal(clearedSeparateAudioOverride.status, 200);
-  assert.equal((await clearedSeparateAudioOverride.json()).alert.broadcastAudioSource, undefined);
 
   const stopped = await fetch(`${runtime.baseUrl}/v1/safety/stop`, { method: 'POST', headers, body: '{}' });
   assert.equal(stopped.status, 200);
@@ -528,8 +523,6 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(preview.activeAlert.name, 'Hype Pulse');
   assert.equal(preview.activeAlert.viewerName, 'Visual Operator');
   assert.equal(preview.activeAlert.audioUrl, undefined);
-  assert.equal(playback.at(-1).phase, 'play');
-  assert.equal(playback.at(-1).runId, preview.activeAlert.runId);
   const clearedPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/clear`, { method: 'POST', headers, body: '{}' });
   assert.equal(clearedPreview.status, 200);
   assert.equal((await clearedPreview.json()).state, 'ready');
@@ -696,11 +689,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const twitchActiveAlert = twitchPreviewBody.activeAlert;
   const reactionCommand = await reactionCommandPromise;
   assert.equal(twitchActiveAlert.name, '100 Bits');
-  assert.equal(twitchActiveAlert.audioUrl, undefined);
-  assert.equal(playback.at(-1).phase, 'play');
-  assert.equal(playback.at(-1).runId, twitchActiveAlert.runId);
+  assert.equal(twitchActiveAlert.audioUrl, '/visual-alerts/audio/twitch.cheer');
   assert.equal(twitchActiveAlert.mediaUrl, '/visual-alerts/media/twitch.cheer');
-  assert.equal(twitchActiveAlert.volume, undefined);
+  assert.equal(twitchActiveAlert.volume, 0.35);
   assert.equal(twitchActiveAlert.design.entranceAnimation, 'glitch');
   assert.equal(twitchActiveAlert.design.customPositionX, 18);
   assert.equal(twitchActiveAlert.design.customPositionY, 24);
@@ -726,10 +717,10 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const variantActiveAlert = (await variantPreview.json()).activeAlert;
   assert.equal(variantActiveAlert.name, '1000 Bits');
   assert.equal(variantActiveAlert.mediaUrl, '/visual-alerts/media/twitch.cheer?variant=mega-cheer');
-  assert.equal(variantActiveAlert.audioUrl, undefined);
+  assert.equal(variantActiveAlert.audioUrl, '/visual-alerts/audio/twitch.cheer?variant=mega-cheer');
   assert.equal(variantActiveAlert.design.preset, 'cinematic');
   assert.equal((await fetch(`${runtime.baseUrl}${variantActiveAlert.mediaUrl}`)).status, 200);
-  assert.equal(playback.at(-1).runId, variantActiveAlert.runId);
+  assert.equal((await fetch(`${runtime.baseUrl}${variantActiveAlert.audioUrl}`)).status, 200);
   const splitOverlayStatus = await fetch(`${runtime.baseUrl}/v1/visual-alerts`, { headers }).then((response) => response.json());
   assert.equal(splitOverlayStatus.interaction.state, 'ready');
   assert.equal(splitOverlayStatus.twitch.state, 'showing');

@@ -620,7 +620,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   };
 
   const queueTwitchAlert = async (alert: TempestTwitchVisualAlertDefinition, event: TempestNormalizedTwitchEvent, source: string) => {
-    const studioPreviewOwnsAudio = source === 'studio.simulator' && Boolean(alert.audioUri && options.soundAlertPlayback);
     const accepted = await alertQueue!.enqueue({
       kind: 'twitch',
       alertId: alert.id,
@@ -633,22 +632,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         variantName: alert.selectedVariantName,
         audioAssigned: Boolean(alert.audioUri),
         visualAssigned: Boolean(alert.visualUri),
-        audioRoute: !alert.audioUri ? 'none' : studioPreviewOwnsAudio ? 'studio-local' : 'browser-source',
+        audioRoute: alert.audioUri ? 'browser-source' : 'none',
         browserClients: twitchAlertOverlay.status('').connectedClients,
         preview: source === 'studio.simulator'
       },
       execute: async () => {
         const reactionRun = await triggerTwitchAlertReaction(alert, event, source);
         const sceneName = activeBroadcastScene();
-        const activeAlert = twitchAlertOverlay.showTwitch(alert, event, event.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName, !studioPreviewOwnsAudio);
-        if (studioPreviewOwnsAudio) {
-          Promise.resolve(options.soundAlertPlayback!({ phase: 'play', runId: event.id, alert })).catch((error) => {
-            workflowEngine!.recordExternalEvent('twitch-alert.audio.failed', 'error', `Local preview audio failed for ${alert.name}: ${(error as Error).message}`, {
-              alertId: alert.id,
-              runId: event.id
-            });
-          });
-        }
+        const activeAlert = twitchAlertOverlay.showTwitch(alert, event, event.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         return { reactionRun, activeAlert };
       }
     });
@@ -709,7 +700,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
 
   const triggerSoundAlert = async (idOrCue: string, request: TempestSoundAlertTriggerRequest) => {
     const prepared = soundAlerts.prepare(idOrCue, request);
-    const studioPreviewOwnsAudio = request.source === 'studio.operator' && Boolean(prepared.alert.audioUri && !prepared.alert.broadcastAudioSource && options.soundAlertPlayback);
     if (!workflowEngine!.safetyState().armed) throw new Error('Viewer interactions are disarmed. Arm Studio before adding an Interaction Alert to the queue.');
     const accepted = await alertQueue!.enqueue({
       kind: 'interaction',
@@ -721,7 +711,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         viewerName: request.viewerName,
         audioAssigned: Boolean(prepared.alert.audioUri),
         visualAssigned: Boolean(prepared.alert.visualUri),
-        audioRoute: !prepared.alert.audioUri ? 'none' : prepared.alert.broadcastAudioSource ? 'broadcast-source' : studioPreviewOwnsAudio ? 'studio-local' : visualAlerts.status('').connectedClients ? 'browser-source' : options.soundAlertPlayback ? 'studio-local' : 'none',
+        audioRoute: !prepared.alert.audioUri ? 'none' : prepared.alert.broadcastAudioSource ? 'broadcast-source' : visualAlerts.status('').connectedClients ? 'browser-source' : options.soundAlertPlayback ? 'studio-local' : 'none',
         browserClients: visualAlerts.status('').connectedClients,
         preview: request.source === 'studio.operator'
       },
@@ -745,7 +735,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const placement = prepared.alert.placementMode === 'viewer' && request.placement
           ? { x: Math.max(0, Math.min(1, Number(request.placement.x))), y: Math.max(0, Math.min(1, Number(request.placement.y))) }
           : undefined;
-        const browserAlert = prepared.alert.broadcastAudioSource || studioPreviewOwnsAudio ? { ...prepared.alert, audioUri: undefined } : prepared.alert;
+        const browserAlert = prepared.alert.broadcastAudioSource ? { ...prepared.alert, audioUri: undefined } : prepared.alert;
         const activeVisualAlert = visualAlerts.show(browserAlert, request.viewerName, run.id, true, placement ? { ...sceneDesign, position: 'custom', customPositionX: placement.x * 100, customPositionY: placement.y * 100 } : sceneDesign, false, sceneName);
         workflowEngine!.recordExternalEvent('sound-alert.triggered', 'success', `${prepared.alert.name} started from the Alert Queue.`, {
           alertId: prepared.alert.id,
@@ -757,7 +747,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         broadcastSystemEvent('sound-alert.triggered', { alert: prepared.alert, eventId: prepared.eventId, run });
         const browserSourceOwnsAudio = Boolean(activeVisualAlert.audioUrl && visualAlerts.hasClients());
         const separateBroadcastSourceOwnsAudio = Boolean(prepared.alert.broadcastAudioSource);
-        if (options.soundAlertPlayback && (studioPreviewOwnsAudio || (!browserSourceOwnsAudio && !separateBroadcastSourceOwnsAudio))) {
+        if (options.soundAlertPlayback && !browserSourceOwnsAudio && !separateBroadcastSourceOwnsAudio) {
           Promise.resolve(options.soundAlertPlayback({ phase: 'play', runId: run.id, alert: prepared.alert })).catch((error) => {
             workflowEngine!.recordExternalEvent('sound-alert.audio.failed', 'error', `Local audio playback failed for ${prepared.alert.name}: ${(error as Error).message}`, {
               alertId: prepared.alert.id,
@@ -1368,12 +1358,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
                   : {}
         };
         const sceneName = activeBroadcastScene();
-        const studioPreviewOwnsAudio = Boolean(alert.audioUri && options.soundAlertPlayback);
-        const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent, previewEvent.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName, !studioPreviewOwnsAudio);
+        const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent, previewEvent.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         const reactionRun = await triggerTwitchAlertReaction(alert, previewEvent, 'studio.simulator');
-        if (studioPreviewOwnsAudio) await options.soundAlertPlayback!({ phase: 'play', runId: previewEvent.id, alert });
         const previewTime = new Date().toISOString();
-        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: !alert.audioUri ? 'none' : studioPreviewOwnsAudio ? 'studio-local' : 'browser-source', browserClients: twitchAlertOverlay.status('').connectedClients, preview: true } };
+        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri ? 'browser-source' : 'none', browserClients: twitchAlertOverlay.status('').connectedClients, preview: true } };
         alertHistory.started(previewItem);
         alertHistory.completed(previewItem);
         return sendJson(response, 202, { activeAlert, reactionRun, preview: true });
@@ -1391,10 +1379,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const viewerName = typeof body.viewerName === 'string' ? body.viewerName.slice(0, 80) : 'Studio Operator';
         const sceneName = activeBroadcastScene();
         const activeAlert = visualAlerts.show(alert, viewerName, globalThis.crypto.randomUUID(), false, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
-        const previewRunId = activeAlert.runId;
-        if (alert.audioUri && !alert.broadcastAudioSource && options.soundAlertPlayback) await options.soundAlertPlayback({ phase: 'play', runId: previewRunId, alert });
         const previewTime = new Date().toISOString();
-        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'interaction', alertId: alert.id, name: alert.name, source: 'studio.visual-preview', durationMs: alert.visualDurationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri && !alert.broadcastAudioSource && options.soundAlertPlayback ? 'studio-local' : 'none', browserClients: visualAlerts.status('').connectedClients, preview: true } };
+        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'interaction', alertId: alert.id, name: alert.name, source: 'studio.visual-preview', durationMs: alert.visualDurationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: 'none', browserClients: visualAlerts.status('').connectedClients, preview: true } };
         alertHistory.started(previewItem);
         alertHistory.completed(previewItem);
         return sendJson(response, 202, { activeAlert, preview: true });

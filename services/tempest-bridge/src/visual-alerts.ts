@@ -146,7 +146,7 @@ export class TempestVisualAlertOverlay {
     });
   }
 
-  showTwitch(alert: TempestTwitchVisualAlertDefinition, event: TempestNormalizedTwitchEvent, runId = event.id, design: TempestTwitchAlertDesign = alert.design, positioning = false, sceneName?: string, includeAudio = true): TempestVisualAlertEvent {
+  showTwitch(alert: TempestTwitchVisualAlertDefinition, event: TempestNormalizedTwitchEvent, runId = event.id, design: TempestTwitchAlertDesign = alert.design, positioning = false, sceneName?: string): TempestVisualAlertEvent {
     const viewerName = event.topic === 'viewer.raid.received'
       ? String(event.payload.fromBroadcasterName || 'A raider')
       : event.viewer?.displayName || event.viewer?.login || 'A viewer';
@@ -186,7 +186,7 @@ export class TempestVisualAlertOverlay {
         topic: event.topic
       },
       ...(alert.visualUri ? { mediaUrl: `/visual-alerts/media/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, mediaKind: mediaKind(alert.visualUri) } : {}),
-      ...(!positioning && includeAudio && alert.audioUri ? { audioUrl: `/visual-alerts/audio/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, audioDurationMs: alert.durationMs, volume: alert.volume } : {}),
+      ...(!positioning && alert.audioUri ? { audioUrl: `/visual-alerts/audio/${encodeURIComponent(alert.id)}${alert.selectedVariantId ? `?variant=${encodeURIComponent(alert.selectedVariantId)}` : ''}`, audioDurationMs: alert.durationMs, volume: alert.volume } : {}),
       ...(positioning ? { positioning: true } : {}),
       ...(sceneName ? { sceneName } : {}),
       startedAt: new Date().toISOString()

@@ -297,18 +297,10 @@ export interface TempestSoundAlertTriggerRequest {
   bypassCooldown?: boolean;
 }
 
-export interface TempestAlertAudioPlayback {
-  id: string;
-  name: string;
-  durationMs: number;
-  volume: number;
-  audioUri?: string;
-}
-
 export interface TempestSoundAlertPlaybackCommand {
   phase: 'play' | 'stop-all';
   runId?: string;
-  alert?: TempestAlertAudioPlayback;
+  alert?: TempestSoundAlertDefinition;
 }
 
 export interface TempestTwitchVisualAlertDefinition {
