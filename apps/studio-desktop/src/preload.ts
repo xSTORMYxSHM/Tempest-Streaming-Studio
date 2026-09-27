@@ -84,6 +84,14 @@ contextBridge.exposeInMainWorld('tempestStudio', {
     return () => ipcRenderer.removeListener('studio:sound-alert-playback', handler);
   },
   openExternal: (targetUrl: string) => ipcRenderer.invoke('studio:open-external', targetUrl),
+  getStreamTogetherStatus: () => ipcRenderer.invoke('studio:get-stream-together-status'),
+  openStreamTogether: (login: string) => ipcRenderer.invoke('studio:open-stream-together', { login }),
+  closeStreamTogether: () => ipcRenderer.invoke('studio:close-stream-together'),
+  onStreamTogetherStatus: (listener: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => listener(status);
+    ipcRenderer.on('studio:stream-together-status', handler);
+    return () => ipcRenderer.removeListener('studio:stream-together-status', handler);
+  },
   openIsolatedTwitchAuthorization: (targetUrl: string) => ipcRenderer.invoke('studio:open-isolated-twitch-authorization', targetUrl),
   closeIsolatedTwitchAuthorization: () => ipcRenderer.invoke('studio:close-isolated-twitch-authorization'),
   platform: process.platform

@@ -4,7 +4,7 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 ## Scope freeze
 
-- [x] Limit Studio scope to the known Browser Source fixes, Emote Wall recovery, Dice Box completion and styles, numeric chat polls, reusable GIPHY alert assignment, on-air workspace cleanup, chatbot quality-of-life work, and release validation.
+- [x] Limit Studio scope to the known Browser Source fixes, Emote Wall recovery, Dice Box completion and styles, numeric chat polls, reusable GIPHY alert assignment, the dedicated Stream Together call window, on-air workspace cleanup, chatbot quality-of-life work, and release validation.
 - [x] Keep video canvases, encoders, Enhanced Broadcasting, platform output services, recording, and final audio routing owned by Broadcast.
 - [x] Keep accounts, stream information, chat/chatbot behavior, alerts, interactions, counters, Dice Box, operator readiness, and orchestration owned by Studio.
 - [x] Keep both Twitch Extension packages on their independent `0.1.0` version line; 1.5.0 does not itself authorize a Twitch-hosted extension deployment.
@@ -14,12 +14,12 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 ## Automated Studio gates
 
 - [x] `pnpm install --frozen-lockfile`
-- [x] `pnpm check` (104 tests, 0 failures)
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for packaged resources.
-- [x] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
+- [x] `pnpm check` (107 tests, 0 failures)
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for packaged resources.
+- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
 
@@ -38,6 +38,7 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
 - [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
 - [ ] Twitch and Kick messages share Studio's Collaboration Center while replies remain platform-local.
+- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Shared Chat and polls remain connected independently.
 - [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
 - [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
 - [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.

@@ -5,6 +5,7 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 ## Network requests
 
 - Twitch OAuth, EventSub, Helix, chat, and Extension relay traffic occurs only after Twitch is configured and connected.
+- Opening Stream Together loads Twitch Backstage directly from `twitch.tv` in a dedicated Studio browser session. Camera and microphone permission is granted only to secure Twitch origins; screen sharing always requires a source selection. Twitch receives the selected live media under its own privacy terms.
 - GIPHY requests occur only after an API key is saved with Windows encryption and the user performs a search. Selected results are downloaded into local Studio media storage.
 - National Weather Service requests occur only when a U.S. weather location is configured and a command using Local Weather is invoked.
 - AzuraCast requests occur only when a Now Playing provider is configured and its status or command is used.
@@ -27,6 +28,8 @@ The optional, separately installed Tempest Bits Extension uses Twitch's Bits pro
 
 Broadcaster OAuth tokens, chatbot OAuth tokens, the Kick client secret and OAuth tokens, local Twitch Extension secrets, hosted Extension relay credentials, and the GIPHY API key are encrypted using the operating system's protected storage. The separate Bits Extension shared secret is configured only on the hosted EBS and is never included in the browser package or Studio. The separate Kick stream key used for video simulcast is sent once over the authenticated loopback Bridge and encrypted by Tempest Broadcast with Windows Data Protection; Studio does not store it or receive it back in status. Credentials are excluded from Studio backups, Alert Packs, and diagnostics exports. The hosted service stores only the relay credential's SHA-256 hash and validates—but does not retain—the Kick access token used while linking an account.
 
+Stream Together uses a separate persistent Electron browser partition so its Twitch sign-in survives closing the call window without sharing cookies with Studio's control renderer or the temporary Chatbot authorization window. Those Twitch-managed cookies and site storage remain in the local Studio profile and are not included in Studio backups or diagnostics.
+
 ## Discord guest library
 
 Discord Guests stores detected participant User IDs, usernames, display names, Discord avatar URLs, last-seen channel/server labels and timestamps, and streamer-assigned design settings in the local Studio data directory. This allows guest images to be prepared and edited while that person is offline. The library is included in Studio backups and is never uploaded by Studio. **Forget User** removes one saved entry; the person will be remembered again if Discord later reports them in the selected voice channel. Discord messages are never read or stored, and offline saved guests are never rendered in the live Browser Source.
@@ -43,6 +46,6 @@ Privacy Shield is enabled by default. Its in-app masking layer replaces streamer
 
 Third-party Emote Wall providers are disabled by default. Enabling 7TV, BetterTTV, or FrankerFaceZ authorizes Studio to send the broadcaster's public numeric Twitch channel ID to that provider to resolve channel emotes. Studio validates provider hosts and proxies approved image bytes through its loopback-only Bridge; the Broadcast browser source does not connect directly to those provider CDNs.
 
-On Windows, Studio also requests operating-system capture protection for the main Studio window and isolated Twitch sign-in windows. Capture exclusion depends on the capture method and Windows compositor support, so it is not a substitute for the masking layer. A full-display capture may still include the Studio window, but sensitive fields remain masked while Privacy Shield is active.
+On Windows, Studio also requests operating-system capture protection for the main Studio window, the Stream Together call window, and isolated Twitch sign-in windows. Capture exclusion depends on the capture method and Windows compositor support, so it is not a substitute for the masking layer. A full-display capture may still include a Studio window, but sensitive fields remain masked while Privacy Shield is active.
 
 AutoMod allowlists and blocked-term lists are local configuration and are masked in Studio while Privacy Shield is active. They are included in Studio backups but excluded from redacted diagnostics.

@@ -1,5 +1,13 @@
 # Twitch Interaction Integration
 
+## 1.5.0 Stream Together call surface
+
+Studio opens Twitch Stream Together Backstage in a dedicated call window instead of treating the feature as part of the Shared Chat console. The window uses the bundled Chromium runtime with a Chrome-compatible Windows user agent, a persistent isolated Twitch partition, background throttling disabled for call continuity, and no Node.js integration or Studio preload.
+
+Top-level navigation is restricted to secure Twitch domains. Camera, microphone, speaker selection, fullscreen, and sanitized clipboard-write requests are accepted only from Twitch frames in that call window. Screen sharing uses the operating-system picker when available and otherwise presents a bounded Studio source picker; no screen or window is selected automatically. Downloads and non-Twitch popups are blocked, and Windows capture protection follows the Studio Privacy Shield setting.
+
+The call session and Shared Chat are deliberately independent. Closing the call does not disconnect EventSub, Twitch/Kick chat, the Chatbot, or active polls. The persistent partition remembers only Twitch-managed web sign-in state and never receives Studio OAuth tokens.
+
 ## 0.21.0 Public Extension installations
 
 The hosted EBS supports public multi-channel installations backed by PostgreSQL. A streamer authorizes Twitch in Studio and pairs the Railway HTTPS domain from Twitch Gateway. The EBS validates that OAuth token with Twitch, derives the broadcaster channel, issues a unique relay credential, stores only its SHA-256 hash, and never retains the OAuth token. Studio encrypts the issued credential with Windows credential protection and reconnects outbound over WSS.

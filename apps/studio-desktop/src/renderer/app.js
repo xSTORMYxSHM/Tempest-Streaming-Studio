@@ -62,6 +62,7 @@
     vtubeStudio: null,
     appInfo: null,
     update: null,
+    streamTogether: null,
     privacy: { streamerMode: true, captureProtection: true },
     twitchDeviceAuthorization: null,
     chatbotDeviceAuthorization: null
@@ -1447,6 +1448,43 @@
     directory.innerHTML = topics.length ? topics.map((topic) => `<code>${escapeHtml(topic)}</code>`).join('') : 'No topics advertised.';
     renderHostedExtension();
     renderLocalExtension();
+    renderStreamTogether();
+  }
+
+  function renderStreamTogether() {
+    const status = state.streamTogether || { open: false };
+    const login = state.twitch?.oauth?.account?.login;
+    const authorized = state.twitch?.oauth?.state === 'authorized' && Boolean(login);
+    $('#streamTogetherCallBadge').textContent = status.open ? 'CALL WINDOW OPEN' : 'CLOSED';
+    $('#streamTogetherCallBadge').classList.toggle('offline', !status.open);
+    $('#streamTogetherCallTitle').textContent = status.open
+      ? `Stream Together is open for @${status.login || login}`
+      : authorized ? `Ready to open for @${login}` : 'Connect the broadcaster Twitch account';
+    $('#streamTogetherCallDetail').textContent = status.open
+      ? 'The dedicated call window remains active in Studio with Twitch-only camera and microphone access. Shared Chat continues independently below.'
+      : authorized
+        ? 'Open Twitch Backstage in Studio. The separate call session remembers its Twitch sign-in without exposing those cookies to the Studio control interface.'
+        : 'Connect the broadcaster account in Twitch Setup first. Stream Together uses a separate persistent Twitch web session for the call itself.';
+    $('#openStreamTogetherCall').disabled = !authorized;
+    $('#closeStreamTogetherCall').disabled = !status.open;
+  }
+
+  async function openStreamTogetherCall() {
+    const login = state.twitch?.oauth?.account?.login;
+    if (!login) return toast('Connect the broadcaster Twitch account before opening Stream Together.', true);
+    try {
+      state.streamTogether = await window.tempestStudio.openStreamTogether(login);
+      renderStreamTogether();
+      toast('Stream Together opened in its dedicated Studio call window.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function closeStreamTogetherCall() {
+    try {
+      state.streamTogether = await window.tempestStudio.closeStreamTogether();
+      renderStreamTogether();
+      toast('Stream Together call window closed.');
+    } catch (error) { toast(error.message, true); }
   }
 
   function renderChatbot() {
@@ -1457,6 +1495,7 @@
     const connected = chatbot.connections?.eventSub === 'connected' && chatbot.connections?.chat === 'connected';
     const kickConnected = state.kick?.oauth?.state === 'authorized' && state.kick?.events?.state === 'connected';
     const account = chatbot.oauth?.account;
+    renderStreamTogether();
     const botName = chatbot.botName || account?.login || 'Chat Bot';
     $('#chatbotOverallBadge').textContent = connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : kickConnected ? 'KICK LIVE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
     $('#chatbotOverallBadge').classList.toggle('offline', !connected && !kickConnected);
@@ -4792,6 +4831,10 @@
     $('#connectTwitchButton').addEventListener('click', connectTwitch);
     $('#validateTwitchButton').addEventListener('click', validateTwitch);
     $('#disconnectTwitchButton').addEventListener('click', disconnectTwitch);
+    $('#openHomeStreamTogether').addEventListener('click', openStreamTogetherCall);
+    $('#openTwitchStreamTogether').addEventListener('click', openStreamTogetherCall);
+    $('#openStreamTogetherCall').addEventListener('click', openStreamTogetherCall);
+    $('#closeStreamTogetherCall').addEventListener('click', closeStreamTogetherCall);
     $('#connectChatbotButton').addEventListener('click', connectChatbot);
     $('#saveChatbotIdentity').addEventListener('click', () => { void saveChatbotIdentity(); });
     $('#validateChatbotButton').addEventListener('click', validateChatbot);
@@ -4908,7 +4951,8 @@
     restoreSimulcastOperations();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
     window.tempestStudio.onUpdateStatus((update) => { state.update = update; renderUpdateStatus(); });
-    [state.config, state.panelDesign, state.appInfo, state.privacy, state.update] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus()]);
+    window.tempestStudio.onStreamTogetherStatus((status) => { state.streamTogether = status; renderStreamTogether(); });
+    [state.config, state.panelDesign, state.appInfo, state.privacy, state.update, state.streamTogether] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus(), window.tempestStudio.getStreamTogetherStatus()]);
     renderPrivacySettings();
     populatePanelDesign(state.panelDesign);
     $('#panelDesignStateBadge').textContent = 'SAVED LOCALLY';

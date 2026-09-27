@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
 import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
-import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, net, protocol, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
 import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet, KickCredentialStore, KickCredentialSet, validateTwitchAlertDesign } from '@tempest/bridge';
 import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
 import {
@@ -40,6 +40,7 @@ import {
   validateTwitchExtensionEdition
 } from './hosted-extension';
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
+import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -64,6 +65,8 @@ let broadcasterCredentialStore: TwitchCredentialStore | null = null;
 let discordRpc: TempestDiscordRpcClient | null = null;
 let kickCredentialStore: KickCredentialStore | null = null;
 let mainWindow: BrowserWindow | null = null;
+let streamTogetherWindow: BrowserWindow | null = null;
+let streamTogetherLogin: string | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
 
@@ -236,6 +239,9 @@ async function savePrivacySettings(value: unknown): Promise<StudioPrivacySetting
   await writeFile(privacySettingsPath(), `${JSON.stringify(privacySettings, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   if (mainWindow && !mainWindow.isDestroyed() && !captureArgument) {
     mainWindow.setContentProtection(privacySettings.captureProtection);
+  }
+  if (streamTogetherWindow && !streamTogetherWindow.isDestroyed()) {
+    streamTogetherWindow.setContentProtection(privacySettings.captureProtection);
   }
   return { ...privacySettings };
 }
@@ -662,6 +668,144 @@ function closeIsolatedTwitchAuthorization(): number {
     if (!window.isDestroyed()) window.close();
   }
   return windows.length;
+}
+
+interface StreamTogetherStatus {
+  open: boolean;
+  login?: string;
+  url?: string;
+  browser: string;
+  mediaPermissions: 'twitch-only';
+  session: 'persistent-isolated';
+}
+
+function getStreamTogetherStatus(): StreamTogetherStatus {
+  return {
+    open: Boolean(streamTogetherWindow && !streamTogetherWindow.isDestroyed()),
+    ...(streamTogetherLogin ? { login: streamTogetherLogin, url: streamTogetherUrl(streamTogetherLogin) } : {}),
+    browser: `Chromium ${process.versions.chrome}`,
+    mediaPermissions: 'twitch-only',
+    session: 'persistent-isolated'
+  };
+}
+
+function publishStreamTogetherStatus(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('studio:stream-together-status', getStreamTogetherStatus());
+  }
+}
+
+async function openStreamTogether(value: unknown): Promise<StreamTogetherStatus> {
+  const input = value && typeof value === 'object' ? value as { login?: unknown } : {};
+  const login = normalizeTwitchLogin(input.login);
+  const targetUrl = streamTogetherUrl(login);
+  if (streamTogetherWindow && !streamTogetherWindow.isDestroyed()) {
+    streamTogetherLogin = login;
+    const current = streamTogetherWindow.webContents.getURL();
+    if (!isTwitchWebUrl(current) || !current.includes(`/popout/${login}/guest-star`)) {
+      await streamTogetherWindow.loadURL(targetUrl, { userAgent: chromeCompatibleUserAgent(process.versions.chrome) });
+    }
+    if (streamTogetherWindow.isMinimized()) streamTogetherWindow.restore();
+    streamTogetherWindow.show();
+    streamTogetherWindow.focus();
+    publishStreamTogetherStatus();
+    return getStreamTogetherStatus();
+  }
+
+  const callWindow = new BrowserWindow({
+    width: 1180,
+    height: 820,
+    minWidth: 860,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'Twitch Stream Together · Tempest Studio',
+    backgroundColor: '#0e0e10',
+    icon: path.join(__dirname, 'renderer', 'assets', 'app-icon.png'),
+    webPreferences: {
+      partition: 'persist:tempest-stream-together',
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      spellcheck: false,
+      backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required'
+    }
+  });
+  streamTogetherWindow = callWindow;
+  streamTogetherLogin = login;
+  callWindow.setContentProtection(privacySettings.captureProtection);
+  callWindow.removeMenu();
+  callWindow.webContents.setUserAgent(chromeCompatibleUserAgent(process.versions.chrome));
+  const callSession = callWindow.webContents.session;
+  const isTrustedRequester = (webContents: Electron.WebContents | null, origin: string): boolean => (
+    Boolean(webContents && webContents === callWindow.webContents && isTwitchWebUrl(origin))
+  );
+  callSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => (
+    ['media', 'fullscreen', 'clipboard-sanitized-write'].includes(permission)
+      && isTrustedRequester(webContents, requestingOrigin)
+  ));
+  callSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const requestingUrl = details.requestingUrl || webContents.getURL();
+    callback(['media', 'display-capture', 'speaker-selection', 'fullscreen', 'clipboard-sanitized-write'].includes(permission)
+      && isTrustedRequester(webContents, requestingUrl));
+  });
+  callSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const requestFrame = request.frame;
+    const trustedFrame = Boolean(requestFrame && (requestFrame === callWindow.webContents.mainFrame || requestFrame.top === callWindow.webContents.mainFrame));
+    if (!trustedFrame || !isTwitchWebUrl(request.securityOrigin)) return callback({});
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false });
+      const choices = sources.slice(0, 14);
+      if (!choices.length || callWindow.isDestroyed()) return callback({});
+      const cancelId = choices.length;
+      const selection = await dialog.showMessageBox(callWindow, {
+        type: 'question',
+        title: 'Share with Stream Together',
+        message: 'Choose the screen or window Twitch may share.',
+        detail: 'Studio sends only your selected source to Twitch for this screen-share session.',
+        buttons: [...choices.map((source) => source.name), 'Cancel'],
+        cancelId,
+        defaultId: 0,
+        noLink: true
+      });
+      callback(selection.response >= 0 && selection.response < choices.length ? { video: choices[selection.response] } : {});
+    } catch {
+      callback({});
+    }
+  }, { useSystemPicker: true });
+  callSession.on('will-download', (event) => event.preventDefault());
+  const guardNavigation = (event: Electron.Event, navigationUrl: string) => {
+    if (!isTwitchWebUrl(navigationUrl)) event.preventDefault();
+  };
+  callWindow.webContents.on('will-navigate', guardNavigation);
+  callWindow.webContents.on('will-redirect', guardNavigation);
+  callWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isTwitchWebUrl(url) && !callWindow.isDestroyed()) void callWindow.loadURL(url, { userAgent: chromeCompatibleUserAgent(process.versions.chrome) });
+    return { action: 'deny' };
+  });
+  callWindow.once('ready-to-show', () => {
+    callWindow.show();
+    callWindow.focus();
+  });
+  callWindow.on('closed', () => {
+    if (streamTogetherWindow === callWindow) streamTogetherWindow = null;
+    publishStreamTogetherStatus();
+  });
+  try {
+    await callWindow.loadURL(targetUrl, { userAgent: chromeCompatibleUserAgent(process.versions.chrome) });
+    publishStreamTogetherStatus();
+    return getStreamTogetherStatus();
+  } catch (error) {
+    if (!callWindow.isDestroyed()) callWindow.destroy();
+    throw new Error(`Could not open Twitch Stream Together: ${(error as Error).message}`);
+  }
+}
+
+function closeStreamTogether(): StreamTogetherStatus {
+  if (streamTogetherWindow && !streamTogetherWindow.isDestroyed()) streamTogetherWindow.close();
+  return getStreamTogetherStatus();
 }
 
 function registerDesktopHandlers(): void {
@@ -1322,6 +1466,9 @@ function registerDesktopHandlers(): void {
     return true;
   });
 
+  handleDesktop('studio:get-stream-together-status', () => getStreamTogetherStatus());
+  handleDesktop('studio:open-stream-together', (_event, input: unknown) => openStreamTogether(input));
+  handleDesktop('studio:close-stream-together', () => closeStreamTogether());
   handleDesktop('studio:open-isolated-twitch-authorization', (_event, targetUrl: unknown) => openIsolatedTwitchAuthorization(targetUrl));
   handleDesktop('studio:close-isolated-twitch-authorization', () => closeIsolatedTwitchAuthorization());
 }
