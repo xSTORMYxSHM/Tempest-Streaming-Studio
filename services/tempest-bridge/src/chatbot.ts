@@ -124,8 +124,16 @@ export interface ChatbotAutoModConfiguration {
   noticeMessage: string;
 }
 
+export interface ChatbotAutoMessageConfiguration {
+  enabled: boolean;
+  messages: string[];
+  intervalMinutes: number;
+  chatMessageThreshold: number;
+  platforms: Array<'twitch' | 'kick'>;
+}
+
 interface ChatbotConfiguration {
-  schemaVersion: 6;
+  schemaVersion: 7;
   displayName: string;
   prefix: string;
   commands: ChatbotCommand[];
@@ -134,6 +142,7 @@ interface ChatbotConfiguration {
   interactionAccess: ChatbotInteractionAccessConfiguration;
   assignedCreatorIds: Record<string, string>;
   autoMod: ChatbotAutoModConfiguration;
+  autoMessages: ChatbotAutoMessageConfiguration;
   weatherProvider?: ChatbotWeatherProvider;
   nowPlayingProvider?: ChatbotNowPlayingProvider;
   updatedAt: string;
@@ -202,6 +211,13 @@ export interface ChatbotStatus {
     timeoutAuthorized: boolean;
     moderatorRequired: true;
     actionsTaken: number;
+  };
+  autoMessages: ChatbotAutoMessageConfiguration & {
+    messagesSinceLast: number;
+    sent: number;
+    nextMessageIndex: number;
+    nextTimeAt?: string;
+    lastSentAt?: string;
   };
   providers: {
     weather?: ChatbotWeatherProvider;
@@ -318,6 +334,32 @@ function validateAutoMod(value: unknown, fallback: ChatbotAutoModConfiguration =
   };
 }
 
+function validateAutoMessages(value: unknown, fallback: ChatbotAutoMessageConfiguration = {
+  enabled: false,
+  messages: [],
+  intervalMinutes: 20,
+  chatMessageThreshold: 30,
+  platforms: ['twitch']
+}): ChatbotAutoMessageConfiguration {
+  if (value === undefined) return { ...fallback, messages: [...fallback.messages], platforms: [...fallback.platforms] };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Auto Message settings are invalid.');
+  const source = value as { enabled?: unknown; messages?: unknown; intervalMinutes?: unknown; chatMessageThreshold?: unknown; platforms?: unknown };
+  const rawMessages = Array.isArray(source.messages) ? source.messages : typeof source.messages === 'string' ? source.messages.split(/\r?\n/) : fallback.messages;
+  const messages = rawMessages.map((entry) => String(entry || '').trim()).filter(Boolean);
+  if (messages.length > 20) throw new Error('Auto Messages supports up to 20 rotating messages.');
+  if (messages.some((message) => [...message].length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(message))) throw new Error('Each Auto Message must contain no more than 500 safe characters.');
+  const intervalMinutes = Number(source.intervalMinutes ?? fallback.intervalMinutes);
+  const chatMessageThreshold = Number(source.chatMessageThreshold ?? fallback.chatMessageThreshold);
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 0 || intervalMinutes > 240) throw new Error('Auto Message interval must be between 0 and 240 minutes.');
+  if (!Number.isInteger(chatMessageThreshold) || chatMessageThreshold < 0 || chatMessageThreshold > 1000) throw new Error('Auto Message chat threshold must be between 0 and 1,000 messages.');
+  const platforms = [...new Set((Array.isArray(source.platforms) ? source.platforms : fallback.platforms).filter((platform): platform is 'twitch' | 'kick' => platform === 'twitch' || platform === 'kick'))];
+  const enabled = typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled;
+  if (enabled && !messages.length) throw new Error('Add at least one message before enabling Auto Messages.');
+  if (enabled && !platforms.length) throw new Error('Select Twitch, Kick, or both before enabling Auto Messages.');
+  if (enabled && intervalMinutes === 0 && chatMessageThreshold === 0) throw new Error('Enable a time interval, a chat-message threshold, or both.');
+  return { enabled, messages, intervalMinutes, chatMessageThreshold, platforms };
+}
+
 function validateRaidAutomation(value: unknown, fallback: ChatbotRaidAutomationConfiguration = { welcomeEnabled: true, welcomeMessage: defaultRaidWelcomeMessage, shoutoutEnabled: true }): ChatbotRaidAutomationConfiguration {
   if (value === undefined) return { ...fallback };
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Raid automation settings are invalid.');
@@ -358,7 +400,7 @@ function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionA
 function defaultConfiguration(): ChatbotConfiguration {
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     displayName: '',
     prefix: '!',
     raidAutomation: validateRaidAutomation(undefined),
@@ -366,6 +408,7 @@ function defaultConfiguration(): ChatbotConfiguration {
     interactionAccess: validateInteractionAccess(undefined),
     assignedCreatorIds: {},
     autoMod: validateAutoMod(undefined),
+    autoMessages: validateAutoMessages(undefined),
     commands: [{
       id: 'studio',
       name: 'studio',
@@ -620,6 +663,15 @@ export class TwitchChatbot {
   private firstChatShoutoutSessions = new Map<string, string>();
   private firstChatShoutoutAttempts = new Set<string>();
   private autoModActionsTaken = 0;
+  private autoMessageTimer?: NodeJS.Timeout;
+  private autoMessageSending = false;
+  private autoMessageWindowStartedAt = Date.now();
+  private autoMessageLastAttemptAt = 0;
+  private autoMessageMessagesSinceLast = 0;
+  private autoMessageSent = 0;
+  private autoMessageIndex = 0;
+  private autoMessageLastSentAt?: string;
+  private autoMessageActivePlatforms = new Set<'twitch' | 'kick'>();
   private channelInfoCache?: { fetchedAt: number; title: string; gameName: string };
   private streamCache?: { fetchedAt: number; startedAt?: string; viewerCount?: number };
   private scheduleCache?: { fetchedAt: number; title?: string; startTime?: string };
@@ -662,7 +714,7 @@ export class TwitchChatbot {
           installedDefaults = true;
         }
       }
-      const legacyConfiguration = parsed.schemaVersion !== 6;
+      const legacyConfiguration = parsed.schemaVersion !== 7;
       const legacyProviderConfiguration = !parsed.schemaVersion || parsed.schemaVersion < 2;
       const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
       let nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? defaultStormHorizonProvider : undefined));
@@ -678,7 +730,8 @@ export class TwitchChatbot {
         .filter(([login, userId]) => firstChatShoutouts.channels.includes(login) && /^\d{1,30}$/.test(String(userId)))
         .map(([login, userId]) => [login, String(userId)]));
       const autoMod = validateAutoMod(parsed.autoMod);
-      this.configuration = { schemaVersion: 6, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      const autoMessages = validateAutoMessages(parsed.autoMessages);
+      this.configuration = { schemaVersion: 7, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, autoMessages, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
       if (installedDefaults || legacyConfiguration || migratedStormHorizonPlayer) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
@@ -695,6 +748,7 @@ export class TwitchChatbot {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read First Chat Shoutout state: ${(error as Error).message}`);
     }
     await this.setClientId(clientId);
+    this.scheduleAutoMessages();
   }
 
   async setClientId(clientId: string): Promise<void> {
@@ -771,6 +825,18 @@ export class TwitchChatbot {
         moderatorRequired: true,
         actionsTaken: this.autoModActionsTaken
       },
+      autoMessages: {
+        ...this.configuration.autoMessages,
+        messages: [...this.configuration.autoMessages.messages],
+        platforms: [...this.configuration.autoMessages.platforms],
+        messagesSinceLast: this.autoMessageMessagesSinceLast,
+        sent: this.autoMessageSent,
+        nextMessageIndex: this.autoMessageIndex,
+        nextTimeAt: this.configuration.autoMessages.intervalMinutes > 0
+          ? new Date(this.autoMessageWindowStartedAt + this.configuration.autoMessages.intervalMinutes * 60_000).toISOString()
+          : undefined,
+        lastSentAt: this.autoMessageLastSentAt
+      },
       providers: {
         weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
         nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
@@ -781,7 +847,7 @@ export class TwitchChatbot {
 
   async configure(input: unknown): Promise<ChatbotStatus> {
     if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
-    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; autoMod?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
+    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; autoMod?: unknown; autoMessages?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
     const prefix = String(source.prefix ?? this.configuration.prefix);
     if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
     const nextFirstChatShoutouts = Object.prototype.hasOwnProperty.call(source, 'firstChatShoutouts')
@@ -812,6 +878,11 @@ export class TwitchChatbot {
     }
     if (Object.prototype.hasOwnProperty.call(source, 'autoMod')) {
       this.configuration.autoMod = validateAutoMod(source.autoMod, this.configuration.autoMod);
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'autoMessages')) {
+      this.configuration.autoMessages = validateAutoMessages(source.autoMessages, this.configuration.autoMessages);
+      this.resetAutoMessageWindow();
+      this.scheduleAutoMessages();
     }
     if (Object.prototype.hasOwnProperty.call(source, 'weatherProvider')) {
       this.configuration.weatherProvider = validateWeatherProvider(source.weatherProvider);
@@ -1048,6 +1119,11 @@ export class TwitchChatbot {
       this.messages = this.messages.slice(-100);
     }
     if (event.payload.botMessage === true || (event.source === 'twitch' && event.viewer?.id && event.viewer.id === this.identity?.userId)) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
+    if (!simulated) {
+      this.autoMessageMessagesSinceLast += 1;
+      this.autoMessageActivePlatforms.add(event.source === 'kick' ? 'kick' : 'twitch');
+      await this.maybeSendAutoMessage();
+    }
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
     const [rawName, ...args] = text.slice(this.configuration.prefix.length).trim().split(/\s+/);
@@ -1269,6 +1345,8 @@ export class TwitchChatbot {
 
   async close(): Promise<void> {
     this.clearRaidShoutoutQueue();
+    clearTimeout(this.autoMessageTimer);
+    this.autoMessageTimer = undefined;
     await this.stopConnection();
   }
 
@@ -1368,6 +1446,74 @@ export class TwitchChatbot {
   private record(input: Omit<ChatbotActivity, 'id' | 'timestamp'>): void {
     this.activity.unshift({ id: randomUUID(), timestamp: new Date().toISOString(), ...input });
     this.activity = this.activity.slice(0, 100);
+  }
+
+  private resetAutoMessageWindow(): void {
+    this.autoMessageWindowStartedAt = Date.now();
+    this.autoMessageLastAttemptAt = 0;
+    this.autoMessageMessagesSinceLast = 0;
+    this.autoMessageActivePlatforms.clear();
+  }
+
+  private scheduleAutoMessages(): void {
+    clearTimeout(this.autoMessageTimer);
+    this.autoMessageTimer = undefined;
+    if (!this.configuration.autoMessages.enabled) return;
+    this.autoMessageTimer = setTimeout(() => {
+      this.autoMessageTimer = undefined;
+      void this.maybeSendAutoMessage().finally(() => this.scheduleAutoMessages());
+    }, 15_000);
+    this.autoMessageTimer.unref?.();
+  }
+
+  private async maybeSendAutoMessage(): Promise<void> {
+    const settings = this.configuration.autoMessages;
+    if (this.autoMessageSending || !settings.enabled || !settings.messages.length || !this.autoMessageMessagesSinceLast) return;
+    const now = Date.now();
+    const dueByTime = settings.intervalMinutes > 0 && now >= this.autoMessageWindowStartedAt + settings.intervalMinutes * 60_000;
+    const dueByChat = settings.chatMessageThreshold > 0 && this.autoMessageMessagesSinceLast >= settings.chatMessageThreshold;
+    if ((!dueByTime && !dueByChat) || now - this.autoMessageLastAttemptAt < 15_000) return;
+    if (!this.lastMessageAt || now - Date.parse(this.lastMessageAt) > 10 * 60_000) return;
+    this.autoMessageLastAttemptAt = now;
+    this.autoMessageSending = true;
+    try {
+      const template = settings.messages[this.autoMessageIndex % settings.messages.length];
+      const message = template
+        .replaceAll('{channel}', this.channel?.channelLogin || 'the channel')
+        .replaceAll('{bot}', this.status().botName)
+        .slice(0, 500);
+      const delivered: string[] = [];
+      const failures: string[] = [];
+      for (const platform of settings.platforms) {
+        if (!this.autoMessageActivePlatforms.has(platform)) continue;
+        try {
+          if (platform === 'twitch') {
+            const stream = await this.loadStreamStatus();
+            if (!stream.startedAt) continue;
+            await this.sendMessage(message);
+          } else {
+            if (!this.options.sendPlatformMessage) throw new Error('Kick chat output is not configured.');
+            await this.options.sendPlatformMessage('kick', message);
+          }
+          delivered.push(platform);
+        } catch (error) {
+          failures.push(`${platform}: ${(error as Error).message}`);
+        }
+      }
+      if (!delivered.length) {
+        if (failures.length) this.record({ state: 'error', message: `Auto Message could not be sent · ${failures.join(' · ')}` });
+        return;
+      }
+      this.autoMessageIndex = (this.autoMessageIndex + 1) % settings.messages.length;
+      this.autoMessageSent += 1;
+      this.autoMessageLastSentAt = new Date().toISOString();
+      this.autoMessageWindowStartedAt = Date.now();
+      this.autoMessageMessagesSinceLast = 0;
+      this.autoMessageActivePlatforms.clear();
+      this.record({ state: 'accepted', message: `Auto Message sent to ${delivered.map((platform) => platform === 'twitch' ? 'Twitch' : 'Kick').join(' + ')}${failures.length ? `; ${failures.join(' · ')}` : ''}.` });
+    } finally {
+      this.autoMessageSending = false;
+    }
   }
 
   private async sendMessage(message: string, replyParentMessageId?: string): Promise<void> {

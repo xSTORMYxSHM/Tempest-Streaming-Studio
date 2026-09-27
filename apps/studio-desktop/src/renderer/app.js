@@ -1488,6 +1488,23 @@
     const device = state.chatbotDeviceAuthorization;
     $('#chatbotDeviceAuthorization').classList.toggle('hidden', !device);
     if (device) $('#chatbotDeviceCode').textContent = device.userCode;
+    const autoMessages = chatbot.autoMessages || { enabled: false, messages: [], intervalMinutes: 20, chatMessageThreshold: 30, platforms: ['twitch'], messagesSinceLast: 0, sent: 0 };
+    if (!$('#chatbotAutoMessagesForm').contains(document.activeElement)) {
+      $('#chatbotAutoMessagesEnabled').checked = autoMessages.enabled === true;
+      $('#chatbotAutoMessages').value = (autoMessages.messages || []).join('\n');
+      $('#chatbotAutoMessageInterval').value = String(autoMessages.intervalMinutes ?? 20);
+      $('#chatbotAutoMessageThreshold').value = String(autoMessages.chatMessageThreshold ?? 30);
+      $('#chatbotAutoMessagesTwitch').checked = (autoMessages.platforms || []).includes('twitch');
+      $('#chatbotAutoMessagesKick').checked = (autoMessages.platforms || []).includes('kick');
+    }
+    $('#chatbotAutoMessagesBadge').textContent = autoMessages.enabled ? `${autoMessages.sent || 0} SENT` : 'OFF';
+    $('#chatbotAutoMessagesBadge').classList.toggle('offline', !autoMessages.enabled);
+    const remainingMessages = autoMessages.chatMessageThreshold > 0 ? Math.max(0, autoMessages.chatMessageThreshold - (autoMessages.messagesSinceLast || 0)) : null;
+    const remainingMinutes = autoMessages.intervalMinutes > 0 && autoMessages.nextTimeAt ? Math.max(0, Math.ceil((Date.parse(autoMessages.nextTimeAt) - Date.now()) / 60_000)) : null;
+    const autoMessageDestinations = (autoMessages.platforms || []).map((platform) => platform === 'kick' ? 'Kick' : 'Twitch').join(' + ');
+    $('#chatbotAutoMessagesStatus').textContent = !autoMessages.enabled
+      ? 'Auto Messages are off.'
+      : `Next rotating message goes to ${autoMessageDestinations || 'no platform'} after ${remainingMinutes === null ? 'the time trigger is disabled' : `${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}`} or ${remainingMessages === null ? 'the chat trigger is disabled' : `${remainingMessages} more viewer message${remainingMessages === 1 ? '' : 's'}`}, whichever happens first.`;
     const raidAutomation = chatbot.raidAutomation || {};
     if (!$('#chatbotRaidAutomationForm').contains(document.activeElement)) {
       $('#chatbotRaidWelcomeEnabled').checked = raidAutomation.welcomeEnabled === true;
@@ -1932,6 +1949,26 @@
       state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { raidAutomation } });
       renderChatbot();
       toast('Raid welcome and shoutout automation saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveChatbotAutoMessages(event) {
+    event.preventDefault();
+    const platforms = [
+      $('#chatbotAutoMessagesTwitch').checked ? 'twitch' : '',
+      $('#chatbotAutoMessagesKick').checked ? 'kick' : ''
+    ].filter(Boolean);
+    const autoMessages = {
+      enabled: $('#chatbotAutoMessagesEnabled').checked,
+      messages: $('#chatbotAutoMessages').value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+      intervalMinutes: Number($('#chatbotAutoMessageInterval').value),
+      chatMessageThreshold: Number($('#chatbotAutoMessageThreshold').value),
+      platforms
+    };
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { autoMessages } });
+      renderChatbot();
+      toast('Rotating Auto Messages saved.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -4683,6 +4720,7 @@
     $('#copyChatbotAuthorizationLink').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.verificationUri, event.currentTarget));
     $('#openChatbotAuthorization').addEventListener('click', () => state.chatbotDeviceAuthorization && window.tempestStudio.openExternal(state.chatbotDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     $('#chatbotCommandForm').addEventListener('submit', saveChatbotCommand);
+    $('#chatbotAutoMessagesForm').addEventListener('submit', saveChatbotAutoMessages);
     $('#chatbotAutoModForm').addEventListener('submit', saveChatbotAutoMod);
     $('#testChatbotAutoMod').addEventListener('click', testChatbotAutoMod);
     $('#chatbotAutoModAction').addEventListener('change', () => { $('#chatbotAutoModTimeoutControl').hidden = $('#chatbotAutoModAction').value !== 'timeout'; });

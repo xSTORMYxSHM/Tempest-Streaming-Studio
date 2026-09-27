@@ -553,6 +553,16 @@
             </div>
           </article>
 
+          <form id="chatbotAutoMessagesForm" class="panel chatbot-provider-panel chatbot-auto-message-panel" data-advanced>
+            <div class="panel-header"><div><span>CHAT ENGAGEMENT</span><h3>Rotating Auto Messages</h3><p>Post reminders, links, or community prompts when either the time interval or chat-message threshold is reached.</p></div><span id="chatbotAutoMessagesBadge" class="status-badge offline">OFF</span></div>
+            <label class="toggle-label automod-master"><input id="chatbotAutoMessagesEnabled" type="checkbox" /> Enable rotating Auto Messages</label>
+            <div class="chatbot-auto-message-grid">
+              <fieldset><legend>MESSAGE ROTATION</legend><label>Messages<textarea id="chatbotAutoMessages" rows="7" maxlength="10019" placeholder="Follow the channel so you know when we go live.&#10;Listen to Storm Horizon Radio: https://www.tempestmainframe.com/listen"></textarea></label><small>Enter one message per line; Studio rotates through up to 20 messages. Variables: <code>{channel}</code> and <code>{bot}</code>.</small></fieldset>
+              <fieldset><legend>WHEN + WHERE</legend><div class="form-row"><label>Minutes between messages<input id="chatbotAutoMessageInterval" type="number" min="0" max="240" value="20" /><small>0 disables the time trigger.</small></label><label>Viewer chat messages<input id="chatbotAutoMessageThreshold" type="number" min="0" max="1000" value="30" /><small>0 disables the chat trigger.</small></label></div><div class="auto-message-platforms"><span>POST TO</span><label><input id="chatbotAutoMessagesTwitch" type="checkbox" checked /> Twitch</label><label><input id="chatbotAutoMessagesKick" type="checkbox" /> Kick</label></div><p id="chatbotAutoMessagesStatus">Auto Messages are off.</p><small>The first threshold reached wins. Studio requires recent viewer chat activity, checks that Twitch is live before posting there, and keeps a 15-second retry guard.</small></fieldset>
+            </div>
+            <div class="dialog-actions"><button class="primary-button" type="submit">Save Auto Messages</button></div>
+          </form>
+
           <form id="chatbotAutoModForm" class="panel chatbot-provider-panel chatbot-automod-panel" data-advanced>
             <div class="panel-header"><div><span>CHAT MODERATION</span><h3>AutoMod + link protection</h3><p>Check home-channel messages before commands run. Shared Chat messages are left to their source channel's moderators.</p></div><span id="chatbotAutoModBadge" class="status-badge offline">OFF</span></div>
             <label class="toggle-label automod-master"><input id="chatbotAutoModEnabled" type="checkbox" /> Enable Studio AutoMod</label>

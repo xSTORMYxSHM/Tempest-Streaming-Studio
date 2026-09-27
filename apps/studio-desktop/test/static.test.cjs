@@ -391,6 +391,13 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="chatbotInteractionAllowStaff"/);
   assert.match(renderer, /firstChatShoutouts/);
   assert.match(renderer, /interactionAccess/);
+  assert.match(html, /id="chatbotAutoMessagesForm"/);
+  assert.match(html, /Rotating Auto Messages/);
+  assert.match(html, /id="chatbotAutoMessageInterval"/);
+  assert.match(html, /id="chatbotAutoMessageThreshold"/);
+  assert.match(html, /id="chatbotAutoMessagesTwitch"/);
+  assert.match(html, /id="chatbotAutoMessagesKick"/);
+  assert.match(renderer, /Rotating Auto Messages saved/);
   assert.match(html, /id="chatbotAutoModForm"/);
   assert.match(html, /AutoMod \+ link protection/);
   assert.match(html, /moderator:manage:chat_messages/);

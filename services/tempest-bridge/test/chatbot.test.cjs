@@ -175,6 +175,57 @@ test('persists streamer-named counters shared by Twitch and Kick chat', async ()
   assert.equal(counter.counterValue, 6);
 });
 
+test('rotates automatic messages when either the chat or time threshold is reached', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-auto-messages-'));
+  const sent = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    sendPlatformMessage: async (platform, message) => sent.push({ platform, message })
+  });
+  await chatbot.initialize('client123');
+  await chatbot.configure({ autoMessages: {
+    enabled: true,
+    messages: ['Remember to follow {channel}.', 'Join the community with {bot}.'],
+    intervalMinutes: 0,
+    chatMessageThreshold: 2,
+    platforms: ['kick']
+  } });
+  const chatEvent = (id) => ({
+    schemaVersion: 1,
+    id,
+    topic: 'viewer.chat.message',
+    occurredAt: new Date().toISOString(),
+    source: 'kick',
+    channel: { id: 'kick-channel', login: 'storm' },
+    viewer: { id: `viewer-${id}`, login: `viewer_${id}`, displayName: `Viewer ${id}`, roles: [] },
+    payload: { text: 'hello stream' }
+  });
+
+  await chatbot.processChatEvent(chatEvent('one'));
+  assert.equal(sent.length, 0);
+  await chatbot.processChatEvent(chatEvent('two'));
+  assert.deepEqual(sent, [{ platform: 'kick', message: 'Remember to follow the channel.' }]);
+  chatbot.autoMessageLastAttemptAt = 0;
+  await chatbot.processChatEvent(chatEvent('three'));
+  await chatbot.processChatEvent(chatEvent('four'));
+  assert.equal(sent[1].message, 'Join the community with Chat Bot.');
+
+  await chatbot.configure({ autoMessages: {
+    enabled: true,
+    messages: ['Remember to follow {channel}.', 'Join the community with {bot}.'],
+    intervalMinutes: 1,
+    chatMessageThreshold: 0,
+    platforms: ['kick']
+  } });
+  chatbot.autoMessageWindowStartedAt = Date.now() - 61_000;
+  await chatbot.processChatEvent(chatEvent('five'));
+  assert.equal(sent[2].message, 'Remember to follow the channel.');
+  assert.equal(chatbot.status().autoMessages.sent, 3);
+  assert.equal(chatbot.status().autoMessages.messagesSinceLast, 0);
+  await chatbot.close();
+});
+
 test('monitors Stream Together participants and keeps a native Shared Chat message feed', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-collaboration-'));
   const requests = [];
