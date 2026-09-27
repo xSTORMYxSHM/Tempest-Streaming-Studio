@@ -768,6 +768,60 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     };
   };
 
+  const serveAlertAudio = async (request: IncomingMessage, response: ServerResponse, requestUrl: URL): Promise<boolean> => {
+    const alertAudioMatch = requestUrl.pathname.match(/^\/visual-alerts\/audio\/([^/]+)$/);
+    if (request.method !== 'GET' || !alertAudioMatch) return false;
+    if (!isLoopbackRequest(request)) {
+      sendJson(response, 403, { error: 'Visual Alerts audio is available only on this computer.' });
+      return true;
+    }
+    const audioId = decodeURIComponent(alertAudioMatch[1]);
+    const selectedVariantId = requestUrl.searchParams.get('variant') || undefined;
+    const alert = soundAlerts.find(audioId) || twitchVisualAlerts.resolveVariant(audioId, selectedVariantId);
+    if (!alert?.audioUri) {
+      sendJson(response, 404, { error: 'No local audio is assigned to this alert.' });
+      return true;
+    }
+    const filePath = fileURLToPath(alert.audioUri);
+    const details = await stat(filePath);
+    if (!details.isFile()) {
+      sendJson(response, 404, { error: 'The assigned audio file is unavailable.' });
+      return true;
+    }
+    const contentType = audioMediaTypes[path.extname(filePath).toLowerCase()];
+    if (!contentType) {
+      sendJson(response, 415, { error: 'The assigned audio format is not supported.' });
+      return true;
+    }
+    const rangeMatch = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
+    let start = 0;
+    let end = details.size - 1;
+    if (rangeMatch) {
+      start = rangeMatch[1] ? Number(rangeMatch[1]) : 0;
+      end = rangeMatch[2] ? Number(rangeMatch[2]) : end;
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= details.size) {
+        response.statusCode = 416;
+        response.setHeader('Content-Range', `bytes */${details.size}`);
+        response.end();
+        return true;
+      }
+      end = Math.min(end, details.size - 1);
+      response.statusCode = 206;
+      response.setHeader('Content-Range', `bytes ${start}-${end}/${details.size}`);
+    } else response.statusCode = 200;
+    response.setHeader('Content-Type', contentType);
+    response.setHeader('Content-Length', end - start + 1);
+    response.setHeader('Accept-Ranges', 'bytes');
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    const requestOrigin = request.headers.origin || '';
+    if (/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(requestOrigin)) response.setHeader('Access-Control-Allow-Origin', requestOrigin);
+    createReadStream(filePath, { start, end }).pipe(response);
+    return true;
+  };
+
+  let alertAudioBaseUrl = '';
+
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${host}`);
     try {
@@ -796,9 +850,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         response.statusCode = 200;
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
         response.setHeader('Cache-Control', 'no-store');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:;");
+        response.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ${alertAudioBaseUrl}; img-src 'self' data:; media-src 'self' ${alertAudioBaseUrl} blob:;`);
         response.setHeader('X-Content-Type-Options', 'nosniff');
-        return response.end(visualAlertPageRoute.overlay.page(visualAlertPageRoute.eventsPath));
+        return response.end(visualAlertPageRoute.overlay.page(visualAlertPageRoute.eventsPath, alertAudioBaseUrl));
       }
       const visualAlertEventsOverlay = requestUrl.pathname === '/visual-alerts/events' || requestUrl.pathname === '/visual-alerts/interactions/events'
         ? visualAlerts
@@ -961,41 +1015,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         createReadStream(filePath).pipe(response);
         return;
       }
-      const alertAudioMatch = requestUrl.pathname.match(/^\/visual-alerts\/audio\/([^/]+)$/);
-      if (request.method === 'GET' && alertAudioMatch) {
-        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Visual Alerts audio is available only on this computer.' });
-        const audioId = decodeURIComponent(alertAudioMatch[1]);
-        const selectedVariantId = requestUrl.searchParams.get('variant') || undefined;
-        const alert = soundAlerts.find(audioId) || twitchVisualAlerts.resolveVariant(audioId, selectedVariantId);
-        if (!alert?.audioUri) return sendJson(response, 404, { error: 'No local audio is assigned to this alert.' });
-        const filePath = fileURLToPath(alert.audioUri);
-        const details = await stat(filePath);
-        if (!details.isFile()) return sendJson(response, 404, { error: 'The assigned audio file is unavailable.' });
-        const contentType = audioMediaTypes[path.extname(filePath).toLowerCase()];
-        if (!contentType) return sendJson(response, 415, { error: 'The assigned audio format is not supported.' });
-        const rangeMatch = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
-        let start = 0;
-        let end = details.size - 1;
-        if (rangeMatch) {
-          start = rangeMatch[1] ? Number(rangeMatch[1]) : 0;
-          end = rangeMatch[2] ? Number(rangeMatch[2]) : end;
-          if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= details.size) {
-            response.statusCode = 416;
-            response.setHeader('Content-Range', `bytes */${details.size}`);
-            return response.end();
-          }
-          end = Math.min(end, details.size - 1);
-          response.statusCode = 206;
-          response.setHeader('Content-Range', `bytes ${start}-${end}/${details.size}`);
-        } else response.statusCode = 200;
-        response.setHeader('Content-Type', contentType);
-        response.setHeader('Content-Length', end - start + 1);
-        response.setHeader('Accept-Ranges', 'bytes');
-        response.setHeader('Cache-Control', 'no-store');
-        response.setHeader('X-Content-Type-Options', 'nosniff');
-        createReadStream(filePath, { start, end }).pipe(response);
-        return;
-      }
+      if (await serveAlertAudio(request, response, requestUrl)) return;
       if (requestToken(request, requestUrl) !== token) return sendJson(response, 401, { error: 'A valid Tempest Bridge token is required.' });
 
       if (request.method === 'GET' && requestUrl.pathname === '/v1/broadcast/simulcast') {
@@ -1675,6 +1695,17 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     }
   });
 
+  const alertAudioServer = createServer(async (request, response) => {
+    const requestUrl = new URL(request.url || '/', `http://${host}`);
+    try {
+      if (await serveAlertAudio(request, response, requestUrl)) return;
+      return sendJson(response, 404, { error: 'Tempest alert audio route was not found.' });
+    } catch (error) {
+      logger.warn(error);
+      return sendJson(response, 400, { error: (error as Error).message });
+    }
+  });
+
   server.on('upgrade', (request, socket, head) => {
     const requestUrl = new URL(request.url || '/', `http://${host}`);
     if (requestUrl.pathname !== '/v1/socket' || requestToken(request, requestUrl) !== token) {
@@ -1805,9 +1836,20 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   };
 
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(requestedPort, host, () => resolve());
+    alertAudioServer.once('error', reject);
+    alertAudioServer.listen(requestedPort > 0 ? requestedPort + 1 : 0, host, () => resolve());
   });
+  const alertAudioAddress = alertAudioServer.address() as AddressInfo;
+  alertAudioBaseUrl = `http://${host}:${alertAudioAddress.port}`;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(requestedPort, host, () => resolve());
+    });
+  } catch (error) {
+    await new Promise<void>((resolve) => alertAudioServer.close(() => resolve()));
+    throw error;
+  }
   const address = server.address() as AddressInfo;
   runtime = {
     host,
@@ -1833,6 +1875,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       for (const client of clients.values()) client.socket.close(1001, 'Tempest Bridge shutting down');
       await new Promise<void>((resolve, reject) => webSockets.close((error) => error ? reject(error) : resolve()));
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) => alertAudioServer.close((error) => error ? reject(error) : resolve()));
     }
   };
   await syncChatbotConnection();
