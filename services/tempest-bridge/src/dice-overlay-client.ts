@@ -318,6 +318,27 @@ const events = window.__tempestDiceEvents || new EventSource('/dice-overlay/even
 let pollClientId = '';
 let pollRevision = 0;
 let pollStarted = false;
+function scheduleRendererStartup(nextSettings) {
+  const start = () => apply(nextSettings).catch((error) => showError(error.message));
+  if (!obsBrowserRuntime) {
+    queueMicrotask(start);
+    return;
+  }
+  // A loaded OBS Browser Source can be background-timer throttled even while it remains
+  // visible in the active scene. MessageChannel gives renderer initialization a separate
+  // browser task without depending on setTimeout, which otherwise can stay frozen forever.
+  if (typeof MessageChannel === 'function') {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      channel.port2.close();
+      start();
+    };
+    channel.port2.postMessage(null);
+    return;
+  }
+  Promise.resolve().then(start);
+}
 const handleInit = (event) => {
   const data = JSON.parse(event.data);
   const nextClientId = String(data.clientId || '');
@@ -325,9 +346,9 @@ const handleInit = (event) => {
   clientId = nextClientId;
   startupScheduledFor = clientId;
   reportClient('connecting', obsBrowserRuntime ? 'OBS transport ready; preparing the main-thread renderer.' : 'Browser transport ready; preparing the renderer.').catch(() => {});
-  // Let OBS finish activating the Browser Source before WebGL allocates its scene. Starting
-  // DiceBox in the same task as the first SSE message can terminate CEF during source startup.
-  setTimeout(() => apply(data.settings || {}).catch((error) => showError(error.message)), obsBrowserRuntime ? 1500 : 0);
+  // Let OBS finish the SSE task before WebGL allocates its scene, without relying on a
+  // background timer that CEF may suspend for an offscreen Browser Source.
+  scheduleRendererStartup(data.settings || {});
 };
 async function runPollFallback() {
   try {
