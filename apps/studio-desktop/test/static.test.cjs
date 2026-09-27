@@ -318,11 +318,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /data-section="dualformat"/);
   assert.match(html, /id="dualformatSection"/);
   assert.match(html, /Twitch Dual Format/);
-  assert.match(html, /id="prepareDualFormatButton"/);
-  assert.match(html, /1080 × 1920 — recommended/);
+  assert.match(html, /Configure the vertical canvas in Broadcast/);
+  assert.doesNotMatch(html, /id="prepareDualFormatButton"/);
+  assert.doesNotMatch(html, /id="dualFormatCanvasPreset"/);
   assert.match(html, /Twitch chat layer/i);
   assert.match(renderer, /renderDualFormat/);
-  assert.match(renderer, /\/v1\/broadcast\/dual-format\/configure/);
+  assert.doesNotMatch(renderer, /\/v1\/broadcast\/dual-format\/configure/);
   assert.match(renderer, /\/v1\/broadcast\/dual-format\/preview/);
   assert.match(renderer, /status\.streaming/);
   assert.match(renderer, /verticalSources\.twitchUrl/);
@@ -331,8 +332,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /data-section="simulcast"/);
   assert.match(html, /id="simulcastSection"/);
   assert.match(html, /<h2>Go Live<\/h2>/);
-  assert.match(html, /id="simulcastKickStreamKey" type="password"/);
-  assert.match(html, /WINDOWS ENCRYPTED/);
+  assert.doesNotMatch(html, /id="simulcastKickStreamKey"/);
+  assert.match(html, /One source of truth/);
   assert.match(html, /id="startSimulcastButton"/);
   assert.match(html, /id="runSimulcastPreflightButton"/);
   assert.match(html, /id="retryKickOutputButton"/);
@@ -344,7 +345,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /this Studio session/i);
   assert.match(html, /Emergency Stop All Outputs/);
   assert.match(renderer, /renderSimulcast/);
-  assert.match(renderer, /\/v1\/broadcast\/simulcast\/configure/);
+  assert.doesNotMatch(renderer, /\/v1\/broadcast\/simulcast\/configure/);
   assert.match(renderer, /\/v1\/broadcast\/simulcast\/start/);
   assert.match(renderer, /\/v1\/broadcast\/simulcast\/preflight/);
   assert.match(renderer, /\/v1\/broadcast\/simulcast\/retry-kick/);
@@ -354,7 +355,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /simulcastSupervisorState/);
   assert.match(renderer, /HIGH CONGESTION/);
   assert.match(renderer, /sessionStorage\.setItem\(simulcastOperationsStorageKey/);
-  assert.match(renderer, /streamKeyInput\.value = ''/);
+  assert.doesNotMatch(renderer, /simulcastKickStreamKey/);
   assert.match(styles, /\.simulcast-live-panel/);
   assert.match(html, /Reply directly to viewer/);
   assert.match(html, /OPTIONAL RESPONSE PROVIDERS/);

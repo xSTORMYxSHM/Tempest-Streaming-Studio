@@ -13,13 +13,13 @@ Tempest uses one coordinated production controller while keeping responsibility 
 
 1. Complete the **Dual Format** readiness checklist.
 2. In Broadcast, select Twitch as the primary streaming service and confirm Enhanced Broadcasting is enabled.
-3. In Studio, open **Go Live** and paste the ingest URL and stream key shown by the Kick creator dashboard.
-4. Enter measured sustained upload capacity in Kbps. Studio reserves 20% above the estimated Twitch + Kick output budget.
-5. Optionally enable coordinated local recording, then save the output setup.
+3. In Broadcast's **Destinations** dock, enter the Kick ingest URL and stream key shown by the Kick creator dashboard.
+4. Enter measured sustained upload capacity in Broadcast. Broadcast requires at least 20% headroom above the estimated Twitch + Kick output budget.
+5. In Broadcast, optionally enable coordinated local recording and save the output setup.
 6. Run **Production preflight** while off-air. A passing result is valid for four hours and is invalidated by a Broadcast restart or an output/Dual Format configuration change.
 7. Complete the operator rehearsal checklist in Studio. Its selections are session-only and disappear when that Studio window closes.
 
-The stream key crosses only the authenticated loopback Bridge. Broadcast encrypts it with Windows Data Protection for the current Windows user. Studio clears the input after submission, never persists the key, and never returns it through status or diagnostics.
+The stream key is entered and stored only in Broadcast, which encrypts it with Windows Data Protection for the current Windows user and never returns it through status or diagnostics. The authenticated loopback `broadcast.simulcast.configure` route remains available for compatibility clients, but the current Studio UI does not collect or transmit the key.
 
 ## Live behavior
 
@@ -41,7 +41,7 @@ After the automatic result passes, Studio requires session-only operator sign-of
 - Run an unlisted or restricted destination check when the platforms support it; do not expose the stream key.
 - Verify Twitch horizontal and vertical playback in Stream Manager and on a real phone.
 - Verify Kick playback and audio on a separate device.
-- Confirm sustained upload capacity has at least 20% reserve over Studio's estimate.
+- Confirm sustained upload capacity has at least 20% reserve over Broadcast's estimate.
 - Confirm the local recording path and free disk space if coordinated recording is enabled.
 - Confirm Twitch and Kick chat messages and replies remain platform-local in Studio.
 

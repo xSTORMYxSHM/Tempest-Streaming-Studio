@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Kept Broadcast-owned video and output settings in Tempest Broadcast only. Studio now presents Kick destination and Dual Format configuration as read-only readiness, while retaining platform accounts, chat, stream information, preflight, preview, Go Live, recovery, and monitoring controls.
+
 ## 1.4.2 — Streaming performance cleanup
 
 - Reduced Studio renderer work by updating only the visible workspace during one-second live refreshes while preserving the existing full-state compatibility refresh.

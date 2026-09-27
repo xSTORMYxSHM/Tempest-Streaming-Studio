@@ -433,7 +433,7 @@
         </section>
 
         <section id="kickSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">KICK PLATFORM</p><h2>Kick</h2><p>Keep Kick authorization, chat delivery, ingest destination, and Broadcast-owned stream credentials together.</p></div><span id="kickChatBadge" class="status-badge offline">NOT CONFIGURED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">KICK PLATFORM</p><h2>Kick</h2><p>Manage the Kick account and chat connection here. Tempest Broadcast owns the video destination, encoder, stream key, and recording settings.</p></div><span id="kickChatBadge" class="status-badge offline">NOT CONFIGURED</span></div>
 
           <article class="panel kick-chat-panel">
             <div class="panel-header"><div><span>ACCOUNT + CHAT</span><h3>Kick connection</h3><p>Authorize the Kick broadcaster account so the shared command directory and live monitor can operate on both platforms.</p></div></div>
@@ -450,15 +450,10 @@
           </article>
 
           <article class="panel dual-format-control-panel kick-output-panel">
-            <div class="panel-header"><div><span>STREAM OUTPUT</span><h3>Kick destination in Tempest Broadcast</h3><p>These output credentials belong to Kick and remain encrypted inside Broadcast.</p></div><span class="state-chip installed">WINDOWS ENCRYPTED</span></div>
-            <div class="simulcast-config-grid">
-              <label>Kick ingest URL<input id="simulcastKickServer" maxlength="500" placeholder="rtmps://…/app" /></label>
-              <label>Kick stream key<input id="simulcastKickStreamKey" type="password" maxlength="512" autocomplete="new-password" placeholder="Leave blank to keep stored key" /></label>
-              <label>Measured upload capacity (Kbps)<input id="simulcastUploadCapacity" type="number" min="1000" max="1000000" step="100" placeholder="25000" /></label>
-              <label class="checkbox-row"><input id="simulcastRecordingWithStream" type="checkbox" /> Start a local recording with the stream</label>
-            </div>
-            <div class="dual-format-actions"><button id="saveSimulcastButton" class="secondary-button" disabled>Save Kick Output</button><button id="disableSimulcastButton" class="secondary-button danger-outline" disabled>Disable Kick Simulcast</button><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></div>
-            <small>The stream key is sent once over the authenticated loopback bridge and encrypted by Windows inside Broadcast. Studio never saves it or returns it in status.</small>
+            <div class="panel-header"><div><span>STREAM OUTPUT</span><h3>Kick destination in Tempest Broadcast</h3><p>Configure the ingest URL, protected stream key, encoder, upload budget, and recording behavior in Broadcast's Destination Coordinator.</p></div><span class="state-chip installed">BROADCAST OWNED</span></div>
+            <div class="local-extension-status"><div><small>DESTINATION</small><strong id="kickOutputDestinationState">WAITING</strong></div><div><small>STREAM KEY</small><strong id="kickOutputCredentialState">WAITING</strong></div><div><small>UPLOAD BUDGET</small><strong id="kickOutputUploadState">WAITING</strong></div><div><small>RECORDING</small><strong id="kickOutputRecordingState">OFF</strong></div></div>
+            <div class="sound-alert-note"><strong>One source of truth:</strong> Studio reads readiness and live telemetry from Broadcast but does not edit or retain Broadcast output settings.</div>
+            <div class="dual-format-actions"><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></div>
           </article>
 
           <div class="platform-tool-grid" aria-label="Kick tools">
@@ -594,13 +589,9 @@
             </article>
 
             <article class="panel dual-format-control-panel">
-              <div class="panel-header"><div><span>OFF-AIR CONFIGURATION</span><h3>Prepare the vertical canvas</h3></div><span class="state-chip installed">BROADCAST OWNED</span></div>
-              <div class="dual-format-controls">
-                <label>Vertical resolution<select id="dualFormatCanvasPreset"><option value="1080x1920">1080 × 1920 — recommended</option><option value="720x1280">720 × 1280 — reduced load</option></select></label>
-                <label>Canvas name<input id="dualFormatCanvasName" maxlength="80" value="Tempest Vertical" /></label>
-              </div>
-              <div class="dual-format-actions"><button id="prepareDualFormatButton" class="primary-button" disabled>Prepare Dual Format</button><button id="previewDualFormatButton" class="secondary-button" disabled>Open Vertical Preview</button><button id="disableDualFormatButton" class="secondary-button danger-outline" disabled>Disable Dual Format</button></div>
-              <small>Studio requests configuration from Broadcast and waits for a new status report. Canvas or encoder settings cannot be changed while live.</small>
+              <div class="panel-header"><div><span>OFF-AIR CONFIGURATION</span><h3>Configure the vertical canvas in Broadcast</h3><p>Choose the 1080 × 1920 or 720 × 1280 canvas, link scenes, and enable Enhanced Broadcasting in Tempest Broadcast.</p></div><span class="state-chip installed">BROADCAST OWNED</span></div>
+              <div class="dual-format-actions"><button id="previewDualFormatButton" class="secondary-button" disabled>Open Vertical Preview</button></div>
+              <small>Studio displays readiness and can request the existing portrait preview, but it does not create, rename, resize, select, or disable Broadcast canvases.</small>
               <div id="verticalAlertSources" class="dual-format-source-list empty-state">Vertical-safe alert sources will appear when Studio is online.</div>
             </article>
           </div>

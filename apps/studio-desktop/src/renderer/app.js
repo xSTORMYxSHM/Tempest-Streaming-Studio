@@ -1095,7 +1095,7 @@
     $('#dualFormatBadge').textContent = stateLabel;
     $('#dualFormatBadge').classList.toggle('offline', !status.ready);
     $('#dualFormatStateMetric').textContent = status.streaming && status.ready ? 'LIVE' : status.ready ? 'READY' : status.enabled ? 'INCOMPLETE' : 'OFF';
-    $('#dualFormatStateNote').textContent = status.streaming ? 'Broadcast is currently live' : status.connected ? 'Safe to configure while off air' : 'Waiting for Broadcast';
+    $('#dualFormatStateNote').textContent = status.streaming ? 'Broadcast is currently live' : status.connected ? 'Configured in Broadcast while off air' : 'Waiting for Broadcast';
     const horizontal = broadcastCanvasProfile();
     $('#dualFormatHorizontalMetric').textContent = horizontal ? `${horizontal.outputWidth} × ${horizontal.outputHeight}` : '—';
     const vertical = status.canvas;
@@ -1125,30 +1125,12 @@
       error: status.lastError || 'Broadcast reported a Dual Format error.'
     };
     $('#dualFormatStatusMessage').textContent = messages[status.state] || 'Checking Broadcast Dual Format status.';
-    if (document.activeElement !== $('#dualFormatCanvasName') && vertical?.name) $('#dualFormatCanvasName').value = vertical.name;
-    const blocked = !status.connected || !status.controllerSupported || status.streaming;
-    $('#prepareDualFormatButton').disabled = blocked;
-    $('#disableDualFormatButton').disabled = blocked || !status.enabled;
     $('#previewDualFormatButton').disabled = !status.connected || !status.previewSupported || !status.canvas;
     $('#refreshDualFormatButton').disabled = !status.connected;
     const verticalSources = state.visualAlerts?.vertical;
     const sourceList = $('#verticalAlertSources');
     sourceList.classList.toggle('empty-state', !verticalSources);
     sourceList.innerHTML = verticalSources ? `<span>VERTICAL-SAFE BROWSER SOURCES · VISUAL ONLY</span><div><small>Twitch Alerts</small><code>${escapeHtml(verticalSources.twitchUrl)}</code>${copyButton(verticalSources.twitchUrl, 'vertical Twitch Alert source')}</div><div><small>Interaction Alerts</small><code>${escapeHtml(verticalSources.interactionUrl)}</code>${copyButton(verticalSources.interactionUrl, 'vertical Interaction Alert source')}</div><p>These variants keep alerts above Twitch's mobile chat area and mute duplicate alert audio. Keep the horizontal Browser Sources as the only audio-producing copies.</p>` : 'Vertical-safe alert sources will appear when Studio is online.';
-  }
-
-  async function configureDualFormat(enabled) {
-    try {
-      if (!enabled && !confirm('Disable Twitch Dual Format output? Broadcast will keep the vertical canvas but stop selecting it for streaming.')) return;
-      const canvasName = $('#dualFormatCanvasName').value.trim();
-      if (enabled && !canvasName) throw new Error('Enter a name for the vertical canvas.');
-      await api('/v1/broadcast/dual-format/configure', {
-        method: 'POST',
-        body: { enabled, canvasPreset: $('#dualFormatCanvasPreset').value, canvasName: canvasName || 'Tempest Vertical' }
-      });
-      toast(enabled ? 'Dual Format setup requested. Waiting for Broadcast status…' : 'Dual Format disable requested.');
-      await refreshRuntime();
-    } catch (error) { toast(error.message, true); }
   }
 
   async function previewDualFormat() {
@@ -1209,10 +1191,6 @@
       error: status.lastError || 'Broadcast reported an output error.'
     };
     $('#simulcastStatusMessage').textContent = status.lastError && status.state !== 'live' ? status.lastError : messages[status.state] || 'Checking output status.';
-    if (document.activeElement !== $('#simulcastUploadCapacity') && capacity) $('#simulcastUploadCapacity').value = String(capacity);
-    if (document.activeElement !== $('#simulcastRecordingWithStream')) $('#simulcastRecordingWithStream').checked = status.recordingWithStream === true;
-    $('#simulcastKickServer').placeholder = status.kickServerConfigured ? 'Configured in Broadcast — leave blank to keep' : 'rtmps://…/app';
-    $('#simulcastKickStreamKey').placeholder = status.credentialsStored ? 'Stored securely — leave blank to keep' : 'Paste stream key from Kick';
     const live = status.twitch?.active || status.kick?.active;
     const transitioning = ['starting', 'stopping', 'reconnecting'].includes(status.twitch?.state) || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
     const manualChecks = [...document.querySelectorAll('.simulcast-manual-check')];
@@ -1222,43 +1200,12 @@
       ? 'Run and pass the automatic preflight, then complete all operator checks.'
       : operatorReady ? `Automatic preflight passed ${new Date(status.lastPreflightAt).toLocaleTimeString()}. Operator sign-off is complete for this Studio session.`
         : `Automatic preflight passed. Complete ${manualChecks.length - completedChecks} remaining operator check${manualChecks.length - completedChecks === 1 ? '' : 's'}.`;
-    $('#saveSimulcastButton').disabled = !status.connected || !status.controllerSupported || live || transitioning;
-    $('#disableSimulcastButton').disabled = !status.connected || !status.controllerSupported || live || transitioning || !status.enabled;
     $('#runSimulcastPreflightButton').disabled = !status.connected || !status.controllerSupported || live || transitioning || !status.configured;
     $('#startSimulcastButton').disabled = !status.ready || !operatorReady || live || transitioning;
     $('#retryKickOutputButton').disabled = !status.twitch?.active || status.kick?.active || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
     $('#stopKickOutputButton').disabled = !status.kick?.active;
     $('#stopAllOutputsButton').disabled = !live && !status.recording && !transitioning;
-    ['#simulcastKickServer', '#simulcastKickStreamKey', '#simulcastUploadCapacity', '#simulcastRecordingWithStream'].forEach((selector) => { $(selector).disabled = live || transitioning; });
     updateSimulcastOperations(status);
-  }
-
-  async function configureSimulcast(enabled) {
-    const streamKeyInput = $('#simulcastKickStreamKey');
-    try {
-      if (!enabled && !confirm('Disable coordinated Twitch + Kick simulcast? Stored credentials will remain encrypted in Broadcast.')) return;
-      const kickServer = $('#simulcastKickServer').value.trim();
-      const kickStreamKey = streamKeyInput.value.trim();
-      const capacity = Number($('#simulcastUploadCapacity').value || 0);
-      if (enabled && !kickServer && !state.simulcast?.kickServerConfigured) throw new Error('Enter the Kick ingest URL from the creator dashboard.');
-      if (enabled && !kickStreamKey && !state.simulcast?.credentialsStored) throw new Error('Enter the Kick stream key from the creator dashboard.');
-      if (capacity && (capacity < 1000 || capacity > 1000000)) throw new Error('Upload capacity must be between 1,000 and 1,000,000 Kbps.');
-      await api('/v1/broadcast/simulcast/configure', {
-        method: 'POST',
-        body: {
-          enabled,
-          ...(kickServer ? { kickServer } : {}),
-          ...(kickStreamKey ? { kickStreamKey } : {}),
-          keepStoredKey: true,
-          ...(capacity ? { uploadCapacityKbps: capacity } : {}),
-          recordingWithStream: $('#simulcastRecordingWithStream').checked
-        }
-      });
-      $('#simulcastKickServer').value = '';
-      toast(enabled ? 'Simulcast setup sent to Broadcast. The Kick key field has been cleared.' : 'Simulcast disabled; encrypted credentials were retained.');
-      await refreshRuntime();
-    } catch (error) { toast(error.message, true); }
-    finally { streamKeyInput.value = ''; }
   }
 
   async function startSimulcast() {
@@ -1266,7 +1213,7 @@
     if (!operatorChecklistAccepted) return toast('Complete every operator rehearsal check before going live.', true);
     if (!confirm('Go live now on Twitch (horizontal + vertical) and Kick (horizontal)?')) return;
     try {
-      await api('/v1/broadcast/simulcast/start', { method: 'POST', body: { recording: $('#simulcastRecordingWithStream').checked, operatorChecklistAccepted } });
+      await api('/v1/broadcast/simulcast/start', { method: 'POST', body: { operatorChecklistAccepted } });
       toast('Coordinated Go Live sent to Broadcast. Twitch will connect before Kick.');
       await refreshRuntime();
     } catch (error) { toast(error.message, true); }
@@ -1660,6 +1607,11 @@
         : kick.oauth?.state === 'authorization-pending' ? 'Complete authorization in the Kick browser tab. Studio will receive the callback automatically.'
           : kick.configured ? 'Kick application saved. Connect the broadcaster account to activate chat.'
             : 'Create a Kick developer application, register both URLs shown here, then save its Client ID and secret.');
+    const output = state.simulcast || {};
+    $('#kickOutputDestinationState').textContent = output.kickServerConfigured ? 'CONFIGURED' : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
+    $('#kickOutputCredentialState').textContent = output.credentialsStored && output.secureStorageAvailable ? 'PROTECTED' : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
+    $('#kickOutputUploadState').textContent = output.uploadCapacityConfigured ? `${Math.round(Number(output.uploadCapacityKbps || 0) / 100) / 10} MBPS` : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
+    $('#kickOutputRecordingState').textContent = output.recording ? 'RECORDING' : output.recordingWithStream ? 'ARMED' : 'OFF';
   }
 
   function renderHostedExtension() {
@@ -4467,12 +4419,8 @@
     $('#discordVoiceCanvasPreview').addEventListener('pointercancel', endDiscordCanvasDrag);
     $('#forgetDiscordVoice').addEventListener('click', forgetDiscordVoice);
     $('#discordGuestUserId').addEventListener('keydown', (event) => { if (event.key === 'Enter') addDiscordVoiceProfile(); });
-    $('#prepareDualFormatButton').addEventListener('click', () => { void configureDualFormat(true); });
-    $('#disableDualFormatButton').addEventListener('click', () => { void configureDualFormat(false); });
     $('#previewDualFormatButton').addEventListener('click', () => { void previewDualFormat(); });
     $('#refreshDualFormatButton').addEventListener('click', () => { void refreshDualFormat(); });
-    $('#saveSimulcastButton').addEventListener('click', () => { void configureSimulcast(true); });
-    $('#disableSimulcastButton').addEventListener('click', () => { void configureSimulcast(false); });
     $('#runSimulcastPreflightButton').addEventListener('click', () => { void runSimulcastPreflight(); });
     $('#refreshSimulcastButton').addEventListener('click', () => { void api('/v1/broadcast/simulcast/refresh', { method: 'POST', body: {} }).then(() => refreshRuntime()).catch((error) => toast(error.message, true)); });
     $('#startSimulcastButton').addEventListener('click', () => { void startSimulcast(); });

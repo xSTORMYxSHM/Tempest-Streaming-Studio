@@ -1,6 +1,6 @@
 # Avatar and Tempest Broadcast Adapter Contracts
 
-No adapter owns interaction-facing Twitch ingestion. Studio owns interaction OAuth, EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast still owns OBS/Twitch stream-service authentication, streaming credentials, and Stream Information because those control the outgoing broadcast.
+No adapter owns interaction-facing Twitch ingestion. Studio owns Twitch and Kick account/API authorization, Stream Information (title, category, tags, and notifications), EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast owns OBS output-service authentication and credentials, canvases, encoders, recording, destination configuration, and live output control.
 
 ## Shared command envelope
 
@@ -41,7 +41,7 @@ Required capabilities for the bundled Black Hole Event:
 
 Exact Broadcast compatibility changes:
 
-1. Remove or disable interaction-facing Twitch OAuth, EventSub, chat, channel-point, Sound Alerts, cheer, and subscription ingestion. Keep OBS/Twitch stream-service authentication and Stream Information inside Broadcast.
+1. Remove or disable interaction-facing Twitch OAuth, EventSub, chat, channel-point, Sound Alerts, cheer, subscription ingestion, and Stream Information authoring. Keep OBS output-service authentication and credentials inside Broadcast.
 2. Register the application manifest and connect to `/v1/socket` with the Studio-issued Bridge token.
 3. Send `hello` as `com.tempestmainframe.tempest-broadcast` and subscribe to its command topics plus required system health topics.
 4. Advertise `broadcast.reaction.trigger`, `broadcast.reaction.clear`, `broadcast.audio.play`, `broadcast.visual.show`, `broadcast.visual.hide`, `broadcast.status`, `broadcast.dual-format.configure`, `broadcast.dual-format.preview`, `broadcast.simulcast.configure`, `broadcast.simulcast.preflight`, `broadcast.simulcast.retry-kick`, `broadcast.simulcast.start`, and `broadcast.simulcast.stop`.

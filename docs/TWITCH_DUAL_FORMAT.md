@@ -7,14 +7,14 @@ Twitch currently makes Dual Format available to all streamers. It requires Enhan
 ## Studio workflow
 
 1. Open Tempest Broadcast and connect its Studio Integration dock.
-2. Open **Dual Format** in Studio.
-3. While off air, select a vertical resolution and choose **Prepare Dual Format**.
-4. Complete or inspect the vertical scene composition in Broadcast. Link each production horizontal scene to its vertical partner and confirm program audio reaches both orientations.
+2. While off air, configure Enhanced Broadcasting and select the vertical additional canvas in Broadcast. Canvas names, resolutions, frame rates, scene links, and audio routing are authored only in Broadcast.
+3. Complete or inspect the vertical scene composition in Broadcast. Link each production horizontal scene to its vertical partner and confirm program audio reaches both orientations.
+4. Open **Dual Format** in Studio to inspect the read-only readiness reported by Broadcast.
 5. Add Studio's displayed `?orientation=vertical` alert sources to the vertical scenes. These copies automatically use a portrait-safe layout and do not play audio or TTS, preventing doubled alerts; the horizontal source remains the audio-producing copy.
 6. Use **Open Vertical Preview**, then verify Twitch Stream Manager and a physical phone before the show.
 7. Start the stream once Studio reports every readiness check as ready.
 
-Studio refuses configuration changes while Broadcast reports that streaming is active. Disabling Dual Format deselects the additional output but asks Broadcast to preserve the vertical canvas for later use.
+Broadcast refuses output configuration changes while streaming is active. Studio remains a readiness, preview, and guarded live-operations surface; it does not duplicate Broadcast's canvas configuration controls.
 
 ## Bridge contract
 
@@ -51,7 +51,7 @@ Broadcast advertises these API 1.0 capabilities:
 }
 ```
 
-Studio sends `broadcast.dual-format.configure` with guarded arguments for Enhanced Broadcasting, the additional canvas, and two visual-only vertical Browser Sources. `verticalBrowserSources.chatOverlay` is deliberately `null` because Twitch supplies chat in the mobile viewer. Broadcast must apply the request atomically, preserve existing sources and scenes, and publish a fresh `broadcast.status` result. `broadcast.dual-format.preview` receives `{ "orientation": "vertical" }` and should focus or open the native Broadcast vertical preview without beginning an output.
+`broadcast.dual-format.configure` remains available for authenticated compatibility clients and automation, but the current Studio UI does not expose it. Requests contain guarded arguments for Enhanced Broadcasting, the additional canvas, and visual-only vertical Browser Sources. `verticalBrowserSources.chatOverlay` is deliberately `null` because Twitch supplies chat in the mobile viewer. Broadcast must apply a request atomically, preserve existing sources and scenes, and publish a fresh `broadcast.status` result. `broadcast.dual-format.preview` receives `{ "orientation": "vertical" }` and should focus or open the native Broadcast vertical preview without beginning an output.
 
 Older Broadcast builds remain compatible with the Bridge but appear as **Update Required** on the Dual Format page. Studio never interprets an ordinary horizontal `canvasProfile` as proof that the vertical route is ready.
 
