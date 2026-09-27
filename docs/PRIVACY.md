@@ -39,7 +39,7 @@ Studio backups can contain channel commands, workflows, visual designs, provider
 
 ## Privacy Shield while streaming
 
-Privacy Shield is enabled by default. Its in-app masking layer replaces streamer-sensitive values with fixed `HIDDEN` blocks, including Twitch and chatbot identities, activation codes, client/channel IDs, channel-point mappings, weather coordinates, station/provider settings, local service endpoints, and Twitch Alert, Interaction Alert, Twitch Experiences, Chat Overlay, and Emote Wall Browser Source URLs. The quick top-bar control toggles masking; Settings exposes the complete controls.
+Privacy Shield is enabled by default. Its in-app masking layer replaces streamer-sensitive values with fixed `HIDDEN` blocks, including Twitch and chatbot identities, activation codes, client/channel IDs, channel-point mappings, weather coordinates, station/provider settings, local service endpoints, and Twitch Alert, Interaction Alert, Twitch Experiences, Chat Overlay, Emote Wall, and 3D Dice Browser Source URLs. The quick top-bar control toggles masking; Settings exposes the complete controls.
 
 Third-party Emote Wall providers are disabled by default. Enabling 7TV, BetterTTV, or FrankerFaceZ authorizes Studio to send the broadcaster's public numeric Twitch channel ID to that provider to resolve channel emotes. Studio validates provider hosts and proxies approved image bytes through its loopback-only Bridge; the Broadcast browser source does not connect directly to those provider CDNs.
 

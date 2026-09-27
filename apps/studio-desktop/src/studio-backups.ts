@@ -31,6 +31,7 @@ const safeDocuments = new Map([
   ['interactionAlerts', ['bridge', 'sound-alerts.json']],
   ['chatOverlay', ['bridge', 'chat-overlay.json']],
   ['emoteWall', ['bridge', 'emote-wall.json']],
+  ['diceOverlay', ['bridge', 'dice-overlay.json']],
   ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
   ['discordVoiceOverlay', ['bridge', 'discord-voice-overlay.json']],
   ['panelDesign', ['twitch-panel-design.json']],

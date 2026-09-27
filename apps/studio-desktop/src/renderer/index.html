@@ -29,6 +29,7 @@
           <button class="nav-button" data-section="chatbot">Chatbot + Live Chat</button>
           <p class="nav-group">CREATE</p>
           <button class="nav-button" data-section="soundalerts">Viewer Interactions</button>
+          <button class="nav-button" data-section="dice">3D Dice</button>
           <button class="nav-button" data-section="chatoverlay">Chat Overlay</button>
           <button class="nav-button" data-section="discordvoice">Discord Guests</button>
           <button class="nav-button" data-section="api">Avatar Apps</button>
@@ -74,8 +75,9 @@
             <button class="home-menu-card" data-go="extensiondesigner"><b>TWITCH TOOL</b><strong>Twitch Panel</strong><span>Style the viewer panel to match your channel.</span><i>DESIGN PANEL →</i></button>
             <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Viewer Interactions</strong><span>Create sounds, visuals, and optional avatar reactions for viewer commands.</span><i>BUILD INTERACTIONS →</i></button>
-            <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 03</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAYS →</i></button>
-            <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 04</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
+            <button class="home-menu-card" data-go="dice"><b>ON AIR 03</b><strong>3D Dice</strong><span>Roll secure virtual dice and show the complete result to everyone watching.</span><i>OPEN DICE TABLE →</i></button>
+            <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 04</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAYS →</i></button>
+            <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 05</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
             <button class="home-menu-card" data-go="chatbot"><b>CHANNEL 01</b><strong>Chatbot</strong><span>Create commands, replies, and simple viewer triggers.</span><i>MANAGE CHATBOT →</i></button>
             <button class="home-menu-card" data-go="dualformat"><b>TWITCH OUTPUT</b><strong>Dual Format</strong><span>Prepare and monitor Twitch horizontal and mobile-first vertical output.</span><i>CHECK MOBILE OUTPUT →</i></button>
             <button class="home-menu-card" data-go="simulcast"><b>ON AIR</b><strong>Go Live</strong><span>Run preflight, start, and monitor Twitch plus Kick after each platform is configured.</span><i>OPEN OUTPUT CONTROL →</i></button>
@@ -152,6 +154,46 @@
                 <div id="giphyResults" class="giphy-results empty-state">Search results will appear here in a larger, multi-row gallery.</div>
                 <p class="giphy-attribution">Powered by GIPHY</p>
               </div>
+            </div>
+          </article>
+        </section>
+
+        <section id="diceSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">STREAM DICE TABLE</p><h2>3D Dice</h2><p>Resolve the roll in Studio, then replay that exact result as 3D dice for everyone watching.</p></div><span id="diceOverlayBadge" class="status-badge">CHECKING</span></div>
+          <div class="metric-grid dice-metrics">
+            <article><span>BROWSER SOURCES</span><strong id="diceConnectedClients">0</strong><small>Connected stream canvases</small></article>
+            <article><span>LAST TOTAL</span><strong id="diceLastTotal">—</strong><small id="diceLastReason">No roll yet</small></article>
+            <article><span>LAST ROLL</span><strong id="diceLastExpression">—</strong><small>Authoritative Studio result</small></article>
+            <article><span>SESSION ROLLS</span><strong id="diceHistoryCount">0</strong><small>Most recent 20 retained</small></article>
+          </div>
+          <div id="diceOverlaySourceStatus" class="sound-alert-note"><strong>3D Dice source:</strong> Loading the local Browser Source address…</div>
+          <div class="dice-workspace">
+            <article class="panel dice-control-panel">
+              <div class="panel-header"><div><span>ROLL CONTROL</span><h3>Put a roll on stream</h3></div><strong class="state-chip">SECURE RNG</strong></div>
+              <form id="diceRollForm" class="dice-roll-form">
+                <div class="dice-preset-grid" aria-label="Common dice">
+                  <button type="button" data-dice-preset="1d20">d20</button><button type="button" data-dice-preset="2d20kh1">Advantage</button><button type="button" data-dice-preset="2d20kl1">Disadvantage</button><button type="button" data-dice-preset="1d12">d12</button><button type="button" data-dice-preset="1d10">d10</button><button type="button" data-dice-preset="1d8">d8</button><button type="button" data-dice-preset="1d6">d6</button><button type="button" data-dice-preset="1d4">d4</button><button type="button" data-dice-preset="1d100">d100</button>
+                </div>
+                <label><span>Dice expression</span><input id="diceExpression" value="1d20" maxlength="40" spellcheck="false" required /><small>Examples: 1d20, 2d6+3, 2d20kh1, 2d20kl1</small></label>
+                <label><span>Rolling as</span><input id="diceRollerName" value="Streamer" maxlength="80" /></label>
+                <label class="dice-reason-field"><span>What is the roll for?</span><input id="diceReason" maxlength="160" placeholder="Saving throw, giveaway, choose the next game…" /></label>
+                <button id="rollDiceOnStream" class="primary-button dice-roll-button" type="submit">Roll on Stream</button>
+              </form>
+            </article>
+            <article class="panel dice-preview-panel">
+              <div class="panel-header"><div><span>LAST RESULT</span><h3>Studio authority</h3></div><button id="clearDiceOverlay" class="secondary-button" type="button">Clear Source</button></div>
+              <div id="diceResultPreview" class="dice-result-preview empty-state">Rolls will appear here after Studio has fixed the result and sent it to the Browser Source.</div>
+            </article>
+          </div>
+          <article class="panel dice-settings-panel">
+            <div class="panel-header"><div><span>PRESENTATION</span><h3>Browser Source appearance</h3></div><button id="saveDiceOverlaySettings" class="secondary-button" type="button">Save Appearance</button></div>
+            <div class="dice-settings-grid">
+              <label><span>Dice material</span><select id="diceTheme"><option value="stormglass">Stormglass</option><option value="brass">Brass</option><option value="obsidian">Obsidian</option></select></label>
+              <label><span>On-screen time</span><select id="diceDuration"><option value="3500">3.5 seconds</option><option value="5200">5.2 seconds</option><option value="7000">7 seconds</option><option value="10000">10 seconds</option></select></label>
+              <label><span>Scale</span><input id="diceScale" type="number" min="60" max="140" step="5" value="100" /><small>60–140%</small></label>
+              <label class="toggle-label"><input id="diceShowReason" type="checkbox" checked /><span>Show the roll reason</span></label>
+              <label class="toggle-label"><input id="diceSoundEnabled" type="checkbox" /><span>Play a dice impact sound in the Browser Source</span></label>
+              <label class="toggle-label"><input id="diceOverlayEnabled" type="checkbox" checked /><span>Enable 3D Dice rolls</span></label>
             </div>
           </article>
         </section>

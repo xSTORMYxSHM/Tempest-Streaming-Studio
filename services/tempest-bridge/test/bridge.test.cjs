@@ -435,7 +435,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /runtimeStopTimer=setTimeout\(stopAudio/);
   assert.match(overlayMarkup, /audioContext\.decodeAudioData/);
   assert.match(overlayMarkup, /fetch\(url,\{cache:'no-store',signal:controller\.signal\}\)/);
-  assert.match(overlayMarkup, /media element timed out while loading/);
+  assert.match(overlayMarkup, /URL\.createObjectURL\(new Blob/);
+  assert.match(overlayMarkup, /blob media element timed out while starting/);
+  assert.match(overlayMarkup, /Web Audio compatibility fallback/);
   assert.match(overlayMarkup, /Tempest alert audio playback failed/);
   assert.equal((overlayMarkup.match(/(?:async )?function playAudio\(/g) || []).length, 1);
   assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
@@ -447,6 +449,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /id="customHtml"/);
   assert.match(overlayMarkup, /TempestAlertContext/);
   assert.match(overlayMarkup, /Content-Security-Policy/);
+  assert.match(overlayMarkup, /media-src 'self' blob:/);
   const overlayScript = overlayMarkup.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(overlayScript);
   assert.doesNotThrow(() => new Function(overlayScript));

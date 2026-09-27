@@ -5,6 +5,7 @@
     overview: { title: 'Studio Home', kicker: 'START HERE' },
     events: { title: 'Activity & Diagnostics', kicker: 'ADVANCED TOOLS' },
     soundalerts: { title: 'Viewer Interactions', kicker: 'ALERTS VIEWERS CAN TRIGGER' },
+    dice: { title: '3D Dice', kicker: 'STREAM DICE TABLE' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
     chatoverlay: { title: 'Chat Overlay', kicker: 'CHAT + EMOTES' },
     discordvoice: { title: 'Discord Guests', kicker: 'LOCAL VOICE OVERLAY' },
@@ -41,6 +42,7 @@
     alertHistory: { summary: {}, records: [] },
     alertDiagnostics: null,
     soundAlerts: { alerts: [] },
+    diceOverlay: null,
     visualAlerts: null,
     twitchVisualAlerts: { alerts: [] },
     giphy: { configured: false, encryptionAvailable: false },
@@ -2374,12 +2376,80 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  function renderDiceOverlay({ settings = false } = {}) {
+    const status = state.diceOverlay;
+    if (!status) return;
+    const enabled = status.settings?.enabled !== false;
+    const clients = Number(status.connectedClients || 0);
+    const roll = status.latestRoll;
+    $('#diceOverlayBadge').textContent = enabled ? (clients ? 'ON STREAM' : 'SOURCE READY') : 'DISABLED';
+    $('#diceOverlayBadge').classList.toggle('offline', !enabled);
+    $('#diceConnectedClients').textContent = String(clients);
+    $('#diceLastTotal').textContent = roll ? String(roll.total) : '—';
+    $('#diceLastReason').textContent = roll?.reason || (roll ? `Rolled by ${roll.rollerName}` : 'No roll yet');
+    $('#diceLastExpression').textContent = roll?.expression || '—';
+    $('#diceHistoryCount').textContent = String(status.history?.length || 0);
+    $('#diceOverlaySourceStatus').innerHTML = `<strong>3D Dice source:</strong> ${clients ? `${clients} Browser Source${clients === 1 ? '' : 's'} connected.` : 'Add this local URL to Broadcast as a Browser Source.'} <code data-sensitive>${escapeHtml(status.url)}</code> ${copyButton(status.url, '3D Dice Browser Source URL')}`;
+    const preview = $('#diceResultPreview');
+    preview.classList.toggle('empty-state', !roll);
+    preview.innerHTML = roll ? `<div><div class="dice-preview-expression">${escapeHtml(roll.expression)} · ${escapeHtml(roll.rollerName)}</div><div class="dice-preview-dice">${roll.dice.map((die) => `<span class="dice-preview-die ${die.kept ? '' : 'dropped'}" title="d${escapeHtml(die.sides)}${die.kept ? '' : ' dropped'}">${escapeHtml(die.value)}</span>`).join('')}</div></div><strong class="dice-preview-total">${escapeHtml(roll.total)}</strong>${roll.reason ? `<p class="dice-preview-reason">${escapeHtml(roll.reason)}</p>` : ''}` : 'Rolls will appear here after Studio has fixed the result and sent it to the Browser Source.';
+    if (!settings || !status.settings) return;
+    $('#diceTheme').value = status.settings.theme || 'stormglass';
+    $('#diceDuration').value = String(status.settings.durationMs || 5200);
+    $('#diceScale').value = String(status.settings.scalePercent || 100);
+    $('#diceShowReason').checked = status.settings.showReason !== false;
+    $('#diceSoundEnabled').checked = status.settings.soundEnabled === true;
+    $('#diceOverlayEnabled').checked = enabled;
+  }
+
+  async function rollDiceOnStream(event) {
+    event.preventDefault();
+    const button = $('#rollDiceOnStream');
+    button.disabled = true;
+    button.textContent = 'Rolling…';
+    try {
+      state.diceOverlay = await api('/v1/dice-overlay/roll', { method: 'POST', body: {
+        expression: $('#diceExpression').value,
+        reason: $('#diceReason').value,
+        rollerName: $('#diceRollerName').value
+      } });
+      renderDiceOverlay();
+      toast(`${state.diceOverlay.roll.expression} rolled ${state.diceOverlay.roll.total} on stream.`);
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; button.textContent = 'Roll on Stream'; }
+  }
+
+  async function saveDiceOverlaySettings() {
+    try {
+      const result = await api('/v1/dice-overlay/settings', { method: 'POST', body: {
+        enabled: $('#diceOverlayEnabled').checked,
+        theme: $('#diceTheme').value,
+        durationMs: Number($('#diceDuration').value),
+        soundEnabled: $('#diceSoundEnabled').checked,
+        showReason: $('#diceShowReason').checked,
+        scalePercent: Number($('#diceScale').value)
+      } });
+      state.diceOverlay.settings = result.settings;
+      renderDiceOverlay({ settings: true });
+      toast('3D Dice appearance saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearDiceOverlay() {
+    try {
+      state.diceOverlay = await api('/v1/dice-overlay/clear', { method: 'POST', body: {} });
+      renderDiceOverlay();
+      toast('3D Dice Browser Source cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   function renderAll() {
     renderSafety();
     renderOverview();
     renderEvents();
     renderAlertHistory();
     renderSoundAlerts();
+    renderDiceOverlay({ settings: true });
     renderVisualAlerts();
     renderChatOverlay({ settings: true });
     renderEmoteWall({ settings: true });
@@ -2418,6 +2488,7 @@
       renderEvents();
       renderAlertHistory();
     } else if (activeSection === 'soundalertsSection') renderVisualAlertStatus();
+    else if (activeSection === 'diceSection') renderDiceOverlay();
     else if (activeSection === 'visualalertsSection') {
       renderVisualAlertStatus();
       renderTwitchExperiences();
@@ -2444,7 +2515,7 @@
     runtimeRefreshBusy = true;
     try {
       const diagnosticsVisible = $('#eventsSection').classList.contains('active');
-      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), diagnosticsVisible ? api('/v1/alert-history?limit=200') : Promise.resolve(state.alertHistory), diagnosticsVisible ? api('/v1/alert-diagnostics') : Promise.resolve(state.alertDiagnostics)]);
+      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), diagnosticsVisible ? api('/v1/alert-history?limit=200') : Promise.resolve(state.alertHistory), diagnosticsVisible ? api('/v1/alert-diagnostics') : Promise.resolve(state.alertDiagnostics)]);
       state.health = health;
       state.connections = connections.connections || [];
       state.dualFormat = dualFormat;
@@ -2455,6 +2526,7 @@
       state.chatbot = chatbot;
       state.kick = kick;
       state.visualAlerts = visualAlerts;
+      state.diceOverlay = diceOverlay;
       state.chatOverlay = chatOverlay;
       state.emoteWall = emoteWall;
       state.twitchExperiences = twitchExperiences;
@@ -2477,8 +2549,8 @@
 
   async function refresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
+      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
       renderBridgeStatus(true);
       renderAll();
     } catch (error) {
@@ -4381,6 +4453,11 @@
     if (button.dataset.exportTwitchAlertPack) return exportAlertPack('twitch', button.dataset.exportTwitchAlertPack);
     if (button.dataset.section) return showSection(button.dataset.section);
     if (button.dataset.go) return showSection(button.dataset.go);
+    if (button.dataset.dicePreset) {
+      $('#diceExpression').value = button.dataset.dicePreset;
+      $('#diceExpression').focus();
+      return;
+    }
     if (button.dataset.soundAlertTrigger) return testSoundAlert(button.dataset.soundAlertTrigger);
     if (button.dataset.soundAlertAudio) return assignSoundAlertAudio(button.dataset.soundAlertAudio);
     if (button.dataset.soundAlertVisual) return assignSoundAlertVisual(button.dataset.soundAlertVisual);
@@ -4455,6 +4532,9 @@
     $('#privacyModeButton').addEventListener('click', togglePrivacyMode);
     $('#savePrivacySettings').addEventListener('click', savePrivacyControls);
     $('#refreshButton').addEventListener('click', () => refresh());
+    $('#diceRollForm').addEventListener('submit', rollDiceOnStream);
+    $('#saveDiceOverlaySettings').addEventListener('click', saveDiceOverlaySettings);
+    $('#clearDiceOverlay').addEventListener('click', clearDiceOverlay);
     $('#openOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#reviewOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#closeOnboardingWizard').addEventListener('click', () => $('#onboardingDialog').close());

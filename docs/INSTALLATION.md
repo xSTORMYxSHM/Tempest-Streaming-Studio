@@ -11,6 +11,7 @@
    - Chat Overlay, optional: `http://127.0.0.1:4765/chat-overlay`
    - Emote Wall, optional: `http://127.0.0.1:4765/emote-wall`
    - Twitch Experiences, optional: `http://127.0.0.1:4765/twitch-experiences`
+   - 3D Dice, optional: `http://127.0.0.1:4765/dice-overlay`
 5. Enable **Control audio via OBS** for both alert sources. Keep Twitch Alert audio on live and recording tracks. Route Interaction Alert audio to the live track and exclude it from the VOD track when its media may be copyrighted.
 
 The ZIP artifact is a portable application directory for testing or users who do not want an installer. Studio settings remain in the Windows per-user application-data directory, not beside the executable.

@@ -34,6 +34,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /FrankerFaceZ/);
   assert.match(renderer, /emote-wall\/providers\/refresh/);
   assert.match(renderer, /Emote Wall browser-source URL/);
+  assert.match(html, /data-section="dice"/);
+  assert.match(html, /id="diceSection"/);
+  assert.match(html, /id="diceRollForm"/);
+  assert.match(renderer, /\/v1\/dice-overlay\/roll/);
+  assert.match(renderer, /3D Dice Browser Source URL/);
+  assert.match(styles, /Studio-owned 3D dice/);
   assert.match(html, /data-section="discordvoice"/);
   assert.match(html, /id="discordvoiceSection"/);
   assert.match(html, /Discord Guests/);

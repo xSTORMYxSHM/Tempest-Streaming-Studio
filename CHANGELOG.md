@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.7 — 3D Dice and Browser Source audio
+
+- Added a Studio-owned 3D Dice workspace and transparent Browser Source with secure fixed-result rolls, common dice presets, custom bounded notation, advantage/disadvantage, optional reasons and impact audio, three materials, and configurable timing and scale. The feature is independent of Tempest Tabletop Engine.
+- Restored Twitch and Interaction Alert sound capture in current Broadcast Browser Sources by playing fully fetched local audio through an OBS-capturable blob media element, with bounded Web Audio fallback and explicit fetch, start, resume, and decode failures in the Broadcast log.
+
 ## 1.4.6 — Viewer interaction platform
 
 - Added a persistent Twitch Extension edition selector for **Tempest Mainframe (Free)** and **Tempest Streaming (Bits)**. Studio publishes the selected edition with its hosted catalog, and Tempest Signal rejects requests from the inactive Extension so both products cannot trigger the same channel accidentally.

@@ -36,6 +36,7 @@ import { TempestChatOverlay } from './chat-overlay';
 import { TempestEmoteWall } from './emote-wall';
 import { TempestTwitchExperiences } from './twitch-experiences';
 import { TempestDiscordVoiceOverlay } from './discord-voice-overlay';
+import { TempestDiceOverlay } from './dice-overlay';
 import { TempestAlertQueue, TempestAlertQueueItem } from './alert-queue';
 import { TempestAlertHistory } from './alert-history';
 import {
@@ -419,6 +420,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await twitchExperiences.initialize();
   const discordVoiceOverlay = new TempestDiscordVoiceOverlay(options.dataDirectory);
   await discordVoiceOverlay.initialize();
+  const diceOverlay = new TempestDiceOverlay(options.dataDirectory);
+  await diceOverlay.initialize();
   let alertQueue: TempestAlertQueue | undefined;
   let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
@@ -814,6 +817,20 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         emoteWall.connect(response);
         return;
       }
+      if (request.method === 'GET' && requestUrl.pathname === '/dice-overlay') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The 3D Dice overlay is available only on this computer.' });
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'text/html; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src blob:;");
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        return response.end(diceOverlay.page());
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/dice-overlay/events') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The 3D Dice overlay is available only on this computer.' });
+        diceOverlay.connect(response);
+        return;
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
         response.statusCode = 200;
@@ -1128,6 +1145,23 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'POST' && requestUrl.pathname === '/v1/emote-wall/clear') {
         emoteWall.clear();
         return sendJson(response, 200, emoteWall.status(`${runtime.baseUrl}/emote-wall`));
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/dice-overlay') {
+        return sendJson(response, 200, diceOverlay.status(`${runtime.baseUrl}/dice-overlay`));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/settings') {
+        const settings = await diceOverlay.update(await readJson(request));
+        return sendJson(response, 200, { settings });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/roll') {
+        const roll = diceOverlay.roll(await readJson(request));
+        workflowEngine!.recordExternalEvent('studio.dice.rolled', 'success', `${roll.rollerName} rolled ${roll.expression}: ${roll.total}.`, { roll });
+        return sendJson(response, 202, { roll, ...diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/clear') {
+        diceOverlay.clear();
+        workflowEngine!.recordExternalEvent('studio.dice.cleared', 'info', 'The operator cleared the 3D Dice Browser Source.', {});
+        return sendJson(response, 200, diceOverlay.status(`${runtime.baseUrl}/dice-overlay`));
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/twitch-experiences') return sendJson(response, 200, twitchExperiences.status(`${runtime.baseUrl}/twitch-experiences`));
       if (request.method === 'POST' && requestUrl.pathname === '/v1/twitch-experiences/settings') {
@@ -1724,6 +1758,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       twitchAlertOverlay.close();
       chatOverlay.close();
       emoteWall.close();
+      diceOverlay.close();
       twitchExperiences.close();
       discordVoiceOverlay.close();
       twitchGateway.close();
