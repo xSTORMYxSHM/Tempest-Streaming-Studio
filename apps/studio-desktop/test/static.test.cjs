@@ -427,6 +427,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="chatbotAutoMessagesTwitch"/);
   assert.match(html, /id="chatbotAutoMessagesKick"/);
   assert.match(html, /id="chatbotPollForm"/);
+  assert.match(html, /class="chatbot-poll-card chatbot-poll-setup-card"/);
+  assert.match(html, /class="chatbot-poll-actions"/);
   assert.match(renderer, /\/v1\/chatbot\/poll\/start/);
   assert.match(renderer, /\/v1\/chatbot\/poll\/stop/);
   assert.match(renderer, /Rotating Auto Messages saved/);

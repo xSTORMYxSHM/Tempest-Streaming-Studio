@@ -26,6 +26,7 @@ Tempest Streaming Studio 1.5.0 is a coordinated reliability and operations relea
 - Runs Twitch Stream Together Backstage as a dedicated Studio call window with a Chrome-compatible Chromium identity, a persistent isolated Twitch sign-in, Twitch-only camera and microphone permission, and native screen-share selection. Live Desk calls its combined Twitch, Stream Together collaboration, and Kick feed **Unified Chat**, reserving **Shared Chat** for Twitch's own Stream Together feature.
 - Keeps the private-information masking control permanently visible and automatically reveals the correct setup drawer when Guided Setup links to a hidden configuration page.
 - Expands the Stream Goal overlay beyond Twitch's automatic channel goal: Studio can run persistent subscriber, follower, Bits, donation, or custom goals with an editable title, unit, current value, target, and live −1/+1 controls.
+- Restyles Live Desk polls with the same dark cards, field treatments, status notes, spacing, and action hierarchy used by the rest of Studio.
 
 ## Studio and Broadcast ownership
 
