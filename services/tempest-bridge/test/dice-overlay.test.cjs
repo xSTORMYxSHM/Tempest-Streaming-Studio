@@ -46,11 +46,14 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
   const client = connectedClient(overlay);
+  const init = latestEvent(client, 'init');
+  overlay.reportClient({ clientId: init.clientId, state: 'ready', theme: 'default', renderer: 'offscreen' });
 
   const rolling = overlay.roll({ expression: '2d20kh1+3', reason: 'Saving throw', rollerName: 'Storm' });
   const request = latestEvent(client, 'roll-request');
   assert.equal(request.physicalSides, 20);
-  overlay.complete({ id: request.id, token: request.token, values: [7, 18] });
+  const completed = overlay.complete({ id: request.id, token: request.token, values: [7, 18] });
+  assert.equal(overlay.complete({ id: request.id, token: request.token, values: [7, 18] }).id, completed.id);
   const roll = await rolling;
 
   assert.deepEqual(roll.dice.map((die) => die.value), [7, 18]);
@@ -66,7 +69,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(page, /Tempest Studio 3D Dice/);
   assert.match(page, /id="diceWorld"/);
   assert.match(page, /\/dice-overlay\/client\.js/);
-  assert.match(browserClient, /import DiceBox from '\/dice-overlay\/vendor\/dice-box\.es\.min\.js'/);
+  assert.doesNotMatch(page, /type="module"/);
+  assert.match(browserClient, /import\('\/dice-overlay\/vendor\/dice-box\.es\.min\.js'\)/);
   assert.match(browserClient, /diceBox\.roll/);
   assert.match(browserClient, /diceBox\.reroll\(rejected/);
   assert.match(browserClient, /onDieComplete: \(die\) => physicalDieListener/);
@@ -74,11 +78,43 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /Promise\.race\(\[apiResult, callbackResult\]\)/);
   assert.match(browserClient, /settled visually but did not return its physical result within 20 seconds/);
   assert.match(browserClient, /if \(payload\.roll\) showResult\(payload\.roll\)/);
-  assert.match(browserClient, /fetch\('\/dice-overlay\/error'/);
+  assert.match(browserClient, /postJson\('\/dice-overlay\/error'/);
   assert.match(browserClient, /hasOwnProperty\.call\(result, 'value'\)/);
-  assert.match(browserClient, /URL\.createObjectURL\(impactWav\(\)\)/);
-  assert.match(browserClient, /new Audio\(impactUrl\)/);
+  assert.match(browserClient, /diceBox\.loadTheme\(requested\)/);
+  assert.match(browserClient, /Using Classic dice instead/);
+  assert.match(browserClient, /Offscreen Dice Box initialization timed out/);
+  assert.match(browserClient, /create\(false\)/);
+  assert.match(browserClient, /new DiceBoxClass/);
+  assert.match(browserClient, /new Audio\(\)/);
+  assert.match(browserClient, /new AudioContextClass/);
+  assert.match(browserClient, /events\.addEventListener\('audio-test'/);
   assert.doesNotMatch(browserClient, /Math\.random/);
+  assert.equal(overlay.status('local').requests.pageLoads, 1);
+  assert.equal(overlay.status('local').requests.clientLoads, 1);
+  overlay.close();
+});
+
+test('tracks renderer readiness, verifies sound, and fails promptly when the authority disconnects', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-health-'));
+  const overlay = new TempestDiceOverlay(directory);
+  await overlay.initialize();
+  const client = connectedClient(overlay);
+  const init = latestEvent(client, 'init');
+  overlay.reportClient({ clientId: init.clientId, state: 'degraded', theme: 'default', renderer: 'onscreen', error: 'Custom theme unavailable.' });
+  assert.equal(overlay.status('local').readyClients, 1);
+  assert.equal(overlay.status('local').clients[0].state, 'degraded');
+
+  const testing = overlay.testAudio();
+  const audioRequest = latestEvent(client, 'audio-test');
+  overlay.reportAudio({ clientId: init.clientId, testId: audioRequest.id, state: 'ready', method: 'web-audio' });
+  assert.deepEqual(await testing, { state: 'ready', method: 'web-audio', testedAt: overlay.status('local').audio.testedAt });
+
+  const rolling = overlay.roll({ expression: '1d20' });
+  latestEvent(client, 'roll-request');
+  const rejected = assert.rejects(rolling, /disconnected before the roll settled/);
+  client.emit('close');
+  await rejected;
+  assert.equal(overlay.status('local').rolling, false);
   overlay.close();
 });
 

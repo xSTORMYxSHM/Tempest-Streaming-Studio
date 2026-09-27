@@ -48,7 +48,7 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
 
   const client = await fetch(`${runtime.baseUrl}/dice-overlay/client.js`);
   assert.equal(client.status, 200);
-  assert.match(await client.text(), /new DiceBox/);
+  assert.match(await client.text(), /new DiceBoxClass/);
   const vendor = await fetch(`${runtime.baseUrl}/dice-overlay/vendor/dice-box.es.min.js`);
   assert.equal(vendor.status, 200);
   assert.match(await vendor.text(), /OffscreenCanvas/);
@@ -75,7 +75,13 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   assert.equal(stream.status, 200);
   const reader = stream.body.getReader();
   const decoder = new TextDecoder();
-  await readSseEvent(reader, decoder, 'init');
+  const init = await readSseEvent(reader, decoder, 'init');
+
+  const clientHealth = await fetch(`${runtime.baseUrl}/dice-overlay/client-status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: init.clientId, state: 'ready', theme: 'default', renderer: 'offscreen' })
+  });
+  assert.equal(clientHealth.status, 200);
 
   const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
   const initialStatus = await fetch(`${runtime.baseUrl}/v1/dice-overlay`, { headers });
@@ -84,6 +90,7 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   assert.ok(initialDice.themes.some((candidate) => candidate.id === 'gemstoneMarble'));
   assert.ok(initialDice.themes.some((candidate) => candidate.id === 'auroraDice' && candidate.custom === true));
   assert.equal(initialDice.settings.gravity, 1);
+  assert.equal(initialDice.readyClients, 1);
   const settingsResponse = await fetch(`${runtime.baseUrl}/v1/dice-overlay/settings`, {
     method: 'POST', headers, body: JSON.stringify({ diceTheme: 'auroraDice', themeColor: '#44ccff', gravity: 1.2, restitution: 0.35 })
   });
@@ -103,6 +110,11 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
     body: JSON.stringify({ id: request.id, token: request.token, values: [2, 4, 6] })
   });
   assert.equal(completion.status, 200);
+  const duplicateCompletion = await fetch(`${runtime.baseUrl}/dice-overlay/result`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: request.id, token: request.token, values: [2, 4, 6] })
+  });
+  assert.equal(duplicateCompletion.status, 200);
 
   const response = await rolling;
   assert.equal(response.status, 200);
@@ -113,6 +125,15 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   assert.equal(result.roll.total, 14);
   assert.equal(result.latestRoll.id, result.roll.id);
   assert.equal(result.history.length, 1);
+
+  const audioTest = fetch(`${runtime.baseUrl}/v1/dice-overlay/audio/test`, { method: 'POST', headers, body: '{}' });
+  const audioRequest = await readSseEvent(reader, decoder, 'audio-test');
+  const audioReport = await fetch(`${runtime.baseUrl}/dice-overlay/audio-status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: init.clientId, testId: audioRequest.id, state: 'ready', method: 'media' })
+  });
+  assert.equal(audioReport.status, 200);
+  assert.equal((await audioTest).status, 200);
 
   const failingRoll = fetch(`${runtime.baseUrl}/v1/dice-overlay/roll`, {
     method: 'POST',

@@ -1,6 +1,4 @@
 export const tempestDiceOverlayClient = String.raw`
-import DiceBox from '/dice-overlay/vendor/dice-box.es.min.js';
-
 const world = document.getElementById('diceWorld');
 const hud = document.getElementById('diceHud');
 const errorBanner = document.getElementById('diceError');
@@ -8,25 +6,64 @@ const colors = { stormglass: '#2e91ad', brass: '#a7792b', obsidian: '#3d315f' };
 let settings = { theme: 'stormglass', diceTheme: 'default', themeColor: '#2e91ad', durationMs: 5200, soundEnabled: false, showReason: true, scalePercent: 100, gravity: 1, mass: 1, friction: .8, restitution: .1, angularDamping: .4, linearDamping: .5, spinForce: 6, throwForce: 5, startingHeight: 8, settleTimeout: 5000, diceDelayMs: 10, lightIntensity: 1, enableShadows: true, shadowTransparency: .8 };
 let box;
 let boxPromise;
+let DiceBoxClass;
+let configPromise = Promise.resolve();
+let configuredSignature = '';
+let clientId = '';
+let activeDiceTheme = 'default';
+let rendererMode = 'offscreen';
+let rendererFallbackError = '';
 let clearTimer = 0;
 let errorTimer = 0;
 let impactAudio;
 let impactUrl;
+let impactEncoded;
+let impactAudioContext;
+let impactAudioBuffer;
+let impactAudioSource;
 let physicalDieListener;
 let physicalRollListener;
 let presentedRollId = '';
 
 function themeColor() { return settings.themeColor || colors[settings.theme] || colors.stormglass; }
 
-function boxConfig() {
+function boxConfig(theme = activeDiceTheme) {
   return {
-    theme: settings.diceTheme || 'default', themeColor: themeColor(),
+    theme, themeColor: themeColor(),
     scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)),
     gravity: Number(settings.gravity), mass: Number(settings.mass), friction: Number(settings.friction), restitution: Number(settings.restitution),
     angularDamping: Number(settings.angularDamping), linearDamping: Number(settings.linearDamping), spinForce: Number(settings.spinForce), throwForce: Number(settings.throwForce),
     startingHeight: Number(settings.startingHeight), settleTimeout: Number(settings.settleTimeout), delay: Number(settings.diceDelayMs),
     lightIntensity: Number(settings.lightIntensity), enableShadows: settings.enableShadows !== false, shadowTransparency: Number(settings.shadowTransparency)
   };
+}
+
+function bounded(promise, timeoutMs, message) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })]).finally(() => clearTimeout(timer));
+}
+
+async function postJson(path, body, attempts = 4) {
+  let latestError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+      const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: controller.signal });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Studio returned HTTP ' + response.status + '.');
+      return payload;
+    } catch (error) {
+      latestError = error;
+      if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt)));
+    } finally { clearTimeout(timeout); }
+  }
+  throw latestError || new Error('Studio did not answer the Browser Source.');
+}
+
+async function reportClient(state, error) {
+  if (!clientId) return;
+  await postJson('/dice-overlay/client-status', { clientId, state, theme: activeDiceTheme, renderer: rendererMode, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
 }
 
 function showError(message) {
@@ -47,39 +84,119 @@ function impactWav() {
     const sample = (Math.sin(2 * Math.PI * 132 * t) + .55 * Math.sin(2 * Math.PI * 197 * t) + .28 * Math.sin(2 * Math.PI * 281 * t)) * envelope * .24;
     view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, sample)) * 32767, true);
   }
-  return new Blob([buffer], { type: 'audio/wav' });
+  return buffer;
 }
 
-function playImpact() {
-  if (!settings.soundEnabled) return;
+function stopImpact() {
+  if (impactAudio) { impactAudio.pause(); impactAudio.currentTime = 0; }
+  if (impactAudioSource) { try { impactAudioSource.stop(); } catch {} try { impactAudioSource.disconnect(); } catch {} impactAudioSource = undefined; }
+}
+
+async function reportAudio(state, method, testId, error) {
+  if (!clientId) return;
+  await postJson('/dice-overlay/audio-status', { clientId, state, method, testId, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
+}
+
+async function playImpact({ force = false, testId } = {}) {
+  if (!force && !settings.soundEnabled) return;
+  stopImpact();
+  if (!impactEncoded) impactEncoded = impactWav();
+  let mediaError;
   try {
-    if (!impactUrl) impactUrl = URL.createObjectURL(impactWav());
-    if (!impactAudio) { impactAudio = new Audio(impactUrl); impactAudio.preload = 'auto'; impactAudio.volume = .72; }
-    else { impactAudio.pause(); impactAudio.currentTime = 0; }
-    impactAudio.play().catch((error) => console.error('Tempest dice impact audio failed: ' + error.message));
-  } catch (error) { console.error('Tempest dice impact audio failed: ' + error.message); }
+    if (!impactUrl) impactUrl = URL.createObjectURL(new Blob([impactEncoded], { type: 'audio/wav' }));
+    if (!impactAudio) { impactAudio = new Audio(); impactAudio.preload = 'auto'; impactAudio.autoplay = true; impactAudio.volume = .72; }
+    impactAudio.src = impactUrl; impactAudio.load();
+    await bounded(impactAudio.play(), 3000, 'dice media element timed out while starting');
+    await reportAudio('ready', 'media', testId);
+    return;
+  } catch (error) { mediaError = error; }
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('Web Audio is unavailable.');
+    if (!impactAudioContext || impactAudioContext.state === 'closed') impactAudioContext = new AudioContextClass({ latencyHint: 'interactive' });
+    if (impactAudioContext.state !== 'running') await bounded(impactAudioContext.resume(), 2500, 'Web Audio resume timed out');
+    if (impactAudioContext.state !== 'running') throw new Error('Web Audio context is ' + impactAudioContext.state + '.');
+    if (!impactAudioBuffer) impactAudioBuffer = await bounded(impactAudioContext.decodeAudioData(impactEncoded.slice(0)), 4000, 'Dice sound decode timed out');
+    const source = impactAudioContext.createBufferSource(), gain = impactAudioContext.createGain();
+    gain.gain.value = .72; source.buffer = impactAudioBuffer; source.connect(gain); gain.connect(impactAudioContext.destination); impactAudioSource = source;
+    source.onended = () => { if (impactAudioSource === source) impactAudioSource = undefined; try { source.disconnect(); } catch {} try { gain.disconnect(); } catch {} };
+    source.start(0);
+    await reportAudio('ready', 'web-audio', testId);
+  } catch (error) {
+    const media = mediaError instanceof Error ? mediaError.message : String(mediaError || 'unknown media error');
+    const fallback = error instanceof Error ? error.message : String(error);
+    const failure = 'media element: ' + media + '; Web Audio fallback: ' + fallback;
+    console.error('Tempest dice impact audio failed: ' + failure);
+    showError('Dice sound failed: ' + failure);
+    await reportAudio('failed', 'web-audio', testId, failure);
+  }
+}
+
+async function configureBox(diceBox) {
+  const requested = settings.diceTheme || 'default';
+  const desiredSignature = JSON.stringify([requested, settings.theme, settings.themeColor, settings.scalePercent, settings.gravity, settings.mass, settings.friction, settings.restitution, settings.angularDamping, settings.linearDamping, settings.spinForce, settings.throwForce, settings.startingHeight, settings.settleTimeout, settings.diceDelayMs, settings.lightIntensity, settings.enableShadows, settings.shadowTransparency]);
+  if (desiredSignature === configuredSignature) return;
+  const nextConfiguration = configPromise.catch(() => undefined).then(async () => {
+    if (desiredSignature === configuredSignature) return;
+    try {
+      const loaded = await bounded(diceBox.loadTheme(requested), 6000, 'Dice theme load timed out.');
+      if (!loaded || !Array.isArray(loaded.diceAvailable)) throw new Error('Dice theme did not provide valid model metadata.');
+      activeDiceTheme = requested;
+      await bounded(diceBox.updateConfig(boxConfig(activeDiceTheme)), 6000, 'Dice engine configuration timed out.');
+      configuredSignature = desiredSignature;
+      await reportClient(rendererFallbackError ? 'degraded' : 'ready', rendererFallbackError);
+    } catch (error) {
+      activeDiceTheme = 'default';
+      const fallback = await bounded(diceBox.loadTheme('default'), 6000, 'Classic fallback theme load timed out.');
+      if (!fallback || !Array.isArray(fallback.diceAvailable)) throw error;
+      await bounded(diceBox.updateConfig(boxConfig('default')), 6000, 'Classic fallback configuration timed out.');
+      configuredSignature = desiredSignature;
+      showError((error instanceof Error ? error.message : String(error)) + ' Using Classic dice instead.');
+      await reportClient('degraded', error);
+    }
+  });
+  configPromise = nextConfiguration.catch(() => undefined);
+  try { await nextConfiguration; }
+  catch (error) { await reportClient('failed', error); throw error; }
 }
 
 async function getBox() {
   if (boxPromise) return boxPromise;
   boxPromise = (async () => {
-    box = new DiceBox({
-      container: '#diceWorld', assetPath: '/dice-overlay/assets/', offscreen: true, ...boxConfig(),
-      onDieComplete: (die) => physicalDieListener?.(die),
-      onRollComplete: (results) => physicalRollListener?.(results)
+    await reportClient('connecting', 'Loading the Dice Box runtime.');
+    if (!DiceBoxClass) {
+      const runtime = await bounded(import('/dice-overlay/vendor/dice-box.es.min.js'), 8000, 'Dice Box runtime import timed out.');
+      DiceBoxClass = runtime.default;
+      if (typeof DiceBoxClass !== 'function') throw new Error('Dice Box runtime did not export its renderer.');
+    }
+    const create = (offscreen) => new DiceBoxClass({
+      container: '#diceWorld', assetPath: '/dice-overlay/assets/', offscreen, ...boxConfig('default'),
+      onDieComplete: (die) => physicalDieListener?.(die), onRollComplete: (results) => physicalRollListener?.(results)
     });
-    await box.init();
+    await reportClient('connecting', 'Initializing the offscreen Dice Box renderer.');
+    try {
+      rendererMode = 'offscreen';
+      box = create(true);
+      await bounded(box.init(), 12000, 'Offscreen Dice Box initialization timed out.');
+    } catch (offscreenError) {
+      rendererFallbackError = 'Offscreen renderer unavailable (' + (offscreenError instanceof Error ? offscreenError.message : String(offscreenError)) + '); using the onscreen renderer.';
+      try { box?.clear(); } catch {}
+      world.replaceChildren();
+      rendererMode = 'onscreen';
+      await reportClient('connecting', rendererFallbackError);
+      box = create(false);
+      await bounded(box.init(), 12000, 'Onscreen Dice Box fallback initialization timed out.');
+    }
     return box;
-  })().catch((error) => { boxPromise = undefined; showError('Dice Box could not start: ' + error.message); throw error; });
+  })().catch(async (error) => { boxPromise = undefined; await reportClient('failed', error); showError('Dice Box could not start: ' + error.message); throw error; });
   return boxPromise;
 }
 
 async function apply(next) {
   settings = { ...settings, ...next };
-  if (boxPromise) {
-    const diceBox = await boxPromise;
-    await diceBox.updateConfig(boxConfig());
-  }
+  document.documentElement.style.setProperty('--dice-scale', String(Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100))));
+  const diceBox = await getBox();
+  await configureBox(diceBox);
 }
 
 function flatten(results) {
@@ -120,10 +237,7 @@ async function waitForPhysicalDice(startRoll, expectedCount) {
 
 async function reportRollFailure(request, error) {
   if (!request?.id || !request?.token) return;
-  await fetch('/dice-overlay/error', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: request.id, token: request.token, message: error instanceof Error ? error.message : String(error) })
-  }).catch(() => {});
+  await postJson('/dice-overlay/error', { id: request.id, token: request.token, message: error instanceof Error ? error.message : String(error) }, 2).catch(() => {});
 }
 
 async function performRoll(request) {
@@ -133,8 +247,9 @@ async function performRoll(request) {
     hud.classList.remove('visible');
     errorBanner.classList.remove('visible');
     const diceBox = await getBox();
+    await configureBox(diceBox);
     const notation = String(request.count) + 'd' + String(request.physicalSides);
-    let pending = await waitForPhysicalDice(() => diceBox.roll(notation, { theme: settings.diceTheme || 'default', themeColor: themeColor() }), Number(request.count));
+    let pending = await waitForPhysicalDice(() => diceBox.roll(notation, { theme: activeDiceTheme, themeColor: themeColor() }), Number(request.count));
     const accepted = [];
     let attempts = 0;
     while (pending.length && attempts < 40) {
@@ -149,12 +264,7 @@ async function performRoll(request) {
       pending = await waitForPhysicalDice(() => diceBox.reroll(rejected, { remove: true, newStartPoint: true }), rejected.length);
     }
     if (accepted.length !== Number(request.count)) throw new Error('Dice Box did not produce the requested number of in-range results.');
-    const response = await fetch('/dice-overlay/result', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: request.id, token: request.token, values: accepted })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Studio rejected the physical dice result.');
+    const payload = await postJson('/dice-overlay/result', { id: request.id, token: request.token, values: accepted });
     if (payload.roll) showResult(payload.roll);
   } catch (error) {
     console.error('Tempest Dice Box roll failed.', error);
@@ -179,7 +289,7 @@ function showResult(roll) {
   if (roll.rollerName) { const roller = document.createElement('em'); roller.textContent = 'Rolled by ' + roll.rollerName; card.append(roller); }
   hud.append(card);
   hud.classList.add('visible');
-  if (!repeated) playImpact();
+  if (!repeated) playImpact().catch((error) => console.error('Tempest dice impact audio failed: ' + error.message));
   clearTimer = setTimeout(clearPresentation, Math.max(2500, Number(settings.durationMs) || 5200));
 }
 
@@ -188,17 +298,18 @@ function clearPresentation() {
   hud.classList.remove('visible');
   hud.replaceChildren();
   presentedRollId = '';
+  stopImpact();
   if (box) box.clear();
 }
 
-getBox().catch(() => {});
 const events = new EventSource('/dice-overlay/events');
-events.addEventListener('init', (event) => apply(JSON.parse(event.data).settings || {}).catch((error) => showError(error.message)));
+events.addEventListener('init', (event) => { const data = JSON.parse(event.data); clientId = String(data.clientId || ''); apply(data.settings || {}).catch((error) => showError(error.message)); });
 events.addEventListener('settings', (event) => apply(JSON.parse(event.data)).catch((error) => showError(error.message)));
 events.addEventListener('roll-request', (event) => performRoll(JSON.parse(event.data)));
 events.addEventListener('roll-result', (event) => showResult(JSON.parse(event.data)));
 events.addEventListener('roll-error', (event) => showError(JSON.parse(event.data).message));
+events.addEventListener('audio-test', (event) => playImpact({ force: true, testId: JSON.parse(event.data).id }).catch((error) => showError(error.message)));
 events.addEventListener('clear', clearPresentation);
-events.onerror = () => {};
-window.addEventListener('beforeunload', () => { if (impactUrl) URL.revokeObjectURL(impactUrl); });
+events.onerror = () => { clientId = ''; };
+window.addEventListener('beforeunload', () => { stopImpact(); if (impactUrl) URL.revokeObjectURL(impactUrl); if (impactAudioContext && impactAudioContext.state !== 'closed') impactAudioContext.close().catch(() => {}); });
 `;

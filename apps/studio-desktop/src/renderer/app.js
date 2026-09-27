@@ -2580,15 +2580,35 @@
     if (!status) return;
     const enabled = status.settings?.enabled !== false;
     const clients = Number(status.connectedClients || 0);
+    const authority = status.clients?.find((client) => client.authority) || status.clients?.[0];
+    const engineState = authority?.state || (clients ? 'connecting' : 'disconnected');
+    const engineReady = engineState === 'ready' || engineState === 'degraded';
     const roll = status.latestRoll;
-    $('#diceOverlayBadge').textContent = enabled ? (clients ? 'ON STREAM' : 'SOURCE READY') : 'DISABLED';
-    $('#diceOverlayBadge').classList.toggle('offline', !enabled);
+    $('#diceOverlayBadge').textContent = !enabled ? 'DISABLED' : engineState === 'failed' ? 'ENGINE FAILED' : clients && !engineReady ? 'ENGINE STARTING' : clients ? 'ON STREAM' : 'SOURCE READY';
+    $('#diceOverlayBadge').classList.toggle('offline', !enabled || engineState === 'failed');
     $('#diceConnectedClients').textContent = String(clients);
     $('#diceLastTotal').textContent = roll ? String(roll.total) : '—';
     $('#diceLastReason').textContent = roll?.reason || (roll ? `Rolled by ${roll.rollerName}` : 'No roll yet');
     $('#diceLastExpression').textContent = roll?.expression || '—';
     $('#diceHistoryCount').textContent = String(status.history?.length || 0);
-    $('#diceOverlaySourceStatus').innerHTML = `<strong>3D Dice source:</strong> ${clients ? `${clients} Browser Source${clients === 1 ? '' : 's'} connected.` : 'Add this local URL to Broadcast as a Browser Source.'} <code data-sensitive>${escapeHtml(status.url)}</code> ${copyButton(status.url, '3D Dice Browser Source URL')}`;
+    const sourceMessage = !clients
+      ? 'Add this local URL to Broadcast as a Browser Source.'
+      : engineState === 'ready'
+        ? `Browser Source connected and the ${escapeHtml(authority?.theme || status.settings?.diceTheme || 'selected')} dice engine is ready.`
+        : engineState === 'degraded'
+          ? `Browser Source is using a safe fallback: ${escapeHtml(authority?.error || 'the selected theme was unavailable')}`
+          : engineState === 'failed'
+            ? `Browser Source engine failed: ${escapeHtml(authority?.error || 'reload the source to retry')}`
+            : 'Browser Source connected; its dice engine is still loading.';
+    const duplicateMessage = Number(status.duplicateClients || 0) ? ` ${escapeHtml(status.duplicateClients)} duplicate source${Number(status.duplicateClients) === 1 ? '' : 's'} will mirror results but not own rolls.` : '';
+    $('#diceOverlaySourceStatus').innerHTML = `<strong>3D Dice source:</strong> ${sourceMessage}${duplicateMessage} <code data-sensitive>${escapeHtml(status.url)}</code> ${copyButton(status.url, '3D Dice Browser Source URL')}`;
+    const audio = status.audio || { state: 'untested' };
+    $('#diceAudioStatus').textContent = audio.state === 'ready'
+      ? `Verified in the Browser Source via ${audio.method === 'web-audio' ? 'Web Audio fallback' : 'media playback'}.`
+      : audio.state === 'failed'
+        ? `Sound test failed: ${audio.error || 'the Browser Source did not confirm playback.'}`
+        : audio.state === 'testing' ? 'Waiting for the Browser Source to confirm playback…' : 'Sound has not been verified in the Browser Source.';
+    $('#testDiceAudio').disabled = !clients || audio.state === 'testing';
     const preview = $('#diceResultPreview');
     preview.classList.toggle('empty-state', !roll);
     preview.innerHTML = roll ? `<div><div class="dice-preview-expression">${escapeHtml(roll.expression)} · ${escapeHtml(roll.rollerName)}</div><div class="dice-preview-dice">${roll.dice.map((die) => `<span class="dice-preview-die ${die.kept ? '' : 'dropped'}" title="d${escapeHtml(die.sides)}${die.kept ? '' : ' dropped'}">${escapeHtml(die.value)}</span>`).join('')}</div></div><strong class="dice-preview-total">${escapeHtml(roll.total)}</strong>${roll.reason ? `<p class="dice-preview-reason">${escapeHtml(roll.reason)}</p>` : ''}` : 'Results appear here after the on-stream dice finish bouncing and settle.';
@@ -2679,6 +2699,19 @@
       renderDiceOverlay({ settings: true });
       toast('3D Dice appearance and physics saved.');
     } catch (error) { toast(error.message, true); }
+  }
+
+  async function testDiceAudio() {
+    const button = $('#testDiceAudio');
+    button.disabled = true;
+    button.textContent = 'Testing…';
+    try {
+      const result = await api('/v1/dice-overlay/audio/test', { method: 'POST', body: {} });
+      state.diceOverlay.audio = result.audio;
+      renderDiceOverlay();
+      toast(result.audio.state === 'ready' ? 'Dice sound was confirmed by the Browser Source.' : result.audio.error || 'Dice sound test failed.', result.audio.state !== 'ready');
+    } catch (error) { toast(error.message, true); }
+    finally { button.textContent = 'Test Dice Sound'; renderDiceOverlay(); }
   }
 
   async function importDiceTheme() {
@@ -4837,6 +4870,7 @@
     $('#diceRollForm').addEventListener('submit', rollDiceOnStream);
     $('#saveDiceOverlaySettings').addEventListener('click', saveDiceOverlaySettings);
     $('#clearDiceOverlay').addEventListener('click', clearDiceOverlay);
+    $('#testDiceAudio').addEventListener('click', testDiceAudio);
     $('#importDiceTheme').addEventListener('click', importDiceTheme);
     $('#resetDicePhysics').addEventListener('click', resetDicePhysics);
     $('#diceTheme').addEventListener('change', updateDicePickerAvailability);

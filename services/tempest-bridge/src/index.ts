@@ -1026,6 +1026,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         diceOverlay.fail(await readJson(request));
         return sendJson(response, 200, { ok: true });
       }
+      if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/client-status') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice status is accepted only from this computer.' });
+        return sendJson(response, 200, { client: diceOverlay.reportClient(await readJson(request)) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/dice-overlay/audio-status') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: '3D Dice audio status is accepted only from this computer.' });
+        return sendJson(response, 200, { audio: diceOverlay.reportAudio(await readJson(request)) });
+      }
       if (request.method === 'GET' && requestUrl.pathname === '/twitch-experiences') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Twitch Experiences are available only on this computer.' });
         response.statusCode = 200;
@@ -1321,6 +1329,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const roll = await diceOverlay.roll(await readJson(request));
         workflowEngine!.recordExternalEvent('studio.dice.rolled', 'success', `${roll.rollerName} rolled ${roll.expression}: ${roll.total}.`, { roll });
         return sendJson(response, 200, { roll, ...diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/audio/test') {
+        return sendJson(response, 200, { audio: await diceOverlay.testAudio() });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/clear') {
         diceOverlay.clear();

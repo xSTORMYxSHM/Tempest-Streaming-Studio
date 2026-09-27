@@ -44,10 +44,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="diceColor"/);
   assert.match(html, /id="diceThemeColor"/);
   assert.match(html, /id="importDiceTheme"/);
+  assert.match(html, /id="testDiceAudio"/);
   assert.match(html, /id="diceGravity"/);
   assert.match(html, /id="diceEnableShadows"/);
   assert.match(renderer, /\/v1\/dice-overlay\/roll/);
   assert.match(renderer, /\/v1\/dice-overlay\/themes\/refresh/);
+  assert.match(renderer, /\/v1\/dice-overlay\/audio\/test/);
   assert.match(renderer, /3D Dice Browser Source URL/);
   assert.match(main, /studio:import-dice-theme/);
   assert.match(preload, /studio:import-dice-theme/);
