@@ -15,11 +15,11 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm check` (107 tests, 0 failures)
-- [ ] `pnpm package:win`
-- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
-- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [ ] Secret/path scan passes for packaged resources.
-- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
+- [x] `pnpm package:win`
+- [x] Packaged executable smoke test exits 0 with a new isolated profile.
+- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [x] Secret/path scan passes for packaged resources.
+- [x] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
 
@@ -38,7 +38,7 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
 - [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
 - [ ] Twitch and Kick messages share Studio's Collaboration Center while replies remain platform-local.
-- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Shared Chat and polls remain connected independently.
+- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Shared Chat and polls remain connected independently. Confirm Broadcast captures call audio through exactly one chosen route so desktop audio and Twitch Browser Source audio do not create an echo.
 - [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
 - [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
 - [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
