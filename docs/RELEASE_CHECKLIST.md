@@ -8,17 +8,17 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 - [x] Keep video canvases, encoders, Enhanced Broadcasting, platform output services, recording, and final audio routing owned by Broadcast.
 - [x] Keep accounts, stream information, chat/chatbot behavior, alerts, interactions, counters, Dice Box, operator readiness, and orchestration owned by Studio.
 - [x] Keep both Twitch Extension packages on their independent `0.1.0` version line; 1.5.0 does not itself authorize a Twitch-hosted extension deployment.
-- [ ] Record Broadcast's matching 1.5.0 commit and confirm the shared production contract before packaging.
+- [x] Record Broadcast's matching 1.5.0 commit (`b3ef758dd347de210ae78df882f71a289cfa00dc`) and confirm the shared production contract.
 - [ ] Do not add new release features after the candidate is packaged; fixes require a new candidate and a repeated rehearsal.
 
 ## Automated Studio gates
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm check` (103 tests, 0 failures)
-- [ ] `pnpm package:win`
-- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
-- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [ ] Secret/path scan passes for source and packaged resources.
+- [x] `pnpm package:win`
+- [x] Packaged executable smoke test exits 0 with a new isolated profile.
+- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [x] Secret/path scan passes for packaged resources.
 - [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
@@ -45,6 +45,7 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 ## Performance and soak gates
 
 - [ ] Capture at least 30 minutes with Tempest telemetry, including five minutes idle, game launch/load, active gameplay, alerts, Emote Wall, Dice Box, and a Studio reconnect marker.
+- [ ] Confirm Tempest telemetry ingests Broadcast's atomic `%APPDATA%\\tempest-broadcast-system\\telemetry\\runtime.json` sidecar when OBS WebSocket is disabled and can read active logs without a sharing violation.
 - [ ] Compare Broadcast render lag, encode skips, dropped frames, CPU, memory, GPU 3D/encode, and VRAM with the 1.4.7 stream baseline.
 - [ ] Confirm Studio and Browser Source CPU/memory settle after each interaction and show no sustained growth across the soak.
 - [ ] Preserve current Enhanced Broadcasting resolution, frame rate, and bitrate unless output counters—not aggregate GPU utilization alone—show a regression.
