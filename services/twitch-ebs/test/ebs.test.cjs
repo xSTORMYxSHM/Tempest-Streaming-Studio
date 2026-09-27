@@ -26,6 +26,25 @@ function jwt(secret, overrides = {}) {
   return `${signingInput}.${signature}`;
 }
 
+function bitsReceipt(secret, clientId, overrides = {}) {
+  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = base64url(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + 300,
+    topic: 'bits_transaction_receipt',
+    data: {
+      domainId: `twitch.ext.${clientId}`,
+      product: { sku: 'tempest.storm-pulse.50', cost: { amount: 50, type: 'bits' }, displayName: 'Storm Pulse' },
+      time: new Date().toISOString(),
+      transactionId: `tx-${randomUUID()}`,
+      userId: '778899',
+      ...overrides
+    }
+  }));
+  const signingInput = `${header}.${payload}`;
+  const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
+  return `${signingInput}.${signature}`;
+}
+
 function connectStudio(runtime, relayToken, channelId = '123456') {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(runtime.websocketUrl, {
@@ -302,6 +321,92 @@ test('exchanges Discord RPC authorization codes without exposing the client secr
   assert.equal(submitted.get('refresh_token'), 'refresh-token');
   const wrongClient = await fetch(`${runtime.baseUrl}/v1/discord/oauth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grantType: 'authorization_code', clientId: 'wrong', code: 'one-time-code' }) });
   assert.equal(wrongClient.status, 400);
+});
+
+test('verifies Twitch Bits receipts and relays only mapped published interactions', async (context) => {
+  const freeSecret = randomBytes(32);
+  const bitsSecret = randomBytes(32);
+  const clientId = 'bitsext123';
+  const relayToken = randomBytes(32).toString('hex');
+  const store = new MemoryTwitchEbsInstallationStore();
+  const runtime = await startTwitchEbs({
+    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [freeSecret.toString('base64')], relayToken,
+    allowedChannelIds: ['123456'], installationStore: store,
+    bitsExtension: {
+      clientId,
+      secrets: [bitsSecret.toString('base64')],
+      products: {
+        'tempest.storm-pulse.50': { action: 'tempest.storm-pulse', bits: 50 },
+        'tempest.not-paid-audio.100': { action: 'sound-alert.hype-pulse', bits: 100 }
+      }
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+  const installation = await store.findActiveByChannelId('123456');
+  await store.updateCatalog(installation.id, {
+    schemaVersion: 1,
+    extensionEdition: 'bits',
+    updatedAt: new Date().toISOString(),
+    items: [
+      { id: 'tempest.storm-pulse', name: 'Storm Pulse', kind: 'interaction', durationMs: 8000, viewerCooldownMs: 1000, globalCooldownMs: 1000, category: 'screen-effect', placementMode: 'fixed', access: { mode: 'specific-viewers', allowedViewerIds: ['778899'], blockedViewerIds: [], hideWhenLocked: false }, accent: '#54F2EB', glyph: 'SP' },
+      { id: 'sound-alert.hype-pulse', name: 'Hype Pulse', kind: 'sound-alert', durationMs: 8000, accent: '#A66BFF', glyph: 'HP' }
+    ]
+  });
+  const studio = await connectStudio(runtime, relayToken);
+  context.after(() => studio.close());
+  let relayed;
+  studio.on('message', (raw) => {
+    const message = JSON.parse(raw.toString());
+    if (message.type !== 'interaction') return;
+    relayed = message;
+    studio.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId: message.requestId, status: 202, body: { accepted: true } }));
+  });
+  const viewerToken = jwt(bitsSecret, { user_id: '778899' });
+  const catalog = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': viewerToken } });
+  assert.equal(catalog.status, 200);
+  assert.deepEqual((await catalog.json()).products.map((product) => product.sku), ['tempest.storm-pulse.50']);
+  const lockedToken = jwt(bitsSecret, { user_id: '111222' });
+  const lockedCatalog = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': lockedToken } }).then((result) => result.json());
+  assert.equal(lockedCatalog.products[0].eligibility.allowed, false);
+  assert.match(lockedCatalog.products[0].eligibility.reason, /selected viewers/i);
+  const lockedReservation = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
+  assert.equal(lockedReservation.status, 403);
+  const inactiveFreeEdition = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(freeSecret) } });
+  assert.equal(inactiveFreeEdition.status, 409);
+  assert.equal((await inactiveFreeEdition.json()).activeEdition, 'bits');
+
+  const reservationResponse = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' })
+  });
+  assert.equal(reservationResponse.status, 201);
+  const reservation = await reservationResponse.json();
+  const receipt = bitsReceipt(bitsSecret, clientId);
+  const response = await fetch(`${runtime.baseUrl}/v1/extension/bits/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: receipt, reservationToken: reservation.reservationToken })
+  });
+  assert.equal(response.status, 202);
+  assert.equal(relayed.event.viewer.id, '778899');
+  assert.equal(relayed.event.payload.action, 'tempest.storm-pulse');
+  assert.equal(relayed.event.payload.bits, 50);
+  assert.equal(relayed.event.payload.paymentSource, 'twitch.bits-extension');
+
+  const replay = await fetch(`${runtime.baseUrl}/v1/extension/bits/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: receipt })
+  });
+  assert.equal(replay.status, 202);
+
+  const wrongAmount = bitsReceipt(bitsSecret, clientId, { product: { sku: 'tempest.storm-pulse.50', cost: { amount: 100, type: 'bits' } } });
+  const rejectedAmount = await fetch(`${runtime.baseUrl}/v1/extension/bits/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: wrongAmount })
+  });
+  assert.equal(rejectedAmount.status, 403);
+
+  const audioReceipt = bitsReceipt(bitsSecret, clientId, { product: { sku: 'tempest.not-paid-audio.100', cost: { amount: 100, type: 'bits' } } });
+  const rejectedAudio = await fetch(`${runtime.baseUrl}/v1/extension/bits/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: audioReceipt })
+  });
+  assert.equal(rejectedAudio.status, 403);
 });
 
 test('links a verified Kick broadcaster and relays signed chat webhooks to its paired Studio', async (context) => {

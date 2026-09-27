@@ -105,7 +105,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Twitch Panel Designer/);
   assert.match(html, /318 × 496 Twitch Panel/);
   assert.match(html, /Interaction Alerts/);
-  assert.match(html, /New Interaction Alert/);
+  assert.match(html, /New Interaction/);
   assert.match(html, /id="interactionAlertForm"/);
   assert.match(html, /New Twitch Alert/);
   assert.match(html, /id="twitchAlertForm"/);
@@ -164,7 +164,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /STUDIO-OWNED STREAM CHAT/);
   assert.match(html, /independent local Browser Sources/);
   assert.match(html, /Twitch Alerts/);
-  assert.match(html, /PERFORMANCE \+ DANCE CATALOG/);
+  assert.match(html, /VIEWER INTERACTION CATALOG/);
   assert.match(html, /TWITCH CHANNEL EVENTS/);
   assert.match(html, /Design the complete sound-and-visual response/);
   assert.match(html, /GIPHY KEY REQUIRED/);
@@ -183,7 +183,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Test Release/);
   assert.match(html, /tempestPerformance/);
   assert.match(html, /ws:\/\/localhost:4770/);
-  assert.match(html, /ALWAYS FREE/);
+  assert.match(html, /FREE \+ BITS READY/);
   assert.match(html, /Control audio via OBS/);
   assert.match(html, /VOD-safe routing/);
   assert.match(html, /Alert Queue/);
@@ -255,6 +255,13 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Start Local Panel/);
   assert.match(html, /Use Official Twitch Sign-In/);
   assert.match(html, /Connect My Channel/);
+  assert.match(html, /name="twitchExtensionEdition" value="free"/);
+  assert.match(html, /name="twitchExtensionEdition" value="bits"/);
+  assert.match(html, /TEMPEST MAINFRAME/);
+  assert.match(html, /TEMPEST STREAMING/);
+  assert.match(preload, /studio:set-twitch-extension-edition/);
+  assert.match(main, /twitch-extension-edition\.json/);
+  assert.match(renderer, /setTwitchExtensionEdition/);
   assert.match(html, /No developer setup required/);
   assert.match(html, /securely connects your public Twitch panel automatically/);
   assert.doesNotMatch(html, /id="hostedExtensionUrl"/);

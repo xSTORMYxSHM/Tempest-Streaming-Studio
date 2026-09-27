@@ -5,7 +5,7 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
-const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials } = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials, validateTwitchExtensionEdition } = require('../dist/hosted-extension.js');
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -49,6 +49,11 @@ test('validates a public hosted EBS and derives a credential-free WSS relay URL'
   assert.equal(validateHostedEbsUrl('https://tempest.example.com/'), 'https://tempest.example.com');
   assert.equal(hostedExtensionRelayOptions(credentials).url, 'wss://tempest.example.com/v1/studio');
   assert.equal(hostedExtensionRelayOptions(credentials).channelId, '123456');
+  assert.equal(hostedExtensionRelayOptions(credentials).extensionEdition, 'free');
+  assert.equal(hostedExtensionRelayOptions(credentials, 'bits').extensionEdition, 'bits');
+  assert.equal(validateTwitchExtensionEdition(undefined), 'free');
+  assert.equal(validateTwitchExtensionEdition('bits'), 'bits');
+  assert.throws(() => validateTwitchExtensionEdition('paid'), /Free.*Bits/);
   assert.throws(() => validateHostedEbsUrl('http://tempest.example.com'), /HTTPS/);
   assert.throws(() => validateHostedEbsUrl('https://user:pass@tempest.example.com'), /credentials/);
 });

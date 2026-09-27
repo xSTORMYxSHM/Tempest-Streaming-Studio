@@ -262,6 +262,14 @@ export interface TempestSoundAlertDefinition {
   durationMs: number;
   viewerCooldownMs: number;
   globalCooldownMs: number;
+  interactionCategory?: 'sticker' | 'gif' | 'jumpscare' | 'screen-effect' | 'sound' | 'counter' | 'community' | 'other';
+  placementMode?: 'fixed' | 'viewer';
+  accessMode?: 'everyone' | 'staff' | 'assigned-creators' | 'specific-viewers';
+  allowedViewerIds?: string[];
+  blockedViewerIds?: string[];
+  hideWhenLocked?: boolean;
+  counterCommandId?: string;
+  counterDelta?: number;
   volume: number;
   audioUri?: string;
   visualUri?: string;
@@ -284,6 +292,7 @@ export interface TempestSoundAlertTriggerRequest {
   viewerId?: string;
   viewerName?: string;
   intensity?: number;
+  placement?: { x: number; y: number };
   simulateMissing?: boolean;
   bypassCooldown?: boolean;
 }

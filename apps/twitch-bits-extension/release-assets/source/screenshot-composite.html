@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1024,initial-scale=1">
+  <title>Tempest Streaming release screenshot</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 1024px; height: 768px; margin: 0; overflow: hidden; }
+    body {
+      color: #edfaff;
+      background:
+        radial-gradient(circle at 78% 42%, rgba(84, 242, 235, .11), transparent 28%),
+        radial-gradient(circle at 74% 58%, rgba(75, 112, 255, .14), transparent 34%),
+        #03080d;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    .layout { display: grid; grid-template-columns: 520px 1fr; gap: 48px; height: 100%; padding: 42px; }
+    .preview {
+      align-self: center;
+      width: 520px;
+      height: 372px;
+      overflow: hidden;
+      border: 1px solid rgba(84, 242, 235, .5);
+      border-radius: 15px;
+      box-shadow: 0 26px 80px rgba(0, 0, 0, .56), 0 0 34px rgba(84, 242, 235, .08);
+    }
+    .preview img { display: block; width: 1024px; height: 768px; transform: translate(-14px, -14px); }
+    .copy { align-self: center; }
+    .brand { display: flex; align-items: center; gap: 15px; margin-bottom: 34px; }
+    .brand img { width: 76px; height: 76px; }
+    .eyebrow { color: #54f2eb; font-size: 13px; font-weight: 800; letter-spacing: .17em; }
+    .brand strong { display: block; margin-top: 5px; font-size: 18px; letter-spacing: .04em; }
+    h1 { margin: 0; font-size: 44px; line-height: 1.02; letter-spacing: -.025em; }
+    .lede { margin: 22px 0 30px; color: #9bb4bf; font-size: 18px; line-height: 1.55; }
+    .features { display: grid; gap: 12px; }
+    .feature {
+      padding: 15px 17px;
+      border: 1px solid rgba(134, 222, 235, .24);
+      border-radius: 11px;
+      background: rgba(7, 18, 27, .88);
+    }
+    .feature strong { display: block; font-size: 12px; letter-spacing: .08em; }
+    .feature span { display: block; margin-top: 6px; color: #89a3ad; font-size: 13px; line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="preview" aria-label="Tempest Streaming panel preview">
+      <img src="screenshot-panel-raw-1024x768.png" alt="Tempest Streaming panel showing three Bits signals">
+    </section>
+    <section class="copy">
+      <div class="brand">
+        <img src="../logo-100x100.png" alt="">
+        <div><span class="eyebrow">TEMPEST</span><strong>STREAMING</strong></div>
+      </div>
+      <h1>Interactive<br>stream signals</h1>
+      <p class="lede">Viewers activate clearly priced effects while Tempest Streaming Studio keeps the show in control.</p>
+      <div class="features">
+        <div class="feature"><strong>BITS READY</strong><span>Fixed Twitch product amounts shown before activation</span></div>
+        <div class="feature"><strong>EVERY SURFACE</strong><span>Overlay, component, panel, and mobile layouts</span></div>
+        <div class="feature"><strong>STUDIO LINKED</strong><span>Effects are available only while Studio is online</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -244,6 +244,17 @@ button:disabled { opacity: .42; cursor: not-allowed; }
 .copyable-field .copy-button { width: 35px; height: 35px; }
 .twitch-setup-grid { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(300px, .8fr); gap: 24px; }
 .twitch-local-panel { margin-top: 16px; border-color: #20404a; background: linear-gradient(145deg, #0a151d, #080d13); }
+.extension-edition-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0 10px; }
+.extension-edition-options > label { position: relative; display: block; cursor: pointer; }
+.extension-edition-options input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+.extension-edition-options span { display: grid; gap: 5px; min-height: 104px; padding: 15px; border: 1px solid #1c333d; border-radius: 9px; background: #071018; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.extension-edition-options b { color: #76939e; font: 8px Consolas, monospace; letter-spacing: .15em; }
+.extension-edition-options strong { color: #d5e8ed; font-size: 15px; }
+.extension-edition-options small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.extension-edition-options input:checked + span { border-color: var(--cyan); background: rgba(31, 92, 96, .2); box-shadow: inset 0 0 0 1px rgba(84,242,235,.12); }
+.extension-edition-options input:focus-visible + span { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.extension-edition-message { margin: 0 0 18px; color: #8da8b2; font: 10px/1.5 Consolas, monospace; }
+.hosted-extension-connect-header { padding-top: 16px; border-top: 1px solid #1a3039; }
 .local-extension-grid { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(300px, .8fr); gap: 24px; }
 .local-extension-status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .local-extension-status > div { min-width: 0; padding: 10px; border: 1px solid #18303a; border-radius: 6px; background: #071016; }

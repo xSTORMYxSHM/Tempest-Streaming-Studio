@@ -5,7 +5,7 @@ import { AddressInfo } from 'node:net';
 import { URL } from 'node:url';
 import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket, WebSocketServer } from 'ws';
-import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchExtensionJwt } from './jwt';
+import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchBitsTransactionReceipt, verifyTwitchExtensionJwt } from './jwt';
 import {
   MemoryTwitchEbsInstallationStore,
   PublicExtensionCatalog,
@@ -15,7 +15,7 @@ import {
   TwitchEbsInstallationStore
 } from './installation-store';
 
-export { decodeTwitchSecrets, verifyTwitchExtensionJwt } from './jwt';
+export { decodeTwitchSecrets, verifyTwitchBitsTransactionReceipt, verifyTwitchExtensionJwt } from './jwt';
 export {
   MemoryTwitchEbsInstallationStore,
   PostgresTwitchEbsInstallationStore
@@ -58,6 +58,11 @@ export interface StartTwitchEbsOptions {
   viewerRequestsPerMinute?: number;
   channelRequestsPerMinute?: number;
   relayTimeoutMs?: number;
+  bitsExtension?: {
+    clientId: string;
+    secrets: string[];
+    products: Record<string, { action: string; bits: number }>;
+  };
   discordOAuth?: {
     clientId: string;
     clientSecret: string;
@@ -93,6 +98,16 @@ interface PendingRelay {
 
 interface CachedResult extends RelayResult {
   storedAt: number;
+}
+
+interface BitsReservation {
+  token: string;
+  channelId: string;
+  viewerId: string;
+  sku: string;
+  action: string;
+  expiresAt: number;
+  placement?: { x: number; y: number };
 }
 
 class HttpError extends Error {
@@ -192,7 +207,9 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { items?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown };
+  if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
+  const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
   const seen = new Set<string>();
   const items: PublicExtensionCatalogItem[] = source.items.map((entry, index) => {
@@ -203,17 +220,27 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     const kind = item.kind === 'interaction' ? 'interaction' : item.kind === 'sound-alert' ? 'sound-alert' : '';
     const durationMs = Number(item.durationMs);
     const cooldownMs = item.cooldownMs === undefined ? undefined : Number(item.cooldownMs);
+    const viewerCooldownMs = item.viewerCooldownMs === undefined ? undefined : Number(item.viewerCooldownMs);
+    const globalCooldownMs = item.globalCooldownMs === undefined ? undefined : Number(item.globalCooldownMs);
     const accent = String(item.accent || '').toUpperCase();
     const glyph = String(item.glyph || '').toUpperCase();
+    const category = ['sticker', 'gif', 'jumpscare', 'screen-effect', 'sound', 'counter', 'community', 'other'].includes(String(item.category)) ? item.category as PublicExtensionCatalogItem['category'] : 'other';
+    const placementMode = item.placementMode === 'viewer' ? 'viewer' : 'fixed';
+    const accessSource = item.access && typeof item.access === 'object' && !Array.isArray(item.access) ? item.access as Record<string, unknown> : {};
+    const accessMode = ['everyone', 'staff', 'assigned-creators', 'specific-viewers'].includes(String(accessSource.mode)) ? accessSource.mode as NonNullable<PublicExtensionCatalogItem['access']>['mode'] : 'everyone';
+    const normalizeIds = (raw: unknown): string[] => [...new Set((Array.isArray(raw) ? raw : []).map((entry) => String(entry || '').trim()).filter((entry) => /^\d{1,30}$/.test(entry)))].slice(0, 100);
+    const access = { mode: accessMode, allowedViewerIds: normalizeIds(accessSource.allowedViewerIds), blockedViewerIds: normalizeIds(accessSource.blockedViewerIds), hideWhenLocked: accessSource.hideWhenLocked === true };
     if (!actionPattern.test(id) || seen.has(id)) throw new Error(`Catalog item ${index + 1} has an invalid or duplicate ID.`);
     if (!name || name.length > 80 || /[\r\n\0]/.test(name)) throw new Error(`Catalog item ${index + 1} has an invalid name.`);
     if (!kind || !Number.isInteger(durationMs) || durationMs < 1_000 || durationMs > 300_000) throw new Error(`Catalog item ${index + 1} has invalid timing or kind.`);
     if (cooldownMs !== undefined && (!Number.isInteger(cooldownMs) || cooldownMs < 0 || cooldownMs > 86_400_000)) throw new Error(`Catalog item ${index + 1} has an invalid cooldown.`);
+    if (viewerCooldownMs !== undefined && (!Number.isInteger(viewerCooldownMs) || viewerCooldownMs < 0 || viewerCooldownMs > 86_400_000)) throw new Error(`Catalog item ${index + 1} has an invalid viewer cooldown.`);
+    if (globalCooldownMs !== undefined && (!Number.isInteger(globalCooldownMs) || globalCooldownMs < 0 || globalCooldownMs > 86_400_000)) throw new Error(`Catalog item ${index + 1} has an invalid global cooldown.`);
     if (!/^#[0-9A-F]{6}$/.test(accent) || !glyphPattern.test(glyph)) throw new Error(`Catalog item ${index + 1} has invalid display data.`);
     seen.add(id);
-    return { id, name, kind, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), accent, glyph };
+    return { id, name, kind, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), ...(viewerCooldownMs === undefined ? {} : { viewerCooldownMs }), ...(globalCooldownMs === undefined ? {} : { globalCooldownMs }), category, placementMode, access, accent, glyph };
   });
-  return { schemaVersion: 1, updatedAt: new Date().toISOString(), items };
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {
@@ -327,7 +354,7 @@ function sendJson(response: ServerResponse, status: number, body: unknown, origi
   response.end(JSON.stringify(body));
 }
 
-function normalizedEvent(claims: TwitchExtensionClaims, requestId: string, action: string, extra: Record<string, unknown> = {}): TempestNormalizedTwitchEvent {
+function normalizedEvent(claims: TwitchExtensionClaims, requestId: string, action: string, extra: Record<string, unknown> = {}, viewerId?: string): TempestNormalizedTwitchEvent {
   return {
     schemaVersion: 1,
     id: `${claims.channel_id}:${requestId}`,
@@ -336,7 +363,7 @@ function normalizedEvent(claims: TwitchExtensionClaims, requestId: string, actio
     source: 'twitch',
     channel: { id: claims.channel_id },
     viewer: {
-      id: claims.user_id || claims.opaque_user_id,
+      id: viewerId || claims.user_id || claims.opaque_user_id,
       roles: [claims.role]
     },
     payload: { action, ...extra }
@@ -358,6 +385,16 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const requestedPort = options.port ?? 8080;
   const logger = options.logger || console;
   const secrets = decodeTwitchSecrets(options.twitchExtensionSecrets);
+  const bitsClientId = String(options.bitsExtension?.clientId || '').trim();
+  if (options.bitsExtension && !/^[a-z0-9]{8,80}$/i.test(bitsClientId)) throw new Error('The Twitch Bits Extension client ID is invalid.');
+  const bitsSecrets = options.bitsExtension ? decodeTwitchSecrets(options.bitsExtension.secrets) : [];
+  const bitsProducts = new Map<string, { action: string; bits: number }>();
+  for (const [sku, product] of Object.entries(options.bitsExtension?.products || {})) {
+    if (!/^[A-Za-z0-9._-]{1,255}$/.test(sku) || !actionPattern.test(product.action) || !Number.isInteger(product.bits) || product.bits < 1 || product.bits > 10_000) {
+      throw new Error(`The Twitch Bits product mapping for ${sku || '(empty SKU)'} is invalid.`);
+    }
+    bitsProducts.set(sku, product);
+  }
   const installationStore = options.installationStore || new MemoryTwitchEbsInstallationStore();
   await installationStore.initialize();
   const legacyRelayToken = String(options.relayToken || '').trim();
@@ -377,6 +414,9 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const studioSockets = new Map<string, WebSocket>();
   const pending = new Map<string, PendingRelay>();
   const results = new Map<string, CachedResult>();
+  const bitsReservations = new Map<string, BitsReservation>();
+  const lastBitsGlobalUse = new Map<string, number>();
+  const lastBitsViewerUse = new Map<string, number>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
@@ -413,6 +453,39 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     });
   };
 
+  const requireExtensionEdition = (installation: TwitchEbsInstallation, expected: 'free' | 'bits'): void => {
+    const activeEdition = installation.catalog.extensionEdition === 'bits' ? 'bits' : 'free';
+    if (activeEdition !== expected) {
+      throw new HttpError(409, `${expected === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)'} is not the active Extension for this channel.`, {
+        code: 'EXTENSION_EDITION_INACTIVE',
+        activeEdition
+      });
+    }
+  };
+
+  const expireBitsReservations = (now = Date.now()): void => {
+    for (const [token, reservation] of bitsReservations) if (reservation.expiresAt <= now) bitsReservations.delete(token);
+  };
+
+  const bitsEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): { allowed: boolean; reason?: string; retryAfterMs: number } => {
+    const viewerId = String(claims.user_id || '');
+    const access = item.access;
+    if (access?.blockedViewerIds.includes(viewerId)) return { allowed: false, reason: 'Unavailable for this viewer', retryAfterMs: 0 };
+    const staff = claims.role === 'broadcaster' || claims.role === 'moderator';
+    if (!staff && access?.mode === 'staff') return { allowed: false, reason: 'Broadcaster and moderators only', retryAfterMs: 0 };
+    if (!staff && (access?.mode === 'assigned-creators' || access?.mode === 'specific-viewers') && !access.allowedViewerIds.includes(viewerId)) {
+      return { allowed: false, reason: access.mode === 'assigned-creators' ? 'Assigned creator group only' : 'Locked to selected viewers', retryAfterMs: 0 };
+    }
+    expireBitsReservations(now);
+    const globalKey = `${claims.channel_id}:${item.id}`;
+    const viewerKey = `${globalKey}:${viewerId}`;
+    const globalRemaining = Math.max(0, (lastBitsGlobalUse.get(globalKey) || 0) + (item.globalCooldownMs ?? item.cooldownMs ?? 0) - now);
+    const viewerRemaining = Math.max(0, (lastBitsViewerUse.get(viewerKey) || 0) + (item.viewerCooldownMs ?? item.cooldownMs ?? 0) - now);
+    const reservationRemaining = [...bitsReservations.values()].filter((entry) => entry.channelId === claims.channel_id && entry.action === item.id).reduce((maximum, entry) => Math.max(maximum, entry.expiresAt - now), 0);
+    const retryAfterMs = Math.max(globalRemaining, viewerRemaining, reservationRemaining);
+    return retryAfterMs > 0 ? { allowed: false, reason: `Available again in ${Math.ceil(retryAfterMs / 1000)} seconds`, retryAfterMs } : { allowed: true, retryAfterMs: 0 };
+  };
+
   const authenticateViewer = async (request: IncomingMessage): Promise<{ claims: TwitchExtensionClaims; installation: TwitchEbsInstallation }> => {
     let claims: TwitchExtensionClaims;
     try {
@@ -422,20 +495,33 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     }
     const installation = await installationStore.findActiveByChannelId(claims.channel_id);
     if (!installation) throw new HttpError(403, 'This Twitch channel has not paired Tempest Streaming Studio.');
+    requireExtensionEdition(installation, 'free');
     if (!options.allowAnonymous && claims.opaque_user_id.startsWith('A')) throw new HttpError(403, 'Anonymous Twitch viewers cannot trigger interactions.');
     return { claims, installation };
   };
 
-  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
-    const body = await readJson(request);
-    const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
+  const authenticateBitsViewer = async (request: IncomingMessage): Promise<{ claims: TwitchExtensionClaims; installation: TwitchEbsInstallation }> => {
+    if (!options.bitsExtension) throw new HttpError(503, 'Twitch Bits interactions are not configured.');
+    let claims: TwitchExtensionClaims;
+    try {
+      claims = verifyTwitchExtensionJwt(extensionToken(request), bitsSecrets);
+    } catch (error) {
+      throw new HttpError(401, (error as Error).message);
+    }
+    const installation = await installationStore.findActiveByChannelId(claims.channel_id);
+    if (!installation) throw new HttpError(403, 'This Twitch channel has not paired Tempest Streaming Studio.');
+    requireExtensionEdition(installation, 'bits');
+    if (!claims.user_id || claims.opaque_user_id.startsWith('A')) throw new HttpError(403, 'A linked Twitch identity is required to use Bits interactions.', { code: 'identity_required' });
+    return { claims, installation };
+  };
+
+  const dispatchInteraction = async (claims: TwitchExtensionClaims, requestId: string, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent, viewerId = claims.user_id || claims.opaque_user_id): Promise<RelayResult> => {
     if (!requestIdPattern.test(requestId)) throw new HttpError(400, 'requestId must contain 16 to 128 URL-safe characters.');
-    const viewerId = claims.user_id || claims.opaque_user_id;
     const resultKey = `${claims.channel_id}:${requestId}`;
     expireResults();
     const cached = results.get(resultKey);
     if (cached) return { status: cached.status, body: cached.body };
-    if (pending.has(`${claims.channel_id}:${requestId}`)) throw new HttpError(409, 'This interaction request is already being processed.');
+    if (pending.has(resultKey)) throw new HttpError(409, 'This interaction request is already being processed.');
     const viewerRetry = limiter.consume(`viewer:${claims.channel_id}:${viewerId}`, viewerLimit);
     const channelRetry = limiter.consume(`channel:${claims.channel_id}`, channelLimit);
     const retryAfterMs = Math.max(viewerRetry, channelRetry);
@@ -443,6 +529,12 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     const result = withCooldown(await forward(claims.channel_id, requestId, eventFactory(requestId)));
     results.set(resultKey, { ...result, storedAt: Date.now() });
     return result;
+  };
+
+  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
+    const body = await readJson(request);
+    const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
+    return dispatchInteraction(claims, requestId, eventFactory);
   };
 
   const requestHandler = async (request: IncomingMessage, response: ServerResponse) => {
@@ -506,7 +598,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'GET' && requestUrl.pathname === '/v1/installations/current') {
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
         if (!installation) throw new HttpError(401, 'Installation relay credential is invalid or revoked.');
-        return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, channel: { id: installation.channelId, login: installation.channelLogin }, ...(installation.kickUserId ? { kick: { userId: installation.kickUserId, username: installation.kickUsername } } : {}), updatedAt: installation.updatedAt }, origin);
+        return sendJson(response, 200, { schemaVersion: 1, installationId: installation.id, extensionEdition: installation.catalog.extensionEdition === 'bits' ? 'bits' : 'free', channel: { id: installation.channelId, login: installation.channelLogin }, ...(installation.kickUserId ? { kick: { userId: installation.kickUserId, username: installation.kickUsername } } : {}), updatedAt: installation.updatedAt }, origin);
       }
       if (request.method === 'PUT' && requestUrl.pathname === '/v1/installations/current/panel-design') {
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
@@ -564,6 +656,79 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/catalog') {
         const { claims, installation } = await authenticateViewer(request);
         return sendJson(response, 200, { ...installation.catalog, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
+        const { claims, installation } = await authenticateBitsViewer(request);
+        const products = [...bitsProducts.entries()].flatMap(([sku, mapping]) => {
+          const interaction = installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === mapping.action);
+          if (!interaction) return [];
+          const eligibility = bitsEligibility(interaction, claims);
+          if (!eligibility.allowed && interaction.access?.hideWhenLocked && eligibility.retryAfterMs === 0) return [];
+          return [{ sku, bits: mapping.bits, interaction, eligibility }];
+        });
+        return sendJson(response, 200, { schemaVersion: 1, products, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/reservations') {
+        const { claims, installation } = await authenticateBitsViewer(request);
+        if (studioSockets.get(claims.channel_id)?.readyState !== WebSocket.OPEN) throw new HttpError(503, 'Tempest Streaming Studio must be online before a Bits interaction can start.');
+        const body = await readJson(request);
+        const sku = String(body.sku || '').trim();
+        const mapping = bitsProducts.get(sku);
+        const interaction = mapping && installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === mapping.action);
+        if (!mapping || !interaction) throw new HttpError(404, 'This Bits interaction is not currently published by Studio.');
+        const eligibility = bitsEligibility(interaction, claims);
+        if (!eligibility.allowed) throw new HttpError(eligibility.retryAfterMs ? 409 : 403, eligibility.reason || 'This interaction is unavailable.', { code: eligibility.retryAfterMs ? 'interaction_cooldown' : 'interaction_locked', retryAfterMs: eligibility.retryAfterMs });
+        const placementSource = body.placement && typeof body.placement === 'object' && !Array.isArray(body.placement) ? body.placement as Record<string, unknown> : undefined;
+        const placement = interaction.placementMode === 'viewer' && placementSource ? { x: Number(placementSource.x), y: Number(placementSource.y) } : undefined;
+        if (interaction.placementMode === 'viewer' && (!placement || !Number.isFinite(placement.x) || placement.x < 0 || placement.x > 1 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 1)) {
+          throw new HttpError(400, 'Choose a valid on-stream placement before activating this interaction.');
+        }
+        const token = randomBytes(24).toString('base64url');
+        const reservation: BitsReservation = { token, channelId: claims.channel_id, viewerId: claims.user_id!, sku, action: mapping.action, expiresAt: Date.now() + 120_000, ...(placement ? { placement } : {}) };
+        bitsReservations.set(token, reservation);
+        return sendJson(response, 201, { schemaVersion: 1, reservationToken: token, expiresAt: new Date(reservation.expiresAt).toISOString() }, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/transactions') {
+        const { claims, installation } = await authenticateBitsViewer(request);
+        const body = await readJson(request);
+        const transactionReceipt = String(body.transactionReceipt || '').trim();
+        const reservationToken = String(body.reservationToken || '').trim();
+        let receipt;
+        try {
+          receipt = verifyTwitchBitsTransactionReceipt(transactionReceipt, bitsSecrets, bitsClientId);
+        } catch (error) {
+          throw new HttpError(401, (error as Error).message);
+        }
+        if (receipt.data.userId !== claims.user_id) throw new HttpError(403, 'Twitch Bits transaction user does not match the authorized viewer.');
+        const mapping = bitsProducts.get(receipt.data.product.sku);
+        if (!mapping) throw new HttpError(403, 'This Twitch Bits product is not enabled by Tempest Streaming Studio.');
+        if (mapping.bits !== receipt.data.product.cost.amount) throw new HttpError(403, 'Twitch Bits transaction amount does not match the configured product.');
+        const interaction = installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === mapping.action);
+        if (!interaction) {
+          throw new HttpError(403, 'This Twitch Bits product is not mapped to a published Studio interaction.');
+        }
+        const requestId = `bits-${createHash('sha256').update(receipt.data.transactionId).digest('hex').slice(0, 48)}`;
+        const cached = results.get(`${claims.channel_id}:${requestId}`);
+        if (cached) return sendJson(response, cached.status, cached.body, origin);
+        expireBitsReservations();
+        const reservation = bitsReservations.get(reservationToken);
+        if (!reservation || reservation.channelId !== claims.channel_id || reservation.viewerId !== receipt.data.userId || reservation.sku !== receipt.data.product.sku || reservation.action !== mapping.action) {
+          throw new HttpError(409, 'This Bits transaction does not have a valid pre-purchase interaction reservation.', { code: 'reservation_required' });
+        }
+        bitsReservations.delete(reservationToken);
+        const result = await dispatchInteraction(claims, requestId, (id) => normalizedEvent(claims, id, mapping.action, {
+          bits: mapping.bits,
+          sku: receipt.data.product.sku,
+          transactionId: receipt.data.transactionId,
+          paymentSource: 'twitch.bits-extension',
+          ...(reservation.placement ? { placement: reservation.placement } : {})
+        }, receipt.data.userId), receipt.data.userId);
+        if (result.status >= 200 && result.status < 300) {
+          const now = Date.now();
+          lastBitsGlobalUse.set(`${claims.channel_id}:${interaction.id}`, now);
+          lastBitsViewerUse.set(`${claims.channel_id}:${interaction.id}:${receipt.data.userId}`, now);
+        }
+        return sendJson(response, result.status, result.body, origin);
       }
       const alertMatch = requestUrl.pathname.match(/^\/v1\/extension\/alerts\/([^/]+)\/trigger$/);
       if (request.method === 'POST' && alertMatch) {
@@ -626,7 +791,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         if (message.protocolVersion === 1 && message.type === 'catalog.sync') {
           const catalog = validatePublicCatalog(message.catalog);
           await installationStore.updateCatalog(installation.id, catalog);
-          return socket.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.ack', updatedAt: catalog.updatedAt, itemCount: catalog.items.length }));
+          return socket.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.ack', extensionEdition: catalog.extensionEdition, updatedAt: catalog.updatedAt, itemCount: catalog.items.length }));
         }
         if (message.protocolVersion !== 1 || message.type !== 'result' || typeof message.requestId !== 'string') throw new Error('Studio sent an invalid relay message.');
         const key = `${channelId}:${message.requestId}`;

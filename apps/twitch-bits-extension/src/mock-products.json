@@ -1,0 +1,5 @@
+[
+  { "sku": "dev.tempest.storm-pulse.50", "displayName": "Storm Pulse", "cost": { "amount": 50, "type": "bits" }, "interaction": { "name": "Storm Pulse", "accent": "#54F2EB", "glyph": "SP" }, "inDevelopment": true },
+  { "sku": "dev.tempest.gravity-well.100", "displayName": "Gravity Well", "cost": { "amount": 100, "type": "bits" }, "interaction": { "name": "Gravity Well", "accent": "#A66BFF", "glyph": "GW" }, "inDevelopment": true },
+  { "sku": "dev.tempest.overdrive.250", "displayName": "Overdrive", "cost": { "amount": 250, "type": "bits" }, "interaction": { "name": "Overdrive", "accent": "#FF9F43", "glyph": "OD" }, "inDevelopment": true }
+]

@@ -1,6 +1,13 @@
 import type { ExtensionRelayOptions } from '@tempest/bridge';
 
 export const OFFICIAL_HOSTED_EBS_URL = 'https://signal.tempestmainframe.com';
+export type TwitchExtensionEdition = 'free' | 'bits';
+
+export function validateTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
+  if (value === undefined || value === null || value === '' || value === 'free') return 'free';
+  if (value === 'bits') return 'bits';
+  throw new Error('Choose either Tempest Mainframe (Free) or Tempest Streaming (Bits).');
+}
 
 export interface HostedExtensionCredentials {
   schemaVersion: 1;
@@ -14,6 +21,7 @@ export interface HostedExtensionCredentials {
 
 export interface HostedExtensionStatus {
   paired: boolean;
+  extensionEdition: TwitchExtensionEdition;
   defaultEbsBaseUrl: string;
   ebsBaseUrl?: string;
   installationId?: string;
@@ -66,7 +74,7 @@ export function describeHostedExtensionPairingFailure(status: number, result: { 
   return error || `Hosted Extension pairing failed with ${status}.`;
 }
 
-export function hostedExtensionRelayOptions(credentials: HostedExtensionCredentials): ExtensionRelayOptions {
+export function hostedExtensionRelayOptions(credentials: HostedExtensionCredentials, extensionEdition: TwitchExtensionEdition = 'free'): ExtensionRelayOptions {
   const url = new URL(credentials.ebsBaseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.pathname = '/v1/studio';
@@ -74,6 +82,7 @@ export function hostedExtensionRelayOptions(credentials: HostedExtensionCredenti
     url: url.href,
     token: credentials.relayToken,
     channelId: credentials.channelId,
+    extensionEdition: validateTwitchExtensionEdition(extensionEdition),
     allowUnauthorizedLocalTls: false
   };
 }

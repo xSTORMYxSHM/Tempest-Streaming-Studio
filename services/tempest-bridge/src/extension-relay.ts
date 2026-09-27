@@ -7,6 +7,7 @@ export interface ExtensionRelayOptions {
   url: string;
   token: string;
   channelId: string;
+  extensionEdition?: 'free' | 'bits';
   allowUnauthorizedLocalTls?: boolean;
 }
 
@@ -22,6 +23,10 @@ export interface ExtensionRelayStatus {
   lastError?: string;
 }
 
+export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEdition']): 'sound-alert' | 'interaction' {
+  return edition === 'bits' ? 'interaction' : 'sound-alert';
+}
+
 export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   handler(event: TempestNormalizedTwitchEvent): Promise<ExtensionRelayResult>;
   kickEventHandler?(event: { event: unknown; eventId?: string; occurredAt?: string }): Promise<ExtensionRelayResult>;
@@ -30,6 +35,16 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
     name: string;
     durationMs: number;
     cooldownMs?: number;
+    viewerCooldownMs?: number;
+    globalCooldownMs?: number;
+    category?: 'sticker' | 'gif' | 'jumpscare' | 'screen-effect' | 'sound' | 'counter' | 'community' | 'other';
+    placementMode?: 'fixed' | 'viewer';
+    access?: {
+      mode: 'everyone' | 'staff' | 'assigned-creators' | 'specific-viewers';
+      allowedViewerIds: string[];
+      blockedViewerIds: string[];
+      hideWhenLocked: boolean;
+    };
     accent: string;
     glyph: string;
     kind: 'sound-alert' | 'interaction';
@@ -75,6 +90,7 @@ export class TempestExtensionRelayClient {
     }
     if (options.token.trim().length < 32) throw new Error('Extension relay token must contain at least 32 characters.');
     if (!/^\d{1,30}$/.test(options.channelId)) throw new Error('Extension relay channelId must be a numeric Twitch channel ID.');
+    if (options.extensionEdition !== undefined && !['free', 'bits'].includes(options.extensionEdition)) throw new Error('Extension relay edition must be free or bits.');
     this.logger = options.logger || console;
   }
 
@@ -159,7 +175,7 @@ export class TempestExtensionRelayClient {
   private sendCatalog(socket: WebSocket, force = false): void {
     if (!this.options.catalog || socket.readyState !== WebSocket.OPEN) return;
     try {
-      const catalog = { schemaVersion: 1, items: this.options.catalog() };
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog() };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;

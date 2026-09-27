@@ -30,12 +30,14 @@ import {
   HostedExtensionCredentials,
   HostedExtensionStatus,
   OFFICIAL_HOSTED_EBS_URL,
+  TwitchExtensionEdition,
   describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
   syncHostedExtensionPanelDesign,
   isOfficialHostedEbsUrl,
   validateHostedEbsUrl,
-  validateHostedExtensionCredentials
+  validateHostedExtensionCredentials,
+  validateTwitchExtensionEdition
 } from './hosted-extension';
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 
@@ -353,6 +355,32 @@ function hostedExtensionCredentialPath(): string {
   return path.join(app.getPath('userData'), 'hosted-extension-credentials.bin');
 }
 
+function twitchExtensionEditionPath(): string {
+  return path.join(app.getPath('userData'), 'twitch-extension-edition.json');
+}
+
+async function loadTwitchExtensionEdition(): Promise<TwitchExtensionEdition> {
+  try {
+    const saved = JSON.parse(await readFile(twitchExtensionEditionPath(), 'utf8')) as { edition?: unknown };
+    return validateTwitchExtensionEdition(saved.edition);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'free';
+    throw new Error(`Could not read the Twitch Extension edition: ${(error as Error).message}`);
+  }
+}
+
+async function saveTwitchExtensionEdition(value: unknown): Promise<TwitchExtensionEdition> {
+  const edition = validateTwitchExtensionEdition(value);
+  if (edition === 'bits' && localExtension) throw new Error('Stop the Local Free Panel before selecting Tempest Streaming (Bits).');
+  await mkdir(path.dirname(twitchExtensionEditionPath()), { recursive: true });
+  await writeFile(twitchExtensionEditionPath(), `${JSON.stringify({ schemaVersion: 1, edition }, null, 2)}\n`, { mode: 0o600 });
+  if (bridge && !localExtension) {
+    const credentials = await loadHostedExtensionCredentials();
+    await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, edition) : undefined);
+  }
+  return edition;
+}
+
 async function loadHostedExtensionCredentials(): Promise<HostedExtensionCredentials | null> {
   if (!safeStorage.isEncryptionAvailable()) return null;
   try {
@@ -371,9 +399,13 @@ async function saveHostedExtensionCredentials(credentials: HostedExtensionCreden
 }
 
 async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
-  const credentials = await loadHostedExtensionCredentials().catch(() => null);
+  const [credentials, extensionEdition] = await Promise.all([
+    loadHostedExtensionCredentials().catch(() => null),
+    loadTwitchExtensionEdition().catch(() => 'free' as const)
+  ]);
   return {
     paired: Boolean(credentials),
+    extensionEdition,
     defaultEbsBaseUrl: OFFICIAL_HOSTED_EBS_URL,
     ...(credentials ? {
       ebsBaseUrl: credentials.ebsBaseUrl,
@@ -388,8 +420,8 @@ async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
 
 async function restoreHostedExtensionRelay(): Promise<void> {
   if (!bridge || localExtension) return;
-  const credentials = await loadHostedExtensionCredentials();
-  await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials) : undefined);
+  const [credentials, extensionEdition] = await Promise.all([loadHostedExtensionCredentials(), loadTwitchExtensionEdition()]);
+  await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, extensionEdition) : undefined);
 }
 
 function giphyCredentialPath(): string {
@@ -758,6 +790,10 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:get-local-extension-status', () => getLocalExtensionStatus());
   handleDesktop('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
+  handleDesktop('studio:set-twitch-extension-edition', async (_event, value: unknown) => {
+    await saveTwitchExtensionEdition(value);
+    return getHostedExtensionStatus();
+  });
   handleDesktop('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
     if (!broadcasterCredentialStore?.available) throw new Error('Windows credential encryption is unavailable.');
@@ -808,7 +844,7 @@ function registerDesktopHandlers(): void {
       await stopLocalExtension();
       await saveHostedExtensionCredentials(credentials);
       await syncHostedExtensionPanelDesign(credentials, await loadTwitchPanelDesign());
-      await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials));
+      await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials, await loadTwitchExtensionEdition()));
       return getHostedExtensionStatus();
     } catch (error) {
       hostedExtensionLastError = (error as Error).message;
@@ -857,6 +893,7 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:start-local-extension', async (_event, input: { channelId?: unknown; extensionSecret?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
+    if (await loadTwitchExtensionEdition() === 'bits') throw new Error('The Local Panel runs Tempest Mainframe (Free). Select the Free edition for local testing.');
     if (localExtension) return getLocalExtensionStatus();
     const stored = await loadLocalExtensionSettings();
     const channelId = String(input?.channelId || stored?.channelId || '').trim();

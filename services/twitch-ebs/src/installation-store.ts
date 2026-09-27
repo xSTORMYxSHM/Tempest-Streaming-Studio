@@ -6,6 +6,16 @@ export interface PublicExtensionCatalogItem {
   name: string;
   durationMs: number;
   cooldownMs?: number;
+  viewerCooldownMs?: number;
+  globalCooldownMs?: number;
+  category?: 'sticker' | 'gif' | 'jumpscare' | 'screen-effect' | 'sound' | 'counter' | 'community' | 'other';
+  placementMode?: 'fixed' | 'viewer';
+  access?: {
+    mode: 'everyone' | 'staff' | 'assigned-creators' | 'specific-viewers';
+    allowedViewerIds: string[];
+    blockedViewerIds: string[];
+    hideWhenLocked: boolean;
+  };
   accent: string;
   glyph: string;
   kind: 'sound-alert' | 'interaction';
@@ -36,6 +46,7 @@ export interface PublicExtensionPanelDesign {
 
 export interface PublicExtensionCatalog {
   schemaVersion: 1;
+  extensionEdition: 'free' | 'bits';
   updatedAt: string;
   items: PublicExtensionCatalogItem[];
   panelDesign?: PublicExtensionPanelDesign;
@@ -71,6 +82,7 @@ export interface TwitchEbsInstallationStore {
 
 export const emptyPublicExtensionCatalog = (): PublicExtensionCatalog => ({
   schemaVersion: 1,
+  extensionEdition: 'free',
   updatedAt: new Date().toISOString(),
   items: []
 });
@@ -182,6 +194,7 @@ interface InstallationRow {
 }
 
 function fromRow(row: InstallationRow): TwitchEbsInstallation {
+  const catalog = row.catalog || emptyPublicExtensionCatalog();
   return {
     id: row.id,
     channelId: row.channel_id,
@@ -190,7 +203,7 @@ function fromRow(row: InstallationRow): TwitchEbsInstallation {
     kickUsername: row.kick_username || undefined,
     relayTokenHash: row.relay_token_hash,
     active: row.active,
-    catalog: row.catalog || emptyPublicExtensionCatalog(),
+    catalog: { ...catalog, extensionEdition: catalog.extensionEdition === 'bits' ? 'bits' : 'free' },
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString()
   };

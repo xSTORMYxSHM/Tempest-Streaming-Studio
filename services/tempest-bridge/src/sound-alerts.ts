@@ -25,6 +25,9 @@ const idPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const replayWindowMs = 10 * 60 * 1000;
 const broadcastEffects = ['pulse', 'glow', 'glitch', 'spectrum', 'surge'] as const;
 const broadcastCircuits = ['all', 'core', 'frame', 'chat', 'plates', 'alerts'] as const;
+const interactionCategories = ['sticker', 'gif', 'jumpscare', 'screen-effect', 'sound', 'counter', 'community', 'other'] as const;
+const placementModes = ['fixed', 'viewer'] as const;
+const accessModes = ['everyone', 'staff', 'assigned-creators', 'specific-viewers'] as const;
 
 const catalogSeed: Array<Pick<TempestSoundAlertDefinition, 'id' | 'name' | 'cue' | 'durationMs' | 'legacyReceiver' | 'accent'>> = [
   { id: 'sound-alert.hype-pulse', name: 'Hype Pulse', cue: 'sound-alert.hype-pulse', durationMs: 8000, accent: '#54f2eb' },
@@ -61,6 +64,12 @@ export const bundledSoundAlerts: TempestSoundAlertDefinition[] = catalogSeed.map
   tempest2dAction: '',
   viewerCooldownMs: 60000,
   globalCooldownMs: alert.durationMs,
+  interactionCategory: 'other',
+  placementMode: 'fixed',
+  accessMode: 'everyone',
+  allowedViewerIds: [],
+  blockedViewerIds: [],
+  hideWhenLocked: false,
   volume: 0.8,
   visualDurationMs: 6000,
   broadcastEffect: 'spectrum',
@@ -91,6 +100,21 @@ function validateAudioUri(value: unknown): string | undefined {
     throw new Error('Sound Alert audio supports MP3, WAV, OGG, M4A, AAC, or FLAC files.');
   }
   return url.href;
+}
+
+function validateViewerIds(value: unknown, field: string): string[] {
+  if (value === undefined || value === null || value === '') return [];
+  const entries = Array.isArray(value) ? value : String(value).split(/[\s,]+/);
+  const ids = [...new Set(entries.map((entry) => String(entry || '').trim()).filter(Boolean))];
+  if (ids.length > 100 || ids.some((id) => !/^\d{1,30}$/.test(id))) throw new Error(`${field} must contain at most 100 numeric Twitch user IDs.`);
+  return ids;
+}
+
+function validateCounterCommandId(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const id = String(value).trim();
+  if (!/^[A-Za-z0-9._-]{1,80}$/.test(id)) throw new Error('counterCommandId must identify one saved Studio counter command.');
+  return id;
 }
 
 function validateVisualUri(value: unknown): string | undefined {
@@ -193,7 +217,7 @@ export class TempestSoundAlertCatalog {
     if (index < 0) throw new Error(`Sound Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Sound Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
+    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'interactionCategory', 'placementMode', 'accessMode', 'allowedViewerIds', 'blockedViewerIds', 'hideWhenLocked', 'counterCommandId', 'counterDelta', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Sound Alert catalog.`);
     const current = this.alerts[index];
     const updated = this.validate({
@@ -207,6 +231,14 @@ export class TempestSoundAlertCatalog {
       ...(source.durationMs === undefined ? {} : { durationMs: source.durationMs }),
       ...(source.viewerCooldownMs === undefined ? {} : { viewerCooldownMs: source.viewerCooldownMs }),
       ...(source.globalCooldownMs === undefined ? {} : { globalCooldownMs: source.globalCooldownMs }),
+      ...(source.interactionCategory === undefined ? {} : { interactionCategory: source.interactionCategory }),
+      ...(source.placementMode === undefined ? {} : { placementMode: source.placementMode }),
+      ...(source.accessMode === undefined ? {} : { accessMode: source.accessMode }),
+      ...(source.allowedViewerIds === undefined ? {} : { allowedViewerIds: source.allowedViewerIds }),
+      ...(source.blockedViewerIds === undefined ? {} : { blockedViewerIds: source.blockedViewerIds }),
+      ...(source.hideWhenLocked === undefined ? {} : { hideWhenLocked: source.hideWhenLocked }),
+      ...(Object.hasOwn(source, 'counterCommandId') ? { counterCommandId: source.counterCommandId } : {}),
+      ...(source.counterDelta === undefined ? {} : { counterDelta: source.counterDelta }),
       ...(source.volume === undefined ? {} : { volume: source.volume }),
       ...(Object.hasOwn(source, 'audioUri') ? { audioUri: validateAudioUri(source.audioUri) } : {}),
       ...(Object.hasOwn(source, 'visualUri') ? { visualUri: validateVisualUri(source.visualUri) } : {}),
@@ -249,6 +281,14 @@ export class TempestSoundAlertCatalog {
       durationMs,
       viewerCooldownMs: source.viewerCooldownMs === undefined ? 60000 : source.viewerCooldownMs,
       globalCooldownMs: source.globalCooldownMs === undefined ? durationMs : source.globalCooldownMs,
+      interactionCategory: source.interactionCategory === undefined ? 'other' : source.interactionCategory,
+      placementMode: source.placementMode === undefined ? 'fixed' : source.placementMode,
+      accessMode: source.accessMode === undefined ? 'everyone' : source.accessMode,
+      allowedViewerIds: source.allowedViewerIds,
+      blockedViewerIds: source.blockedViewerIds,
+      hideWhenLocked: source.hideWhenLocked === undefined ? false : source.hideWhenLocked,
+      counterCommandId: source.counterCommandId,
+      counterDelta: source.counterDelta === undefined ? 1 : source.counterDelta,
       volume: source.volume === undefined ? 0.8 : source.volume,
       audioUri: source.audioUri,
       visualUri: source.visualUri,
@@ -311,12 +351,17 @@ export class TempestSoundAlertCatalog {
         durationMs: alert.durationMs,
         visualDurationMs: alert.visualDurationMs,
         intensity,
+        ...(request.placement ? { placement: request.placement } : {}),
         eventType: 'sound-alert',
         circuit: alert.broadcastCircuit || 'all',
         accent: alert.accent,
         effect: alert.broadcastEffect || 'spectrum',
         strength: Math.min(1.5, (alert.broadcastEffectStrength || 1) * intensity),
         dedupeId: eventId,
+        instanceId: eventId,
+        broadcastAudioEnabled: Boolean(alert.broadcastAudioSource),
+        broadcastInteractionRenderEnabled: Boolean(alert.broadcastVisualSource),
+        ...(alert.broadcastVisualSource ? { renderTargets: { horizontal: { sourceName: alert.broadcastVisualSource, fit: 'contain', restartMedia: true } } } : {}),
         broadcastAudioSource: alert.broadcastAudioSource,
         broadcastVisualSource: alert.broadcastVisualSource
       }
@@ -369,6 +414,14 @@ export class TempestSoundAlertCatalog {
       durationMs: boundedInteger(input.durationMs, 'durationMs', 1000, 60000),
       viewerCooldownMs: boundedInteger(input.viewerCooldownMs, 'viewerCooldownMs', 0, 24 * 60 * 60 * 1000),
       globalCooldownMs: boundedInteger(input.globalCooldownMs, 'globalCooldownMs', 0, 24 * 60 * 60 * 1000),
+      interactionCategory: validateChoice(input.interactionCategory ?? 'other', 'interactionCategory', interactionCategories) || 'other',
+      placementMode: validateChoice(input.placementMode ?? 'fixed', 'placementMode', placementModes) || 'fixed',
+      accessMode: validateChoice(input.accessMode ?? 'everyone', 'accessMode', accessModes) || 'everyone',
+      allowedViewerIds: validateViewerIds(input.allowedViewerIds, 'allowedViewerIds'),
+      blockedViewerIds: validateViewerIds(input.blockedViewerIds, 'blockedViewerIds'),
+      hideWhenLocked: input.hideWhenLocked === true,
+      counterCommandId: validateCounterCommandId(input.counterCommandId),
+      counterDelta: boundedInteger(input.counterDelta ?? 1, 'counterDelta', -1000, 1000),
       volume,
       audioUri: validateAudioUri(input.audioUri),
       visualUri: validateVisualUri(input.visualUri),

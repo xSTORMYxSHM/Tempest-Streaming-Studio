@@ -631,6 +631,12 @@
     return values.map((value) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${value.toUpperCase()}</option>`).join('');
   }
 
+  function interactionCounterOptions(selected = '') {
+    const counters = (state.chatbot?.commands || []).filter((command) => command.handler === 'counter');
+    const preserved = selected && !counters.some((command) => command.id === selected) ? `<option value="${escapeHtml(selected)}" selected>Previously selected counter</option>` : '';
+    return preserved + '<option value="">No counter change</option>' + counters.map((command) => `<option value="${escapeHtml(command.id)}" ${command.id === selected ? 'selected' : ''}>${escapeHtml(command.counterLabel || command.name)} · ${Number(command.counterValue || 0).toLocaleString()}</option>`).join('');
+  }
+
   function vtubeStudioHotkeyOptions(selected = '') {
     const hotkeys = state.vtubeStudio?.hotkeys || [];
     const known = hotkeys.some((hotkey) => hotkey.hotkeyID === selected);
@@ -681,8 +687,16 @@
       </div>
       <details class="interaction-routing-details"><summary>Request + Broadcast routing</summary><div class="alert-settings-groups">
         <div class="alert-settings-group"><span>REQUEST</span><div class="sound-alert-settings">
+          <label>Interaction type <select data-alert-category="${escapeHtml(alert.id)}">${soundAlertOptions(['sticker', 'gif', 'jumpscare', 'screen-effect', 'sound', 'counter', 'community', 'other'], alert.interactionCategory || 'other')}</select></label>
+          <label>Placement <select data-alert-placement="${escapeHtml(alert.id)}"><option value="fixed" ${(alert.placementMode || 'fixed') === 'fixed' ? 'selected' : ''}>STREAMER PLACED</option><option value="viewer" ${alert.placementMode === 'viewer' ? 'selected' : ''}>VIEWER CLICK / TAP</option></select></label>
           <label>Viewer cooldown <span><input data-alert-viewer-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.viewerCooldownMs / 1000)}" /> sec</span></label>
           <label>Global cooldown <span><input data-alert-global-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.globalCooldownMs / 1000)}" /> sec</span></label>
+          <label>Who can activate <select data-alert-access="${escapeHtml(alert.id)}"><option value="everyone" ${(alert.accessMode || 'everyone') === 'everyone' ? 'selected' : ''}>EVERYONE</option><option value="staff" ${alert.accessMode === 'staff' ? 'selected' : ''}>BROADCASTER + MODS</option><option value="assigned-creators" ${alert.accessMode === 'assigned-creators' ? 'selected' : ''}>ASSIGNED CREATORS</option><option value="specific-viewers" ${alert.accessMode === 'specific-viewers' ? 'selected' : ''}>SPECIFIC TWITCH IDS</option></select></label>
+          <label>Allowed Twitch IDs <input data-alert-allowed-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Comma-separated numeric IDs" value="${escapeHtml((alert.allowedViewerIds || []).join(', '))}" /></label>
+          <label>Blocked Twitch IDs <input data-alert-blocked-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Optional numeric IDs" value="${escapeHtml((alert.blockedViewerIds || []).join(', '))}" /></label>
+          <label class="toggle-label"><input data-alert-hide-locked="${escapeHtml(alert.id)}" type="checkbox" ${alert.hideWhenLocked ? 'checked' : ''} /> Hide when viewer is locked out</label>
+          <label>Counter target <select data-alert-counter-command="${escapeHtml(alert.id)}">${interactionCounterOptions(alert.counterCommandId || '')}</select></label>
+          <label>Counter change <input data-alert-counter-delta="${escapeHtml(alert.id)}" type="number" min="-1000" max="1000" step="1" value="${Number.isInteger(alert.counterDelta) ? alert.counterDelta : 1}" /></label>
           <label>Separate OBS audio <input data-alert-broadcast-audio="${escapeHtml(alert.id)}" list="broadcastAudioSourceOptions" maxlength="128" placeholder="Optional override" value="${escapeHtml(alert.broadcastAudioSource || '')}" /></label>
         </div></div>
         <div class="alert-settings-group"><span>BROADCAST REACTION</span><div class="sound-alert-settings">
@@ -1570,7 +1584,7 @@
     const commands = chatbot.commands || [];
     const list = $('#chatbotCommandList');
     list.classList.toggle('empty-state', !commands.length);
-    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'shared chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
+    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'shared chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
 
     const activity = chatbot.activity || [];
     const activityList = $('#chatbotActivity');
@@ -1617,19 +1631,28 @@
   function renderHostedExtension() {
     const hosted = state.hostedExtension || {};
     const paired = Boolean(hosted.paired);
+    const extensionEdition = hosted.extensionEdition === 'bits' ? 'bits' : 'free';
+    const editionName = extensionEdition === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)';
     const authorized = state.twitch?.oauth?.state === 'authorized';
     const officialTwitchAuthorization = state.twitch?.clientIdMode === 'official';
     const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
+    document.querySelectorAll('input[name="twitchExtensionEdition"]').forEach((input) => { input.checked = input.value === extensionEdition; });
+    $('#twitchExtensionEditionBadge').textContent = extensionEdition === 'bits' ? 'BITS ENABLED' : 'FREE';
+    $('#twitchExtensionEditionBadge').classList.remove('offline');
+    $('#twitchExtensionEditionMessage').textContent = extensionEdition === 'bits'
+      ? 'Tempest Streaming (Bits) is active. Tempest Signal accepts only Twitch-verified, configured Bits products for this channel.'
+      : 'Tempest Mainframe (Free) is active. Bits product and transaction routes are disabled for this channel.';
     $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
     $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
     $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
     $('#hostedExtensionChannelState').textContent = hosted.channel?.login ? `@${hosted.channel.login}` : hosted.channel?.id || '—';
     $('#hostedExtensionRelayState').textContent = relayState;
     $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired || !officialTwitchAuthorization;
+    $('#pairHostedExtension').textContent = `Connect ${extensionEdition === 'bits' ? 'Tempest Streaming' : 'Tempest Mainframe'}`;
     $('#switchHostedExtensionToOfficialTwitch').hidden = paired || officialTwitchAuthorization;
     $('#revokeHostedExtension').disabled = !paired;
     $('#hostedExtensionMessage').textContent = paired
-      ? relayState === 'CONNECTED' ? 'This channel is paired. Studio publishes its enabled signal catalog to the public Twitch panel automatically.' : 'The installation is paired. Studio will keep retrying the hosted relay connection.'
+      ? relayState === 'CONNECTED' ? `${editionName} is selected. Studio publishes its enabled signal catalog and edition lock to Tempest Signal automatically.` : `The installation is paired for ${editionName}. Studio will keep retrying the hosted relay connection.`
       : !officialTwitchAuthorization ? 'The public Extension requires the built-in Tempest Twitch application. Switch sign-in once, reconnect Twitch, then connect your channel.'
         : hosted.lastError || (!authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
           : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
@@ -1637,6 +1660,7 @@
 
   function renderLocalExtension() {
     const local = state.localExtension || {};
+    const bitsEdition = state.hostedExtension?.extensionEdition === 'bits';
     const accountChannelId = state.twitch?.oauth?.account?.userId || '';
     const channelInput = $('#localExtensionChannelId');
     if (document.activeElement !== channelInput && !channelInput.value.trim()) channelInput.value = local.channelId || accountChannelId;
@@ -1647,12 +1671,14 @@
     $('#localExtensionChannelState').textContent = local.channelId || accountChannelId || '—';
     $('#localExtensionPanelUrl').textContent = local.panelUrl || 'https://localhost:8080/panel.html';
     $('#localExtensionSecret').placeholder = local.secretStored ? 'Stored securely; leave blank to reuse' : 'Paste once; stored with Windows encryption';
-    $('#startLocalExtension').disabled = Boolean(local.running) || !Boolean(local.certificateAvailable);
+    $('#startLocalExtension').disabled = bitsEdition || Boolean(local.running) || !Boolean(local.certificateAvailable);
     $('#stopLocalExtension').disabled = !local.running;
     $('#openLocalExtensionPanel').disabled = !local.running;
     $('#prepareLocalExtensionCertificate').disabled = Boolean(local.running);
     $('#forgetLocalExtensionSecret').disabled = !local.secretStored && !local.running;
-    $('#localExtensionMessage').textContent = local.lastError || (local.running
+    $('#localExtensionMessage').textContent = bitsEdition && !local.running
+      ? 'Local Panel testing currently runs Tempest Mainframe (Free). Select the Free edition to use these local controls; test Bits through Twitch\'s hosted sandbox.'
+      : local.lastError || (local.running
       ? 'Your single-channel Extension services are running. Refresh the installed Twitch panel to send signals into Studio.'
       : !local.certificateAvailable ? 'Prepare the trusted localhost certificate once, then start the Local Panel.'
         : local.secretStored ? 'The Extension secret is stored with Windows encryption. Start the Local Panel whenever you want to test it.'
@@ -1979,6 +2005,9 @@
     $('#chatbotCommandPermission').value = 'everyone';
     $('#chatbotCommandResponse').value = '';
     $('#chatbotCommandHandler').value = '';
+    $('#chatbotCounterLabel').value = '';
+    $('#chatbotCounterValue').value = '0';
+    $('#chatbotCounterFields').hidden = true;
     $('#chatbotCommandWorkflow').value = '';
     $('#chatbotViewerCooldown').value = '15';
     $('#chatbotGlobalCooldown').value = '3';
@@ -1998,6 +2027,9 @@
     $('#chatbotCommandPermission').value = command.permission;
     $('#chatbotCommandResponse').value = command.response || '';
     $('#chatbotCommandHandler').value = command.handler || '';
+    $('#chatbotCounterLabel').value = command.counterLabel || command.name;
+    $('#chatbotCounterValue').value = String(command.counterValue || 0);
+    $('#chatbotCounterFields').hidden = command.handler !== 'counter';
     $('#chatbotCommandWorkflow').value = command.workflowId || '';
     $('#chatbotViewerCooldown').value = String(Math.round(command.viewerCooldownMs / 1000));
     $('#chatbotGlobalCooldown').value = String(Math.round(command.globalCooldownMs / 1000));
@@ -2018,6 +2050,8 @@
       permission: $('#chatbotCommandPermission').value,
       response: $('#chatbotCommandResponse').value.trim(),
       handler: $('#chatbotCommandHandler').value || undefined,
+      counterLabel: $('#chatbotCommandHandler').value === 'counter' ? $('#chatbotCounterLabel').value.trim() : undefined,
+      counterValue: $('#chatbotCommandHandler').value === 'counter' ? Number($('#chatbotCounterValue').value) : undefined,
       workflowId: $('#chatbotCommandWorkflow').value || undefined,
       viewerCooldownMs: Number($('#chatbotViewerCooldown').value) * 1000,
       globalCooldownMs: Number($('#chatbotGlobalCooldown').value) * 1000,
@@ -2096,7 +2130,8 @@
     try {
       state.hostedExtension = await window.tempestStudio.pairHostedExtension({});
       await refresh({ quiet: true });
-      toast(`Public Extension connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
+      const editionName = state.hostedExtension.extensionEdition === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)';
+      toast(`${editionName} connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
     } catch (error) {
       state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
       renderHostedExtension();
@@ -2359,6 +2394,21 @@
     renderChatbot();
     renderAbout();
     renderUpdateStatus();
+  }
+
+  async function saveTwitchExtensionEdition(event) {
+    const edition = event.currentTarget.value;
+    try {
+      state.hostedExtension = await window.tempestStudio.setTwitchExtensionEdition(edition);
+      renderHostedExtension();
+      renderLocalExtension();
+      toast(edition === 'bits' ? 'Tempest Streaming (Bits) selected.' : 'Tempest Mainframe (Free) selected.');
+    } catch (error) {
+      state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
+      renderHostedExtension();
+      renderLocalExtension();
+      toast(error.message, true);
+    }
   }
 
   function renderRuntimeSection() {
@@ -4196,6 +4246,14 @@
     const durationSeconds = Number(document.querySelector(`[data-alert-duration="${selectorId}"]`).value);
     const viewerSeconds = Number(document.querySelector(`[data-alert-viewer-cooldown="${selectorId}"]`).value);
     const globalSeconds = Number(document.querySelector(`[data-alert-global-cooldown="${selectorId}"]`).value);
+    const interactionCategory = document.querySelector(`[data-alert-category="${selectorId}"]`).value;
+    const placementMode = document.querySelector(`[data-alert-placement="${selectorId}"]`).value;
+    const accessMode = document.querySelector(`[data-alert-access="${selectorId}"]`).value;
+    const allowedViewerIds = document.querySelector(`[data-alert-allowed-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
+    const blockedViewerIds = document.querySelector(`[data-alert-blocked-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
+    const hideWhenLocked = document.querySelector(`[data-alert-hide-locked="${selectorId}"]`).checked;
+    const counterCommandId = document.querySelector(`[data-alert-counter-command="${selectorId}"]`).value;
+    const counterDelta = Number(document.querySelector(`[data-alert-counter-delta="${selectorId}"]`).value);
     const volumePercent = Number(document.querySelector(`[data-alert-volume="${selectorId}"]`).value);
     const broadcastAudioSource = document.querySelector(`[data-alert-broadcast-audio="${selectorId}"]`).value.trim();
     const visualSeconds = Number(document.querySelector(`[data-visual-alert-duration="${selectorId}"]`).value);
@@ -4211,6 +4269,14 @@
       durationMs: Math.round(durationSeconds * 1000),
       viewerCooldownMs: Math.round(viewerSeconds * 1000),
       globalCooldownMs: Math.round(globalSeconds * 1000),
+      interactionCategory,
+      placementMode,
+      accessMode,
+      allowedViewerIds,
+      blockedViewerIds,
+      hideWhenLocked,
+      counterCommandId,
+      counterDelta,
       volume: volumePercent / 100,
       broadcastAudioSource,
       visualDurationMs: Math.round(visualSeconds * 1000),
@@ -4539,6 +4605,11 @@
     $('#chatbotFirstChatShoutoutForm').addEventListener('submit', saveChatbotFirstChatShoutouts);
     $('#chatbotProvidersForm').addEventListener('submit', saveChatbotProviders);
     $('#chatbotCommandPermission').addEventListener('change', protectSharedChatCommandPolicy);
+    $('#chatbotCommandHandler').addEventListener('change', () => {
+      const counter = $('#chatbotCommandHandler').value === 'counter';
+      $('#chatbotCounterFields').hidden = !counter;
+      if (counter && !$('#chatbotCounterLabel').value.trim()) $('#chatbotCounterLabel').value = $('#chatbotCommandName').value.trim() || 'Counter';
+    });
     $('#chatbotCommandWorkflow').addEventListener('change', protectSharedChatCommandPolicy);
     $('#resetChatbotCommand').addEventListener('click', resetChatbotCommandForm);
     $('#deleteChatbotCommand').addEventListener('click', deleteChatbotCommand);
@@ -4548,6 +4619,7 @@
     $('#sharedChatPlatform').addEventListener('change', renderChatbot);
     $('#clearSharedChatMessages').addEventListener('click', clearSharedChatMessages);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
+    document.querySelectorAll('input[name="twitchExtensionEdition"]').forEach((input) => input.addEventListener('change', saveTwitchExtensionEdition));
     $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
     $('#switchHostedExtensionToOfficialTwitch').addEventListener('click', switchHostedExtensionToOfficialTwitch);
     $('#revokeHostedExtension').addEventListener('click', revokeHostedExtension);

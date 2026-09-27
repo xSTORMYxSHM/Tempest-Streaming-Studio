@@ -3,7 +3,13 @@ const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { randomBytes, randomUUID } = require('node:crypto');
 const { WebSocketServer } = require('ws');
-const { TempestExtensionRelayClient } = require('../dist');
+const { TempestExtensionRelayClient, extensionCatalogKind } = require('../dist');
+
+test('publishes the catalog route expected by the selected Extension edition', () => {
+  assert.equal(extensionCatalogKind('free'), 'sound-alert');
+  assert.equal(extensionCatalogKind('bits'), 'interaction');
+  assert.equal(extensionCatalogKind(undefined), 'sound-alert');
+});
 
 test('connects outbound, validates channel events, and acknowledges EBS interactions', async (context) => {
   const token = randomBytes(32).toString('hex');
@@ -28,18 +34,26 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     payload: { action: 'sound-alert.hype-pulse', alertId: 'sound-alert.hype-pulse' }
   };
   let handled;
+  let catalogSync;
+  let resolveCatalogSync;
+  const catalogResult = new Promise((resolve) => { resolveCatalogSync = resolve; });
   const result = new Promise((resolve, reject) => {
     webSockets.on('connection', (socket) => {
       socket.send(JSON.stringify({ protocolVersion: 1, type: 'interaction', requestId: randomUUID(), event }));
       socket.on('message', (raw) => {
         const message = JSON.parse(raw.toString());
+        if (message.type === 'catalog.sync') {
+          catalogSync = message.catalog;
+          resolveCatalogSync();
+        }
         if (message.type === 'result') resolve(message);
       });
       socket.on('error', reject);
     });
   });
   const relay = new TempestExtensionRelayClient({
-    url: `ws://127.0.0.1:${port}/v1/studio`, token, channelId,
+    url: `ws://127.0.0.1:${port}/v1/studio`, token, channelId, extensionEdition: 'bits',
+    catalog: () => [{ id: 'tempest.storm-pulse', name: 'Storm Pulse', durationMs: 8000, accent: '#54F2EB', glyph: 'SP', kind: 'interaction' }],
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
       handled = value;
@@ -53,8 +67,11 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   });
   relay.start();
   const acknowledgement = await result;
+  await catalogResult;
   assert.equal(acknowledgement.status, 202);
   assert.equal(acknowledgement.body.accepted, true);
   assert.deepEqual(handled, event);
+  assert.equal(catalogSync.extensionEdition, 'bits');
+  assert.equal(catalogSync.items[0].id, 'tempest.storm-pulse');
   assert.equal(relay.status().state, 'connected');
 });

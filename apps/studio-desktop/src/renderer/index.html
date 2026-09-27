@@ -105,7 +105,7 @@
         </section>
 
         <section id="soundalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">PERFORMANCE + DANCE CATALOG</p><h2>Interaction Alerts</h2><p>Design viewer-triggered sound and visual alerts, place them anywhere on the stream canvas, and send actions directly to Tempest 2D or Warudo.</p></div><div class="page-toolbar-actions"><span class="status-badge">ALWAYS FREE</span><button data-import-alert-pack="interaction" class="secondary-button">Import Alert Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction Alert</button></div></div>
+          <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build free or Bits-enabled stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions from one reusable catalog.</p></div><div class="page-toolbar-actions"><span class="status-badge">FREE + BITS READY</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>
@@ -364,7 +364,13 @@
             </div>
           </article>
           <article class="panel twitch-local-panel">
-            <div class="panel-header"><div><span>VIEWER PANEL</span><h3>Connect your Twitch panel</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT CONNECTED</span></div>
+            <div class="panel-header"><div><span>VIEWER EXTENSION</span><h3>Choose the Extension used on this channel</h3><p>Studio publishes signals only to the selected edition. Change this whenever you replace the active Extension in Twitch.</p></div><span id="twitchExtensionEditionBadge" class="status-badge">FREE</span></div>
+            <div class="extension-edition-options" role="radiogroup" aria-label="Twitch Extension edition">
+              <label><input type="radio" name="twitchExtensionEdition" value="free" checked /><span><b>TEMPEST MAINFRAME</b><strong>Free</strong><small>Viewer interactions with no Bits products or transaction flow.</small></span></label>
+              <label><input type="radio" name="twitchExtensionEdition" value="bits" /><span><b>TEMPEST STREAMING</b><strong>Bits enabled</strong><small>Twitch-verified Bits products mapped to approved Studio interactions.</small></span></label>
+            </div>
+            <p id="twitchExtensionEditionMessage" class="extension-edition-message">Tempest Mainframe (Free) is active.</p>
+            <div class="panel-header hosted-extension-connect-header"><div><span>CHANNEL PAIRING</span><h3>Connect your selected Twitch Extension</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT CONNECTED</span></div>
             <div class="local-extension-grid">
               <div class="twitch-form-stack">
                 <div class="sound-alert-note"><strong>No developer setup required.</strong><br />Studio securely connects your public Twitch panel automatically.</div>
@@ -395,7 +401,7 @@
           </article>
           <div class="overview-grid twitch-grid" data-advanced>
             <article class="panel"><div class="panel-header"><div><span>CANONICAL TOPICS</span><h3>Normalized event directory</h3></div></div><div id="twitchTopicDirectory" class="topic-directory empty-state">No topics advertised.</div></article>
-            <article class="panel integration-boundary"><div class="panel-header"><div><span>OWNERSHIP BOUNDARY</span><h3>What stays in Studio</h3></div></div><ul><li>Interaction OAuth authorization, refresh, expiry, and secure token storage</li><li>EventSub, chat, free Extension interactions, and optional channel-point intake</li><li>Signature checks, replay dedupe, normalization, cooldowns, and routing</li><li>Cheers are observations unless an operator explicitly maps a workflow</li></ul><p>OBS stream-service authentication, Stream Information, and high-bandwidth media remain outside this gateway.</p></article>
+            <article class="panel integration-boundary"><div class="panel-header"><div><span>OWNERSHIP BOUNDARY</span><h3>What stays in Studio</h3></div></div><ul><li>Interaction OAuth authorization, refresh, expiry, and secure token storage</li><li>EventSub, chat, selected Extension interactions, and optional channel-point intake</li><li>Signature checks, transaction verification results, replay dedupe, normalization, cooldowns, and routing</li><li>Ordinary Twitch Cheers remain observations unless an operator explicitly maps a workflow</li></ul><p>OBS stream-service authentication, Stream Information, and high-bandwidth media remain outside this gateway.</p></article>
           </div>
         </section>
 
@@ -550,8 +556,9 @@
                 <input id="chatbotCommandId" type="hidden" />
                 <div class="form-row"><label>Command name<div class="prefixed-input"><span id="chatbotPrefixLabel">!</span><input id="chatbotCommandName" required maxlength="32" placeholder="blackhole" /></div></label><label>Permission<select id="chatbotCommandPermission"><option value="everyone">Everyone</option><option value="subscriber">Subscribers</option><option value="moderator">Moderators</option><option value="broadcaster">Broadcaster only</option></select></label></div>
                 <label>Aliases<input id="chatbotCommandAliases" maxlength="240" placeholder="bh, gravity" /><small>Comma-separated; the command prefix is added automatically.</small></label>
-                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option></select></label>
-                <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, and {args}. Built-in response sources may leave this blank.</small></label>
+                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="counter">Custom counter (+1)</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option></select></label>
+                <div id="chatbotCounterFields" class="form-row" hidden><label>Counter label<input id="chatbotCounterLabel" maxlength="80" placeholder="Deaths" /></label><label>Current value<input id="chatbotCounterValue" type="number" min="-1000000000" max="1000000000" step="1" value="0" /></label></div>
+                <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, {args}, {counterLabel}, and {counter}. Counter responses may be left blank.</small></label>
                 <label data-advanced>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
                 <div class="form-row" data-advanced><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
                 <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Shared Chat</label></div>

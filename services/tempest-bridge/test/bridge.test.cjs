@@ -417,6 +417,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.equal(result.alert.cue, 'sound-alert.hype-pulse');
   assert.equal(result.run.triggerEventId, 'hype-pulse-test-1');
   assert.equal(result.run.actions[0].capability, 'broadcast.reaction.trigger');
+  assert.equal(result.run.actions[1].capability, 'broadcast.interaction.show');
+  assert.equal(result.run.actions[1].releaseCapability, 'broadcast.interaction.clear');
+  assert.equal(result.run.actions.some((action) => action.capability === 'broadcast.audio.play'), false);
   assert.equal(result.run.actions.some((action) => action.capability === 'avatar.performance.apply'), false);
   assert.equal(new Date(result.run.endsAt).getTime() - new Date(result.run.startedAt).getTime(), 1000);
   assert.equal(playback[0].phase, 'play');
@@ -434,6 +437,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /fetch\(url,\{cache:'no-store',signal:controller\.signal\}\)/);
   assert.match(overlayMarkup, /media element timed out while loading/);
   assert.match(overlayMarkup, /Tempest alert audio playback failed/);
+  assert.equal((overlayMarkup.match(/(?:async )?function playAudio\(/g) || []).length, 1);
+  assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
+  assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(orientation==='vertical'/);
   assert.match(overlayMarkup, /id="customStyle"/);
   assert.match(overlayMarkup, /id="placement"/);
   assert.match(overlayMarkup, /speechSynthesis/);
@@ -830,6 +836,12 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
       visualDurationMs: 7000,
       viewerCooldownMs: 45000,
       globalCooldownMs: 11000,
+      interactionCategory: 'gif',
+      placementMode: 'viewer',
+      accessMode: 'specific-viewers',
+      allowedViewerIds: ['778899'],
+      blockedViewerIds: ['998877'],
+      hideWhenLocked: true,
       audioUri: pathToFileURL(packedAudioPath).href,
       visualUri: pathToFileURL(packedVisualPath).href,
       accent: '#123abc'
@@ -840,6 +852,12 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(interactionAlert.custom, true);
   assert.equal(interactionAlert.free, true);
   assert.equal(interactionAlert.accent, '#123ABC');
+  assert.equal(interactionAlert.interactionCategory, 'gif');
+  assert.equal(interactionAlert.placementMode, 'viewer');
+  assert.equal(interactionAlert.accessMode, 'specific-viewers');
+  assert.deepEqual(interactionAlert.allowedViewerIds, ['778899']);
+  assert.deepEqual(interactionAlert.blockedViewerIds, ['998877']);
+  assert.equal(interactionAlert.hideWhenLocked, true);
   assert.equal(interactionAlert.warudoEnabled, false);
   assert.equal(interactionAlert.vtubeStudioEnabled, false);
   assert.equal(interactionAlert.tempest2dEnabled, false);
@@ -1014,13 +1032,11 @@ test('runs simulated workflows, expires leases, and exposes the safety control',
   });
   assert.equal(soundAlert.status, 202);
   const soundRun = (await soundAlert.json()).run;
-  assert.equal(soundRun.actions.length, 5);
+  assert.equal(soundRun.actions.length, 3);
   assert.equal(soundRun.actions[0].capability, 'avatar.performance.apply');
   assert.equal(soundRun.actions[1].capability, 'avatar.performance.apply');
   assert.equal(soundRun.actions[1].state, 'scheduled');
   assert.equal(soundRun.actions[2].releaseCapability, 'broadcast.reaction.clear');
-  assert.equal(soundRun.actions[3].capability, 'broadcast.audio.play');
-  assert.equal(soundRun.actions[4].releaseCapability, 'broadcast.visual.hide');
   assert.equal(new Date(soundRun.endsAt).getTime() - new Date(soundRun.startedAt).getTime(), 1000);
 
   const unmappedCheer = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {

@@ -2,14 +2,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import type { TempestNormalizedChatEvent, TempestNormalizedTwitchEvent } from '@tempest/contracts';
+import type { TempestNormalizedChatEvent, TempestNormalizedTwitchEvent, TempestSoundAlertDefinition } from '@tempest/contracts';
 import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
 
 export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as const;
 export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
-export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing'] as const;
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing', 'counter'] as const;
 export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
 
 export interface ChatbotCommand {
@@ -22,6 +22,8 @@ export interface ChatbotCommand {
   permission: ChatbotPermission;
   response: string;
   handler?: ChatbotResponseHandler;
+  counterLabel?: string;
+  counterValue?: number;
   workflowId?: string;
   viewerCooldownMs: number;
   globalCooldownMs: number;
@@ -229,7 +231,7 @@ export interface ChatbotDispatch {
 
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
-  code: 'allowed' | 'identity-required' | 'not-assigned' | 'verification-unavailable';
+  code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
   reason?: string;
 }
 
@@ -546,6 +548,10 @@ function validateCommand(input: unknown, existing?: ChatbotCommand): ChatbotComm
   const rawHandler = (source as { handler?: unknown }).handler;
   const handler = rawHandler === undefined || rawHandler === '' ? undefined : String(rawHandler);
   if (handler && !chatbotResponseHandlers.includes(handler as ChatbotResponseHandler)) throw new Error('Chatbot response handler is invalid.');
+  const counterLabel = handler === 'counter' ? String(source.counterLabel || existing?.counterLabel || name).trim() : undefined;
+  const counterValue = handler === 'counter' ? Number(source.counterValue ?? existing?.counterValue ?? 0) : undefined;
+  if (handler === 'counter' && (!counterLabel || counterLabel.length > 80 || /[\r\n\0]/.test(counterLabel))) throw new Error('Counter label must contain 1 to 80 printable characters.');
+  if (handler === 'counter' && (typeof counterValue !== 'number' || !Number.isSafeInteger(counterValue) || Math.abs(counterValue) > 1_000_000_000)) throw new Error('Counter value must be an integer between -1000000000 and 1000000000.');
   if (workflowId && !/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/i.test(workflowId)) throw new Error('Workflow ID must be a namespaced identifier.');
   if (!response && !workflowId && !handler) throw new Error('A command needs a chat response, a built-in response, a workflow, or a combination.');
   const timestamp = new Date().toISOString();
@@ -559,6 +565,7 @@ function validateCommand(input: unknown, existing?: ChatbotCommand): ChatbotComm
     permission: permission as ChatbotPermission,
     response,
     handler: handler as ChatbotResponseHandler | undefined,
+    ...(handler === 'counter' ? { counterLabel, counterValue } : {}),
     workflowId,
     viewerCooldownMs: normalizeDuration(source.viewerCooldownMs, 'Viewer cooldown'),
     globalCooldownMs: normalizeDuration(source.globalCooldownMs, 'Global cooldown'),
@@ -923,20 +930,56 @@ export class TwitchChatbot {
     await this.ensureConnection();
   }
 
-  async authorizeInteraction(event: TempestNormalizedTwitchEvent): Promise<ChatbotInteractionAccessDecision> {
+  async interactionGroupViewerIds(): Promise<string[]> {
+    await this.refreshAssignedCreatorIds().catch(() => undefined);
+    return this.resolvedInteractionGroupViewerIds();
+  }
+
+  resolvedInteractionGroupViewerIds(): string[] {
+    return [...new Set(Object.values(this.configuration.assignedCreatorIds).filter((id) => /^\d{1,30}$/.test(id)))];
+  }
+
+  async adjustCounter(commandId: string, delta: number, source = 'viewer interaction'): Promise<{ commandId: string; label: string; value: number; delta: number }> {
+    const command = this.configuration.commands.find((entry) => entry.id === commandId && entry.handler === 'counter');
+    if (!command) throw new Error('The selected counter command is not available.');
+    if (!Number.isSafeInteger(delta) || delta < -1000 || delta > 1000) throw new Error('Counter adjustment must be an integer between -1000 and 1000.');
+    const value = Number(command.counterValue || 0) + delta;
+    if (!Number.isSafeInteger(value) || Math.abs(value) > 1_000_000_000) throw new Error('Counter adjustment would exceed the supported range.');
+    command.counterValue = value;
+    command.updatedAt = new Date().toISOString();
+    await this.persist();
+    this.record({ command: command.name, state: 'accepted', message: `${command.counterLabel || command.name} adjusted by ${delta} from ${source}; new value ${value}.` });
+    return { commandId: command.id, label: command.counterLabel || command.name, value, delta };
+  }
+
+  async authorizeInteraction(event: TempestNormalizedTwitchEvent, alert?: Pick<TempestSoundAlertDefinition, 'accessMode' | 'allowedViewerIds' | 'blockedViewerIds'>): Promise<ChatbotInteractionAccessDecision> {
     const settings = this.configuration.interactionAccess;
-    if (settings.mode === 'everyone') return { allowed: true, code: 'allowed' };
     const roles = new Set(event.viewer?.roles || []);
-    if (settings.allowBroadcasterAndModerators && (roles.has('broadcaster') || roles.has('moderator'))) return { allowed: true, code: 'allowed' };
     const viewerId = String(event.viewer?.id || '');
+    if (alert?.blockedViewerIds?.includes(viewerId)) return { allowed: false, code: 'blocked', reason: 'This interaction is not available to this viewer.' };
+    if (settings.allowBroadcasterAndModerators && (roles.has('broadcaster') || roles.has('moderator'))) return { allowed: true, code: 'allowed' };
+    if (settings.mode !== 'everyone') {
+      if (!/^\d{1,30}$/.test(viewerId)) return { allowed: false, code: 'identity-required', reason: 'Share your Twitch identity with this Extension to use restricted interactions.' };
+      try {
+        await this.refreshAssignedCreatorIds();
+      } catch (error) {
+        return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator list: ${(error as Error).message}` };
+      }
+      if (!Object.values(this.configuration.assignedCreatorIds).includes(viewerId)) return { allowed: false, code: 'not-assigned', reason: 'This channel has limited interactions to its assigned creators.' };
+    }
+    const mode = alert?.accessMode || 'everyone';
+    if (mode === 'everyone') return { allowed: true, code: 'allowed' };
+    if (mode === 'staff') return { allowed: false, code: 'staff-only', reason: 'This interaction is limited to the broadcaster and moderators.' };
     if (!/^\d{1,30}$/.test(viewerId)) {
       return { allowed: false, code: 'identity-required', reason: 'Share your Twitch identity with this Extension to use restricted interactions.' };
     }
-    try {
-      await this.refreshAssignedCreatorIds();
-    } catch (error) {
-      return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator list: ${(error as Error).message}` };
+    if (mode === 'specific-viewers') {
+      return alert?.allowedViewerIds?.includes(viewerId)
+        ? { allowed: true, code: 'allowed' }
+        : { allowed: false, code: 'not-allowed', reason: 'This interaction is locked to selected viewers.' };
     }
+    try { await this.refreshAssignedCreatorIds(); }
+    catch (error) { return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator group: ${(error as Error).message}` }; }
     if (Object.values(this.configuration.assignedCreatorIds).includes(viewerId)) return { allowed: true, code: 'allowed' };
     return { allowed: false, code: 'not-assigned', reason: 'This channel has limited interactions to its assigned creators.' };
   }
@@ -1023,12 +1066,26 @@ export class TwitchChatbot {
       this.lastViewerUse.set(viewerKey, now);
     }
     if (!simulated) this.lastGlobalUse.set(command.id, now);
-    const responseTemplate = await this.resolveCommandResponse(command, event);
+    let responseTemplate: string;
+    let counterValue: number | undefined;
+    if (command.handler === 'counter') {
+      counterValue = Number(command.counterValue || 0) + 1;
+      responseTemplate = command.response || '{counterLabel}: {counter}';
+      if (!simulated) {
+        command.counterValue = counterValue;
+        command.updatedAt = new Date().toISOString();
+        await this.persist();
+      }
+    } else {
+      responseTemplate = await this.resolveCommandResponse(command, event);
+    }
     const response = responseTemplate
       .replaceAll('{user}', viewerName)
       .replaceAll('{bot}', this.status().botName)
       .replaceAll('{command}', `${this.configuration.prefix}${command.name}`)
-      .replaceAll('{args}', args.join(' '));
+      .replaceAll('{args}', args.join(' '))
+      .replaceAll('{counterLabel}', command.counterLabel || command.name)
+      .replaceAll('{counter}', String(counterValue ?? command.counterValue ?? 0));
     try {
       await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
       if (response && !simulated) {

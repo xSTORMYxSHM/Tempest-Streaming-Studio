@@ -41,7 +41,8 @@ import { TempestAlertHistory } from './alert-history';
 import {
   ExtensionRelayOptions,
   ExtensionRelayStatus,
-  TempestExtensionRelayClient
+  TempestExtensionRelayClient,
+  extensionCatalogKind
 } from './extension-relay';
 import { ChatbotDispatch, TwitchChatbot } from './chatbot';
 import { KickIntegrationGateway, type KickCredentialStore } from './kick-integration';
@@ -51,6 +52,7 @@ export type { KickCredentialSet, KickCredentialStore, KickIntegrationStatus } fr
 export { KickIntegrationGateway } from './kick-integration';
 export type { ChatbotCommand, ChatbotStatus } from './chatbot';
 export {
+  extensionCatalogKind,
   extensionRelayOptionsFromEnvironment,
   TempestExtensionRelayClient
 } from './extension-relay';
@@ -691,6 +693,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       },
       onAccepted: () => soundAlerts.commit(prepared),
       execute: async () => {
+        const counter = prepared.alert.counterCommandId
+          ? await chatbot.adjustCounter(prepared.alert.counterCommandId, prepared.alert.counterDelta ?? 1, request.source)
+          : undefined;
+        if (counter) prepared.payload.counter = counter;
         const run = await workflowEngine!.trigger(soundAlertPerformanceWorkflow.id, {
           source: request.source,
           eventId: prepared.eventId,
@@ -701,7 +707,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           bypassCooldown: request.bypassCooldown
         });
         const sceneName = activeBroadcastScene();
-        const activeVisualAlert = visualAlerts.show(prepared.alert, request.viewerName, run.id, true, resolveTwitchAlertDesignForScene(prepared.alert.design, sceneName), false, sceneName);
+        const sceneDesign = resolveTwitchAlertDesignForScene(prepared.alert.design, sceneName);
+        const placement = prepared.alert.placementMode === 'viewer' && request.placement
+          ? { x: Math.max(0, Math.min(1, Number(request.placement.x))), y: Math.max(0, Math.min(1, Number(request.placement.y))) }
+          : undefined;
+        const browserAlert = prepared.alert.broadcastAudioSource ? { ...prepared.alert, audioUri: undefined } : prepared.alert;
+        const activeVisualAlert = visualAlerts.show(browserAlert, request.viewerName, run.id, true, placement ? { ...sceneDesign, position: 'custom', customPositionX: placement.x * 100, customPositionY: placement.y * 100 } : sceneDesign, false, sceneName);
         workflowEngine!.recordExternalEvent('sound-alert.triggered', 'success', `${prepared.alert.name} started from the Alert Queue.`, {
           alertId: prepared.alert.id,
           eventId: prepared.eventId,
@@ -720,7 +731,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
             });
           });
         }
-        return { run, activeVisualAlert };
+        return { run, activeVisualAlert, ...(counter ? { counter } : {}) };
       }
     });
     return {
@@ -1286,12 +1297,17 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'POST' && soundAlertTriggerMatch) {
         const alertId = decodeURIComponent(soundAlertTriggerMatch[1]);
         const body = await readJson(request) as Partial<TempestSoundAlertTriggerRequest>;
+        const rawPlacement = body.placement;
+        const placement = rawPlacement && typeof rawPlacement === 'object'
+          ? { x: Number(rawPlacement.x), y: Number(rawPlacement.y) }
+          : undefined;
         const result = await triggerSoundAlert(alertId, {
           source: body.source || 'api',
           eventId: body.eventId,
           viewerId: body.viewerId,
           viewerName: body.viewerName,
           intensity: body.intensity,
+          ...(placement && Number.isFinite(placement.x) && placement.x >= 0 && placement.x <= 1 && Number.isFinite(placement.y) && placement.y >= 0 && placement.y <= 1 ? { placement } : {}),
           simulateMissing: body.simulateMissing,
           bypassCooldown: body.bypassCooldown
         });
@@ -1485,8 +1501,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           workflowEngine.recordExternalEvent('integration.event.duplicate', 'info', `Duplicate Twitch event ${event.id} was ignored.`, { eventId: event.id, topic: event.topic });
           return sendJson(response, 200, { accepted: false, duplicate: true, eventId: event.id });
         }
+        const action = typeof event.payload.action === 'string' ? event.payload.action : undefined;
+        const configuredAlert = typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
+          : typeof event.payload.cue === 'string' ? soundAlerts.find(event.payload.cue)
+            : action ? soundAlerts.find(action) : undefined;
         if (event.topic === 'viewer.interaction.requested') {
-          const access = await chatbot.authorizeInteraction(event);
+          const access = await chatbot.authorizeInteraction(event, configuredAlert);
           if (!access.allowed) {
             workflowEngine.recordExternalEvent('viewer.interaction.denied', 'warning', access.reason || 'Viewer interaction access was denied.', { eventId: event.id, viewerId: event.viewer?.id, accessCode: access.code });
             return sendJson(response, 403, { accepted: false, error: access.reason, code: access.code.replaceAll('-', '_'), eventId: event.id });
@@ -1499,17 +1519,18 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         twitchExperiences.ingest(event);
         const raidAutomation = event.topic === 'viewer.raid.received' ? await chatbot.processRaidEvent(event) : undefined;
 
-        const action = typeof event.payload.action === 'string' ? event.payload.action : undefined;
-        const configuredAlert = typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
-          : typeof event.payload.cue === 'string' ? soundAlerts.find(event.payload.cue)
-            : action ? soundAlerts.find(action) : undefined;
         if ((event.topic === 'viewer.interaction.requested' || event.topic === 'viewer.reward.redeemed') && configuredAlert) {
+          const rawPlacement = event.payload.placement;
+          const placement = configuredAlert.placementMode === 'viewer' && rawPlacement && typeof rawPlacement === 'object' && !Array.isArray(rawPlacement)
+            ? { x: Number((rawPlacement as Record<string, unknown>).x), y: Number((rawPlacement as Record<string, unknown>).y) }
+            : undefined;
           const result = await triggerSoundAlert(configuredAlert.id, {
             source: event.topic === 'viewer.reward.redeemed' ? 'twitch.channel-points' : 'twitch.extension',
             eventId: event.id,
             viewerId: event.viewer?.id,
             viewerName: event.viewer?.displayName || event.viewer?.login,
             intensity: typeof event.payload.intensity === 'number' ? event.payload.intensity : undefined,
+            ...(placement && Number.isFinite(placement.x) && placement.x >= 0 && placement.x <= 1 && Number.isFinite(placement.y) && placement.y >= 0 && placement.y <= 1 ? { placement } : {}),
             simulateMissing: false
           });
           return sendJson(response, 202, { accepted: true, duplicate: false, ...result });
@@ -1644,9 +1665,19 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         name: alert.name,
         durationMs: alert.durationMs,
         cooldownMs: Math.max(alert.viewerCooldownMs, alert.globalCooldownMs, alert.durationMs),
+        viewerCooldownMs: alert.viewerCooldownMs,
+        globalCooldownMs: alert.globalCooldownMs,
+        category: alert.interactionCategory || 'other',
+        placementMode: alert.placementMode || 'fixed',
+        access: {
+          mode: alert.accessMode || 'everyone',
+          allowedViewerIds: alert.accessMode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : alert.allowedViewerIds || [],
+          blockedViewerIds: alert.blockedViewerIds || [],
+          hideWhenLocked: alert.hideWhenLocked === true
+        },
         accent: alert.accent || '#54F2EB',
         glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
-        kind: 'sound-alert' as const
+        kind: extensionCatalogKind(relayOptions.extensionEdition)
       })),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);

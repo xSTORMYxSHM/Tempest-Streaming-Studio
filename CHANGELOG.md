@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.4.6 — Viewer interaction platform
+
+- Added a persistent Twitch Extension edition selector for **Tempest Mainframe (Free)** and **Tempest Streaming (Bits)**. Studio publishes the selected edition with its hosted catalog, and Tempest Signal rejects requests from the inactive Extension so both products cannot trigger the same channel accidentally.
+- Expanded Interaction Alerts into a reusable Viewer Interactions catalog for stickers, GIFs, jumpscares, screen effects, sounds, counters, community actions, and future interaction types.
+- Added viewer click/tap placement, per-interaction staff/assigned-creator/individual access rules, explicit block lists, hidden locked items, and separately adjustable viewer/global cooldowns.
+- Added a server-enforced reservation step before the Twitch Bits dialog so access and cooldown checks occur before activation, with signed receipt verification still required afterward.
+- Added persistent streamer-named chat counters that work across Twitch, Shared Chat, and Kick through ordinary commands such as `!death` or `!restart`.
+- Kept the reliable single Web Audio alert path and its regression coverage, preventing the duplicate-function override that previously caused silent Browser Source alerts.
 
 ## 1.4.5 — Broadcast ownership alignment
 

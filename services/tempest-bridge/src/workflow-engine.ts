@@ -140,16 +140,18 @@ export const soundAlertPerformanceWorkflow: TempestWorkflowDefinition = {
       target: 'com.tempestmainframe.tempest-broadcast',
       capability: 'broadcast.audio.play',
       arguments: { bus: 'sound-alerts' },
-      forwardInteractionPayload: true
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'broadcastAudioEnabled', equals: true, ifMissing: false }
     },
     {
-      id: 'broadcast-visual',
-      name: 'Broadcast Sound Alert visual',
+      id: 'broadcast-interaction-render',
+      name: 'Broadcast viewer interaction render',
       target: 'com.tempestmainframe.tempest-broadcast',
-      capability: 'broadcast.visual.show',
-      releaseCapability: 'broadcast.visual.hide',
-      arguments: { scene: 'current' },
+      capability: 'broadcast.interaction.show',
+      releaseCapability: 'broadcast.interaction.clear',
+      arguments: {},
       forwardInteractionPayload: true,
+      whenPayload: { field: 'broadcastInteractionRenderEnabled', equals: true, ifMissing: false },
       lease: { durationMs: 60000, durationInput: 'durationMs', fadeOutMs: 500 }
     }
   ]

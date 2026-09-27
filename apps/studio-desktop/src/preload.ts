@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   importDiscordProfile: () => ipcRenderer.invoke('studio:import-discord-profile'),
   getLocalExtensionStatus: () => ipcRenderer.invoke('studio:get-local-extension-status'),
   getHostedExtensionStatus: () => ipcRenderer.invoke('studio:get-hosted-extension-status'),
+  setTwitchExtensionEdition: (edition: 'free' | 'bits') => ipcRenderer.invoke('studio:set-twitch-extension-edition', edition),
   pairHostedExtension: (settings: { ebsBaseUrl: string }) => ipcRenderer.invoke('studio:pair-hosted-extension', settings),
   revokeHostedExtension: () => ipcRenderer.invoke('studio:revoke-hosted-extension'),
   linkHostedKick: () => ipcRenderer.invoke('studio:link-hosted-kick'),

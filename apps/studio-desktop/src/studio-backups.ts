@@ -33,7 +33,8 @@ const safeDocuments = new Map([
   ['emoteWall', ['bridge', 'emote-wall.json']],
   ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
   ['discordVoiceOverlay', ['bridge', 'discord-voice-overlay.json']],
-  ['panelDesign', ['twitch-panel-design.json']]
+  ['panelDesign', ['twitch-panel-design.json']],
+  ['twitchExtensionEdition', ['twitch-extension-edition.json']]
 ]);
 const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.mp4', '.webm']);
 const maximumAssetBytes = 96 * 1024 * 1024;
