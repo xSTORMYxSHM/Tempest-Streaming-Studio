@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -150,12 +150,7 @@ const builtInThemes: TempestDiceThemeOption[] = [
   { id: 'blueGreenMetal', name: 'Blue-green metal', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: false }
 ];
 
-const diceOverlayPage = String.raw`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Studio 3D Dice</title>
-<style>
-*{box-sizing:border-box}html,body,#diceWorld{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}body{font-family:Inter,"Segoe UI",sans-serif;color:#edffff;pointer-events:none}#diceWorld{position:absolute;inset:0;transform:scale(var(--dice-scale,1));transform-origin:center}#diceWorld canvas{width:100%!important;height:100%!important;background:transparent!important}.dice-hud{position:absolute;inset:0;display:grid;place-items:end center;padding:0 4vw 5vh;opacity:0;transition:opacity .2s ease}.dice-hud.visible{opacity:1}.dice-result{display:grid;grid-template-columns:auto auto;align-items:end;gap:4px clamp(14px,1.4vw,26px);min-width:min(560px,88vw);padding:18px 28px;border:1px solid rgba(139,234,255,.45);border-radius:14px;background:linear-gradient(135deg,rgba(3,13,20,.9),rgba(7,26,35,.72));box-shadow:0 18px 55px rgba(0,0,0,.55);text-align:center;text-shadow:0 4px 16px #000;backdrop-filter:blur(7px)}.dice-result small{grid-column:1/-1;color:#8beaff;font:800 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.18em}.dice-result strong{color:#fff1b9;font:800 clamp(56px,6vw,112px)/.85 Georgia,serif}.dice-result span{align-self:center;color:#d8f5f5;font:800 clamp(18px,1.7vw,34px)/1 Consolas,monospace}.dice-result p{grid-column:1/-1;max-width:80vw;margin:7px 0 0;color:#fff;font:700 clamp(17px,1.6vw,31px)/1.2 Inter,sans-serif}.dice-result em{grid-column:1/-1;color:#9fc6cc;font:700 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.13em;text-transform:uppercase;font-style:normal}.dice-error{position:absolute;top:4vh;left:50%;max-width:86vw;transform:translateX(-50%);padding:12px 18px;border:1px solid #ff6079;border-radius:10px;background:rgba(28,5,10,.92);color:#ffdbe1;font:700 14px/1.35 "Segoe UI",sans-serif;opacity:0;transition:opacity .2s}.dice-error.visible{opacity:1;transition:none}
-</style></head><body><div id="diceWorld" aria-hidden="true"></div><main id="diceHud" class="dice-hud" aria-live="polite"></main><div id="diceError" class="dice-error" role="alert"></div>
-<script>
+const diceOverlayBootstrap = String.raw`
 (() => {
   const runtime = window.__tempestDiceRuntime = { clientId: '', initData: '', error: '' };
   const events = window.__tempestDiceEvents = new EventSource('/dice-overlay/events');
@@ -170,9 +165,17 @@ const diceOverlayPage = String.raw`<!doctype html>
   });
   window.addEventListener('error', (event) => { runtime.error = 'Dice client script error: ' + String(event.message || event.error || 'unknown error'); reportFailure(); });
   window.addEventListener('unhandledrejection', (event) => { runtime.error = 'Dice client promise rejection: ' + String(event.reason?.message || event.reason || 'unknown error'); reportFailure(); });
-})();
-__CLIENT_SCRIPT__
-</script></body></html>`;
+})();`;
+
+const diceOverlayRuntime = `${diceOverlayBootstrap}\n${tempestDiceOverlayClient}`;
+const diceOverlayRuntimeVersion = createHash('sha256').update(diceOverlayRuntime).digest('hex').slice(0, 16);
+
+const diceOverlayPage = String.raw`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Studio 3D Dice</title>
+<style>
+*{box-sizing:border-box}html,body,#diceWorld{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}body{font-family:Inter,"Segoe UI",sans-serif;color:#edffff;pointer-events:none}#diceWorld{position:absolute;inset:0;transform:scale(var(--dice-scale,1));transform-origin:center}#diceWorld canvas{width:100%!important;height:100%!important;background:transparent!important}.dice-hud{position:absolute;inset:0;display:grid;place-items:end center;padding:0 4vw 5vh;opacity:0;transition:opacity .2s ease}.dice-hud.visible{opacity:1}.dice-result{display:grid;grid-template-columns:auto auto;align-items:end;gap:4px clamp(14px,1.4vw,26px);min-width:min(560px,88vw);padding:18px 28px;border:1px solid rgba(139,234,255,.45);border-radius:14px;background:linear-gradient(135deg,rgba(3,13,20,.9),rgba(7,26,35,.72));box-shadow:0 18px 55px rgba(0,0,0,.55);text-align:center;text-shadow:0 4px 16px #000;backdrop-filter:blur(7px)}.dice-result small{grid-column:1/-1;color:#8beaff;font:800 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.18em}.dice-result strong{color:#fff1b9;font:800 clamp(56px,6vw,112px)/.85 Georgia,serif}.dice-result span{align-self:center;color:#d8f5f5;font:800 clamp(18px,1.7vw,34px)/1 Consolas,monospace}.dice-result p{grid-column:1/-1;max-width:80vw;margin:7px 0 0;color:#fff;font:700 clamp(17px,1.6vw,31px)/1.2 Inter,sans-serif}.dice-result em{grid-column:1/-1;color:#9fc6cc;font:700 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.13em;text-transform:uppercase;font-style:normal}.dice-error{position:absolute;top:4vh;left:50%;max-width:86vw;transform:translateX(-50%);padding:12px 18px;border:1px solid #ff6079;border-radius:10px;background:rgba(28,5,10,.92);color:#ffdbe1;font:700 14px/1.35 "Segoe UI",sans-serif;opacity:0;transition:opacity .2s}.dice-error.visible{opacity:1;transition:none}
+</style></head><body><div id="diceWorld" aria-hidden="true"></div><main id="diceHud" class="dice-hud" aria-live="polite"></main><div id="diceError" class="dice-error" role="alert"></div>
+<script defer src="/dice-overlay/client.js?v=__CLIENT_VERSION__"></script></body></html>`;
 
 function integer(value: unknown, name: string, minimum: number, maximum: number): number {
   const number = Number(value);
@@ -300,15 +303,15 @@ export class TempestDiceOverlay {
   page(): string {
     this.requests.pageLoads++;
     this.requests.lastPageLoadedAt = new Date().toISOString();
-    // Embed the runtime so OBS CEF cannot reuse a stale external-script cache entry after
-    // Studio or Broadcast recovery. The standalone route remains for compatibility and
-    // diagnostics, but every overlay page is now a single atomic, no-store document.
-    return diceOverlayPage.replace('__CLIENT_SCRIPT__', () => tempestDiceOverlayClient);
+    // OBS CEF can refuse inline JavaScript even when the page CSP permits it. Keep the
+    // complete bootstrap and renderer runtime in one same-origin external resource, and
+    // content-version its URL so a recovered Browser Source cannot revive stale code.
+    return diceOverlayPage.replace('__CLIENT_VERSION__', diceOverlayRuntimeVersion);
   }
   client(): string {
     this.requests.clientLoads++;
     this.requests.lastClientLoadedAt = new Date().toISOString();
-    return tempestDiceOverlayClient;
+    return diceOverlayRuntime;
   }
 
   connect(response: ServerResponse): void {

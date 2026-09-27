@@ -41,14 +41,19 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const page = await fetch(`${runtime.baseUrl}/dice-overlay`);
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
-  assert.match(page.headers.get('content-security-policy'), /script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'/);
+  assert.match(page.headers.get('content-security-policy'), /script-src 'self' 'wasm-unsafe-eval'/);
+  assert.doesNotMatch(page.headers.get('content-security-policy'), /script-src[^;]*'unsafe-inline'/);
   assert.match(page.headers.get('content-security-policy'), /worker-src blob: data:/);
   assert.match(page.headers.get('content-security-policy'), /media-src 'self' blob:/);
-  assert.match(await page.text(), /Tempest Studio 3D Dice/);
+  const pageBody = await page.text();
+  assert.match(pageBody, /Tempest Studio 3D Dice/);
+  assert.match(pageBody, /<script defer src="\/dice-overlay\/client\.js\?v=[a-f0-9]{16}"><\/script>/);
 
   const client = await fetch(`${runtime.baseUrl}/dice-overlay/client.js`);
   assert.equal(client.status, 200);
-  assert.match(await client.text(), /new DiceBoxClass/);
+  const clientBody = await client.text();
+  assert.match(clientBody, /window\.__tempestDiceEvents = new EventSource/);
+  assert.match(clientBody, /new DiceBoxClass/);
   const vendor = await fetch(`${runtime.baseUrl}/dice-overlay/vendor/dice-box.es.min.js`);
   assert.equal(vendor.status, 200);
   assert.match(await vendor.text(), /OffscreenCanvas/);
