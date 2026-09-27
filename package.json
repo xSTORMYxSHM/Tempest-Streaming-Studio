@@ -1,6 +1,6 @@
 {
   "name": "tempest-mainframe-studio",
-  "version": "1.4.2",
+  "version": "1.4.5",
   "private": true,
   "description": "Viewer-event orchestration, streaming connections, safety, software, and asset control for Tempest Streaming Studio.",
   "packageManager": "pnpm@11.19.0",
@@ -11,6 +11,8 @@
     "bridge": "pnpm --filter @tempest/bridge start",
     "extension:build": "pnpm --filter @tempest/twitch-extension build",
     "extension:start": "pnpm --filter @tempest/twitch-extension start",
+    "extension:bits:build": "pnpm --filter @tempest/twitch-bits-extension build",
+    "extension:bits:start": "pnpm --filter @tempest/twitch-bits-extension start",
     "ebs:build": "pnpm --filter @tempest/twitch-ebs build",
     "ebs:start": "pnpm --filter @tempest/twitch-ebs start",
     "warudo:start": "pnpm --filter @tempest/warudo-adapter start",

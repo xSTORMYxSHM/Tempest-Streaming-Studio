@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.4.5 — Broadcast ownership alignment
+
 - Kept Broadcast-owned video and output settings in Tempest Broadcast only. Studio now presents Kick destination and Dual Format configuration as read-only readiness, while retaining platform accounts, chat, stream information, preflight, preview, Go Live, recovery, and monitoring controls.
 
 ## 1.4.2 — Streaming performance cleanup
