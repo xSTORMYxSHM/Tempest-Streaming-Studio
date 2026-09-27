@@ -183,8 +183,13 @@
             <article class="panel dice-control-panel">
               <div class="panel-header"><div><span>ROLL CONTROL</span><h3>Put a roll on stream</h3></div><strong class="state-chip">DICE BOX PHYSICS</strong></div>
               <form id="diceRollForm" class="dice-roll-form">
-                <div class="dice-preset-grid" aria-label="Common dice">
-                  <button type="button" data-dice-preset="1d20">d20</button><button type="button" data-dice-preset="2d20kh1">Advantage</button><button type="button" data-dice-preset="2d20kl1">Disadvantage</button><button type="button" data-dice-preset="1d12">d12</button><button type="button" data-dice-preset="1d10">d10</button><button type="button" data-dice-preset="1d8">d8</button><button type="button" data-dice-preset="1d6">1–6</button><button type="button" data-dice-preset="1d4">d4</button><button type="button" data-dice-preset="1d50">1–50</button><button type="button" data-dice-preset="1d100">d100</button>
+                <div class="dice-picker" aria-label="Dice picker">
+                  <div><span>QUANTITY</span><input id="dicePickerCount" type="number" min="1" max="20" value="1" /></div>
+                  <div class="dice-picker-types"><button type="button" data-dice-sides="4">d4</button><button type="button" data-dice-sides="6">d6</button><button type="button" data-dice-sides="8">d8</button><button type="button" data-dice-sides="10">d10</button><button type="button" data-dice-sides="12">d12</button><button type="button" data-dice-sides="20">d20</button><button type="button" data-dice-sides="100">d100</button></div>
+                  <div><span>MODIFIER</span><input id="dicePickerModifier" type="number" min="-1000" max="1000" value="0" /></div>
+                </div>
+                <div class="dice-preset-grid" aria-label="Roll shortcuts">
+                  <button type="button" data-dice-preset="2d20kh1">Advantage</button><button type="button" data-dice-preset="2d20kl1">Disadvantage</button><button type="button" data-dice-preset="1d50">1–50</button><button type="button" data-dice-preset="1d100">Percentile</button>
                 </div>
                 <label><span>Dice or random range</span><input id="diceExpression" value="1d20" maxlength="40" spellcheck="false" required /><small>Use 1dN for a random number from 1 through N (2–100). Examples: 1d6, 1d50, 2d20kh1.</small></label>
                 <label><span>Rolling as</span><input id="diceRollerName" value="Streamer" maxlength="80" /></label>
@@ -198,16 +203,29 @@
             </article>
           </div>
           <article class="panel dice-settings-panel">
-            <div class="panel-header"><div><span>PRESENTATION</span><h3>Browser Source appearance</h3></div><button id="saveDiceOverlaySettings" class="secondary-button" type="button">Save Appearance</button></div>
+            <div class="panel-header"><div><span>PRESENTATION + PHYSICS</span><h3>Browser Source controls</h3></div><button id="saveDiceOverlaySettings" class="secondary-button" type="button">Save Dice Setup</button></div>
             <div class="dice-settings-grid">
-              <label><span>Dice style</span><select id="diceTheme"><option value="default">Classic</option><option value="smooth">Smooth edge</option><option value="gemstone">Gemstone</option><option value="rock">Carved rock</option><option value="rust">Weathered rust</option><option value="wooden">Wooden</option><option value="diceOfRolling">Multicolor Dice of Rolling</option><option value="blueGreenMetal">Blue-green metal</option></select></label>
+              <label><span>Dice style</span><select id="diceTheme"><option value="default">Classic</option></select></label>
               <label><span>Dice color</span><select id="diceColor"><option value="stormglass">Stormglass</option><option value="brass">Brass</option><option value="obsidian">Obsidian</option></select></label>
+              <label><span>Custom color</span><input id="diceThemeColor" type="color" value="#2e91ad" /><small>Used by color-compatible themes</small></label>
               <label><span>On-screen time</span><select id="diceDuration"><option value="3500">3.5 seconds</option><option value="5200">5.2 seconds</option><option value="7000">7 seconds</option><option value="10000">10 seconds</option></select></label>
               <label><span>Scale</span><input id="diceScale" type="number" min="60" max="140" step="5" value="100" /><small>60–140%</small></label>
+              <div class="dice-theme-import"><button id="importDiceTheme" class="secondary-button" type="button">Import Dice Theme</button><small>Choose a Dice Box theme folder containing theme.config.json. Imported models and textures stay local.</small></div>
               <label class="toggle-label"><input id="diceShowReason" type="checkbox" checked /><span>Show the roll reason</span></label>
               <label class="toggle-label"><input id="diceSoundEnabled" type="checkbox" /><span>Play a dice impact sound in the Browser Source</span></label>
               <label class="toggle-label"><input id="diceOverlayEnabled" type="checkbox" checked /><span>Enable 3D Dice rolls</span></label>
             </div>
+            <details class="dice-physics-panel"><summary>Advanced physics and lighting</summary><p>These are bounded to OBS-safe ranges. Resetting returns Dice Box defaults.</p>
+              <div class="dice-physics-grid">
+                <label><span>Gravity</span><input id="diceGravity" type="number" min="0.25" max="3" step="0.05" value="1" /></label><label><span>Mass</span><input id="diceMass" type="number" min="0.25" max="5" step="0.05" value="1" /></label>
+                <label><span>Friction</span><input id="diceFriction" type="number" min="0" max="1" step="0.05" value="0.8" /></label><label><span>Bounce</span><input id="diceRestitution" type="number" min="0" max="0.9" step="0.05" value="0.1" /></label>
+                <label><span>Spin damping</span><input id="diceAngularDamping" type="number" min="0.05" max="0.95" step="0.05" value="0.4" /></label><label><span>Movement damping</span><input id="diceLinearDamping" type="number" min="0.05" max="0.95" step="0.05" value="0.5" /></label>
+                <label><span>Spin force</span><input id="diceSpinForce" type="number" min="0" max="12" step="0.5" value="6" /></label><label><span>Throw force</span><input id="diceThrowForce" type="number" min="1" max="12" step="0.5" value="5" /></label>
+                <label><span>Starting height</span><input id="diceStartingHeight" type="number" min="2" max="30" step="1" value="8" /></label><label><span>Settle timeout</span><input id="diceSettleTimeout" type="number" min="2000" max="15000" step="500" value="5000" /><small>milliseconds</small></label>
+                <label><span>Release delay</span><input id="diceDelayMs" type="number" min="0" max="250" step="5" value="10" /><small>milliseconds between dice</small></label><label><span>Light intensity</span><input id="diceLightIntensity" type="number" min="0.2" max="3" step="0.1" value="1" /></label>
+                <label><span>Shadow transparency</span><input id="diceShadowTransparency" type="number" min="0" max="1" step="0.05" value="0.8" /></label><label class="toggle-label"><input id="diceEnableShadows" type="checkbox" checked /><span>Render shadows</span></label>
+              </div><button id="resetDicePhysics" class="secondary-button" type="button">Reset Physics Defaults</button>
+            </details>
           </article>
         </section>
 

@@ -1,21 +1,44 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { ServerResponse } from 'node:http';
 import path from 'node:path';
 import { tempestDiceOverlayClient } from './dice-overlay-client';
 
 export type TempestDiceTheme = 'stormglass' | 'brass' | 'obsidian';
-export type TempestDiceStyle = 'default' | 'smooth' | 'gemstone' | 'rock' | 'rust' | 'wooden' | 'diceOfRolling' | 'blueGreenMetal';
+export type TempestDiceStyle = string;
+
+export interface TempestDiceThemeOption {
+  id: string;
+  name: string;
+  custom: boolean;
+  diceAvailable: string[];
+  colorConfigurable: boolean;
+}
 
 export interface TempestDiceOverlaySettings {
   schemaVersion: 1;
   enabled: boolean;
   theme: TempestDiceTheme;
   diceTheme: TempestDiceStyle;
+  themeColor: string;
   durationMs: number;
   soundEnabled: boolean;
   showReason: boolean;
   scalePercent: number;
+  gravity: number;
+  mass: number;
+  friction: number;
+  restitution: number;
+  angularDamping: number;
+  linearDamping: number;
+  spinForce: number;
+  throwForce: number;
+  startingHeight: number;
+  settleTimeout: number;
+  diceDelayMs: number;
+  lightIntensity: number;
+  enableShadows: boolean;
+  shadowTransparency: number;
   updatedAt?: string;
 }
 
@@ -73,11 +96,38 @@ const defaultSettings: TempestDiceOverlaySettings = {
   enabled: true,
   theme: 'stormglass',
   diceTheme: 'default',
+  themeColor: '#2e91ad',
   durationMs: 5200,
   soundEnabled: false,
   showReason: true,
-  scalePercent: 100
+  scalePercent: 100,
+  gravity: 1,
+  mass: 1,
+  friction: 0.8,
+  restitution: 0.1,
+  angularDamping: 0.4,
+  linearDamping: 0.5,
+  spinForce: 6,
+  throwForce: 5,
+  startingHeight: 8,
+  settleTimeout: 5000,
+  diceDelayMs: 10,
+  lightIntensity: 1,
+  enableShadows: true,
+  shadowTransparency: 0.8
 };
+
+const builtInThemes: TempestDiceThemeOption[] = [
+  { id: 'default', name: 'Classic', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: true },
+  { id: 'smooth', name: 'Smooth edge', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: true },
+  { id: 'gemstone', name: 'Gemstone', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: true },
+  { id: 'gemstoneMarble', name: 'Gemstone rainbow marble', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: false },
+  { id: 'rock', name: 'Carved rock', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: true },
+  { id: 'rust', name: 'Weathered rust', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: true },
+  { id: 'wooden', name: 'Wooden', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: false },
+  { id: 'diceOfRolling', name: 'Multicolor Dice of Rolling', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: false },
+  { id: 'blueGreenMetal', name: 'Blue-green metal', custom: false, diceAvailable: ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], colorConfigurable: false }
+];
 
 const diceOverlayPage = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Studio 3D Dice</title>
@@ -89,6 +139,18 @@ function integer(value: unknown, name: string, minimum: number, maximum: number)
   const number = Number(value);
   if (!Number.isInteger(number) || number < minimum || number > maximum) throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
   return number;
+}
+
+function numberRange(value: unknown, name: string, minimum: number, maximum: number): number {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) throw new Error(`${name} must be between ${minimum} and ${maximum}.`);
+  return Math.round(number * 1000) / 1000;
+}
+
+function color(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!/^#[a-f0-9]{6}$/.test(normalized)) throw new Error('Dice color must be a six-digit HEX color.');
+  return normalized;
 }
 
 export function parseStudioDiceExpression(value: unknown): ParsedDiceExpression {
@@ -107,15 +169,29 @@ export function diceBoxPhysicalSides(sides: number): number {
   return [4, 6, 8, 10, 12, 20, 100].find((candidate) => candidate >= sides) || 100;
 }
 
-function validateSettings(input: TempestDiceOverlaySettings): TempestDiceOverlaySettings {
-  if (typeof input.enabled !== 'boolean' || typeof input.soundEnabled !== 'boolean' || typeof input.showReason !== 'boolean') throw new Error('Dice overlay toggles must be boolean.');
+function validateSettings(input: TempestDiceOverlaySettings, themes: TempestDiceThemeOption[] = builtInThemes): TempestDiceOverlaySettings {
+  if (typeof input.enabled !== 'boolean' || typeof input.soundEnabled !== 'boolean' || typeof input.showReason !== 'boolean' || typeof input.enableShadows !== 'boolean') throw new Error('Dice overlay toggles must be boolean.');
   if (!['stormglass', 'brass', 'obsidian'].includes(input.theme)) throw new Error('Dice theme must be stormglass, brass, or obsidian.');
-  if (!['default', 'smooth', 'gemstone', 'rock', 'rust', 'wooden', 'diceOfRolling', 'blueGreenMetal'].includes(input.diceTheme)) throw new Error('Dice style is not supported.');
+  if (!themes.some((theme) => theme.id === input.diceTheme)) throw new Error('Dice style is not supported or has not been imported.');
   return {
     ...input,
     schemaVersion: 1,
+    themeColor: color(input.themeColor),
     durationMs: integer(input.durationMs, 'Display duration', 2500, 15000),
-    scalePercent: integer(input.scalePercent, 'Dice scale', 60, 140)
+    scalePercent: integer(input.scalePercent, 'Dice scale', 60, 140),
+    gravity: numberRange(input.gravity, 'Gravity', 0.25, 3),
+    mass: numberRange(input.mass, 'Mass', 0.25, 5),
+    friction: numberRange(input.friction, 'Friction', 0, 1),
+    restitution: numberRange(input.restitution, 'Bounce', 0, 0.9),
+    angularDamping: numberRange(input.angularDamping, 'Spin damping', 0.05, 0.95),
+    linearDamping: numberRange(input.linearDamping, 'Movement damping', 0.05, 0.95),
+    spinForce: numberRange(input.spinForce, 'Spin force', 0, 12),
+    throwForce: numberRange(input.throwForce, 'Throw force', 1, 12),
+    startingHeight: numberRange(input.startingHeight, 'Starting height', 2, 30),
+    settleTimeout: integer(input.settleTimeout, 'Settle timeout', 2000, 15000),
+    diceDelayMs: integer(input.diceDelayMs, 'Dice release delay', 0, 250),
+    lightIntensity: numberRange(input.lightIntensity, 'Light intensity', 0.2, 3),
+    shadowTransparency: numberRange(input.shadowTransparency, 'Shadow transparency', 0, 1)
   };
 }
 
@@ -126,15 +202,51 @@ export class TempestDiceOverlay {
   private clients = new Map<ServerResponse, string>();
   private pending?: PendingRoll;
   private readonly documentPath: string;
+  private readonly customThemeDirectory: string;
+  private customThemes: TempestDiceThemeOption[] = [];
 
   constructor(private readonly dataDirectory: string) {
     this.documentPath = path.join(dataDirectory, 'dice-overlay.json');
+    this.customThemeDirectory = path.join(dataDirectory, 'dice-themes');
   }
 
   async initialize(): Promise<void> {
-    try { this.settings = validateSettings({ ...defaultSettings, ...JSON.parse(await readFile(this.documentPath, 'utf8')) }); }
+    await this.refreshThemes();
+    try { this.settings = validateSettings({ ...defaultSettings, ...JSON.parse(await readFile(this.documentPath, 'utf8')) }, this.themes()); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && error instanceof SyntaxError) throw error; }
     await this.persist();
+  }
+
+  themes(): TempestDiceThemeOption[] { return structuredClone([...builtInThemes, ...this.customThemes]); }
+
+  async refreshThemes(): Promise<TempestDiceThemeOption[]> {
+    await mkdir(this.customThemeDirectory, { recursive: true });
+    const imported: TempestDiceThemeOption[] = [];
+    for (const entry of await readdir(this.customThemeDirectory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !/^[a-z][a-z0-9_-]{0,63}$/i.test(entry.name)) continue;
+      if (builtInThemes.some((theme) => theme.id.toLowerCase() === entry.name.toLowerCase())) continue;
+      try {
+        const directory = path.join(this.customThemeDirectory, entry.name);
+        const manifestPath = path.join(directory, 'theme.config.json');
+        if (!(await stat(manifestPath)).isFile()) continue;
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+        if (manifest.systemName !== entry.name || !Array.isArray(manifest.diceAvailable)) continue;
+        const diceAvailable = manifest.diceAvailable.filter((die): die is string => typeof die === 'string' && ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'].includes(die)).slice(0, 7);
+        if (!diceAvailable.length) continue;
+        const material = manifest.material && typeof manifest.material === 'object' && !Array.isArray(manifest.material) ? manifest.material as Record<string, unknown> : undefined;
+        imported.push({ id: entry.name, name: String(manifest.name || entry.name).trim().slice(0, 80) || entry.name, custom: true, diceAvailable, colorConfigurable: material?.type === 'color' });
+      } catch { /* Invalid theme folders stay unavailable. */ }
+    }
+    this.customThemes = imported.sort((left, right) => left.name.localeCompare(right.name));
+    if (!this.themes().some((theme) => theme.id === this.settings.diceTheme)) this.settings.diceTheme = 'default';
+    return this.themes();
+  }
+
+  resolveCustomThemeAsset(themeId: string, segments: string[]): string | undefined {
+    if (!this.customThemes.some((theme) => theme.id === themeId)) return undefined;
+    const root = path.resolve(this.customThemeDirectory, themeId);
+    const filePath = path.resolve(root, ...segments);
+    return filePath.startsWith(`${root}${path.sep}`) ? filePath : undefined;
   }
 
   page(): string { return diceOverlayPage; }
@@ -163,11 +275,14 @@ export class TempestDiceOverlay {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice roll request must be an object.');
     const request = input as Record<string, unknown>;
     const parsed = parseStudioDiceExpression(request.expression);
+    const physicalSides = diceBoxPhysicalSides(parsed.sides);
+    const selectedTheme = this.themes().find((theme) => theme.id === this.settings.diceTheme);
+    if (!selectedTheme?.diceAvailable.includes(`d${physicalSides}`)) throw new Error(`${selectedTheme?.name || 'The selected theme'} does not include the d${physicalSides} model needed for this roll.`);
     const reason = String(request.reason || '').trim().slice(0, 160);
     const rollerName = String(request.rollerName || 'Streamer').trim().slice(0, 80) || 'Streamer';
     const presentation: DiceBoxRollRequest = {
       id: randomUUID(), token: randomUUID(), expression: parsed.expression,
-      count: parsed.count, sides: parsed.sides, physicalSides: diceBoxPhysicalSides(parsed.sides), reason, rollerName
+      count: parsed.count, sides: parsed.sides, physicalSides, reason, rollerName
     };
     return new Promise<TempestStudioDiceRoll>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -228,7 +343,7 @@ export class TempestDiceOverlay {
 
   async update(patch: unknown): Promise<TempestDiceOverlaySettings> {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Dice overlay settings must be an object.');
-    this.settings = validateSettings({ ...this.settings, ...(patch as Partial<TempestDiceOverlaySettings>), schemaVersion: 1, updatedAt: new Date().toISOString() });
+    this.settings = validateSettings({ ...this.settings, ...(patch as Partial<TempestDiceOverlaySettings>), schemaVersion: 1, updatedAt: new Date().toISOString() }, this.themes());
     await this.persist();
     this.broadcast('settings', this.settings);
     return structuredClone(this.settings);
@@ -246,7 +361,7 @@ export class TempestDiceOverlay {
   status(url: string): Record<string, unknown> {
     return {
       url, connectedClients: this.clients.size, rolling: Boolean(this.pending), engine: '@3d-dice/dice-box 1.1.4',
-      settings: structuredClone(this.settings), latestRoll: this.latestRoll ? structuredClone(this.latestRoll) : undefined,
+      settings: structuredClone(this.settings), themes: this.themes(), latestRoll: this.latestRoll ? structuredClone(this.latestRoll) : undefined,
       history: structuredClone(this.history)
     };
   }

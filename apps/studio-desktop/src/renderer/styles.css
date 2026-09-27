@@ -631,6 +631,12 @@ button:disabled { opacity: .42; cursor: not-allowed; }
 .dice-roll-form input,.dice-settings-grid input,.dice-settings-grid select { min-height:38px; padding:0 10px; border:1px solid var(--line); border-radius:7px; color:var(--text); background:#080e15; }
 .dice-roll-form input:focus,.dice-settings-grid input:focus,.dice-settings-grid select:focus { border-color:var(--cyan); outline:none; box-shadow:0 0 0 3px rgba(84,242,235,.06); }
 .dice-roll-form small,.dice-settings-grid small { color:#5f7580; }
+.dice-picker { display:grid; grid-column:1/-1; grid-template-columns:92px minmax(280px,1fr) 92px; gap:9px; align-items:end; padding:11px; border:1px solid #21424d; border-radius:9px; background:linear-gradient(135deg,rgba(84,242,235,.07),rgba(8,14,21,.92)); }
+.dice-picker>div { display:grid; gap:5px; color:#71909a; font:8px Consolas,monospace; letter-spacing:.12em; }
+.dice-picker input { width:100%; min-height:36px; }
+.dice-picker-types { display:grid!important; grid-template-columns:repeat(7,minmax(42px,1fr)); gap:6px!important; }
+.dice-picker-types button { min-height:38px; border:1px solid #315967; border-radius:7px; color:#dff; background:#0b1720; cursor:pointer; font:800 10px Consolas,monospace; }
+.dice-picker-types button:hover,.dice-picker-types button:focus-visible,.dice-picker-types button.selected { border-color:var(--cyan); color:var(--cyan); background:rgba(84,242,235,.12); outline:none; box-shadow:0 0 16px rgba(84,242,235,.08); }
 .dice-preset-grid { display:grid; grid-column:1/-1; grid-template-columns:repeat(5,minmax(64px,1fr)); gap:7px; }
 .dice-preset-grid button { min-height:34px; border:1px solid #28505c; border-radius:7px; color:var(--cyan); background:rgba(84,242,235,.04); cursor:pointer; font:700 9px Consolas,monospace; }
 .dice-preset-grid button:hover,.dice-preset-grid button:focus-visible { border-color:var(--cyan); background:rgba(84,242,235,.1); outline:none; }
@@ -648,8 +654,21 @@ button:disabled { opacity: .42; cursor: not-allowed; }
 .dice-settings-grid .toggle-label { display:flex; align-items:center; gap:9px; min-height:38px; padding:0 10px; border:1px solid var(--line); border-radius:7px; background:#080e15; }
 .dice-settings-grid .toggle-label input { width:16px; min-height:16px; padding:0; }
 .dice-settings-grid .toggle-label span { color:var(--text); line-height:1.35; }
+.dice-theme-import { display:grid; align-content:end; gap:6px; }
+.dice-theme-import button { width:100%; min-height:38px; }
+.dice-theme-import small { font:8px/1.35 Consolas,monospace; }
+.dice-physics-panel { margin-top:14px; border:1px solid var(--line); border-radius:8px; background:#070e14; }
+.dice-physics-panel summary { padding:13px 15px; color:#bcd1d8; cursor:pointer; font:800 10px Consolas,monospace; letter-spacing:.08em; }
+.dice-physics-panel>p { margin:0 15px 12px; color:#69818b; font-size:9px; }
+.dice-physics-panel>button { margin:0 15px 15px; }
+.dice-physics-grid { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; padding:0 15px 14px; }
+.dice-physics-grid label { display:grid; gap:5px; color:var(--muted); font:9px Consolas,monospace; }
+.dice-physics-grid input { width:100%; min-height:36px; padding:0 9px; border:1px solid var(--line); border-radius:7px; color:var(--text); background:#080e15; }
+.dice-physics-grid .toggle-label { display:flex; align-items:center; gap:9px; min-height:36px; padding:0 9px; border:1px solid var(--line); border-radius:7px; }
+.dice-physics-grid .toggle-label input { width:16px; min-height:16px; }
 @media (max-width:1180px) { .dice-workspace { grid-template-columns:1fr; }.dice-settings-grid { grid-template-columns:1fr 1fr; } }
-@media (max-width:760px) { .dice-roll-form,.dice-settings-grid { grid-template-columns:1fr; }.dice-preset-grid { grid-template-columns:repeat(3,1fr); }.dice-roll-form label,.dice-reason-field,.dice-roll-button { grid-column:1; } }
+@media (max-width:1180px) { .dice-physics-grid { grid-template-columns:repeat(2,minmax(140px,1fr)); } }
+@media (max-width:760px) { .dice-roll-form,.dice-settings-grid { grid-template-columns:1fr; }.dice-picker { grid-template-columns:1fr; }.dice-picker-types { grid-template-columns:repeat(4,1fr); }.dice-preset-grid { grid-template-columns:repeat(2,1fr); }.dice-roll-form label,.dice-reason-field,.dice-roll-button { grid-column:1; }.dice-physics-grid { grid-template-columns:1fr; } }
 .discord-streamer-toggle { padding:8px 10px; border:1px solid #633d49; border-radius:6px; background:rgba(110,45,61,.1); }
 .discord-canvas-panel { margin-top:14px; }
 .discord-canvas-panel .panel-header p { max-width:850px; margin:5px 0 0; color:var(--muted); font-size:10px; line-height:1.5; }

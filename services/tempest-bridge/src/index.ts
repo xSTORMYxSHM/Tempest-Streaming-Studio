@@ -991,11 +991,23 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Dice Box assets are available only on this computer.' });
         const relativePath = decodeURIComponent(diceBoxAssetMatch[1]).replace(/\\/g, '/');
         if (!relativePath || relativePath.split('/').some((segment) => !segment || segment === '.' || segment === '..')) return sendJson(response, 400, { error: 'The Dice Box asset path is invalid.' });
-        const themeMatch = relativePath.match(/^themes\/(smooth|gemstone|rock|rust|wooden|diceOfRolling|blueGreenMetal)\/(.+)$/);
-        const assetRoot = themeMatch ? diceThemeAssetsDirectory : diceBoxAssetsDirectory;
-        const assetSegments = themeMatch ? [themeMatch[1], ...themeMatch[2].split('/')] : relativePath.split('/');
-        const filePath = path.resolve(assetRoot, ...assetSegments);
-        if (!filePath.startsWith(`${path.resolve(assetRoot)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        const themeMatch = relativePath.match(/^themes\/([a-z][a-z0-9_-]{0,63})\/(.+)$/i);
+        const bundledThemeIds = new Set(['smooth', 'gemstone', 'gemstoneMarble', 'rock', 'rust', 'wooden', 'diceOfRolling', 'blueGreenMetal']);
+        let filePath: string;
+        if (themeMatch?.[1] === 'default') {
+          filePath = path.resolve(diceBoxAssetsDirectory, 'themes', 'default', ...themeMatch[2].split('/'));
+          if (!filePath.startsWith(`${path.resolve(diceBoxAssetsDirectory)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        } else if (themeMatch && bundledThemeIds.has(themeMatch[1])) {
+          filePath = path.resolve(diceThemeAssetsDirectory, themeMatch[1], ...themeMatch[2].split('/'));
+          if (!filePath.startsWith(`${path.resolve(diceThemeAssetsDirectory)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        } else if (themeMatch) {
+          const customAsset = diceOverlay.resolveCustomThemeAsset(themeMatch[1], themeMatch[2].split('/'));
+          if (!customAsset) return sendJson(response, 404, { error: 'The imported Dice Box theme is unavailable.' });
+          filePath = customAsset;
+        } else {
+          filePath = path.resolve(diceBoxAssetsDirectory, ...relativePath.split('/'));
+          if (!filePath.startsWith(`${path.resolve(diceBoxAssetsDirectory)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        }
         await serveDiceBoxFile(response, filePath);
         return;
       }
@@ -1301,6 +1313,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/settings') {
         const settings = await diceOverlay.update(await readJson(request));
         return sendJson(response, 200, { settings });
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/themes/refresh') {
+        return sendJson(response, 200, { themes: await diceOverlay.refreshThemes() });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/dice-overlay/roll') {
         const roll = await diceOverlay.roll(await readJson(request));

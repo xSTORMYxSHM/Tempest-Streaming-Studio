@@ -2593,13 +2593,43 @@
     preview.classList.toggle('empty-state', !roll);
     preview.innerHTML = roll ? `<div><div class="dice-preview-expression">${escapeHtml(roll.expression)} · ${escapeHtml(roll.rollerName)}</div><div class="dice-preview-dice">${roll.dice.map((die) => `<span class="dice-preview-die ${die.kept ? '' : 'dropped'}" title="d${escapeHtml(die.sides)}${die.kept ? '' : ' dropped'}">${escapeHtml(die.value)}</span>`).join('')}</div></div><strong class="dice-preview-total">${escapeHtml(roll.total)}</strong>${roll.reason ? `<p class="dice-preview-reason">${escapeHtml(roll.reason)}</p>` : ''}` : 'Results appear here after the on-stream dice finish bouncing and settle.';
     if (!settings || !status.settings) return;
+    const themeSelect = $('#diceTheme');
+    const selectedTheme = status.settings.diceTheme || 'default';
+    themeSelect.innerHTML = (status.themes || [{ id: 'default', name: 'Classic', custom: false }]).map((theme) => `<option value="${escapeHtml(theme.id)}">${theme.custom ? 'Imported · ' : ''}${escapeHtml(theme.name)}</option>`).join('');
+    if ([...themeSelect.options].some((option) => option.value === selectedTheme)) themeSelect.value = selectedTheme;
     $('#diceTheme').value = status.settings.diceTheme || 'default';
     $('#diceColor').value = status.settings.theme || 'stormglass';
+    $('#diceThemeColor').value = status.settings.themeColor || '#2e91ad';
     $('#diceDuration').value = String(status.settings.durationMs || 5200);
     $('#diceScale').value = String(status.settings.scalePercent || 100);
     $('#diceShowReason').checked = status.settings.showReason !== false;
     $('#diceSoundEnabled').checked = status.settings.soundEnabled === true;
     $('#diceOverlayEnabled').checked = enabled;
+    $('#diceGravity').value = String(status.settings.gravity ?? 1);
+    $('#diceMass').value = String(status.settings.mass ?? 1);
+    $('#diceFriction').value = String(status.settings.friction ?? 0.8);
+    $('#diceRestitution').value = String(status.settings.restitution ?? 0.1);
+    $('#diceAngularDamping').value = String(status.settings.angularDamping ?? 0.4);
+    $('#diceLinearDamping').value = String(status.settings.linearDamping ?? 0.5);
+    $('#diceSpinForce').value = String(status.settings.spinForce ?? 6);
+    $('#diceThrowForce').value = String(status.settings.throwForce ?? 5);
+    $('#diceStartingHeight').value = String(status.settings.startingHeight ?? 8);
+    $('#diceSettleTimeout').value = String(status.settings.settleTimeout ?? 5000);
+    $('#diceDelayMs').value = String(status.settings.diceDelayMs ?? 10);
+    $('#diceLightIntensity').value = String(status.settings.lightIntensity ?? 1);
+    $('#diceEnableShadows').checked = status.settings.enableShadows !== false;
+    $('#diceShadowTransparency').value = String(status.settings.shadowTransparency ?? 0.8);
+    updateDicePickerAvailability();
+  }
+
+  function updateDicePickerAvailability() {
+    const selected = state.diceOverlay?.themes?.find((theme) => theme.id === $('#diceTheme').value);
+    const available = new Set(selected?.diceAvailable || ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']);
+    document.querySelectorAll('[data-dice-sides]').forEach((button) => {
+      const supported = available.has(`d${button.dataset.diceSides}`);
+      button.disabled = !supported;
+      button.title = supported ? '' : `${selected?.name || 'This theme'} does not include d${button.dataset.diceSides}.`;
+    });
   }
 
   async function rollDiceOnStream(event) {
@@ -2625,15 +2655,50 @@
         enabled: $('#diceOverlayEnabled').checked,
         diceTheme: $('#diceTheme').value,
         theme: $('#diceColor').value,
+        themeColor: $('#diceThemeColor').value,
         durationMs: Number($('#diceDuration').value),
         soundEnabled: $('#diceSoundEnabled').checked,
         showReason: $('#diceShowReason').checked,
-        scalePercent: Number($('#diceScale').value)
+        scalePercent: Number($('#diceScale').value),
+        gravity: Number($('#diceGravity').value),
+        mass: Number($('#diceMass').value),
+        friction: Number($('#diceFriction').value),
+        restitution: Number($('#diceRestitution').value),
+        angularDamping: Number($('#diceAngularDamping').value),
+        linearDamping: Number($('#diceLinearDamping').value),
+        spinForce: Number($('#diceSpinForce').value),
+        throwForce: Number($('#diceThrowForce').value),
+        startingHeight: Number($('#diceStartingHeight').value),
+        settleTimeout: Number($('#diceSettleTimeout').value),
+        diceDelayMs: Number($('#diceDelayMs').value),
+        lightIntensity: Number($('#diceLightIntensity').value),
+        enableShadows: $('#diceEnableShadows').checked,
+        shadowTransparency: Number($('#diceShadowTransparency').value)
       } });
       state.diceOverlay.settings = result.settings;
       renderDiceOverlay({ settings: true });
-      toast('3D Dice appearance saved.');
+      toast('3D Dice appearance and physics saved.');
     } catch (error) { toast(error.message, true); }
+  }
+
+  async function importDiceTheme() {
+    try {
+      const imported = await window.tempestStudio.importDiceTheme();
+      if (!imported) return;
+      const refreshed = await api('/v1/dice-overlay/themes/refresh', { method: 'POST', body: {} });
+      state.diceOverlay.themes = refreshed.themes;
+      state.diceOverlay.settings.diceTheme = imported.id;
+      renderDiceOverlay({ settings: true });
+      $('#diceTheme').value = imported.id;
+      toast(`${imported.name} imported with ${imported.diceAvailable.length} supported die types. Save Dice Setup to use it.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function resetDicePhysics() {
+    const defaults = { diceGravity: 1, diceMass: 1, diceFriction: 0.8, diceRestitution: 0.1, diceAngularDamping: 0.4, diceLinearDamping: 0.5, diceSpinForce: 6, diceThrowForce: 5, diceStartingHeight: 8, diceSettleTimeout: 5000, diceDelayMs: 10, diceLightIntensity: 1, diceShadowTransparency: 0.8 };
+    for (const [id, value] of Object.entries(defaults)) $(`#${id}`).value = String(value);
+    $('#diceEnableShadows').checked = true;
+    toast('Dice physics controls reset. Save Dice Setup to apply them.');
   }
 
   async function clearDiceOverlay() {
@@ -4685,6 +4750,14 @@
       $('#diceExpression').focus();
       return;
     }
+    if (button.dataset.diceSides) {
+      const count = Math.max(1, Math.min(20, Number($('#dicePickerCount').value) || 1));
+      const modifier = Math.max(-1000, Math.min(1000, Number($('#dicePickerModifier').value) || 0));
+      $('#diceExpression').value = `${count}d${button.dataset.diceSides}${modifier ? `${modifier > 0 ? '+' : ''}${modifier}` : ''}`;
+      document.querySelectorAll('[data-dice-sides]').forEach((candidate) => candidate.classList.toggle('selected', candidate === button));
+      $('#diceExpression').focus();
+      return;
+    }
     if (button.dataset.soundAlertTrigger) return testSoundAlert(button.dataset.soundAlertTrigger);
     if (button.dataset.soundAlertAudio) return assignSoundAlertAudio(button.dataset.soundAlertAudio);
     if (button.dataset.soundAlertVisual) return assignSoundAlertVisual(button.dataset.soundAlertVisual);
@@ -4764,6 +4837,13 @@
     $('#diceRollForm').addEventListener('submit', rollDiceOnStream);
     $('#saveDiceOverlaySettings').addEventListener('click', saveDiceOverlaySettings);
     $('#clearDiceOverlay').addEventListener('click', clearDiceOverlay);
+    $('#importDiceTheme').addEventListener('click', importDiceTheme);
+    $('#resetDicePhysics').addEventListener('click', resetDicePhysics);
+    $('#diceTheme').addEventListener('change', updateDicePickerAvailability);
+    $('#diceColor').addEventListener('change', () => {
+      const colors = { stormglass: '#2e91ad', brass: '#a7792b', obsidian: '#3d315f' };
+      $('#diceThemeColor').value = colors[$('#diceColor').value] || '#2e91ad';
+    });
     $('#openOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#reviewOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#closeOnboardingWizard').addEventListener('click', () => $('#onboardingDialog').close());

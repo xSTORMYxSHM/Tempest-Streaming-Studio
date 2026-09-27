@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   exportAlertDesignTemplate: (input: { name: string; kind: string; design: unknown }) => ipcRenderer.invoke('studio:export-alert-design-template', input),
   exportAlertPack: (input: { name: string; description?: string; kind: 'twitch' | 'interaction'; alert: unknown }) => ipcRenderer.invoke('studio:export-alert-pack', input),
   importAlertPack: () => ipcRenderer.invoke('studio:import-alert-pack'),
+  importDiceTheme: () => ipcRenderer.invoke('studio:import-dice-theme'),
   exportBackup: (rendererSettings: unknown) => ipcRenderer.invoke('studio:export-backup', rendererSettings),
   restoreBackup: () => ipcRenderer.invoke('studio:restore-backup'),
   restartApp: () => ipcRenderer.invoke('studio:restart-app'),

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { mkdtemp } = require('node:fs/promises');
+const { mkdir, mkdtemp, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { startTempestBridge } = require('../dist');
@@ -22,9 +22,18 @@ async function readSseEvent(reader, decoder, eventName) {
 }
 
 test('serves bundled Dice Box physics locally and accepts only authenticated roll controls', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-dice-routes-'));
+  const importedTheme = path.join(dataDirectory, 'dice-themes', 'auroraDice');
+  await mkdir(importedTheme, { recursive: true });
+  await writeFile(path.join(importedTheme, 'theme.config.json'), JSON.stringify({
+    systemName: 'auroraDice', name: 'Aurora Dice', diceAvailable: ['d6', 'd20'],
+    material: { type: 'color', diffuseTexture: 'aurora.png' }, meshFile: 'aurora.json'
+  }));
+  await writeFile(path.join(importedTheme, 'aurora.json'), '{}');
+  await writeFile(path.join(importedTheme, 'aurora.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   const runtime = await startTempestBridge({
     port: 0,
-    dataDirectory: await mkdtemp(path.join(os.tmpdir(), 'tempest-dice-routes-')),
+    dataDirectory,
     logger: { info() {}, warn() {}, error() {} }
   });
   context.after(() => runtime.close());
@@ -54,6 +63,9 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const woodenTheme = await fetch(`${runtime.baseUrl}/dice-overlay/assets/themes/wooden/theme.config.json`);
   assert.equal(woodenTheme.status, 200);
   assert.deepEqual((await woodenTheme.json()).diceAvailable, ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']);
+  const customTheme = await fetch(`${runtime.baseUrl}/dice-overlay/assets/themes/auroraDice/theme.config.json`);
+  assert.equal(customTheme.status, 200);
+  assert.equal((await customTheme.json()).systemName, 'auroraDice');
   const wasm = await fetch(`${runtime.baseUrl}/dice-overlay/assets/ammo/ammo.wasm.wasm`);
   assert.equal(wasm.status, 200);
   assert.equal(wasm.headers.get('content-type'), 'application/wasm');
@@ -66,6 +78,20 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   await readSseEvent(reader, decoder, 'init');
 
   const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const initialStatus = await fetch(`${runtime.baseUrl}/v1/dice-overlay`, { headers });
+  assert.equal(initialStatus.status, 200);
+  const initialDice = await initialStatus.json();
+  assert.ok(initialDice.themes.some((candidate) => candidate.id === 'gemstoneMarble'));
+  assert.ok(initialDice.themes.some((candidate) => candidate.id === 'auroraDice' && candidate.custom === true));
+  assert.equal(initialDice.settings.gravity, 1);
+  const settingsResponse = await fetch(`${runtime.baseUrl}/v1/dice-overlay/settings`, {
+    method: 'POST', headers, body: JSON.stringify({ diceTheme: 'auroraDice', themeColor: '#44ccff', gravity: 1.2, restitution: 0.35 })
+  });
+  assert.equal(settingsResponse.status, 200);
+  const updatedSettings = (await settingsResponse.json()).settings;
+  assert.equal(updatedSettings.diceTheme, 'auroraDice');
+  assert.equal(updatedSettings.gravity, 1.2);
+  assert.equal(updatedSettings.restitution, 0.35);
   const rolling = fetch(`${runtime.baseUrl}/v1/dice-overlay/roll`, {
     method: 'POST', headers, body: JSON.stringify({ expression: '3d6+2', reason: 'Stream challenge', rollerName: 'Operator' })
   });

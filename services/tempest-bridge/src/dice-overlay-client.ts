@@ -5,7 +5,7 @@ const world = document.getElementById('diceWorld');
 const hud = document.getElementById('diceHud');
 const errorBanner = document.getElementById('diceError');
 const colors = { stormglass: '#2e91ad', brass: '#a7792b', obsidian: '#3d315f' };
-let settings = { theme: 'stormglass', diceTheme: 'default', durationMs: 5200, soundEnabled: false, showReason: true, scalePercent: 100 };
+let settings = { theme: 'stormglass', diceTheme: 'default', themeColor: '#2e91ad', durationMs: 5200, soundEnabled: false, showReason: true, scalePercent: 100, gravity: 1, mass: 1, friction: .8, restitution: .1, angularDamping: .4, linearDamping: .5, spinForce: 6, throwForce: 5, startingHeight: 8, settleTimeout: 5000, diceDelayMs: 10, lightIntensity: 1, enableShadows: true, shadowTransparency: .8 };
 let box;
 let boxPromise;
 let clearTimer = 0;
@@ -16,7 +16,18 @@ let physicalDieListener;
 let physicalRollListener;
 let presentedRollId = '';
 
-function themeColor() { return colors[settings.theme] || colors.stormglass; }
+function themeColor() { return settings.themeColor || colors[settings.theme] || colors.stormglass; }
+
+function boxConfig() {
+  return {
+    theme: settings.diceTheme || 'default', themeColor: themeColor(),
+    scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)),
+    gravity: Number(settings.gravity), mass: Number(settings.mass), friction: Number(settings.friction), restitution: Number(settings.restitution),
+    angularDamping: Number(settings.angularDamping), linearDamping: Number(settings.linearDamping), spinForce: Number(settings.spinForce), throwForce: Number(settings.throwForce),
+    startingHeight: Number(settings.startingHeight), settleTimeout: Number(settings.settleTimeout), delay: Number(settings.diceDelayMs),
+    lightIntensity: Number(settings.lightIntensity), enableShadows: settings.enableShadows !== false, shadowTransparency: Number(settings.shadowTransparency)
+  };
+}
 
 function showError(message) {
   clearTimeout(errorTimer);
@@ -53,9 +64,7 @@ async function getBox() {
   if (boxPromise) return boxPromise;
   boxPromise = (async () => {
     box = new DiceBox({
-      container: '#diceWorld', assetPath: '/dice-overlay/assets/', theme: 'default', themeColor: themeColor(),
-      enableShadows: true, shadowTransparency: .72, lightIntensity: 1.15, offscreen: true,
-      scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)),
+      container: '#diceWorld', assetPath: '/dice-overlay/assets/', offscreen: true, ...boxConfig(),
       onDieComplete: (die) => physicalDieListener?.(die),
       onRollComplete: (results) => physicalRollListener?.(results)
     });
@@ -69,7 +78,7 @@ async function apply(next) {
   settings = { ...settings, ...next };
   if (boxPromise) {
     const diceBox = await boxPromise;
-    await diceBox.updateConfig({ theme: settings.diceTheme || 'default', themeColor: themeColor(), scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)) });
+    await diceBox.updateConfig(boxConfig());
   }
 }
 

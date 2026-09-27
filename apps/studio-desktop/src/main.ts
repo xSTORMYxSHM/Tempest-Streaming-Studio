@@ -24,6 +24,7 @@ import {
 import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign } from './panel-design';
 import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
 import { buildTempestDiscordProfilePack, importTempestDiscordProfilePack } from './discord-profile-packs';
+import { importDiceBoxTheme } from './dice-theme-import';
 import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
 import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migrations';
 import {
@@ -1330,6 +1331,15 @@ function registerDesktopHandlers(): void {
       if (decision.response !== 1) return null;
     }
     return { ...imported, sourcePath: filePath };
+  });
+
+  handleDesktop('studio:import-dice-theme', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Import Dice Box Theme Folder',
+      properties: ['openDirectory']
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return importDiceBoxTheme(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'dice-themes'));
   });
 
   handleDesktop('studio:export-backup', async (_event, rendererSettings: unknown) => {
