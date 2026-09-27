@@ -47,7 +47,8 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   assert.match(page.headers.get('content-security-policy'), /media-src 'self' blob:/);
   const pageBody = await page.text();
   assert.match(pageBody, /Tempest Studio 3D Dice/);
-  assert.match(pageBody, /<script defer src="\/dice-overlay\/client\.js\?v=[a-f0-9]{16}"><\/script>/);
+  assert.match(pageBody, /<script src="\/dice-overlay\/client\.js\?v=[a-f0-9]{16}"><\/script>/);
+  assert.doesNotMatch(pageBody, /<script defer/);
 
   const client = await fetch(`${runtime.baseUrl}/dice-overlay/client.js`);
   assert.equal(client.status, 200);

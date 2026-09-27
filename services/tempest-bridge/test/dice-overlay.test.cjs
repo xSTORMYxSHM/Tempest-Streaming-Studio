@@ -68,7 +68,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   const browserClient = overlay.client();
   assert.match(page, /Tempest Studio 3D Dice/);
   assert.match(page, /id="diceWorld"/);
-  assert.match(page, /<script defer src="\/dice-overlay\/client\.js\?v=[a-f0-9]{16}"><\/script>/);
+  assert.match(page, /<script src="\/dice-overlay\/client\.js\?v=[a-f0-9]{16}"><\/script>/);
+  assert.doesNotMatch(page, /<script defer/);
   assert.doesNotMatch(page, /Dice sound failed/);
   assert.doesNotMatch(page, /window\.__tempestDiceEvents = new EventSource/);
   assert.doesNotMatch(page, /type="module"/);
