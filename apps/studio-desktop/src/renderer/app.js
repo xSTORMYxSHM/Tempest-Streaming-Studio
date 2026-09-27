@@ -12,7 +12,7 @@
     twitch: { title: 'Twitch', kicker: 'TWITCH PLATFORM' },
     kick: { title: 'Kick', kicker: 'KICK PLATFORM' },
     extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
-    chatbot: { title: 'Chatbot + Live Chat', kicker: 'SHARED CHAT TOOLS' },
+    chatbot: { title: 'Live Desk', kicker: 'ON-AIR COLLABORATION' },
     dualformat: { title: 'Twitch Dual Format', kicker: 'MOBILE-FIRST OUTPUT' },
     simulcast: { title: 'Go Live', kicker: 'PRODUCTION OUTPUT CONTROL' },
     api: { title: 'Avatar Apps', kicker: 'OPTIONAL CONNECTIONS' },
@@ -293,6 +293,9 @@
     const definition = sections[name] || sections.overview;
     document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `${name}Section`));
     document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.section === name));
+    const activeNavigation = document.querySelector(`.nav-button[data-section="${name}"]`);
+    const setupNavigation = activeNavigation?.closest('.nav-setup-drawer');
+    if (setupNavigation) setupNavigation.open = true;
     $('#sectionTitle').textContent = definition.title;
     $('#sectionKicker').textContent = definition.kicker;
     document.querySelector('main').scrollTo({ top: 0, left: 0 });
@@ -1457,6 +1460,8 @@
     const botName = chatbot.botName || account?.login || 'Chat Bot';
     $('#chatbotOverallBadge').textContent = connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : kickConnected ? 'KICK LIVE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
     $('#chatbotOverallBadge').classList.toggle('offline', !connected && !kickConnected);
+    $('#liveDeskSetupBadge').textContent = connected ? 'READY' : authorized ? 'CONNECTING' : 'SETUP REQUIRED';
+    $('#liveDeskSetupBadge').classList.toggle('offline', !connected);
     $('#chatbotIdentityMetric').textContent = botName.toUpperCase();
     $('#chatbotEventSubMetric').textContent = label(chatbot.connections?.eventSub);
     $('#chatbotChatMetric').textContent = label(chatbot.connections?.chat);
@@ -4567,7 +4572,9 @@
     }
     if (button.dataset.onboardingGo) {
       $('#onboardingDialog').close();
-      return showSection(button.dataset.onboardingGo);
+      showSection(button.dataset.onboardingGo);
+      if (button.dataset.onboardingGo === 'chatbot') $('#liveDeskSetupDrawer').open = true;
+      return;
     }
     if (button.dataset.deleteInteractionAlert) return deleteInteractionAlert(button.dataset.deleteInteractionAlert);
     if (button.dataset.deleteTwitchAlert) return deleteTwitchAlert(button.dataset.deleteTwitchAlert);

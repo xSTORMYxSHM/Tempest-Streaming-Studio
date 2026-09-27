@@ -11,7 +11,7 @@ test('renderer includes orchestration and management sections with a restrictive
   const preload = await readFile(path.join(__dirname, '..', 'dist', 'preload.js'), 'utf8');
   const styles = await readFile(path.join(__dirname, '..', 'dist', 'renderer', 'styles.css'), 'utf8');
   assert.match(html, /Studio Home/);
-  assert.match(html, /What would you like to work on/);
+  assert.match(html, /Controls for the current stream/);
   assert.match(html, /id="onboardingDialog"/);
   assert.match(html, /Guided Setup/);
   assert.match(html, /FIRST-RUN SETUP/);
@@ -85,11 +85,14 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /selectTwitchExperienceMedia/);
   assert.match(renderer, /Twitch Experiences browser-source URL/);
   assert.doesNotMatch(html, /class="nav-button[^>]*>\s*<span>\d+/);
-  assert.match(html, /<p class="nav-group">TWITCH<\/p>/);
-  assert.match(html, /<p class="nav-group">KICK<\/p>/);
-  assert.match(html, /<p class="nav-group">PRODUCTION<\/p>/);
+  assert.match(html, /<p class="nav-group">ON AIR<\/p>/);
   assert.match(html, /<p class="nav-group">CREATE<\/p>/);
-  assert.match(html, /<p class="nav-group" data-advanced>ADVANCED<\/p>/);
+  assert.match(html, /id="setupNavigation"/);
+  assert.match(html, /SETUP \+ CONNECTIONS/);
+  assert.match(html, /data-section="chatbot">Live Desk/);
+  assert.match(html, /id="liveDeskSetupDrawer"/);
+  assert.match(html, /Stream Together \+ Polls/);
+  assert.match(renderer, /setupNavigation\.open|setupNavigation\) setupNavigation\.open/);
   assert.match(html, /data-go="visualalerts"/);
   assert.match(html, /data-go="soundalerts"/);
   assert.match(html, /LIVE STATUS/);

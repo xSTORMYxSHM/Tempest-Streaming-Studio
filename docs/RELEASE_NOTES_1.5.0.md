@@ -18,6 +18,12 @@ Tempest Streaming Studio 1.5.0 is a coordinated reliability and operations relea
 - Adds session-based numeric chat polls with 2–10 options, live aggregate results, and one final vote per Twitch or Kick account when the chatter sends only the option number.
 - Expands the encrypted-key GIPHY library so a downloaded GIF can be assigned to any Interaction Alert, base Twitch Alert, or Twitch Alert variant from grouped targets or the alert card's shortcut.
 
+## On-air workspace cleanup
+
+- Reorganizes the sidebar around On Air, Create, and Studio tasks, with account, output, and optional-app configuration behind a collapsed Setup + Connections drawer.
+- Promotes Live Desk, Go Live, 3D Dice, Stream Together chat, and numeric polls while keeping bot identity, commands, moderation, providers, and automation in a separate expandable setup area.
+- Keeps the private-information masking control permanently visible and automatically reveals the correct setup drawer when Guided Setup links to a hidden configuration page.
+
 ## Studio and Broadcast ownership
 
 - Studio continues to own platform accounts and stream information, chat and chatbot behavior, Stream Together, alerts, viewer interactions, counters, Dice Box, readiness, and live orchestration.

@@ -17,26 +17,26 @@
         <nav aria-label="Studio sections">
           <p class="nav-group">START</p>
           <button class="nav-button active" data-section="overview">Studio Home</button>
-          <p class="nav-group">TWITCH</p>
-          <button class="nav-button" data-section="twitch">Twitch</button>
-          <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
-          <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
-          <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
-          <p class="nav-group">KICK</p>
-          <button class="nav-button" data-section="kick">Kick</button>
-          <p class="nav-group">PRODUCTION</p>
-          <button class="nav-button" data-section="simulcast">Go Live</button>
-          <button class="nav-button" data-section="chatbot">Chatbot + Live Chat</button>
+          <p class="nav-group">ON AIR</p>
+          <button class="nav-button nav-live-button" data-section="chatbot">Live Desk</button>
+          <button class="nav-button nav-live-button" data-section="simulcast">Go Live</button>
+          <button class="nav-button nav-live-button" data-section="dice">3D Dice</button>
           <p class="nav-group">CREATE</p>
+          <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
           <button class="nav-button" data-section="soundalerts">Viewer Interactions</button>
-          <button class="nav-button" data-section="dice">3D Dice</button>
           <button class="nav-button" data-section="chatoverlay">Chat Overlay</button>
           <button class="nav-button" data-section="discordvoice">Discord Guests</button>
-          <button class="nav-button" data-section="api">Avatar Apps</button>
-          <p class="nav-group" data-advanced>ADVANCED</p>
-          <button class="nav-button" data-section="events" data-advanced>Activity &amp; Diagnostics</button>
+          <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
+          <details id="setupNavigation" class="nav-setup-drawer">
+            <summary><span>SETUP + CONNECTIONS</span><i aria-hidden="true">›</i></summary>
+            <button class="nav-button" data-section="twitch">Twitch Account</button>
+            <button class="nav-button" data-section="kick">Kick Account</button>
+            <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
+            <button class="nav-button" data-section="api">Avatar Apps</button>
+          </details>
           <p class="nav-group">STUDIO</p>
           <button class="nav-button" data-section="settings">Settings</button>
+          <button class="nav-button" data-section="events" data-advanced>Activity &amp; Diagnostics</button>
         </nav>
         <div class="safety-control">
           <span>STREAM SAFETY</span><strong id="railSafetyState">CHECKING</strong>
@@ -57,7 +57,7 @@
               <p class="eyebrow">WELCOME TO TEMPEST STREAMING STUDIO</p>
               <h2>Your stream systems.<br /><span>One control center.</span></h2>
               <p>Connect your accounts, create alerts and overlays, test everything, and get your stream ready from one place.</p>
-              <div class="hero-actions"><button id="openOnboardingWizard" class="primary-button">Set Up My Stream</button><button class="secondary-button" data-go="twitch">Connect Twitch</button><button class="secondary-button" data-go="visualalerts">Create an Alert</button><button class="secondary-button" data-go="api">Avatar Apps</button></div>
+              <div class="hero-actions"><button class="primary-button" data-go="chatbot">Open Live Desk</button><button class="secondary-button" data-go="simulcast">Go Live</button><button class="secondary-button" data-go="dice">Roll Dice</button><button id="openOnboardingWizard" class="text-button">Review Setup</button></div>
             </div>
             <div id="heroCore" class="bridge-orbit" aria-hidden="true"><div>HOME</div><i></i><i></i><i></i></div>
           </div>
@@ -67,21 +67,31 @@
             <button id="reviewOnboardingWizard" class="secondary-button">Review Setup</button>
           </article>
           <article id="studioDataPanel" class="studio-data-panel" data-advanced><div><span>BACKUP + MIGRATION · <b id="studioDataVersion">CHECKING DATA</b></span><strong>Keep your Studio portable</strong><small>Back up alerts, variants, chatbot settings, panel styling, setup preferences, and alert media. Encrypted account credentials are deliberately excluded.</small></div><div class="studio-data-actions"><button data-export-studio-backup="true" class="secondary-button">Create Backup</button><button data-restore-studio-backup="true" class="secondary-button">Restore Backup</button></div></article>
-          <div class="home-menu-heading"><div><p class="eyebrow">MAIN MENU</p><h3>What would you like to work on?</h3></div><p>Choose a task to jump directly into its workspace.</p></div>
-          <div class="home-menu-grid">
-            <button class="home-menu-card" data-go="api"><b>OPTIONAL</b><strong>Avatar Apps</strong><span>Connect Warudo or VTube Studio for avatar reactions.</span><i>CONNECT AN AVATAR →</i></button>
-            <button class="home-menu-card" data-go="twitch"><b>PLATFORM 01</b><strong>Twitch</strong><span>Manage Twitch sign-in, viewer tools, alerts, mobile output, and platform settings.</span><i>OPEN TWITCH →</i></button>
-            <button class="home-menu-card" data-go="kick"><b>PLATFORM 02</b><strong>Kick</strong><span>Manage Kick authorization, chat delivery, ingest destination, and stream credentials.</span><i>OPEN KICK →</i></button>
-            <button class="home-menu-card" data-go="extensiondesigner"><b>TWITCH TOOL</b><strong>Twitch Panel</strong><span>Style the viewer panel to match your channel.</span><i>DESIGN PANEL →</i></button>
-            <button class="home-menu-card" data-go="visualalerts"><b>ON AIR 01</b><strong>Twitch Alerts</strong><span>Design follows, subscriptions, Bits, raids, rewards, sound, and visuals.</span><i>BUILD ALERTS →</i></button>
-            <button class="home-menu-card" data-go="soundalerts"><b>ON AIR 02</b><strong>Viewer Interactions</strong><span>Create sounds, visuals, and optional avatar reactions for viewer commands.</span><i>BUILD INTERACTIONS →</i></button>
-            <button class="home-menu-card" data-go="dice"><b>ON AIR 03</b><strong>3D Dice</strong><span>Roll real physics-driven Dice Box dice for the streamer or chat.</span><i>OPEN DICE TABLE →</i></button>
-            <button class="home-menu-card" data-go="chatoverlay"><b>ON AIR 04</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAYS →</i></button>
-            <button class="home-menu-card" data-go="discordvoice"><b>ON AIR 05</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking PNGs or GIFs.</span><i>DESIGN GUEST OVERLAY →</i></button>
-            <button class="home-menu-card" data-go="chatbot"><b>CHANNEL 01</b><strong>Chatbot</strong><span>Create commands, replies, and simple viewer triggers.</span><i>MANAGE CHATBOT →</i></button>
-            <button class="home-menu-card" data-go="dualformat"><b>TWITCH OUTPUT</b><strong>Dual Format</strong><span>Prepare and monitor Twitch horizontal and mobile-first vertical output.</span><i>CHECK MOBILE OUTPUT →</i></button>
-            <button class="home-menu-card" data-go="simulcast"><b>ON AIR</b><strong>Go Live</strong><span>Run preflight, start, and monitor Twitch plus Kick after each platform is configured.</span><i>OPEN OUTPUT CONTROL →</i></button>
+          <div class="home-menu-heading"><div><p class="eyebrow">LIVE UTILITIES</p><h3>Controls for the current stream</h3></div><p>Chat, polls, production status, and audience tools stay one click away.</p></div>
+          <div class="home-menu-grid home-live-grid">
+            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Stream Together + Polls</strong><span>Monitor Twitch and Kick chat, shared communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
+            <button class="home-menu-card home-live-card" data-go="simulcast"><b>OUTPUT CONTROL</b><strong>Go Live</strong><span>Run preflight and monitor Twitch, Kick, upload headroom, and recording.</span><i>OPEN GO LIVE →</i></button>
+            <button class="home-menu-card home-live-card" data-go="dice"><b>ON-STREAM TOOL</b><strong>3D Dice</strong><span>Roll physical Dice Box dice for the streamer or chat.</span><i>ROLL ON STREAM →</i></button>
+            <button class="home-menu-card" data-go="soundalerts"><b>AUDIENCE</b><strong>Viewer Interactions</strong><span>Trigger, preview, and manage viewer-controlled stream moments.</span><i>OPEN INTERACTIONS →</i></button>
+            <button class="home-menu-card" data-go="visualalerts"><b>CHANNEL EVENTS</b><strong>Twitch Alerts</strong><span>Preview and manage follows, subscriptions, Bits, raids, and rewards.</span><i>OPEN ALERTS →</i></button>
           </div>
+          <details class="home-tool-drawer">
+            <summary><span><b>CREATE + CUSTOMIZE</b><strong>Overlays, guests, and channel presentation</strong></span><i aria-hidden="true">›</i></summary>
+            <div class="home-menu-grid">
+              <button class="home-menu-card" data-go="chatoverlay"><b>OVERLAY</b><strong>Chat Overlay</strong><span>Choose how chat messages and emotes appear on stream.</span><i>DESIGN OVERLAY →</i></button>
+              <button class="home-menu-card" data-go="discordvoice"><b>OVERLAY</b><strong>Discord Guests</strong><span>Show voice-channel guests with local idle and speaking images.</span><i>DESIGN GUESTS →</i></button>
+              <button class="home-menu-card" data-go="extensiondesigner"><b>TWITCH TOOL</b><strong>Twitch Panel</strong><span>Style the viewer panel to match your channel.</span><i>DESIGN PANEL →</i></button>
+            </div>
+          </details>
+          <details class="home-tool-drawer home-setup-drawer">
+            <summary><span><b>SETUP + CONNECTIONS</b><strong>Accounts, output preparation, and optional apps</strong></span><i aria-hidden="true">›</i></summary>
+            <div class="home-menu-grid">
+              <button class="home-menu-card" data-go="twitch"><b>PLATFORM</b><strong>Twitch Account</strong><span>Manage broadcaster authorization and Twitch-owned settings.</span><i>OPEN TWITCH SETUP →</i></button>
+              <button class="home-menu-card" data-go="kick"><b>PLATFORM</b><strong>Kick Account</strong><span>Manage Kick authorization and shared-chat delivery.</span><i>OPEN KICK SETUP →</i></button>
+              <button class="home-menu-card" data-go="dualformat"><b>OUTPUT SETUP</b><strong>Twitch Dual Format</strong><span>Prepare horizontal and mobile-first vertical output.</span><i>CHECK OUTPUT SETUP →</i></button>
+              <button class="home-menu-card" data-go="api"><b>OPTIONAL</b><strong>Avatar Apps</strong><span>Connect Warudo or VTube Studio for avatar reactions.</span><i>CONNECT AN AVATAR →</i></button>
+            </div>
+          </details>
           <div class="home-runtime-heading"><div><p class="eyebrow">LIVE STATUS</p><h3>Studio right now</h3></div><button data-go="events" class="text-button" data-advanced>Open Diagnostics</button></div>
           <div class="metric-grid home-runtime-metrics">
             <article><span>PLAYING NOW</span><strong id="activeRunMetric">0</strong><small id="activeRunMetricNote">Nothing is playing</small></article>
@@ -506,13 +516,13 @@
           </article>
 
           <div class="platform-tool-grid" aria-label="Kick tools">
-            <button class="platform-tool-card" data-go="chatbot"><span>LIVE CHAT</span><strong>Chatbot + Live Chat</strong><small>Monitor Kick beside Twitch and keep replies on their originating platform.</small></button>
+            <button class="platform-tool-card" data-go="chatbot"><span>LIVE CHAT</span><strong>Live Desk</strong><small>Monitor Kick beside Twitch and keep replies on their originating platform.</small></button>
             <button class="platform-tool-card" data-go="simulcast"><span>PRODUCTION</span><strong>Go Live</strong><small>Run preflight and monitor independent Twitch and Kick destination health.</small></button>
           </div>
         </section>
 
         <section id="chatbotSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">SHARED CHAT TOOLS</p><h2>Chatbot + Live Chat</h2><p>Monitor Twitch, Stream Together Shared Chat, and Kick together; manage one command directory while replies stay on their originating platform.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">ON-AIR COLLABORATION</p><h2>Live Desk</h2><p>Keep Stream Together, Twitch and Kick chat, active polls, and the tools used during a show together in one operator-first workspace.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
           <div class="metric-grid five-up chatbot-metrics" data-advanced>
             <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
             <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
@@ -550,6 +560,9 @@
             <div class="dialog-actions"><button id="clearChatbotPoll" class="secondary-button" type="button">Clear Poll</button><button id="stopChatbotPoll" class="secondary-button danger-outline" type="button">End Voting</button><button id="startChatbotPoll" class="primary-button" type="submit">Start Poll</button></div>
           </form>
 
+          <details id="liveDeskSetupDrawer" class="live-desk-setup-drawer">
+            <summary><span><b>SETUP + AUTOMATION</b><strong>Bot account, commands, moderation, messages, and providers</strong><small>These controls normally stay out of the way while you are live.</small></span><span id="liveDeskSetupBadge" class="status-badge offline">SETUP REQUIRED</span><i aria-hidden="true">›</i></summary>
+            <div class="live-desk-setup-content">
           <article class="panel chatbot-account-guide">
             <div class="chatbot-account-guide-icon" aria-hidden="true">02</div>
             <div><span>SECOND TWITCH ACCOUNT REQUIRED</span><h3>Your chatbot signs in as a separate Twitch user</h3><p>Keep your broadcaster connected in Twitch Setup. For chat listening and replies, create or sign into a secondary Twitch account, then authorize that account below. The username Twitch returns is always shown beside any custom bot name.</p></div>
@@ -639,6 +652,8 @@
             <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Shared Chat collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
             <article class="panel"><div class="panel-header"><div><span>CHATBOT ACTIVITY</span><h3>Recent command decisions</h3></div></div><div id="chatbotActivity" class="compact-list empty-state">No chatbot activity recorded.</div></article>
           </div>
+            </div>
+          </details>
         </section>
 
         <section id="dualformatSection" class="page">
