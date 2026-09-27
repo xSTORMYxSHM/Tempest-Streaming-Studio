@@ -9,9 +9,9 @@ The automated Studio candidate is valid, signed, and ready for the coordinated i
 ## Source pair
 
 - Studio branch: `release/1.5.0`
-- Studio packaged source commit: `11cf73ec3aa2185c4a573e806b89dcffa7322597` (`Assign GIPHY media to every alert type`)
+- Studio packaged source commit: `c766de2e12bc3570d120a3d5eb4d0bc505a57d54` (`Restore packaged UI capture verification`)
 - Broadcast branch: `release/1.5.0-rc`
-- Broadcast candidate commit: `734e952e88f532097dd0249608d61566a275b297`
+- Broadcast candidate commit: `c5e3da86f00d82e845421ade195ab4da0393883a`
 - Shared protocol version: `1.0`
 - Shared interaction render contract: `1.0`
 
@@ -30,10 +30,10 @@ The automated Studio candidate is valid, signed, and ready for the coordinated i
 
 | Asset | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe` | 132,220,600 | `6728824f23ab282ec216ecd033d8891a2c18b9165d8837a080f4d1c157d9dad8` |
-| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe.blockmap` | 138,973 | `342cd4d3e1e0c1d59eb6034e4962cbb4f758200d771ee16d0d9eaf862afe94fe` |
-| `latest.yml` | 385 | `912b15e9b8e98bbf9a7781105fdf30ff8cc76162e7e4e2d6ec57154e9c110fa5` |
-| `Tempest-Streaming-Studio-1.5.0-x64.zip` | 166,121,267 | `2a89e15e48da69c1bf59e0ee56b117edba3b27633a84c36a6d91135ec8e765cf` |
+| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe` | 132,222,232 | `6befad71ae7a59a564b9e4cd9ddd3e0121124ceb5386019d64bfbf2089f3c09b` |
+| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe.blockmap` | 139,234 | `3a9570c2f12dd4a2f20ceac7a7f8c82fe2ad173d58ba31b9b5f8e6c1dc835fcb` |
+| `latest.yml` | 385 | `b430c8ad447cc1d7a4bf7f80361381b2b6b969815607a3c9e2990aed445c3a06` |
+| `Tempest-Streaming-Studio-1.5.0-x64.zip` | 166,122,495 | `dfaf850aa82fb8faf33ba68e544a4ff19b5516039c04f9f20b69cd3e2a892571` |
 
 These artifacts are local rehearsal candidates only. They must be rebuilt if code changes, and they must not be uploaded to the stable updater channel unless the coordinated manual gates pass.
 
