@@ -16,6 +16,7 @@ Tempest Streaming Studio 1.5.0 is a coordinated reliability and operations relea
 - Adds optional rotating automatic messages triggered by elapsed minutes or viewer chat activity, with Twitch, Kick, or combined destinations.
 - Keeps automatic messages offline-aware and supports channel and bot-name substitutions.
 - Adds session-based numeric chat polls with 2–10 options, live aggregate results, and one final vote per Twitch or Kick account when the chatter sends only the option number.
+- Expands the encrypted-key GIPHY library so a downloaded GIF can be assigned to any Interaction Alert, base Twitch Alert, or Twitch Alert variant from grouped targets or the alert card's shortcut.
 
 ## Studio and Broadcast ownership
 

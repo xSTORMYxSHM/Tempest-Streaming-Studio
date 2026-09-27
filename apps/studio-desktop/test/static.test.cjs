@@ -183,6 +183,11 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /DOWNLOADS LOCALLY/);
   assert.match(html, /Powered by GIPHY/);
   assert.match(html, /Stored with Windows encryption/);
+  assert.match(html, /Find a GIF for any alert/);
+  assert.match(renderer, /Interaction Alerts', 'Twitch Alerts', 'Twitch Alert Variants'/);
+  assert.match(renderer, /data-giphy-alert-target="twitch\|/);
+  assert.match(renderer, /data-giphy-alert-target="twitch-variant\|/);
+  assert.match(renderer, /updateTwitchVariant\(target\.alertId, target\.variantId, \{ visualUri: imported\.uri \}/);
   assert.match(html, /Connect your avatar app/);
   assert.match(html, /Save Warudo Receiver/);
   assert.match(html, /VTube Studio/);

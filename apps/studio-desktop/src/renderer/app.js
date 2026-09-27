@@ -708,7 +708,7 @@
           <label>Effect strength <span><input data-visual-alert-strength="${escapeHtml(alert.id)}" type="number" min="5" max="150" value="${Math.round((alert.broadcastEffectStrength || 1) * 100)}" /> %</span></label>
         </div></div>
       </div></details>
-      <div class="sound-alert-actions interaction-alert-actions"><button data-interaction-alert-save="${escapeHtml(alert.id)}">Save Alert</button><button data-interaction-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-interaction-alert-pack="${escapeHtml(alert.id)}">Export Pack</button><button data-sound-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-sound-alert-visual="${escapeHtml(alert.id)}">Assign Visual</button><button data-sound-alert-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button data-visual-alert-preview="${escapeHtml(alert.id)}">Preview Alert</button><button class="primary-button" data-sound-alert-trigger="${escapeHtml(alert.id)}" ${!alert.enabled || !state.safety.armed ? 'disabled' : ''}>Test Interaction</button></div>
+      <div class="sound-alert-actions interaction-alert-actions"><button data-interaction-alert-save="${escapeHtml(alert.id)}">Save Alert</button><button data-interaction-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-interaction-alert-pack="${escapeHtml(alert.id)}">Export Pack</button><button data-sound-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-sound-alert-visual="${escapeHtml(alert.id)}">Assign Visual</button><button data-giphy-alert-target="interaction|${escapeHtml(alert.id)}">GIPHY Visual</button><button data-sound-alert-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button data-visual-alert-preview="${escapeHtml(alert.id)}">Preview Alert</button><button class="primary-button" data-sound-alert-trigger="${escapeHtml(alert.id)}" ${!alert.enabled || !state.safety.armed ? 'disabled' : ''}>Test Interaction</button></div>
     </article>`).join('');
   }
 
@@ -732,16 +732,43 @@
       : '<strong>Interaction Alert source:</strong> Studio is preparing the local overlay.';
   }
 
+  function giphyAlertTargets() {
+    const targets = [];
+    for (const alert of state.soundAlerts?.alerts || []) targets.push({ key: `interaction|${alert.id}`, kind: 'interaction', alertId: alert.id, name: alert.name, group: 'Interaction Alerts' });
+    for (const alert of state.twitchVisualAlerts?.alerts || []) {
+      targets.push({ key: `twitch|${alert.id}`, kind: 'twitch', alertId: alert.id, name: alert.name, group: 'Twitch Alerts' });
+      for (const variant of alert.alertVariants || []) targets.push({ key: `twitch-variant|${alert.id}|${variant.id}`, kind: 'twitch-variant', alertId: alert.id, variantId: variant.id, name: `${alert.name} · ${variant.name}`, group: 'Twitch Alert Variants' });
+    }
+    return targets;
+  }
+
+  function selectedGiphyTarget() {
+    const key = $('#giphyTargetAlert').value;
+    return giphyAlertTargets().find((entry) => entry.key === key);
+  }
+
   function updateGiphyTargetContext() {
-    const target = $('#giphyTargetAlert').value;
-    const alert = state.soundAlerts?.alerts?.find((entry) => entry.id === target);
+    const target = selectedGiphyTarget();
     const summary = $('#giphyTargetSummary');
-    if (summary) summary.textContent = alert
-      ? `Your selection will be downloaded and assigned to ${alert.name}.`
-      : 'Choose an Interaction Alert before selecting a GIF.';
+    if (summary) summary.textContent = target
+      ? `Your selection will be downloaded and assigned to ${target.name}.`
+      : 'Choose an alert before selecting a GIF.';
     document.querySelectorAll('[data-giphy-result]').forEach((button) => {
-      button.setAttribute('aria-label', `Assign this GIF to ${alert?.name || 'the selected Interaction Alert'}`);
+      button.setAttribute('aria-label', `Assign this GIF to ${target?.name || 'the selected alert'}`);
     });
+  }
+
+  function openGiphyForAlert(targetKey) {
+    showSection('soundalerts');
+    renderVisualAlerts();
+    const target = giphyAlertTargets().find((entry) => entry.key === targetKey);
+    if (!target) return toast('That alert is no longer available as a GIPHY target.', true);
+    const variantDialog = $('#twitchVariantDialog');
+    if (variantDialog.open) variantDialog.close();
+    $('#giphyTargetAlert').value = target.key;
+    updateGiphyTargetContext();
+    $('.giphy-picker-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('#giphySearchQuery').focus({ preventScroll: true });
   }
 
   function renderVisualAlerts() {
@@ -762,11 +789,15 @@
       : 'Add a developer API key to enable online search.';
     $('#giphyApiKey').placeholder = state.giphy?.configured ? 'Saved key is encrypted' : 'Enter a key';
     const giphyTarget = $('#giphyTargetAlert');
-    const selectedGiphyTarget = giphyTarget.value;
-    const targetOptions = alerts.map((alert) => `<option value="${escapeHtml(alert.id)}">${escapeHtml(alert.name)}</option>`).join('');
+    const selectedGiphyTargetKey = giphyTarget.value;
+    const targets = giphyAlertTargets();
+    const targetOptions = ['Interaction Alerts', 'Twitch Alerts', 'Twitch Alert Variants'].map((group) => {
+      const options = targets.filter((target) => target.group === group).map((target) => `<option value="${escapeHtml(target.key)}">${escapeHtml(target.name)}</option>`).join('');
+      return options ? `<optgroup label="${group}">${options}</optgroup>` : '';
+    }).join('');
     if (giphyTarget.innerHTML !== targetOptions) giphyTarget.innerHTML = targetOptions;
-    if (alerts.some((alert) => alert.id === selectedGiphyTarget)) giphyTarget.value = selectedGiphyTarget;
-    else if (alerts[0]) giphyTarget.value = alerts[0].id;
+    if (targets.some((target) => target.key === selectedGiphyTargetKey)) giphyTarget.value = selectedGiphyTargetKey;
+    else if (targets[0]) giphyTarget.value = targets[0].key;
     updateGiphyTargetContext();
     const twitchGrid = $('#twitchVisualAlertGrid');
     twitchGrid.classList.toggle('empty-state', !twitchAlerts.length);
@@ -783,7 +814,7 @@
         <label>Alert accent <input data-twitch-visual-accent="${escapeHtml(alert.id)}" type="color" value="${escapeHtml(alert.accent || '#54f2eb')}" /></label>
       </div>
       <div class="twitch-variant-summary"><span>VARIANTS</span><strong>${(alert.alertVariants || []).filter((variant) => variant.enabled).length} active · ${(alert.alertVariants || []).length} total</strong><small>Amount, tier, tenure, raid size, or reward rules</small></div>
-      <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-twitch-alert-pack="${escapeHtml(alert.id)}">Export Pack</button>${variantConditionChoices(alert.topic).length ? `<button data-twitch-alert-variants="${escapeHtml(alert.id)}">Manage Variants${(alert.alertVariants || []).length ? ` (${(alert.alertVariants || []).length})` : ''}</button>` : '<button disabled title="This event has no amount, tier, tenure, raid-size, or reward field">Variants unavailable</button>'}<button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Base Alert</button></div>
+      <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-twitch-alert-pack="${escapeHtml(alert.id)}">Export Pack</button>${variantConditionChoices(alert.topic).length ? `<button data-twitch-alert-variants="${escapeHtml(alert.id)}">Manage Variants${(alert.alertVariants || []).length ? ` (${(alert.alertVariants || []).length})` : ''}</button>` : '<button disabled title="This event has no amount, tier, tenure, raid-size, or reward field">Variants unavailable</button>'}<button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-giphy-alert-target="twitch|${escapeHtml(alert.id)}">GIPHY Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Base Alert</button></div>
     </article>`).join('') : 'No Twitch Alert presets are configured.';
   }
 
@@ -2957,7 +2988,7 @@
       <div class="variant-card-head"><div><span>PRIORITY ${variant.priority}</span><h3>${escapeHtml(variant.name)}</h3><p>${escapeHtml(variantConditionSummary(variant.condition))}</p></div><b>${variant.enabled ? 'ACTIVE' : 'OFF'}</b></div>
       <div class="alert-media-summary"><div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(variant.audioUri))}</strong></div><div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(variant.visualUri))}</strong></div></div>
       <div class="variant-settings-grid"><label>Priority<input data-variant-priority="${escapeHtml(variant.id)}" type="number" min="-1000" max="1000" value="${variant.priority}" /></label><label>Maximum runtime<input data-variant-duration="${escapeHtml(variant.id)}" type="number" min="1" max="60" value="${Math.round(variant.durationMs / 1000)}" /><small>seconds</small></label><label>Volume<input data-variant-volume="${escapeHtml(variant.id)}" type="number" min="0" max="100" value="${Math.round(variant.volume * 100)}" /><small>percent</small></label><label>Accent<input data-variant-accent="${escapeHtml(variant.id)}" type="color" value="${escapeHtml(variant.accent)}" /></label></div>
-      <div class="variant-card-actions"><button type="button" data-variant-edit="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Edit Rule</button><button type="button" data-variant-save="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Save Settings</button><button type="button" data-variant-design="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Design</button><button type="button" data-variant-audio="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Sound</button><button type="button" data-variant-visual="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Visual</button><button type="button" data-variant-toggle="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">${variant.enabled ? 'Disable' : 'Enable'}</button><button type="button" class="primary-button" data-variant-preview="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Preview</button><button type="button" class="danger-outline" data-variant-delete="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Delete</button></div>
+      <div class="variant-card-actions"><button type="button" data-variant-edit="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Edit Rule</button><button type="button" data-variant-save="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Save Settings</button><button type="button" data-variant-design="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Design</button><button type="button" data-variant-audio="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Sound</button><button type="button" data-variant-visual="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Assign Visual</button><button type="button" data-giphy-alert-target="twitch-variant|${escapeHtml(alert.id)}|${escapeHtml(variant.id)}">GIPHY Visual</button><button type="button" data-variant-toggle="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">${variant.enabled ? 'Disable' : 'Enable'}</button><button type="button" class="primary-button" data-variant-preview="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Preview</button><button type="button" class="danger-outline" data-variant-delete="${escapeHtml(variant.id)}" data-parent-alert="${escapeHtml(alert.id)}">Delete</button></div>
     </article>`).join('') : 'No variants yet. The base alert handles every event.';
   }
 
@@ -3953,10 +3984,10 @@
     const originalLabel = button.textContent;
     try {
       const query = $('#giphySearchQuery').value.trim();
-      const target = $('#giphyTargetAlert').value;
-      if (!target) throw new Error('Choose an Interaction Alert before searching GIPHY.');
+      const target = selectedGiphyTarget();
+      if (!target) throw new Error('Choose an alert before searching GIPHY.');
       if (!query) throw new Error('Enter a GIF search first.');
-      const alertName = state.soundAlerts.alerts.find((alert) => alert.id === target)?.name || 'Interaction Alert';
+      const alertName = target.name;
       button.disabled = true;
       button.textContent = 'Searching…';
       $('#giphyResultSummary').textContent = `Searching for “${query}”…`;
@@ -3985,12 +4016,14 @@
     const originalLabel = button?.textContent || 'Assign GIF';
     const card = button?.closest('.giphy-result');
     try {
-      const target = $('#giphyTargetAlert').value;
-      if (!target) throw new Error('Choose an Interaction Alert before selecting a GIF.');
+      const target = selectedGiphyTarget();
+      if (!target) throw new Error('Choose an alert before selecting a GIF.');
       if (button) { button.disabled = true; button.textContent = 'Downloading…'; }
       card?.classList.add('assigning');
       const imported = await window.tempestStudio.importGiphyVisual({ id, mediaUrl });
-      await updateSoundAlert(target, { visualUri: imported.uri }, `${imported.name} downloaded and assigned locally.`);
+      if (target.kind === 'interaction') await updateSoundAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
+      else if (target.kind === 'twitch') await updateTwitchVisualAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
+      else await updateTwitchVariant(target.alertId, target.variantId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
       if (button) button.textContent = 'Assigned';
     } catch (error) {
       if (button) { button.disabled = false; button.textContent = originalLabel; }
@@ -4580,6 +4613,7 @@
     if (button.dataset.giphySave) return saveGiphyKey();
     if (button.dataset.giphySearch) return searchGiphy();
     if (button.dataset.giphyResult) return chooseGiphyResult(button.dataset.giphyResult, button.dataset.giphyMediaUrl, button);
+    if (button.dataset.giphyAlertTarget) return openGiphyForAlert(button.dataset.giphyAlertTarget);
     if (button.dataset.chatOverlaySave) return saveChatOverlaySettings();
     if (button.dataset.chatOverlayPreview) return previewChatOverlay();
     if (button.dataset.chatOverlayClear) return clearChatOverlay();
