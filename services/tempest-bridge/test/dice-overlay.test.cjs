@@ -93,6 +93,7 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /new AudioContextClass/);
   assert.match(browserClient, /events\.addEventListener\('audio-test'/);
   assert.match(browserClient, /queueMicrotask\(start\)/);
+  assert.match(browserClient, /if \(obsBrowserRuntime\) \{\s*start\(\);\s*return;/);
   assert.doesNotMatch(browserClient, /new MessageChannel\(\)/);
   assert.match(browserClient, /scheduleRendererStartup\(data\.settings \|\| \{\}\)/);
   assert.doesNotMatch(browserClient, /Math\.random/);

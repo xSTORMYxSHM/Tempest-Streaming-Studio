@@ -320,9 +320,13 @@ let pollRevision = 0;
 let pollStarted = false;
 function scheduleRendererStartup(nextSettings) {
   const start = () => apply(nextSettings).catch((error) => showError(error.message));
-  // OBS can suspend both timers and MessageChannel tasks for a transparent offscreen
-  // Browser Source. A microtask runs at the end of the transport callback without waiting
-  // for another throttled browser task, while still keeping initialization off this stack.
+  // OBS can suspend timers, MessageChannel tasks, and even microtasks for a transparent
+  // offscreen Browser Source. Start directly while CEF is dispatching the live transport
+  // event; the async renderer yields at its first status request before allocating WebGL.
+  if (obsBrowserRuntime) {
+    start();
+    return;
+  }
   if (typeof queueMicrotask === 'function') {
     queueMicrotask(start);
     return;
@@ -336,7 +340,7 @@ const handleInit = (event) => {
   clientId = nextClientId;
   startupScheduledFor = clientId;
   reportClient('connecting', obsBrowserRuntime ? 'OBS transport ready; preparing the main-thread renderer.' : 'Browser transport ready; preparing the renderer.').catch(() => {});
-  // Move WebGL allocation off the current stack without relying on an OBS-throttled task.
+  // OBS starts within the transport event; normal browsers defer to a microtask.
   scheduleRendererStartup(data.settings || {});
 };
 async function runPollFallback() {
