@@ -326,7 +326,10 @@ export class TempestDiceOverlay {
     // OBS CEF's network service can hold a very small first SSE frame. Prime the stream so
     // the initialization event reaches the renderer immediately instead of waiting for a
     // later heartbeat or roll request.
-    response.write(`: tempest-dice-stream ${' '.repeat(2048)}\n\n`);
+    // Chromium/CEF may buffer an event stream until it has received roughly 4 KiB. Use a
+    // larger primer so OBS dispatches the init event immediately instead of keeping the
+    // renderer permanently in its server-created connecting state.
+    response.write(`: tempest-dice-stream ${' '.repeat(8192)}\n\n`);
     const clientId = randomUUID();
     this.clients.set(response, clientId);
     this.clientStatuses.set(clientId, { state: 'connecting', updatedAt: new Date().toISOString() });

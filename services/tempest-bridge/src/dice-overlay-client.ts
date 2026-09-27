@@ -95,9 +95,17 @@ async function postJson(path, body, attempts = 4) {
   throw latestError || new Error('Studio did not answer the Browser Source.');
 }
 
+async function postJsonOneWay(path, body, attempts = 2) {
+  if (obsBrowserRuntime && typeof navigator.sendBeacon === 'function') {
+    const payload = new Blob([JSON.stringify(body)], { type: 'application/json' });
+    if (navigator.sendBeacon(path, payload)) return {};
+  }
+  return postJson(path, body, attempts);
+}
+
 async function reportClient(state, error) {
   if (!clientId) return;
-  await postJson('/dice-overlay/client-status', { clientId, state, theme: activeDiceTheme, renderer: rendererMode, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
+  await postJsonOneWay('/dice-overlay/client-status', { clientId, state, theme: activeDiceTheme, renderer: rendererMode, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
 }
 
 function showError(message) {
@@ -128,7 +136,7 @@ function stopImpact() {
 
 async function reportAudio(state, method, testId, error) {
   if (!clientId) return;
-  await postJson('/dice-overlay/audio-status', { clientId, state, method, testId, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
+  await postJsonOneWay('/dice-overlay/audio-status', { clientId, state, method, testId, error: error ? String(error).slice(0, 500) : undefined }, 2).catch(() => {});
 }
 
 async function playImpact({ force = false, testId } = {}) {
@@ -281,7 +289,7 @@ async function waitForPhysicalDice(startRoll, expectedCount) {
 
 async function reportRollFailure(request, error) {
   if (!request?.id || !request?.token) return;
-  await postJson('/dice-overlay/error', { id: request.id, token: request.token, message: error instanceof Error ? error.message : String(error) }, 2).catch(() => {});
+  await postJsonOneWay('/dice-overlay/error', { id: request.id, token: request.token, message: error instanceof Error ? error.message : String(error) }, 2).catch(() => {});
 }
 
 async function performRoll(request) {
@@ -308,7 +316,7 @@ async function performRoll(request) {
       pending = await waitForPhysicalDice(() => diceBox.reroll(rejected, { remove: true, newStartPoint: true }), rejected.length);
     }
     if (accepted.length !== Number(request.count)) throw new Error('Dice Box did not produce the requested number of in-range results.');
-    const payload = await postJson('/dice-overlay/result', { id: request.id, token: request.token, values: accepted });
+    const payload = await postJsonOneWay('/dice-overlay/result', { id: request.id, token: request.token, values: accepted });
     if (payload.roll) showResult(payload.roll);
   } catch (error) {
     console.error('Tempest Dice Box roll failed.', error);

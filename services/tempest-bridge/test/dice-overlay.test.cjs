@@ -82,7 +82,7 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /Promise\.race\(\[apiResult, callbackResult\]\)/);
   assert.match(browserClient, /settled visually but did not return its physical result within 20 seconds/);
   assert.match(browserClient, /if \(payload\.roll\) showResult\(payload\.roll\)/);
-  assert.match(browserClient, /postJson\('\/dice-overlay\/error'/);
+  assert.match(browserClient, /postJsonOneWay\('\/dice-overlay\/error'/);
   assert.match(browserClient, /hasOwnProperty\.call\(result, 'value'\)/);
   assert.match(browserClient, /diceBox\.loadTheme\(requested\)/);
   assert.match(browserClient, /Using Classic dice instead/);
@@ -94,6 +94,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /events\.addEventListener\('audio-test'/);
   assert.match(browserClient, /new XMLHttpRequest\(\)/);
   assert.match(browserClient, /if \(obsBrowserRuntime\) \{\s*try \{ return await postJsonWithXhr\(path, body\); \}/);
+  assert.match(browserClient, /navigator\.sendBeacon\(path, payload\)/);
+  assert.match(browserClient, /postJsonOneWay\('\/dice-overlay\/result'/);
   assert.match(browserClient, /queueMicrotask\(start\)/);
   assert.match(browserClient, /if \(obsBrowserRuntime\) \{\s*start\(\);\s*return;/);
   assert.doesNotMatch(browserClient, /new MessageChannel\(\)/);
@@ -101,6 +103,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.doesNotMatch(browserClient, /Math\.random/);
   assert.equal(overlay.status('local').requests.pageLoads, 1);
   assert.equal(overlay.status('local').requests.clientLoads, 1);
+  const overlaySource = await readFile(path.join(__dirname, '../src/dice-overlay.ts'), 'utf8');
+  assert.match(overlaySource, /repeat\(8192\)/);
   overlay.close();
 });
 
