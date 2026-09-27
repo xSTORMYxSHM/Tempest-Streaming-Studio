@@ -320,21 +320,11 @@ let pollRevision = 0;
 let pollStarted = false;
 function scheduleRendererStartup(nextSettings) {
   const start = () => apply(nextSettings).catch((error) => showError(error.message));
-  if (!obsBrowserRuntime) {
+  // OBS can suspend both timers and MessageChannel tasks for a transparent offscreen
+  // Browser Source. A microtask runs at the end of the transport callback without waiting
+  // for another throttled browser task, while still keeping initialization off this stack.
+  if (typeof queueMicrotask === 'function') {
     queueMicrotask(start);
-    return;
-  }
-  // A loaded OBS Browser Source can be background-timer throttled even while it remains
-  // visible in the active scene. MessageChannel gives renderer initialization a separate
-  // browser task without depending on setTimeout, which otherwise can stay frozen forever.
-  if (typeof MessageChannel === 'function') {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      channel.port2.close();
-      start();
-    };
-    channel.port2.postMessage(null);
     return;
   }
   Promise.resolve().then(start);
@@ -346,8 +336,7 @@ const handleInit = (event) => {
   clientId = nextClientId;
   startupScheduledFor = clientId;
   reportClient('connecting', obsBrowserRuntime ? 'OBS transport ready; preparing the main-thread renderer.' : 'Browser transport ready; preparing the renderer.').catch(() => {});
-  // Let OBS finish the SSE task before WebGL allocates its scene, without relying on a
-  // background timer that CEF may suspend for an offscreen Browser Source.
+  // Move WebGL allocation off the current stack without relying on an OBS-throttled task.
   scheduleRendererStartup(data.settings || {});
 };
 async function runPollFallback() {
