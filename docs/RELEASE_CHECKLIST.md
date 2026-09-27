@@ -15,11 +15,11 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm check` (107 tests, 0 failures)
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for packaged resources.
-- [x] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for packaged resources.
+- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
 

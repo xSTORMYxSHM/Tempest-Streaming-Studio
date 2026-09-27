@@ -327,6 +327,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /STREAM TOGETHER BACKSTAGE/);
   assert.match(html, /data-section="streamtogether"/);
   assert.match(html, /id="streamtogetherSection"/);
+  assert.match(html, /data-section="streamtogether"[^]*data-section="chatbot"[^]*data-section="dice"[^]*data-section="simulcast"/);
   assert.match(renderer, /streamtogether:\s*\{\s*title:\s*'Stream Together'/);
   assert.match(html, /id="openStreamTogetherCall"/);
   assert.match(html, /id="closeStreamTogetherCall"/);
