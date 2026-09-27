@@ -153,7 +153,7 @@ const builtInThemes: TempestDiceThemeOption[] = [
 const diceOverlayBootstrap = String.raw`
 (() => {
   const runtime = window.__tempestDiceRuntime = { clientId: '', initData: '', error: '' };
-  const obsRuntime = /(?:^|\\s)OBS\\/\\d/i.test(navigator.userAgent);
+  const obsRuntime = /(?:^|\s)OBS\/\d/i.test(navigator.userAgent);
   const events = window.__tempestDiceEvents = obsRuntime ? null : new EventSource('/dice-overlay/events');
   const reportFailure = () => {
     if (!runtime.clientId || !runtime.error) return;

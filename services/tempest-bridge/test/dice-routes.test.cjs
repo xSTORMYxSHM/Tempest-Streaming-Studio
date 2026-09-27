@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { mkdir, mkdtemp, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { startTempestBridge } = require('../dist');
 
 async function readSseEvent(reader, decoder, eventName) {
@@ -53,6 +54,7 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const client = await fetch(`${runtime.baseUrl}/dice-overlay/client.js`);
   assert.equal(client.status, 200);
   const clientBody = await client.text();
+  assert.doesNotThrow(() => new vm.Script(clientBody, { filename: 'dice-overlay/client.js' }));
   assert.match(clientBody, /window\.__tempestDiceEvents = obsRuntime \? null : new EventSource/);
   assert.match(clientBody, /new DiceBoxClass/);
   const vendor = await fetch(`${runtime.baseUrl}/dice-overlay/vendor/dice-box.es.min.js`);
