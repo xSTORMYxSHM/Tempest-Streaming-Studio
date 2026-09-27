@@ -18,6 +18,7 @@
           <p class="nav-group">START</p>
           <button class="nav-button active" data-section="overview">Studio Home</button>
           <p class="nav-group">ON AIR</p>
+          <button class="nav-button nav-live-button" data-section="streamtogether">Stream Together</button>
           <button class="nav-button nav-live-button" data-section="chatbot">Live Desk</button>
           <button class="nav-button nav-live-button" data-section="simulcast">Go Live</button>
           <button class="nav-button nav-live-button" data-section="dice">3D Dice</button>
@@ -57,7 +58,7 @@
               <p class="eyebrow">WELCOME TO TEMPEST STREAMING STUDIO</p>
               <h2>Your stream systems.<br /><span>One control center.</span></h2>
               <p>Connect your accounts, create alerts and overlays, test everything, and get your stream ready from one place.</p>
-              <div class="hero-actions"><button class="primary-button" data-go="chatbot">Open Live Desk</button><button id="openHomeStreamTogether" class="secondary-button">Stream Together</button><button class="secondary-button" data-go="simulcast">Go Live</button><button class="secondary-button" data-go="dice">Roll Dice</button><button id="openOnboardingWizard" class="text-button">Review Setup</button></div>
+              <div class="hero-actions"><button class="primary-button" data-go="chatbot">Open Live Desk</button><button class="secondary-button" data-go="streamtogether">Stream Together</button><button class="secondary-button" data-go="simulcast">Go Live</button><button class="secondary-button" data-go="dice">Roll Dice</button><button id="openOnboardingWizard" class="text-button">Review Setup</button></div>
             </div>
             <div id="heroCore" class="bridge-orbit" aria-hidden="true"><div>HOME</div><i></i><i></i><i></i></div>
           </div>
@@ -69,7 +70,8 @@
           <article id="studioDataPanel" class="studio-data-panel" data-advanced><div><span>BACKUP + MIGRATION · <b id="studioDataVersion">CHECKING DATA</b></span><strong>Keep your Studio portable</strong><small>Back up alerts, variants, chatbot settings, panel styling, setup preferences, and alert media. Encrypted account credentials are deliberately excluded.</small></div><div class="studio-data-actions"><button data-export-studio-backup="true" class="secondary-button">Create Backup</button><button data-restore-studio-backup="true" class="secondary-button">Restore Backup</button></div></article>
           <div class="home-menu-heading"><div><p class="eyebrow">LIVE UTILITIES</p><h3>Controls for the current stream</h3></div><p>Chat, polls, production status, and audience tools stay one click away.</p></div>
           <div class="home-menu-grid home-live-grid">
-            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Stream Together + Polls</strong><span>Monitor Twitch and Kick chat, shared communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
+            <button class="home-menu-card home-live-card" data-go="streamtogether"><b>TWITCH CALL</b><strong>Stream Together</strong><span>Open Backstage camera, microphone, guests, and call controls.</span><i>OPEN STREAM TOGETHER →</i></button>
+            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Shared Chat + Polls</strong><span>Monitor Twitch and Kick chat, shared communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
             <button class="home-menu-card home-live-card" data-go="simulcast"><b>OUTPUT CONTROL</b><strong>Go Live</strong><span>Run preflight and monitor Twitch, Kick, upload headroom, and recording.</span><i>OPEN GO LIVE →</i></button>
             <button class="home-menu-card home-live-card" data-go="dice"><b>ON-STREAM TOOL</b><strong>3D Dice</strong><span>Roll physical Dice Box dice for the streamer or chat.</span><i>ROLL ON STREAM →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>AUDIENCE</b><strong>Viewer Interactions</strong><span>Trigger, preview, and manage viewer-controlled stream moments.</span><i>OPEN INTERACTIONS →</i></button>
@@ -385,7 +387,7 @@
             <button class="platform-tool-card" data-go="visualalerts"><span>ALERTS</span><strong>Twitch Alerts</strong><small>Follows, subscriptions, Bits, raids, rewards, and experiences.</small></button>
             <button class="platform-tool-card" data-go="extensiondesigner"><span>VIEWER PANEL</span><strong>Twitch Panel</strong><small>Pair and style the channel-specific viewer interaction panel.</small></button>
             <button class="platform-tool-card" data-go="dualformat"><span>STREAM OUTPUT</span><strong>Dual Format</strong><small>Horizontal desktop delivery and mobile-first vertical video.</small></button>
-            <button id="openTwitchStreamTogether" class="platform-tool-card"><span>STREAM TOGETHER</span><strong>Backstage Call</strong><small>Open Twitch camera, microphone, guests, and call controls in Studio.</small></button>
+            <button class="platform-tool-card" data-go="streamtogether"><span>STREAM TOGETHER</span><strong>Backstage Call</strong><small>Open Twitch camera, microphone, guests, and call controls in Studio.</small></button>
           </div>
           <div class="metric-grid five-up twitch-metrics" data-advanced>
             <article><span>OAUTH LIFECYCLE</span><strong id="twitchOauthState">—</strong><small>Tokens stay in the OS credential vault</small></article>
@@ -521,16 +523,8 @@
           </div>
         </section>
 
-        <section id="chatbotSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">ON-AIR COLLABORATION</p><h2>Live Desk</h2><p>Open the Stream Together call, monitor Twitch and Kick chat, run active polls, and keep frequently used show controls together.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
-          <div class="metric-grid five-up chatbot-metrics" data-advanced>
-            <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
-            <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
-            <article><span>CHAT OUTPUT</span><strong id="chatbotChatMetric">DISCONNECTED</strong><small>Replies through Twitch Helix</small></article>
-            <article><span>COMMANDS</span><strong id="chatbotCommandCount">0</strong><small id="chatbotCommandCountNote">0 enabled</small></article>
-            <article><span>TRIGGERS</span><strong id="chatbotTriggerCount">0</strong><small id="chatbotLastMessage">No messages received</small></article>
-          </div>
-
+        <section id="streamtogetherSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">TWITCH COLLABORATION CALL</p><h2>Stream Together</h2><p>Run Twitch Backstage as a dedicated Studio call with its own camera, microphone, guests, and screen-share controls.</p></div><span id="streamTogetherPageBadge" class="status-badge offline">CALL CLOSED</span></div>
           <article class="panel stream-together-call-panel">
             <div class="panel-header"><div><span>STREAM TOGETHER BACKSTAGE</span><h3>Your Twitch call in its own Studio window</h3><p>Run the camera, microphone, guest, and call controls as a dedicated call—not as part of the chat monitor.</p></div><span id="streamTogetherCallBadge" class="status-badge offline">CLOSED</span></div>
             <div class="stream-together-call-layout">
@@ -538,6 +532,22 @@
               <div class="stream-together-call-actions"><button id="openStreamTogetherCall" class="primary-button" type="button">Open Stream Together</button><button id="closeStreamTogetherCall" class="secondary-button danger-outline" type="button">Close Call Window</button><small>First use may ask you to sign in to Twitch again inside the call window.</small></div>
             </div>
           </article>
+          <div class="stream-together-boundary-grid">
+            <article><span>CALL</span><strong>Stream Together</strong><p>Twitch Backstage lives in its own persistent Studio call window.</p></article>
+            <article><span>CHAT + POLLS</span><strong>Live Desk</strong><p>Shared Chat, Twitch/Kick messages, and polls continue independently.</p><button class="secondary-button" data-go="chatbot" type="button">Open Live Desk</button></article>
+            <article><span>VIDEO + OUTPUT</span><strong>Tempest Broadcast</strong><p>Guest Browser Sources, canvases, audio routing, and final output stay in Broadcast.</p><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></article>
+          </div>
+        </section>
+
+        <section id="chatbotSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">ON-AIR CHAT + AUDIENCE</p><h2>Live Desk</h2><p>Monitor Twitch and Kick chat, run active polls, and keep frequently used audience controls together while the Stream Together call runs independently.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
+          <div class="metric-grid five-up chatbot-metrics" data-advanced>
+            <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
+            <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
+            <article><span>CHAT OUTPUT</span><strong id="chatbotChatMetric">DISCONNECTED</strong><small>Replies through Twitch Helix</small></article>
+            <article><span>COMMANDS</span><strong id="chatbotCommandCount">0</strong><small id="chatbotCommandCountNote">0 enabled</small></article>
+            <article><span>TRIGGERS</span><strong id="chatbotTriggerCount">0</strong><small id="chatbotLastMessage">No messages received</small></article>
+          </div>
 
           <article class="panel shared-chat-panel">
             <div class="panel-header"><div><span>SHARED CHAT MONITOR</span><h3>Live Chat + Shared Chat</h3><p>Monitor your home channel and participating Stream Together communities independently of the call window.</p></div><div class="page-toolbar-actions"><span id="sharedChatBadge" class="status-badge offline">NOT CONNECTED</span><button id="clearSharedChatMessages" class="secondary-button" type="button">Clear View</button></div></div>

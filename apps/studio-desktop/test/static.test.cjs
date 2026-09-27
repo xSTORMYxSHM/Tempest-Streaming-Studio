@@ -92,7 +92,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /SETUP \+ CONNECTIONS/);
   assert.match(html, /data-section="chatbot">Live Desk/);
   assert.match(html, /id="liveDeskSetupDrawer"/);
-  assert.match(html, /Stream Together \+ Polls/);
+  assert.match(html, /Shared Chat \+ Polls/);
   assert.match(renderer, /setupNavigation\.open|setupNavigation\) setupNavigation\.open/);
   assert.match(html, /data-go="visualalerts"/);
   assert.match(html, /data-go="soundalerts"/);
@@ -325,6 +325,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="chatbotAllowSharedChat"/);
   assert.match(html, /id="chatbotTestOrigin"/);
   assert.match(html, /STREAM TOGETHER BACKSTAGE/);
+  assert.match(html, /data-section="streamtogether"/);
+  assert.match(html, /id="streamtogetherSection"/);
+  assert.match(renderer, /streamtogether:\s*\{\s*title:\s*'Stream Together'/);
   assert.match(html, /id="openStreamTogetherCall"/);
   assert.match(html, /id="closeStreamTogetherCall"/);
   assert.match(html, /SHARED CHAT MONITOR/);

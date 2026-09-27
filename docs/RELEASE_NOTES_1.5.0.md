@@ -20,7 +20,7 @@ Tempest Streaming Studio 1.5.0 is a coordinated reliability and operations relea
 
 ## On-air workspace cleanup
 
-- Reorganizes the sidebar around On Air, Create, and Studio tasks, with account, output, and optional-app configuration behind a collapsed Setup + Connections drawer.
+- Reorganizes the sidebar around On Air, Create, and Studio tasks, with Stream Together promoted to its own primary On Air tab and account, output, and optional-app configuration behind a collapsed Setup + Connections drawer.
 - Promotes Live Desk, Go Live, 3D Dice, Stream Together, Shared Chat, and numeric polls while keeping bot identity, commands, moderation, providers, and automation in a separate expandable setup area.
 - Runs Twitch Stream Together Backstage as a dedicated Studio call window with a Chrome-compatible Chromium identity, a persistent isolated Twitch sign-in, Twitch-only camera and microphone permission, and native screen-share selection. Shared Chat remains an independent monitor inside Live Desk.
 - Keeps the private-information masking control permanently visible and automatically reveals the correct setup drawer when Guided Setup links to a hidden configuration page.

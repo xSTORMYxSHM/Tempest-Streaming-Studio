@@ -12,6 +12,7 @@
     twitch: { title: 'Twitch', kicker: 'TWITCH PLATFORM' },
     kick: { title: 'Kick', kicker: 'KICK PLATFORM' },
     extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
+    streamtogether: { title: 'Stream Together', kicker: 'TWITCH COLLABORATION CALL' },
     chatbot: { title: 'Live Desk', kicker: 'ON-AIR COLLABORATION' },
     dualformat: { title: 'Twitch Dual Format', kicker: 'MOBILE-FIRST OUTPUT' },
     simulcast: { title: 'Go Live', kicker: 'PRODUCTION OUTPUT CONTROL' },
@@ -1457,6 +1458,8 @@
     const authorized = state.twitch?.oauth?.state === 'authorized' && Boolean(login);
     $('#streamTogetherCallBadge').textContent = status.open ? 'CALL WINDOW OPEN' : 'CLOSED';
     $('#streamTogetherCallBadge').classList.toggle('offline', !status.open);
+    $('#streamTogetherPageBadge').textContent = status.open ? 'CALL WINDOW OPEN' : 'CALL CLOSED';
+    $('#streamTogetherPageBadge').classList.toggle('offline', !status.open);
     $('#streamTogetherCallTitle').textContent = status.open
       ? `Stream Together is open for @${status.login || login}`
       : authorized ? `Ready to open for @${login}` : 'Connect the broadcaster Twitch account';
@@ -4831,8 +4834,6 @@
     $('#connectTwitchButton').addEventListener('click', connectTwitch);
     $('#validateTwitchButton').addEventListener('click', validateTwitch);
     $('#disconnectTwitchButton').addEventListener('click', disconnectTwitch);
-    $('#openHomeStreamTogether').addEventListener('click', openStreamTogetherCall);
-    $('#openTwitchStreamTogether').addEventListener('click', openStreamTogetherCall);
     $('#openStreamTogetherCall').addEventListener('click', openStreamTogetherCall);
     $('#closeStreamTogetherCall').addEventListener('click', closeStreamTogetherCall);
     $('#connectChatbotButton').addEventListener('click', connectChatbot);

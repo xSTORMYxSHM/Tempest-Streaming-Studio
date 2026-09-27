@@ -15,11 +15,11 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm check` (107 tests, 0 failures)
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for packaged resources.
-- [x] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for packaged resources.
+- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
 
@@ -43,7 +43,7 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
 - [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
 - [ ] Use GIPHY to assign and preview a locally downloaded GIF on an Interaction Alert, a base Twitch Alert, and a Twitch Alert variant; confirm each target remains portable in its Alert Pack.
-- [ ] Confirm Live Desk opens directly to Shared Chat and polls; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
+- [ ] Confirm Stream Together has its own primary On Air tab; Live Desk opens directly to Shared Chat and polls; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
 - [ ] Confirm Private Info Hidden remains visible from every workspace and still masks account identities, credentials, locations, provider URLs, and local endpoints inside expanded setup drawers.
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback and temporary interactions.
 - [ ] No new error, uncaught rejection, repeated reconnect loop, or growing alert queue appears in Studio or Broadcast logs.
