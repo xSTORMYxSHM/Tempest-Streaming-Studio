@@ -1,4 +1,4 @@
-# 1.4.6 release checklist
+# 1.4.7 release checklist
 
 ## Automated gates
 
@@ -15,6 +15,9 @@
 - [ ] Guided Setup defaults to 1920 × 1080 and no personal Twitch, station, location, bot, or companion-app values appear.
 - [ ] Twitch and Interaction Browser Sources connect independently and each reports one client.
 - [ ] Twitch and Interaction audio can be routed to separate OBS tracks.
+- [ ] Twitch and Interaction alert sounds move their Broadcast source meters and remain audible through Monitor and Output.
+- [ ] Add the 3D Dice Browser Source, confirm one connected client, and verify fixed d20, advantage, disadvantage, modifier, reason, clear, material, scale, and duration presentation.
+- [ ] Enable the optional dice impact sound and confirm its Broadcast source meter and configured output tracks receive audio.
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback.
 - [ ] Backup/restore succeeds, reconnects are clearly requested, and pre-restore snapshot exists.
 - [ ] Upgrade from 0.11.x preserves credentials, alerts, media, commands, ultrawide canvas, station, and weather settings.
@@ -47,5 +50,5 @@
 - [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
 - [x] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
 - [x] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From 1.4.5, check, download, verify, restart, retain platform settings, and confirm version 1.4.6 in **Settings + About**.
+- [ ] From 1.4.6, check, download, verify, restart, retain platform settings, and confirm version 1.4.7 in **Settings + About**.
 - [x] Configure an Authenticode signing identity before running `pnpm package:win`; the release verifier rejects unsigned installers and application executables. Use `pnpm package:win:unsigned` only for local unsigned packaging tests.
