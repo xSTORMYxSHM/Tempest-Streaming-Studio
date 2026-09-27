@@ -1,54 +1,71 @@
-# 1.4.7 release checklist
+# 1.5.0 coordinated release checklist
 
-## Automated gates
+Studio and Broadcast 1.5.0 remain release candidates until every required gate below passes on the same installed build pair. A prior release's checks, artifacts, or stream results do not satisfy these gates.
+
+## Scope freeze
+
+- [x] Limit Studio scope to the known Browser Source fixes, Emote Wall recovery, Dice Box completion, chatbot quality-of-life work, and release validation.
+- [x] Keep video canvases, encoders, Enhanced Broadcasting, platform output services, recording, and final audio routing owned by Broadcast.
+- [x] Keep accounts, stream information, chat/chatbot behavior, alerts, interactions, counters, Dice Box, operator readiness, and orchestration owned by Studio.
+- [x] Keep both Twitch Extension packages on their independent `0.1.0` version line; 1.5.0 does not itself authorize a Twitch-hosted extension deployment.
+- [ ] Record Broadcast's matching 1.5.0 commit and confirm the shared production contract before packaging.
+- [ ] Do not add new release features after the candidate is packaged; fixes require a new candidate and a repeated rehearsal.
+
+## Automated Studio gates
 
 - [x] `pnpm install --frozen-lockfile`
-- [x] `pnpm check`
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for source and packaged resources.
+- [x] `pnpm check` (103 tests, 0 failures)
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for source and packaged resources.
+- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
-## Manual clean-install gates
+## Coordinated installed-build rehearsal
+
+Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. Do not substitute a development checkout or an older installed app.
+
+- [ ] Studio and Broadcast display 1.5.0 and the recorded candidate commits match the packaged sources.
+- [ ] Broadcast reports the expected Studio capability/overlay status and no compatibility warning appears.
+- [ ] Twitch and Interaction Alert Browser Sources connect independently and each reports one client.
+- [ ] A Twitch alert with assigned audio moves its Broadcast source meter and is audible through Monitor and Output.
+- [ ] An Interaction Alert with assigned audio moves its own source meter and is audible through Monitor and Output.
+- [ ] Alert audio still plays when the first loopback fetch is deliberately stalled or interrupted, and the Broadcast log shows the bounded fallback rather than an unhandled timeout.
+- [ ] Emote Wall receives at least one native Twitch emote and one supported third-party emote while already live, without recreating or refreshing the Browser Source.
+- [ ] A fixed d20 and a custom-range roll visibly bounce, settle, and record their physical results without the 45-second completion failure.
+- [ ] Studio restart/reconnect recovers only the disconnected active Studio Browser Sources and preserves their UUIDs and settings.
+- [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
+- [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
+- [ ] Twitch and Kick messages share Studio's Collaboration Center while replies remain platform-local.
+- [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
+- [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
+- [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback and temporary interactions.
+- [ ] No new error, uncaught rejection, repeated reconnect loop, or growing alert queue appears in Studio or Broadcast logs.
+
+## Performance and soak gates
+
+- [ ] Capture at least 30 minutes with Tempest telemetry, including five minutes idle, game launch/load, active gameplay, alerts, Emote Wall, Dice Box, and a Studio reconnect marker.
+- [ ] Compare Broadcast render lag, encode skips, dropped frames, CPU, memory, GPU 3D/encode, and VRAM with the 1.4.7 stream baseline.
+- [ ] Confirm Studio and Browser Source CPU/memory settle after each interaction and show no sustained growth across the soak.
+- [ ] Preserve current Enhanced Broadcasting resolution, frame rate, and bitrate unless output counters—not aggregate GPU utilization alone—show a regression.
+- [ ] If extra GPU headroom is needed, evaluate optional Vertical Canvas Backtrack separately; do not silently disable it for users who rely on replay.
+- [ ] Review the complete Studio, Broadcast, and telemetry logs after the soak and record any accepted warnings.
+
+## Clean-install and upgrade gates
 
 - [ ] Windows installer starts and uninstalls on a non-developer account.
-- [ ] Guided Setup defaults to 1920 × 1080 and no personal Twitch, station, location, bot, or companion-app values appear.
-- [ ] Twitch and Interaction Browser Sources connect independently and each reports one client.
-- [ ] Twitch and Interaction audio can be routed to separate OBS tracks.
-- [ ] Twitch and Interaction alert sounds move their Broadcast source meters and remain audible through Monitor and Output.
-- [ ] Add the 3D Dice Browser Source, confirm one connected client, and verify fixed d20, advantage, disadvantage, modifier, reason, clear, material, scale, and duration presentation.
-- [ ] Enable the optional dice impact sound and confirm its Broadcast source meter and configured output tracks receive audio.
-- [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback.
-- [ ] Backup/restore succeeds, reconnects are clearly requested, and pre-restore snapshot exists.
-- [ ] Upgrade from 0.11.x preserves credentials, alerts, media, commands, ultrawide canvas, station, and weather settings.
-- [ ] Kick Client Secret and OAuth tokens are Windows-encrypted, excluded from backups/diagnostics, and removed on disconnect.
-- [ ] Kick stream key is Windows-encrypted inside Broadcast, is never returned through Bridge status, and is excluded from Studio backups/diagnostics.
-- [ ] Simulcast readiness blocks Go Live when Twitch, Dual Format, Kick destination, secure storage, or configured upload headroom is not ready.
-- [ ] Local simulcast preflight runs only while off-air, expires after four hours, and is invalidated by Broadcast restart and output/Dual Format changes.
-- [ ] The session-only operator checklist gates Go Live, clears with the Studio window, and is never persisted to profile data.
-- [ ] Kick output failure leaves Twitch live; Stop Kick Only and Emergency Stop All Outputs behave independently and predictably.
-- [ ] Retry Kick recreates only the Kick output while Twitch remains uninterrupted.
-- [ ] Studio's live-operations clock follows Twitch state, delayed Broadcast telemetry is warned after 15 seconds and treated as lost after 30 seconds, and the incident timeline clears when the Studio window closes.
-- [ ] Kick OAuth callback accepts loopback requests only; hosted webhook rejects invalid, stale, or mismatched signatures.
-- [ ] Twitch and Kick messages share the Collaboration Center, while replies and reply IDs remain platform-local.
-- [ ] Connect a Dual Format-capable Broadcast build and confirm Studio reports Enhanced Broadcasting, the selected 9:16 canvas, scene links, and audio routing.
-- [ ] Confirm Studio blocks Dual Format configuration while live and that vertical preview does not start an output.
-- [ ] Verify Twitch's horizontal and vertical previews in Stream Manager and on a physical phone.
+- [ ] Guided Setup contains no personal Twitch, Kick, station, location, bot, or companion-app values.
+- [ ] Upgrade from 1.4.7 preserves credentials, stream information, alerts, media, commands, counters, interactions, dice settings, platform settings, and encrypted secrets.
+- [ ] Backup/restore succeeds, requests reconnects clearly, and creates a pre-restore snapshot.
 - [ ] Offline use, disconnected optional integrations, missing media, and provider outages show recoverable errors.
 - [ ] Keyboard navigation, Windows scaling, reduced-motion preference, and 1080p/1440p layouts are reviewed.
 
 ## Publication gates
 
-- [x] Confirm publisher and license choice: Storm Horizon Media, GPLv3 software, separate trademark policy.
-- [x] Code-sign and timestamp the installer, uninstaller, elevation helper, desktop executable, and native DLL payload with the expected Azure Artifact Signing publisher.
-- [x] Publish checksums, changelog, privacy notice, installation guide, and third-party notices with the release.
-- [ ] Verify the public Twitch Extension and hosted EBS separately before advertising viewer-panel availability.
-
-## Updater-enabled release gates
-
-- [x] Build and Azure-sign the versioned NSIS installer before creating the GitHub release.
-- [x] Confirm `latest.yml` names that exact installer version and includes its SHA-512 digest and size.
-- [x] Upload `latest.yml` and the matching `.exe.blockmap` beside the signed installer, portable ZIP, checksums, and release manifest.
-- [x] Publish as a stable, non-draft GitHub release; prereleases are intentionally ignored by Studio.
-- [ ] From 1.4.6, check, download, verify, restart, retain platform settings, and confirm version 1.4.7 in **Settings + About**.
-- [x] Configure an Authenticode signing identity before running `pnpm package:win`; the release verifier rejects unsigned installers and application executables. Use `pnpm package:win:unsigned` only for local unsigned packaging tests.
+- [ ] Both Studio and Broadcast rehearsals are signed off against the same candidate pair.
+- [ ] Build and timestamp-sign the final installer, uninstaller, elevation helper, desktop executable, and native DLL payload.
+- [ ] Confirm `latest.yml` names the exact 1.5.0 installer and includes its SHA-512 digest and size.
+- [ ] Upload `latest.yml`, matching blockmap, installer, portable ZIP, checksums, release manifest, release notes, privacy notice, installation guide, and third-party notices.
+- [ ] Publish only after all required gates pass; do not publish a draft candidate as the stable updater release.
+- [ ] From installed 1.4.7, download, verify, restart, retain settings, and confirm 1.5.0 in **Settings + About**.
+- [ ] Verify any public Twitch Extension/EBS deployment separately before advertising viewer-facing Bits features.
