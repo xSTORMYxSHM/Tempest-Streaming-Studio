@@ -438,6 +438,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /fetch\(url,\{cache:'no-store',signal:controller\.signal\}\)/);
   assert.match(overlayMarkup, /URL\.createObjectURL\(new Blob/);
   assert.match(overlayMarkup, /blob media element timed out while starting/);
+  assert.match(overlayMarkup, /controller\.abort\(\)/);
+  assert.match(overlayMarkup, /audio request timed out/);
+  assert.match(overlayMarkup, /direct media compatibility fallback/);
   assert.match(overlayMarkup, /Web Audio compatibility fallback/);
   assert.match(overlayMarkup, /Tempest alert audio playback failed/);
   assert.equal((overlayMarkup.match(/(?:async )?function playAudio\(/g) || []).length, 1);
