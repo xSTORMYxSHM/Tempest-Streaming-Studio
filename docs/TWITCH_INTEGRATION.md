@@ -2,11 +2,11 @@
 
 ## 1.5.0 Stream Together call surface
 
-Studio opens Twitch Stream Together Backstage in a dedicated call window instead of treating the feature as part of the Shared Chat console. The window uses the bundled Chromium runtime with a Chrome-compatible Windows user agent, a persistent isolated Twitch partition, background throttling disabled for call continuity, and no Node.js integration or Studio preload.
+Studio opens Twitch Stream Together Backstage in a dedicated call window instead of treating the feature as part of Live Desk's Unified Chat console. The window uses the bundled Chromium runtime with a Chrome-compatible Windows user agent, a persistent isolated Twitch partition, background throttling disabled for call continuity, and no Node.js integration or Studio preload.
 
 Top-level navigation is restricted to secure Twitch domains. Camera, microphone, speaker selection, fullscreen, and sanitized clipboard-write requests are accepted only from Twitch frames in that call window. Screen sharing uses the operating-system picker when available and otherwise presents a bounded Studio source picker; no screen or window is selected automatically. Downloads and non-Twitch popups are blocked, and Windows capture protection follows the Studio Privacy Shield setting.
 
-The call session and Shared Chat are deliberately independent. Closing the call does not disconnect EventSub, Twitch/Kick chat, the Chatbot, or active polls. The persistent partition remembers only Twitch-managed web sign-in state and never receives Studio OAuth tokens.
+The call session and Unified Chat are deliberately independent. Closing the call does not disconnect EventSub, Twitch/Kick chat, the Chatbot, or active polls. Twitch's official Shared Chat messages remain part of the Twitch side of Unified Chat. The persistent partition remembers only Twitch-managed web sign-in state and never receives Studio OAuth tokens.
 
 ## 0.21.0 Public Extension installations
 
@@ -36,7 +36,7 @@ Studio automatically installs `!commands`, `!uptime`, `!title`, `!game`, `!sched
 
 Twitch mirrors ordinary messages between participants in a Shared Chat session. The configured Chatbot keeps its single `channel.chat.message` subscription attached to the owner's authorized home channel, while preserving Twitch's `source_broadcaster_*`, `source_message_id`, and `is_source_only` fields in the normalized chat payload. The source message ID is the duplicate key when Twitch supplies one.
 
-Each command has an **Allow from Shared Chat** policy. The built-in `!tempest` and `!weather` response commands allow collaborator-channel invocation. Existing and newly loaded everyone-access response commands migrate to allowed; commands with a workflow or elevated permission migrate to home-channel-only unless the operator explicitly enables Shared Chat access. Cooldowns remain global to the running Chatbot, so one shared session cannot multiply command throughput.
+Each command has an **Allow from Stream Together Chat** policy in Studio, backed by Twitch's Shared Chat origin fields. The built-in `!tempest` and `!weather` response commands allow collaborator-channel invocation. Existing and newly loaded everyone-access response commands migrate to allowed; commands with a workflow or elevated permission migrate to home-channel-only unless the operator explicitly enables Stream Together Chat access. Cooldowns remain global to the running Chatbot, so one shared session cannot multiply command throughput.
 
 Permissions always use the badges Twitch reports for the owner's destination channel. A moderator, subscriber, or broadcaster role held only in the collaborator's source channel does not grant the corresponding Tempest permission. Chatbot Activity identifies the collaborator channel, and the simulator can exercise the same origin policy without posting to Twitch.
 

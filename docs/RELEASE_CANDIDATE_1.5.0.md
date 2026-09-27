@@ -4,12 +4,12 @@ Date: 2026-09-27
 
 ## Status
 
-The replacement automated Studio candidate is valid, signed, and ready for the coordinated installed-build rehearsal. It is **not approved for publication**. Stream Together camera/microphone hardware, live Browser Source, dual-format output, Kick isolation, upgrade, and performance-soak gates in `RELEASE_CHECKLIST.md` remain mandatory.
+The prior automated Studio candidate was invalidated when the cross-platform Live Desk feed was renamed Unified Chat to distinguish it from Twitch Stream Together Shared Chat. A replacement package and evidence record are pending. Studio 1.5.0 is **not approved for publication**.
 
 ## Source pair
 
 - Studio branch: `release/1.5.0`
-- Studio packaged source commit: `1921bed52bce49df0218d8851a082794a40f8716` (`Promote Stream Together to primary tab`)
+- Studio packaged source commit: pending replacement candidate
 - Broadcast branch: `release/1.5.0-rc`
 - Broadcast candidate commit: `fe8d6b9a4411836ffbc4d1387e5cfe6ad677cc3e`
 - Shared protocol version: `1.0`
@@ -17,25 +17,14 @@ The replacement automated Studio candidate is valid, signed, and ready for the c
 
 ## Studio automated evidence
 
-- Frozen dependency install: passed
-- Workspace build and test suite: passed (107 tests, 0 failures)
-- Live Twitch Stream Together navigation smoke with a clean browser profile: passed (Chrome identity advertised; unsupported-browser page absent)
-- Release verifier: passed (`TEMPEST_RELEASE_VERIFIED 1.5.0`)
-- Signed packaged executable launch with a new isolated profile and independent loopback port: passed (`TEMPEST_STUDIO_SMOKE_OK`, exit code 0)
-- Packaged Stream Together tab visual capture: passed
-- Electron fuse wire: `010011001`
-- Signature coverage: 16 valid, timestamped records across the installer, unpacked application/native payload, and ZIP payload
-- Expected embedded publisher: `CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US`
+- Replacement validation: pending
 - Both Twitch Extension packages remain on independent version `0.1.0`
 
 ## Candidate artifacts
 
 | Asset | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe` | 132,224,536 | `d58d1cd6113c29aad56c1373d9c0822393fee367d9e59a5984a827af5e086d94` |
-| `Tempest-Streaming-Studio-Setup-1.5.0-x64.exe.blockmap` | 137,677 | `09a14b2d2abc395a58cfc86fb24a6892ab794679e6f4f266c5eacd88fc9f27ac` |
-| `latest.yml` | 385 | `bad0567c93afd04365f592f00cf34add924cf45eb2242ffa8544fbe80c48cfb3` |
-| `Tempest-Streaming-Studio-1.5.0-x64.zip` | 166,126,064 | `89d854e2e46c930be407204ebb1b0bf2ce178ab40b1bf970383f25a919bee8fd` |
+| Replacement candidate | pending | pending |
 
 These artifacts are local rehearsal candidates only. They must be rebuilt if code changes, and they must not be uploaded to the stable updater channel unless the coordinated manual gates pass.
 

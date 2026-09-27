@@ -1464,7 +1464,7 @@
       ? `Stream Together is open for @${status.login || login}`
       : authorized ? `Ready to open for @${login}` : 'Connect the broadcaster Twitch account';
     $('#streamTogetherCallDetail').textContent = status.open
-      ? 'The dedicated call window remains active in Studio with Twitch-only camera and microphone access. Shared Chat continues independently below.'
+      ? 'The dedicated call window remains active in Studio with Twitch-only camera and microphone access. Unified Chat continues independently in Live Desk.'
       : authorized
         ? 'Open Twitch Backstage in Studio. The separate call session remembers its Twitch sign-in without exposing those cookies to the Studio control interface.'
         : 'Connect the broadcaster account in Twitch Setup first. Stream Together uses a separate persistent Twitch web session for the call itself.';
@@ -1513,14 +1513,14 @@
     $('#chatbotLastMessage').textContent = chatbot.lastMessageAt ? `Last message ${new Date(chatbot.lastMessageAt).toLocaleTimeString()}` : 'No messages received';
     const sharedChat = chatbot.sharedChat || { state: 'inactive', participants: [] };
     const sharedChatActive = sharedChat.state === 'active';
-    $('#sharedChatBadge').textContent = !connected ? 'NOT CONNECTED' : sharedChatActive ? 'SHARED CHAT LIVE' : sharedChat.state === 'unavailable' ? 'MONITOR UNAVAILABLE' : 'HOME CHAT LIVE';
-    $('#sharedChatBadge').classList.toggle('offline', !connected || sharedChat.state === 'unavailable');
+    $('#sharedChatBadge').textContent = !connected && !kickConnected ? 'NOT CONNECTED' : sharedChatActive ? 'TWITCH COLLAB LIVE' : connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : 'KICK LIVE';
+    $('#sharedChatBadge').classList.toggle('offline', !connected && !kickConnected);
     $('#sharedChatSessionTitle').textContent = !connected ? 'Connect the chatbot' : sharedChatActive
       ? `${sharedChat.participants?.length || 0} participating channel${sharedChat.participants?.length === 1 ? '' : 's'}`
-      : sharedChat.state === 'unavailable' ? 'Shared Chat monitoring unavailable' : 'Home channel chat';
+      : sharedChat.state === 'unavailable' ? 'Stream Together chat unavailable' : 'Home Twitch chat';
     $('#sharedChatSessionDetail').textContent = sharedChat.lastError || (sharedChatActive
       ? `${sharedChat.host?.login ? `Hosted by @${sharedChat.host.login}. ` : ''}Studio is monitoring the complete Stream Together chat without a separate browser window.`
-      : connected ? 'Studio is monitoring your home channel and will detect Stream Together automatically.' : 'Studio will detect Shared Chat automatically after EventSub connects.');
+      : connected ? 'Unified Chat is monitoring your Twitch home channel and will detect Stream Together automatically.' : 'Studio will detect Stream Together chat automatically after Twitch EventSub connects.');
     const participants = sharedChat.participants || [];
     const participantList = $('#sharedChatParticipants');
     participantList.classList.toggle('empty-state', !participants.length);
@@ -1699,12 +1699,12 @@
     const commands = chatbot.commands || [];
     const list = $('#chatbotCommandList');
     list.classList.toggle('empty-state', !commands.length);
-    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'shared chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
+    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'Stream Together chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
 
     const activity = chatbot.activity || [];
     const activityList = $('#chatbotActivity');
     activityList.classList.toggle('empty-state', !activity.length);
-    activityList.innerHTML = activity.length ? activity.slice(0, 10).map((entry) => `<div class="compact-row event-${escapeHtml(entry.state === 'accepted' ? 'success' : entry.state === 'error' ? 'error' : 'warning')}"><div><strong>${escapeHtml(entry.message)}</strong><small>${new Date(entry.timestamp).toLocaleTimeString()}${entry.command ? ` · ${escapeHtml(chatbot.prefix || '!')}${escapeHtml(entry.command)}` : ''}${entry.sharedChat ? ` · via @${escapeHtml(entry.sourceChannelLogin || 'shared-chat-participant')}` : ''}</small></div><i class="event-dot"></i></div>`).join('') : 'No chatbot activity recorded.';
+    activityList.innerHTML = activity.length ? activity.slice(0, 10).map((entry) => `<div class="compact-row event-${escapeHtml(entry.state === 'accepted' ? 'success' : entry.state === 'error' ? 'error' : 'warning')}"><div><strong>${escapeHtml(entry.message)}</strong><small>${new Date(entry.timestamp).toLocaleTimeString()}${entry.command ? ` · ${escapeHtml(chatbot.prefix || '!')}${escapeHtml(entry.command)}` : ''}${entry.sharedChat ? ` · via @${escapeHtml(entry.sourceChannelLogin || 'stream-together-collaborator')}` : ''}</small></div><i class="event-dot"></i></div>`).join('') : 'No chatbot activity recorded.';
     renderKick();
   }
 

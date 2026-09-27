@@ -71,7 +71,7 @@
           <div class="home-menu-heading"><div><p class="eyebrow">LIVE UTILITIES</p><h3>Controls for the current stream</h3></div><p>Chat, polls, production status, and audience tools stay one click away.</p></div>
           <div class="home-menu-grid home-live-grid">
             <button class="home-menu-card home-live-card" data-go="streamtogether"><b>TWITCH CALL</b><strong>Stream Together</strong><span>Open Backstage camera, microphone, guests, and call controls.</span><i>OPEN STREAM TOGETHER →</i></button>
-            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Shared Chat + Polls</strong><span>Monitor Twitch and Kick chat, shared communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
+            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Unified Chat + Polls</strong><span>Monitor Twitch, Kick, collaborator communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
             <button class="home-menu-card home-live-card" data-go="simulcast"><b>OUTPUT CONTROL</b><strong>Go Live</strong><span>Run preflight and monitor Twitch, Kick, upload headroom, and recording.</span><i>OPEN GO LIVE →</i></button>
             <button class="home-menu-card home-live-card" data-go="dice"><b>ON-STREAM TOOL</b><strong>3D Dice</strong><span>Roll physical Dice Box dice for the streamer or chat.</span><i>ROLL ON STREAM →</i></button>
             <button class="home-menu-card" data-go="soundalerts"><b>AUDIENCE</b><strong>Viewer Interactions</strong><span>Trigger, preview, and manage viewer-controlled stream moments.</span><i>OPEN INTERACTIONS →</i></button>
@@ -89,7 +89,7 @@
             <summary><span><b>SETUP + CONNECTIONS</b><strong>Accounts, output preparation, and optional apps</strong></span><i aria-hidden="true">›</i></summary>
             <div class="home-menu-grid">
               <button class="home-menu-card" data-go="twitch"><b>PLATFORM</b><strong>Twitch Account</strong><span>Manage broadcaster authorization and Twitch-owned settings.</span><i>OPEN TWITCH SETUP →</i></button>
-              <button class="home-menu-card" data-go="kick"><b>PLATFORM</b><strong>Kick Account</strong><span>Manage Kick authorization and shared-chat delivery.</span><i>OPEN KICK SETUP →</i></button>
+              <button class="home-menu-card" data-go="kick"><b>PLATFORM</b><strong>Kick Account</strong><span>Manage Kick authorization and Unified Chat delivery.</span><i>OPEN KICK SETUP →</i></button>
               <button class="home-menu-card" data-go="dualformat"><b>OUTPUT SETUP</b><strong>Twitch Dual Format</strong><span>Prepare horizontal and mobile-first vertical output.</span><i>CHECK OUTPUT SETUP →</i></button>
               <button class="home-menu-card" data-go="api"><b>OPTIONAL</b><strong>Avatar Apps</strong><span>Connect Warudo or VTube Studio for avatar reactions.</span><i>CONNECT AN AVATAR →</i></button>
             </div>
@@ -382,7 +382,7 @@
         </section>
 
         <section id="twitchSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">TWITCH PLATFORM</p><h2>Twitch</h2><p>Manage your Twitch account, viewer tools, Stream Together call, shared chat, and horizontal plus mobile output from one platform home.</p></div><span id="twitchOwnerBadge" class="status-badge" data-advanced>STUDIO OWNED</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">TWITCH PLATFORM</p><h2>Twitch</h2><p>Manage your Twitch account, viewer tools, Stream Together call and collaboration chat, plus horizontal and mobile output from one platform home.</p></div><span id="twitchOwnerBadge" class="status-badge" data-advanced>STUDIO OWNED</span></div>
           <div class="platform-tool-grid" aria-label="Twitch tools">
             <button class="platform-tool-card" data-go="visualalerts"><span>ALERTS</span><strong>Twitch Alerts</strong><small>Follows, subscriptions, Bits, raids, rewards, and experiences.</small></button>
             <button class="platform-tool-card" data-go="extensiondesigner"><span>VIEWER PANEL</span><strong>Twitch Panel</strong><small>Pair and style the channel-specific viewer interaction panel.</small></button>
@@ -528,13 +528,13 @@
           <article class="panel stream-together-call-panel">
             <div class="panel-header"><div><span>STREAM TOGETHER BACKSTAGE</span><h3>Your Twitch call in its own Studio window</h3><p>Run the camera, microphone, guest, and call controls as a dedicated call—not as part of the chat monitor.</p></div><span id="streamTogetherCallBadge" class="status-badge offline">CLOSED</span></div>
             <div class="stream-together-call-layout">
-              <div class="stream-together-call-copy"><strong id="streamTogetherCallTitle" data-sensitive>Connect the broadcaster Twitch account</strong><p id="streamTogetherCallDetail">The call window uses Studio's Chromium engine with a Chrome-compatible browser identity. Twitch sign-in and call cookies stay in a separate persistent session on this computer.</p><div class="stream-together-call-points"><span>TWITCH-ONLY CAMERA + MICROPHONE</span><span>NATIVE SCREEN-SHARE PICKER</span><span>SEPARATE FROM SHARED CHAT</span></div></div>
+              <div class="stream-together-call-copy"><strong id="streamTogetherCallTitle" data-sensitive>Connect the broadcaster Twitch account</strong><p id="streamTogetherCallDetail">The call window uses Studio's Chromium engine with a Chrome-compatible browser identity. Twitch sign-in and call cookies stay in a separate persistent session on this computer.</p><div class="stream-together-call-points"><span>TWITCH-ONLY CAMERA + MICROPHONE</span><span>NATIVE SCREEN-SHARE PICKER</span><span>INDEPENDENT FROM UNIFIED CHAT</span></div></div>
               <div class="stream-together-call-actions"><button id="openStreamTogetherCall" class="primary-button" type="button">Open Stream Together</button><button id="closeStreamTogetherCall" class="secondary-button danger-outline" type="button">Close Call Window</button><small>First use may ask you to sign in to Twitch again inside the call window.</small></div>
             </div>
           </article>
           <div class="stream-together-boundary-grid">
             <article><span>CALL</span><strong>Stream Together</strong><p>Twitch Backstage lives in its own persistent Studio call window.</p></article>
-            <article><span>CHAT + POLLS</span><strong>Live Desk</strong><p>Shared Chat, Twitch/Kick messages, and polls continue independently.</p><button class="secondary-button" data-go="chatbot" type="button">Open Live Desk</button></article>
+            <article><span>CHAT + POLLS</span><strong>Live Desk</strong><p>Unified Chat combines Twitch, Stream Together collaboration messages, and Kick while polls continue independently.</p><button class="secondary-button" data-go="chatbot" type="button">Open Live Desk</button></article>
             <article><span>VIDEO + OUTPUT</span><strong>Tempest Broadcast</strong><p>Guest Browser Sources, canvases, audio routing, and final output stay in Broadcast.</p><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></article>
           </div>
         </section>
@@ -550,20 +550,20 @@
           </div>
 
           <article class="panel shared-chat-panel">
-            <div class="panel-header"><div><span>SHARED CHAT MONITOR</span><h3>Live Chat + Shared Chat</h3><p>Monitor your home channel and participating Stream Together communities independently of the call window.</p></div><div class="page-toolbar-actions"><span id="sharedChatBadge" class="status-badge offline">NOT CONNECTED</span><button id="clearSharedChatMessages" class="secondary-button" type="button">Clear View</button></div></div>
+            <div class="panel-header"><div><span>UNIFIED CHAT</span><h3>Twitch + Kick Live Chat</h3><p>One operator feed for Twitch, Stream Together collaboration messages, and Kick—independent of the call window.</p></div><div class="page-toolbar-actions"><span id="sharedChatBadge" class="status-badge offline">NOT CONNECTED</span><button id="clearSharedChatMessages" class="secondary-button" type="button">Clear View</button></div></div>
             <div class="shared-chat-layout">
               <aside class="shared-chat-session">
                 <span>SESSION</span>
                 <strong id="sharedChatSessionTitle">Connect the chatbot</strong>
-                <p id="sharedChatSessionDetail">Studio will detect Shared Chat automatically after EventSub connects.</p>
-                <div><span>PARTICIPATING CHANNELS</span><div id="sharedChatParticipants" class="shared-chat-participants empty-state">No active Stream Together session.</div></div>
+                <p id="sharedChatSessionDetail">Studio will detect Twitch Stream Together chat automatically after EventSub connects.</p>
+                <div><span>STREAM TOGETHER CHANNELS</span><div id="sharedChatParticipants" class="shared-chat-participants empty-state">No active Stream Together session.</div></div>
               </aside>
               <div class="shared-chat-console">
                 <div id="sharedChatMessages" class="shared-chat-messages empty-state" aria-live="polite">Chat messages will appear here while Studio is connected.</div>
                 <form id="sharedChatComposer" class="shared-chat-composer">
-                  <label for="sharedChatMessage">Send through a connected platform</label>
+                  <label for="sharedChatMessage">Send through Twitch or Kick</label>
                   <div><select id="sharedChatPlatform" aria-label="Chat platform"><option value="twitch">Twitch</option><option value="kick">Kick</option></select><input id="sharedChatMessage" maxlength="500" autocomplete="off" placeholder="Message your live chat…" /><button id="sendSharedChatMessage" class="primary-button" type="submit">Send</button></div>
-                  <small>Commands and operator messages stay on their originating platform. Twitch Shared Chat continues to distribute through the home channel identity.</small>
+                  <small>Replies stay on the selected platform. Twitch messages from Stream Together's Shared Chat still distribute through the home-channel identity.</small>
                 </form>
               </div>
             </div>
@@ -605,7 +605,7 @@
           </form>
 
           <form id="chatbotAutoModForm" class="panel chatbot-provider-panel chatbot-automod-panel" data-advanced>
-            <div class="panel-header"><div><span>CHAT MODERATION</span><h3>AutoMod + link protection</h3><p>Check home-channel messages before commands run. Shared Chat messages are left to their source channel's moderators.</p></div><span id="chatbotAutoModBadge" class="status-badge offline">OFF</span></div>
+            <div class="panel-header"><div><span>CHAT MODERATION</span><h3>AutoMod + link protection</h3><p>Check home-channel messages before commands run. Twitch Stream Together messages are left to their source channel's moderators.</p></div><span id="chatbotAutoModBadge" class="status-badge offline">OFF</span></div>
             <label class="toggle-label automod-master"><input id="chatbotAutoModEnabled" type="checkbox" /> Enable Studio AutoMod</label>
             <div class="chatbot-automod-grid">
               <fieldset><legend>MESSAGE RULES</legend><label class="toggle-label"><input id="chatbotAutoModLinks" type="checkbox" /> Block links outside the allowlist</label><label>Allowed domains <textarea id="chatbotAutoModDomains" data-sensitive rows="3" maxlength="4000" placeholder="twitch.tv&#10;youtube.com&#10;mychannel.example"></textarea><small>One domain per line. Subdomains are allowed automatically.</small></label><label class="toggle-label"><input id="chatbotAutoModTermsEnabled" type="checkbox" /> Block custom terms or phrases</label><label>Blocked terms <textarea id="chatbotAutoModTerms" data-sensitive rows="4" maxlength="12000" placeholder="One term or phrase per line"></textarea></label><div class="automod-number-row"><label class="toggle-label"><input id="chatbotAutoModCaps" type="checkbox" /> Excessive caps</label><label>Minimum letters<input id="chatbotAutoModCapsMinimum" type="number" min="5" max="100" value="12" /></label><label>Caps threshold<input id="chatbotAutoModCapsPercentage" type="number" min="50" max="100" value="75" /><small>%</small></label></div><div class="automod-number-row"><label class="toggle-label"><input id="chatbotAutoModRepetition" type="checkbox" /> Repeated characters</label><label>Character limit<input id="chatbotAutoModRepetitionLimit" type="number" min="4" max="30" value="8" /></label></div></fieldset>
@@ -654,8 +654,8 @@
                 <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, {args}, {counterLabel}, and {counter}. Counter responses may be left blank.</small></label>
                 <label data-advanced>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
                 <div class="form-row" data-advanced><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
-                <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Shared Chat</label></div>
-                <small data-advanced>Shared Chat commands can be invoked by viewers arriving through a collaborator's channel. Command permissions are still evaluated in your home channel.</small>
+                <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Stream Together Chat</label></div>
+                <small data-advanced>Stream Together Chat commands can be invoked by viewers arriving through a collaborator's Twitch channel. Command permissions are still evaluated in your home channel.</small>
                 <div class="dialog-actions"><button id="deleteChatbotCommand" type="button" class="secondary-button danger-outline" disabled>Delete</button><button type="submit" class="primary-button">Save Command</button></div>
               </form>
             </article>
@@ -667,7 +667,7 @@
           </div>
 
           <div class="overview-grid chatbot-lower-grid" data-advanced>
-            <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Shared Chat collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
+            <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Stream Together collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
             <article class="panel"><div class="panel-header"><div><span>CHATBOT ACTIVITY</span><h3>Recent command decisions</h3></div></div><div id="chatbotActivity" class="compact-list empty-state">No chatbot activity recorded.</div></article>
           </div>
             </div>

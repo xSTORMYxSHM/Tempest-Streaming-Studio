@@ -15,11 +15,11 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm check` (107 tests, 0 failures)
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for packaged resources.
-- [x] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for packaged resources.
+- [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
 
@@ -37,13 +37,13 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] Studio restart/reconnect recovers only the disconnected active Studio Browser Sources and preserves their UUIDs and settings.
 - [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
 - [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
-- [ ] Twitch and Kick messages share Studio's Collaboration Center while replies remain platform-local.
-- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Shared Chat and polls remain connected independently. Confirm Broadcast captures call audio through exactly one chosen route so desktop audio and Twitch Browser Source audio do not create an echo.
+- [ ] Twitch and Kick messages appear together in Studio's Unified Chat while replies remain platform-local; Twitch's Shared Chat label is reserved for Stream Together collaboration messages.
+- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Unified Chat and polls remain connected independently. Confirm Broadcast captures call audio through exactly one chosen route so desktop audio and Twitch Browser Source audio do not create an echo.
 - [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
 - [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
 - [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
 - [ ] Use GIPHY to assign and preview a locally downloaded GIF on an Interaction Alert, a base Twitch Alert, and a Twitch Alert variant; confirm each target remains portable in its Alert Pack.
-- [ ] Confirm Stream Together has its own primary On Air tab; Live Desk opens directly to Shared Chat and polls; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
+- [ ] Confirm Stream Together has its own primary On Air tab; Live Desk opens directly to Unified Chat and polls; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
 - [ ] Confirm Private Info Hidden remains visible from every workspace and still masks account identities, credentials, locations, provider URLs, and local endpoints inside expanded setup drawers.
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback and temporary interactions.
 - [ ] No new error, uncaught rejection, repeated reconnect loop, or growing alert queue appears in Studio or Broadcast logs.

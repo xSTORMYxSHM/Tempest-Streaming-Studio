@@ -92,7 +92,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /SETUP \+ CONNECTIONS/);
   assert.match(html, /data-section="chatbot">Live Desk/);
   assert.match(html, /id="liveDeskSetupDrawer"/);
-  assert.match(html, /Shared Chat \+ Polls/);
+  assert.match(html, /Unified Chat \+ Polls/);
   assert.match(renderer, /setupNavigation\.open|setupNavigation\) setupNavigation\.open/);
   assert.match(html, /data-go="visualalerts"/);
   assert.match(html, /data-go="soundalerts"/);
@@ -330,11 +330,11 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /streamtogether:\s*\{\s*title:\s*'Stream Together'/);
   assert.match(html, /id="openStreamTogetherCall"/);
   assert.match(html, /id="closeStreamTogetherCall"/);
-  assert.match(html, /SHARED CHAT MONITOR/);
+  assert.match(html, /UNIFIED CHAT/);
   assert.match(html, /id="sharedChatMessages"/);
   assert.match(html, /id="sharedChatParticipants"/);
   assert.match(html, /id="sharedChatComposer"/);
-  assert.match(renderer, /channel.*SHARED CHAT LIVE/is);
+  assert.match(renderer, /channel.*TWITCH COLLAB LIVE/is);
   assert.match(renderer, /openStreamTogether/);
   assert.match(main, /persist:tempest-stream-together/);
   assert.match(main, /setPermissionRequestHandler/);

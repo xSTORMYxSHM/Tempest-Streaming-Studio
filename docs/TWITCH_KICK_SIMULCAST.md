@@ -7,7 +7,7 @@ Tempest uses one coordinated production controller while keeping responsibility 
 - Twitch is the primary output. Twitch Enhanced Broadcasting carries the horizontal program plus the prepared Dual Format vertical canvas.
 - Kick receives the horizontal program through a separate RTMP/RTMPS output.
 - The Kick output shares the already-running horizontal video and audio encoders. It adds upload traffic but does not request another GPU encoder session.
-- Twitch and Kick chat remain unified in Studio. Twitch Stream Together Shared Chat remains embedded in the Collaboration Center.
+- Twitch and Kick messages appear together in Live Desk's **Unified Chat**. Twitch **Shared Chat** refers only to Twitch's Stream Together collaboration feature, whose messages are included on the Twitch side of that unified feed.
 
 ## Setup
 
