@@ -7,6 +7,17 @@ import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 
 export type TempestTwitchExperienceKind = 'hype-train' | 'raid-portal' | 'goal-overlay';
 export type TempestTwitchExperiencePreset = 'tempest' | 'mainframe-breach' | 'minimal';
+export type TempestGoalSource = 'twitch' | 'studio';
+export type TempestStudioGoalKind = 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
+
+export interface TempestStudioGoal {
+  active: boolean;
+  kind: TempestStudioGoalKind;
+  title: string;
+  currentAmount: number;
+  targetAmount: number;
+  unit: string;
+}
 
 export interface TempestTwitchExperienceDesign {
   preset: TempestTwitchExperiencePreset;
@@ -25,6 +36,8 @@ export interface TempestTwitchExperienceSettings {
   hypeTrainEnabled: boolean;
   raidPortalEnabled: boolean;
   goalOverlayEnabled: boolean;
+  goalSource: TempestGoalSource;
+  studioGoal: TempestStudioGoal;
   raidDurationMs: number;
   accent: string;
   hypeAccent: string;
@@ -59,6 +72,8 @@ const defaults: TempestTwitchExperienceSettings = {
   hypeTrainEnabled: true,
   raidPortalEnabled: true,
   goalOverlayEnabled: true,
+  goalSource: 'twitch',
+  studioGoal: { active: false, kind: 'subscriptions', title: 'Subscriber Goal', currentAmount: 0, targetAmount: 25, unit: 'subs' },
   raidDurationMs: 12000,
   accent: '#54F2EB',
   hypeAccent: '#FF4CCF',
@@ -89,19 +104,21 @@ const page = String.raw`<!doctype html><html lang="en"><head><meta charset="utf-
 .experience[data-preset=mainframe-breach]:not(.raid){font-family:Consolas,monospace;border-color:var(--experience-accent);border-radius:0;background:linear-gradient(135deg,rgba(0,12,9,.96),rgba(1,5,4,.92));box-shadow:inset 0 0 36px color-mix(in srgb,var(--experience-accent) 14%,transparent)}
 @keyframes spin{to{transform:rotate(405deg)}}@keyframes portal{50%{transform:scale(1.06);filter:drop-shadow(0 0 45px var(--raid))}}@keyframes breach-card{25%{transform:translateX(-8px)}50%{transform:translateX(7px)}75%{transform:translateX(-3px)}}@keyframes breach-flicker{50%{opacity:.82}}@keyframes code-drift{50%{transform:translateY(-2.5%)}}@media(max-width:900px){.goal{width:48vw}.hype-card{width:84vw}.raid-card{min-width:80vw}}
 </style><style id="hypeCustomStyle"></style><style id="raidCustomStyle"></style><style id="goalCustomStyle"></style></head><body><main id="stage">
-<section id="goal" class="goal experience hidden"><div id="goalMedia" class="experience-media"></div><span class="label">CHANNEL GOAL</span><h2 id="goalTitle">Channel Goal</h2><div class="bar"><i id="goalBar"></i></div><footer><span id="goalCurrent">0</span><span id="goalTarget">0</span></footer><div id="goalCustomHtml" class="custom-html"></div></section>
+<section id="goal" class="goal experience hidden"><div id="goalMedia" class="experience-media"></div><span id="goalLabel" class="label">CHANNEL GOAL</span><h2 id="goalTitle">Channel Goal</h2><div class="bar"><i id="goalBar"></i></div><footer><span id="goalCurrent">0</span><span id="goalTarget">0</span></footer><div id="goalCustomHtml" class="custom-html"></div></section>
 <section id="hype" class="hype experience hidden"><div id="hypeMedia" class="experience-media"></div><div class="hype-card"><span class="label">TEMPEST HYPE TRAIN TAKEOVER</span><h1>Hype Train</h1><div id="hypeLevel" class="hype-level">LEVEL 1</div><div class="bar"><i id="hypeBar"></i></div><small id="hypeDetail">0 / 0 · Build the signal</small></div><div id="hypeCustomHtml" class="custom-html"></div></section>
 <section id="raid" class="raid experience hidden"><div id="raidMedia" class="experience-media"></div><div class="portal"></div><div class="breach-code" aria-hidden="true"><span>SECURITY_GATE 04<br>AUTH::DENIED<br>AUTH::DENIED<br>CIPHER BREAK 37%<br>CIPHER BREAK 82%<br>PERIMETER FAULT<br>UPLINK DETECTED</span><span>0x4F 0x50 0x45 0x4E<br>PACKET INJECTION<br>TRACE ROUTE: UNKNOWN<br>EXTERNAL NODES: ONLINE<br>FIREWALL BYPASS<br>ACCESS VECTOR LOCKED<br>SIGNAL ACCEPTED</span></div><article class="raid-card"><span id="raidLabel" class="label">INCOMING RAID PORTAL</span><h1 id="raidName">Incoming Channel</h1><p><strong id="raidViewers">42</strong> <span id="raidViewerCopy">viewers crossed the horizon</span></p></article><div id="raidCustomHtml" class="custom-html"></div></section>
 </main><script>(()=>{
 const q=id=>document.getElementById(id),goal=q('goal'),hype=q('hype'),raid=q('raid');let settings={},state={},cleanups={};
 const number=value=>new Intl.NumberFormat().format(Math.max(0,Number(value)||0));const percent=(current,target)=>Math.max(0,Math.min(100,target?current/target*100:0));
+const goalLabels={subscriptions:'SUBSCRIBER GOAL',subscription:'SUBSCRIBER GOAL',subscription_count:'SUBSCRIBER GOAL',new_subscription:'NEW SUBSCRIBER GOAL',new_subscriptions:'NEW SUBSCRIBER GOAL',followers:'FOLLOWER GOAL',follower:'FOLLOWER GOAL',follow:'FOLLOWER GOAL',bits:'BITS GOAL',donations:'DONATION GOAL',custom:'STREAM GOAL'};
+const goalValue=(value,unit)=>number(value)+(unit?' '+String(unit):'');
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const template=(source,variables)=>String(source||'').replace(/\{([a-zA-Z0-9_]+)\}/g,(_,key)=>escapeHtml(variables[key]??''));
 function media(kind,design){const container=q(kind+'Media');container.replaceChildren();if(!design.mediaUri)return;const video=/\.(mp4|webm)(?:$|[?#])/i.test(design.mediaUri);const element=document.createElement(video?'video':'img');element.src='./twitch-experiences/media/'+(kind==='hype'?'hype-train':kind==='raid'?'raid-portal':'goal-overlay');element.style.objectFit=design.mediaFit||'cover';element.style.opacity=String(Number.isFinite(Number(design.mediaOpacity))?design.mediaOpacity:.5);if(video){element.autoplay=true;element.loop=true;element.muted=true;element.playsInline=true}container.append(element)}
 function customize(kind,section,design,data,variables){section.dataset.preset=design.preset||'tempest';section.dataset.mediaLayer=design.mediaLayer||'background';section.style.setProperty('--experience-accent',kind==='hype'?'var(--hype)':kind==='raid'?'var(--raid)':'var(--goal)');media(kind,design);q(kind+'CustomStyle').textContent=design.customCss||'';q(kind+'CustomHtml').innerHTML=template(design.customHtml,variables);try{if(typeof cleanups[kind]==='function')cleanups[kind]()}catch(error){console.error('Tempest Twitch Experience cleanup failed',error)}cleanups[kind]=undefined;if(design.customJavaScript){try{const elements={stage:q('stage'),section,media:q(kind+'Media'),customHtml:q(kind+'CustomHtml')};cleanups[kind]=Function('data','variables','elements','"use strict";\n'+design.customJavaScript)(data,variables,elements)}catch(error){console.error('Tempest custom Twitch Experience JavaScript failed',error)}}}
 function deactivate(kind){try{if(typeof cleanups[kind]==='function')cleanups[kind]()}catch(error){console.error('Tempest Twitch Experience cleanup failed',error)}cleanups[kind]=undefined;q(kind+'Media').replaceChildren();q(kind+'CustomHtml').replaceChildren();q(kind+'CustomStyle').textContent=''}
 function render(){document.documentElement.style.setProperty('--goal',settings.goalAccent||'#A7FF5C');document.documentElement.style.setProperty('--hype',settings.hypeAccent||'#FF4CCF');document.documentElement.style.setProperty('--raid',settings.raidAccent||'#54F2EB');
-const g=settings.enabled&&settings.goalOverlayEnabled&&state.goal;goal.classList.toggle('hidden',!g);if(g){const variables={description:g.description||'Channel Goal',current:g.currentAmount||0,target:g.targetAmount||0,percent:percent(g.currentAmount,g.targetAmount),phase:g.phase||'progress'};q('goalTitle').textContent=variables.description;q('goalCurrent').textContent=number(variables.current);q('goalTarget').textContent=number(variables.target);q('goalBar').style.width=variables.percent+'%';customize('goal',goal,settings.goalOverlayDesign||{},g,variables)}else deactivate('goal');
+const studioGoal=settings.goalSource==='studio'&&settings.studioGoal&&settings.studioGoal.active?{...settings.studioGoal,type:settings.studioGoal.kind,description:settings.studioGoal.title,phase:Number(settings.studioGoal.currentAmount)>=Number(settings.studioGoal.targetAmount)?'end':'progress',source:'studio'}:null;const g=settings.enabled&&settings.goalOverlayEnabled&&(state.goal?.preview?state.goal:settings.goalSource==='studio'?studioGoal:state.goal);goal.classList.toggle('hidden',!g);if(g){const variables={description:g.description||g.title||'Channel Goal',type:g.type||g.kind||'custom',unit:g.unit||'',current:g.currentAmount??0,target:g.targetAmount??0,percent:percent(g.currentAmount,g.targetAmount),phase:g.phase||'progress',source:g.source||settings.goalSource||'twitch'};q('goalLabel').textContent=goalLabels[variables.type]||'CHANNEL GOAL';q('goalTitle').textContent=variables.description;q('goalCurrent').textContent=goalValue(variables.current,variables.unit);q('goalTarget').textContent=goalValue(variables.target,variables.unit);q('goalBar').style.width=variables.percent+'%';customize('goal',goal,settings.goalOverlayDesign||{},g,variables)}else deactivate('goal');
 const h=settings.enabled&&settings.hypeTrainEnabled&&state.hypeTrain;hype.classList.toggle('hidden',!h);if(h){const variables={level:h.level||1,progress:h.progress||0,goal:h.goal||0,total:h.total||0,percent:percent(h.progress,h.goal),phase:h.phase||'progress'};q('hypeLevel').textContent='LEVEL '+number(variables.level);q('hypeBar').style.width=variables.percent+'%';q('hypeDetail').textContent=number(variables.progress)+' / '+number(variables.goal)+(variables.phase==='end'?' · TRAIN COMPLETE':' · '+number(variables.total)+' TOTAL');customize('hype',hype,settings.hypeTrainDesign||{},h,variables)}else deactivate('hype');
 const r=settings.enabled&&settings.raidPortalEnabled&&state.raid;raid.classList.toggle('hidden',!r);if(r){const variables={broadcaster:r.fromBroadcasterName||'Incoming Channel',viewers:r.viewers||0};q('raidName').textContent=variables.broadcaster;q('raidViewers').textContent=number(variables.viewers);const design=settings.raidPortalDesign||{};q('raidLabel').textContent=design.preset==='mainframe-breach'?'SECURITY MAINFRAME // PERIMETER BREACH':'INCOMING RAID PORTAL';q('raidViewerCopy').textContent=design.preset==='mainframe-breach'?'external signals authenticated':'viewers crossed the horizon';customize('raid',raid,design,r,variables)}else deactivate('raid')}
 const events=new EventSource('./twitch-experiences/events');events.addEventListener('init',event=>{const data=JSON.parse(event.data);settings=data.settings||{};state=data.state||{};render()});events.addEventListener('settings',event=>{settings=JSON.parse(event.data);render()});events.addEventListener('state',event=>{state=JSON.parse(event.data);render()});events.onerror=()=>{};
@@ -132,6 +149,45 @@ function choice<T extends string>(value: unknown, fallback: T, allowed: readonly
   if (value === undefined) return fallback;
   if (typeof value !== 'string' || !allowed.includes(value as T)) throw new Error(`${name} is not supported.`);
   return value as T;
+}
+
+function goalText(value: unknown, fallback: string, name: string, maximum: number): string {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string') throw new Error(`${name} must be text.`);
+  const text = value.trim();
+  if (!text || text.length > maximum) throw new Error(`${name} must contain between 1 and ${maximum} characters.`);
+  return text;
+}
+
+function goalNumber(value: unknown, fallback: number, name: string, minimum: number): number {
+  if (value === undefined) return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > 999999999) throw new Error(`${name} must be between ${minimum} and 999999999.`);
+  return Math.round(number * 100) / 100;
+}
+
+function goalUnit(value: unknown, fallback: string): string {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || value.trim().length > 24) throw new Error('studioGoal.unit must contain at most 24 characters.');
+  return value.trim();
+}
+
+function validateStudioGoal(value: unknown, fallback: TempestStudioGoal): TempestStudioGoal {
+  if (value === undefined) return structuredClone(fallback);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('studioGoal must be an object.');
+  const source = value as Record<string, unknown>;
+  const allowed = new Set(['active', 'kind', 'title', 'currentAmount', 'targetAmount', 'unit']);
+  for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} is not a supported studioGoal option.`);
+  const active = source.active === undefined ? fallback.active : source.active;
+  if (typeof active !== 'boolean') throw new Error('studioGoal.active must be boolean.');
+  return {
+    active,
+    kind: choice(source.kind, fallback.kind, ['subscriptions', 'followers', 'bits', 'donations', 'custom'], 'studioGoal.kind'),
+    title: goalText(source.title, fallback.title, 'studioGoal.title', 100),
+    currentAmount: goalNumber(source.currentAmount, fallback.currentAmount, 'studioGoal.currentAmount', 0),
+    targetAmount: goalNumber(source.targetAmount, fallback.targetAmount, 'studioGoal.targetAmount', 0.01),
+    unit: goalUnit(source.unit, fallback.unit)
+  };
 }
 
 function validateDesign(value: unknown, fallback: TempestTwitchExperienceDesign, name: string): TempestTwitchExperienceDesign {
@@ -168,6 +224,8 @@ function validate(value: Partial<TempestTwitchExperienceSettings>): TempestTwitc
   return {
     ...merged,
     schemaVersion: 1,
+    goalSource: choice(value.goalSource, defaults.goalSource, ['twitch', 'studio'], 'goalSource'),
+    studioGoal: validateStudioGoal(value.studioGoal, defaults.studioGoal),
     raidDurationMs: duration,
     accent: color(merged.accent, 'accent'),
     hypeAccent: color(merged.hypeAccent, 'hypeAccent'),
@@ -223,7 +281,7 @@ export class TempestTwitchExperiences {
         this.hypeTimer = setTimeout(() => { delete this.state.hypeTrain; this.broadcastState(); }, 8000);
         this.hypeTimer.unref?.();
       }
-    } else if (event.topic === 'channel.goal.updated' && this.settings.goalOverlayEnabled) {
+    } else if (event.topic === 'channel.goal.updated' && this.settings.goalOverlayEnabled && this.settings.goalSource === 'twitch') {
       this.state.goal = { ...event.payload, occurredAt: event.occurredAt };
       clearTimeout(this.goalTimer);
       if (event.payload.phase === 'end') {
@@ -238,15 +296,26 @@ export class TempestTwitchExperiences {
     const base = { schemaVersion: 1 as const, id: globalThis.crypto.randomUUID(), occurredAt: new Date().toISOString(), source: 'twitch' as const, channel: { id: 'studio-preview' } };
     if (kind === 'raid-portal') this.ingest({ ...base, topic: 'viewer.raid.received', viewer: { id: 'raider', displayName: 'Storm Horizon Raiders' }, payload: { fromBroadcasterId: 'raider', fromBroadcasterName: 'Storm Horizon Raiders', viewers: 42 } });
     else if (kind === 'hype-train') this.ingest({ ...base, topic: 'channel.hype-train.updated', payload: { phase: 'progress', hypeTrainId: 'preview', level: 3, total: 4200, progress: 720, goal: 1000, topContributions: [] } });
-    else this.ingest({ ...base, topic: 'channel.goal.updated', payload: { phase: 'progress', goalId: 'preview', type: 'subscription', description: 'Reach the next signal horizon', currentAmount: 72, targetAmount: 100 } });
+    else {
+      this.state.goal = { preview: true, phase: 'progress', goalId: 'preview', type: 'subscriptions', description: 'Subscriber Goal', currentAmount: 18, targetAmount: 25, unit: 'subs', source: 'studio', occurredAt: base.occurredAt };
+      clearTimeout(this.goalTimer);
+      this.goalTimer = setTimeout(() => { delete this.state.goal; this.broadcastState(); }, 12000);
+      this.goalTimer.unref?.();
+      this.broadcastState();
+    }
   }
 
   async update(patch: unknown): Promise<TempestTwitchExperienceSettings> {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Twitch Experience settings must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'hypeTrainEnabled', 'raidPortalEnabled', 'goalOverlayEnabled', 'raidDurationMs', 'accent', 'hypeAccent', 'raidAccent', 'goalAccent', 'hypeTrainDesign', 'raidPortalDesign', 'goalOverlayDesign']);
+    const allowed = new Set(['enabled', 'hypeTrainEnabled', 'raidPortalEnabled', 'goalOverlayEnabled', 'goalSource', 'studioGoal', 'raidDurationMs', 'accent', 'hypeAccent', 'raidAccent', 'goalAccent', 'hypeTrainDesign', 'raidPortalDesign', 'goalOverlayDesign']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} is not a Twitch Experience setting.`);
     this.settings = validate({ ...this.settings, ...source, updatedAt: new Date().toISOString() });
+    if ('goalSource' in source || 'studioGoal' in source) {
+      clearTimeout(this.goalTimer);
+      delete this.state.goal;
+      this.broadcastState();
+    }
     if (!this.settings.enabled) this.clear();
     await this.persist();
     this.broadcast('settings', this.settings);
@@ -279,7 +348,8 @@ export class TempestTwitchExperiences {
   }
 
   status(url: string): Record<string, unknown> {
-    return { state: this.settings.enabled ? 'ready' : 'disabled', url, connectedClients: this.clients.size, settings: structuredClone(this.settings), active: { hypeTrain: Boolean(this.state.hypeTrain), raidPortal: Boolean(this.state.raid), goalOverlay: Boolean(this.state.goal) }, experienceState: structuredClone(this.state) };
+    const goalOverlayActive = this.settings.enabled && this.settings.goalOverlayEnabled && (Boolean(this.state.goal) || (this.settings.goalSource === 'studio' && this.settings.studioGoal.active));
+    return { state: this.settings.enabled ? 'ready' : 'disabled', url, connectedClients: this.clients.size, settings: structuredClone(this.settings), active: { hypeTrain: Boolean(this.state.hypeTrain), raidPortal: Boolean(this.state.raid), goalOverlay: goalOverlayActive }, experienceState: structuredClone(this.state) };
   }
 
   close(): void { this.clear(); for (const client of this.clients) client.end(); this.clients.clear(); }

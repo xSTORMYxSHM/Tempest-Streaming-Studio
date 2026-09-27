@@ -1083,6 +1083,30 @@
     };
   }
 
+  function studioGoalFromForm(active = state.twitchExperiences?.settings?.studioGoal?.active === true) {
+    return {
+      active,
+      kind: $('#twitchExperienceGoalKind').value,
+      title: $('#twitchExperienceGoalTitle').value.trim(),
+      currentAmount: Number($('#twitchExperienceGoalCurrent').value),
+      targetAmount: Number($('#twitchExperienceGoalTarget').value),
+      unit: $('#twitchExperienceGoalUnit').value.trim()
+    };
+  }
+
+  function updateGoalEditorAvailability() {
+    const managed = $('#twitchExperienceGoalSource').value === 'studio';
+    document.querySelectorAll('[data-studio-goal-field]').forEach((label) => {
+      label.classList.toggle('disabled', !managed);
+      label.querySelectorAll('input,select').forEach((input) => { input.disabled = !managed; });
+    });
+    document.querySelectorAll('[data-twitch-goal-action]').forEach((button) => { button.disabled = !managed; });
+    $('#twitchGoalSourceBadge').textContent = managed ? 'STUDIO MANAGED' : 'TWITCH AUTO';
+    $('#twitchGoalControlNote').innerHTML = managed
+      ? '<strong>Studio managed:</strong> Show or update this goal immediately, then use −1 and +1 while live. The value persists across restarts.'
+      : '<strong>Twitch automatic:</strong> Create or manage the goal in Twitch; Studio will mirror its title and progress.';
+  }
+
   function renderTwitchExperiences({ settings = false } = {}) {
     const experience = state.twitchExperiences;
     const configuration = experience?.settings || {};
@@ -1095,12 +1119,13 @@
       ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(experience.url)}</code>${copyButton(experience.url, 'Twitch Experiences browser-source URL')}</span> · ${experience.connectedClients ? `${experience.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the Twitch Experiences canvas.';
     const needsGoals = missingScopes.includes('channel:read:goals');
-    $('#twitchExperienceAuthorizationNote').innerHTML = needsGoals
+    const studioManagedGoal = configuration.goalSource === 'studio';
+    $('#twitchExperienceAuthorizationNote').innerHTML = needsGoals && !studioManagedGoal
       ? '<strong>Reauthorization required:</strong> Disconnect and reconnect the broadcaster once to grant <code>channel:read:goals</code>. Raid Portal and existing features remain available.'
-      : `<strong>EventSub:</strong> Raid Portal ${features.raidPortal ? 'ready' : 'waiting'} · Hype Train ${features.hypeTrain ? 'ready' : 'waiting'} · Goals ${features.goals ? 'ready' : 'waiting'}.`;
+      : `<strong>EventSub:</strong> Raid Portal ${features.raidPortal ? 'ready' : 'waiting'} · Hype Train ${features.hypeTrain ? 'ready' : 'waiting'} · Goal ${studioManagedGoal ? 'managed by Studio' : features.goals ? 'ready' : 'waiting'}.`;
     $('#twitchExperienceHypeState').textContent = active.hypeTrain ? 'LIVE' : features.hypeTrain ? 'STANDBY' : 'WAITING';
     $('#twitchExperienceRaidState').textContent = active.raidPortal ? 'OPEN' : features.raidPortal ? 'STANDBY' : 'WAITING';
-    $('#twitchExperienceGoalState').textContent = active.goalOverlay ? 'TRACKING' : features.goals ? 'STANDBY' : needsGoals ? 'REAUTHORIZE' : 'WAITING';
+    $('#twitchExperienceGoalState').textContent = active.goalOverlay ? 'TRACKING' : studioManagedGoal ? 'READY' : features.goals ? 'STANDBY' : needsGoals ? 'REAUTHORIZE' : 'WAITING';
     if (settings && experience) {
       $('#twitchExperienceEnabled').checked = configuration.enabled !== false;
       $('#twitchExperienceHype').checked = configuration.hypeTrainEnabled !== false;
@@ -1110,8 +1135,16 @@
       $('#twitchExperienceHypeAccent').value = configuration.hypeAccent || '#FF4CCF';
       $('#twitchExperienceRaidAccent').value = configuration.raidAccent || '#54F2EB';
       $('#twitchExperienceGoalAccent').value = configuration.goalAccent || '#A7FF5C';
+      $('#twitchExperienceGoalSource').value = configuration.goalSource || 'twitch';
+      const studioGoal = configuration.studioGoal || {};
+      $('#twitchExperienceGoalKind').value = studioGoal.kind || 'subscriptions';
+      $('#twitchExperienceGoalTitle').value = studioGoal.title || 'Subscriber Goal';
+      $('#twitchExperienceGoalCurrent').value = Number.isFinite(Number(studioGoal.currentAmount)) ? studioGoal.currentAmount : 0;
+      $('#twitchExperienceGoalTarget').value = Number.isFinite(Number(studioGoal.targetAmount)) ? studioGoal.targetAmount : 25;
+      $('#twitchExperienceGoalUnit').value = studioGoal.unit ?? 'subs';
       for (const [kind, meta] of Object.entries(twitchExperienceDesigners)) populateTwitchExperienceDesign(kind, configuration[meta.designKey]);
     }
+    updateGoalEditorAvailability();
   }
 
   function handleSoundAlertPlayback(command) {
@@ -4412,6 +4445,8 @@
         hypeTrainEnabled: $('#twitchExperienceHype').checked,
         raidPortalEnabled: $('#twitchExperienceRaid').checked,
         goalOverlayEnabled: $('#twitchExperienceGoal').checked,
+        goalSource: $('#twitchExperienceGoalSource').value,
+        studioGoal: studioGoalFromForm(),
         raidDurationMs: Math.round(Number($('#twitchExperienceRaidDuration').value) * 1000),
         hypeAccent: $('#twitchExperienceHypeAccent').value,
         raidAccent: $('#twitchExperienceRaidAccent').value,
@@ -4424,6 +4459,21 @@
       for (const kind of Object.keys(twitchExperienceDraftMedia)) delete twitchExperienceDraftMedia[kind];
       renderTwitchExperiences({ settings: true });
       toast('Twitch Experience designs and media saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function controlStudioGoal(action) {
+    if ($('#twitchExperienceGoalSource').value !== 'studio') return;
+    const currentInput = $('#twitchExperienceGoalCurrent');
+    if (action === 'increment') currentInput.value = String(Math.max(0, Number(currentInput.value) + 1));
+    if (action === 'decrement') currentInput.value = String(Math.max(0, Number(currentInput.value) - 1));
+    const active = action !== 'hide';
+    try {
+      await api('/v1/twitch-experiences/settings', { method: 'POST', body: { goalSource: 'studio', studioGoal: studioGoalFromForm(active) } });
+      state.twitchExperiences = await api('/v1/twitch-experiences');
+      renderTwitchExperiences({ settings: true });
+      const labels = { show: 'Stream goal shown and updated.', increment: 'Stream goal increased by 1.', decrement: 'Stream goal decreased by 1.', hide: 'Stream goal hidden.' };
+      toast(labels[action] || 'Stream goal updated.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -4677,6 +4727,7 @@
     if (button.dataset.twitchExperienceSave) return saveTwitchExperiences();
     if (button.dataset.twitchExperiencePreview) return previewTwitchExperience(button.dataset.twitchExperiencePreview);
     if (button.dataset.twitchExperienceClear) return clearTwitchExperiences();
+    if (button.dataset.twitchGoalAction) return controlStudioGoal(button.dataset.twitchGoalAction);
     if (button.dataset.discordVoiceSave) return saveDiscordVoiceSettings();
     if (button.dataset.discordVoicePreview) return previewDiscordVoice();
     if (button.dataset.discordVoiceClear) return clearDiscordVoicePreview();
@@ -4763,6 +4814,19 @@
     $('#alertHistoryKind').addEventListener('change', renderAlertHistory);
     $('#alertHistoryState').addEventListener('change', renderAlertHistory);
     $('#giphyTargetAlert').addEventListener('change', updateGiphyTargetContext);
+    $('#twitchExperienceGoalSource').addEventListener('change', updateGoalEditorAvailability);
+    $('#twitchExperienceGoalKind').addEventListener('change', (event) => {
+      const presets = {
+        subscriptions: ['Subscriber Goal', 'subs'],
+        followers: ['Follower Goal', 'followers'],
+        bits: ['Bits Goal', 'Bits'],
+        donations: ['Donation Goal', 'donations'],
+        custom: ['Stream Goal', 'points']
+      };
+      const [title, unit] = presets[event.target.value] || presets.custom;
+      $('#twitchExperienceGoalTitle').value = title;
+      $('#twitchExperienceGoalUnit').value = unit;
+    });
     for (const meta of Object.values(twitchExperienceDesigners)) {
       $(`#twitchExperience${meta.prefix}MediaOpacity`).addEventListener('input', (event) => {
         $(`#twitchExperience${meta.prefix}MediaOpacityValue`).textContent = `${event.target.value}%`;
