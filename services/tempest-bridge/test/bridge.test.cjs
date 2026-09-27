@@ -750,7 +750,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
 
   const emoteWallPage = await fetch(`${runtime.baseUrl}/emote-wall`);
   assert.equal(emoteWallPage.status, 200);
-  assert.match(await emoteWallPage.text(), /Tempest Studio Emote Wall/);
+  const emoteWallMarkup = await emoteWallPage.text();
+  assert.match(emoteWallMarkup, /Tempest Studio Emote Wall/);
+  assert.match(emoteWallMarkup, /new EventSource\('\/emote-wall\/events'\)/);
   const emoteSettings = await fetch(`${runtime.baseUrl}/v1/emote-wall/settings`, {
     method: 'POST', headers, body: JSON.stringify({ enabled: true, maxActive: 12, lifetimeMs: 6000, sizePx: 120, speed: 140, includeAnimated: true, includeGifs: false })
   });
