@@ -11,7 +11,7 @@ The automated Studio candidate is valid, signed, and ready for the coordinated i
 - Studio branch: `release/1.5.0`
 - Studio packaged source commit: `c766de2e12bc3570d120a3d5eb4d0bc505a57d54` (`Restore packaged UI capture verification`)
 - Broadcast branch: `release/1.5.0-rc`
-- Broadcast candidate commit: `c5e3da86f00d82e845421ade195ab4da0393883a`
+- Broadcast candidate commit: `fe8d6b9a4411836ffbc4d1387e5cfe6ad677cc3e`
 - Shared protocol version: `1.0`
 - Shared interaction render contract: `1.0`
 

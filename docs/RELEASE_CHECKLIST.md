@@ -8,7 +8,7 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 - [x] Keep video canvases, encoders, Enhanced Broadcasting, platform output services, recording, and final audio routing owned by Broadcast.
 - [x] Keep accounts, stream information, chat/chatbot behavior, alerts, interactions, counters, Dice Box, operator readiness, and orchestration owned by Studio.
 - [x] Keep both Twitch Extension packages on their independent `0.1.0` version line; 1.5.0 does not itself authorize a Twitch-hosted extension deployment.
-- [x] Record Broadcast's matching 1.5.0 RC3 commit (`c5e3da86f00d82e845421ade195ab4da0393883a`) and confirm the shared production contract.
+- [x] Record Broadcast's matching 1.5.0 RC5 commit (`fe8d6b9a4411836ffbc4d1387e5cfe6ad677cc3e`) and confirm the shared production contract.
 - [ ] Do not add new release features after the candidate is packaged; fixes require a new candidate and a repeated rehearsal.
 
 ## Automated Studio gates
