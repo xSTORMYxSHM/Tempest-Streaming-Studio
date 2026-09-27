@@ -11,8 +11,10 @@ let configPromise = Promise.resolve();
 let configuredSignature = '';
 let clientId = '';
 let activeDiceTheme = 'default';
-let rendererMode = 'offscreen';
+const obsBrowserRuntime = /(?:^|\s)OBS\/\d/i.test(navigator.userAgent);
+let rendererMode = obsBrowserRuntime ? 'onscreen' : 'offscreen';
 let rendererFallbackError = '';
+let startupScheduledFor = '';
 let clearTimer = 0;
 let errorTimer = 0;
 let impactAudio;
@@ -173,19 +175,29 @@ async function getBox() {
       container: '#diceWorld', assetPath: '/dice-overlay/assets/', offscreen, ...boxConfig('default'),
       onDieComplete: (die) => physicalDieListener?.(die), onRollComplete: (results) => physicalRollListener?.(results)
     });
-    await reportClient('connecting', 'Initializing the offscreen Dice Box renderer.');
-    try {
-      rendererMode = 'offscreen';
-      box = create(true);
-      await bounded(box.init(), 12000, 'Offscreen Dice Box initialization timed out.');
-    } catch (offscreenError) {
-      rendererFallbackError = 'Offscreen renderer unavailable (' + (offscreenError instanceof Error ? offscreenError.message : String(offscreenError)) + '); using the onscreen renderer.';
-      try { box?.clear(); } catch {}
-      world.replaceChildren();
+    if (obsBrowserRuntime) {
+      // OBS already renders the page offscreen. DiceBox's nested OffscreenCanvas worker can
+      // terminate the CEF renderer before it reports an error, so use its stable main-thread
+      // WebGL renderer inside OBS and reserve the worker renderer for normal browsers.
       rendererMode = 'onscreen';
-      await reportClient('connecting', rendererFallbackError);
+      await reportClient('connecting', 'Initializing the OBS-compatible Dice Box renderer.');
       box = create(false);
-      await bounded(box.init(), 12000, 'Onscreen Dice Box fallback initialization timed out.');
+      await bounded(box.init(), 12000, 'OBS-compatible Dice Box initialization timed out.');
+    } else {
+      await reportClient('connecting', 'Initializing the offscreen Dice Box renderer.');
+      try {
+        rendererMode = 'offscreen';
+        box = create(true);
+        await bounded(box.init(), 12000, 'Offscreen Dice Box initialization timed out.');
+      } catch (offscreenError) {
+        rendererFallbackError = 'Offscreen renderer unavailable (' + (offscreenError instanceof Error ? offscreenError.message : String(offscreenError)) + '); using the onscreen renderer.';
+        try { box?.clear(); } catch {}
+        world.replaceChildren();
+        rendererMode = 'onscreen';
+        await reportClient('connecting', rendererFallbackError);
+        box = create(false);
+        await bounded(box.init(), 12000, 'Onscreen Dice Box fallback initialization timed out.');
+      }
     }
     return box;
   })().catch(async (error) => { boxPromise = undefined; await reportClient('failed', error); showError('Dice Box could not start: ' + error.message); throw error; });
@@ -302,14 +314,56 @@ function clearPresentation() {
   if (box) box.clear();
 }
 
-const events = new EventSource('/dice-overlay/events');
-events.addEventListener('init', (event) => { const data = JSON.parse(event.data); clientId = String(data.clientId || ''); apply(data.settings || {}).catch((error) => showError(error.message)); });
+const events = window.__tempestDiceEvents || new EventSource('/dice-overlay/events');
+let pollClientId = '';
+let pollRevision = 0;
+let pollStarted = false;
+const handleInit = (event) => {
+  const data = JSON.parse(event.data);
+  const nextClientId = String(data.clientId || '');
+  if (!nextClientId || startupScheduledFor) return;
+  clientId = nextClientId;
+  startupScheduledFor = clientId;
+  reportClient('connecting', obsBrowserRuntime ? 'OBS transport ready; preparing the main-thread renderer.' : 'Browser transport ready; preparing the renderer.').catch(() => {});
+  // Let OBS finish activating the Browser Source before WebGL allocates its scene. Starting
+  // DiceBox in the same task as the first SSE message can terminate CEF during source startup.
+  setTimeout(() => apply(data.settings || {}).catch((error) => showError(error.message)), obsBrowserRuntime ? 1500 : 0);
+};
+async function runPollFallback() {
+  try {
+    const result = await postJson('/dice-overlay/poll', { clientId: pollClientId, after: pollRevision }, 1);
+    pollClientId = String(result.clientId || pollClientId);
+    pollRevision = Number(result.revision || pollRevision);
+    for (const item of Array.isArray(result.events) ? result.events : []) {
+      const event = { data: JSON.stringify(item.payload) };
+      if (item.type === 'init') handleInit(event);
+      else if (item.type === 'settings') apply(item.payload || {}).catch((error) => showError(error.message));
+      else if (item.type === 'roll-request') performRoll(item.payload);
+      else if (item.type === 'roll-result') showResult(item.payload);
+      else if (item.type === 'roll-error') showError(item.payload?.message);
+      else if (item.type === 'audio-test') playImpact({ force: true, testId: item.payload?.id }).catch((error) => showError(error.message));
+      else if (item.type === 'clear') clearPresentation();
+    }
+  } catch (error) {
+    console.error('Tempest dice polling fallback failed.', error);
+  } finally {
+    setTimeout(runPollFallback, 250);
+  }
+}
+function startPollingFallback() {
+  if (pollStarted) return;
+  pollStarted = true;
+  runPollFallback();
+}
+events.addEventListener('init', handleInit);
+if (window.__tempestDiceRuntime?.initData) handleInit({ data: window.__tempestDiceRuntime.initData });
 events.addEventListener('settings', (event) => apply(JSON.parse(event.data)).catch((error) => showError(error.message)));
 events.addEventListener('roll-request', (event) => performRoll(JSON.parse(event.data)));
 events.addEventListener('roll-result', (event) => showResult(JSON.parse(event.data)));
 events.addEventListener('roll-error', (event) => showError(JSON.parse(event.data).message));
 events.addEventListener('audio-test', (event) => playImpact({ force: true, testId: JSON.parse(event.data).id }).catch((error) => showError(error.message)));
 events.addEventListener('clear', clearPresentation);
-events.onerror = () => { clientId = ''; };
+events.onerror = () => { if (!pollClientId) clientId = ''; startPollingFallback(); };
+setTimeout(() => { if (!clientId) startPollingFallback(); }, 750);
 window.addEventListener('beforeunload', () => { stopImpact(); if (impactUrl) URL.revokeObjectURL(impactUrl); if (impactAudioContext && impactAudioContext.state !== 'closed') impactAudioContext.close().catch(() => {}); });
 `;

@@ -68,8 +68,10 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   const browserClient = overlay.client();
   assert.match(page, /Tempest Studio 3D Dice/);
   assert.match(page, /id="diceWorld"/);
-  assert.match(page, /\/dice-overlay\/client\.js/);
+  assert.match(page, /Dice sound failed/);
+  assert.match(page, /window\.__tempestDiceEvents = new EventSource/);
   assert.doesNotMatch(page, /type="module"/);
+  assert.match(browserClient, /window\.__tempestDiceEvents \|\| new EventSource/);
   assert.match(browserClient, /import\('\/dice-overlay\/vendor\/dice-box\.es\.min\.js'\)/);
   assert.match(browserClient, /diceBox\.roll/);
   assert.match(browserClient, /diceBox\.reroll\(rejected/);
@@ -115,6 +117,28 @@ test('tracks renderer readiness, verifies sound, and fails promptly when the aut
   client.emit('close');
   await rejected;
   assert.equal(overlay.status('local').rolling, false);
+  overlay.close();
+});
+
+test('keeps rolls and audio controls working through the OBS polling fallback', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-poll-'));
+  const overlay = new TempestDiceOverlay(directory);
+  await overlay.initialize();
+  const registered = overlay.poll({});
+  assert.equal(registered.events[0].type, 'init');
+  overlay.reportClient({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' });
+
+  const rolling = overlay.roll({ expression: '1d6', rollerName: 'OBS Poll' });
+  const commands = overlay.poll({ clientId: registered.clientId, after: registered.revision });
+  const request = commands.events.find((event) => event.type === 'roll-request').payload;
+  overlay.complete({ id: request.id, token: request.token, values: [5] });
+  assert.equal((await rolling).total, 5);
+
+  const testing = overlay.testAudio();
+  const audioCommands = overlay.poll({ clientId: registered.clientId, after: commands.revision });
+  const audioRequest = audioCommands.events.find((event) => event.type === 'audio-test').payload;
+  overlay.reportAudio({ clientId: registered.clientId, testId: audioRequest.id, state: 'ready', method: 'media' });
+  assert.equal((await testing).state, 'ready');
   overlay.close();
 });
 

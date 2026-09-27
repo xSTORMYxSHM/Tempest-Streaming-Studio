@@ -41,7 +41,7 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const page = await fetch(`${runtime.baseUrl}/dice-overlay`);
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
-  assert.match(page.headers.get('content-security-policy'), /script-src 'self' 'wasm-unsafe-eval'/);
+  assert.match(page.headers.get('content-security-policy'), /script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'/);
   assert.match(page.headers.get('content-security-policy'), /worker-src blob: data:/);
   assert.match(page.headers.get('content-security-policy'), /media-src 'self' blob:/);
   assert.match(await page.text(), /Tempest Studio 3D Dice/);

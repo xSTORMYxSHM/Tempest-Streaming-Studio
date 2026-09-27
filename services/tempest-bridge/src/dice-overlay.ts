@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { ServerResponse } from 'node:http';
 import path from 'node:path';
@@ -154,7 +154,25 @@ const diceOverlayPage = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Studio 3D Dice</title>
 <style>
 *{box-sizing:border-box}html,body,#diceWorld{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}body{font-family:Inter,"Segoe UI",sans-serif;color:#edffff;pointer-events:none}#diceWorld{position:absolute;inset:0;transform:scale(var(--dice-scale,1));transform-origin:center}#diceWorld canvas{width:100%!important;height:100%!important;background:transparent!important}.dice-hud{position:absolute;inset:0;display:grid;place-items:end center;padding:0 4vw 5vh;opacity:0;transition:opacity .2s ease}.dice-hud.visible{opacity:1}.dice-result{display:grid;grid-template-columns:auto auto;align-items:end;gap:4px clamp(14px,1.4vw,26px);min-width:min(560px,88vw);padding:18px 28px;border:1px solid rgba(139,234,255,.45);border-radius:14px;background:linear-gradient(135deg,rgba(3,13,20,.9),rgba(7,26,35,.72));box-shadow:0 18px 55px rgba(0,0,0,.55);text-align:center;text-shadow:0 4px 16px #000;backdrop-filter:blur(7px)}.dice-result small{grid-column:1/-1;color:#8beaff;font:800 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.18em}.dice-result strong{color:#fff1b9;font:800 clamp(56px,6vw,112px)/.85 Georgia,serif}.dice-result span{align-self:center;color:#d8f5f5;font:800 clamp(18px,1.7vw,34px)/1 Consolas,monospace}.dice-result p{grid-column:1/-1;max-width:80vw;margin:7px 0 0;color:#fff;font:700 clamp(17px,1.6vw,31px)/1.2 Inter,sans-serif}.dice-result em{grid-column:1/-1;color:#9fc6cc;font:700 clamp(9px,.7vw,14px)/1 Consolas,monospace;letter-spacing:.13em;text-transform:uppercase;font-style:normal}.dice-error{position:absolute;top:4vh;left:50%;max-width:86vw;transform:translateX(-50%);padding:12px 18px;border:1px solid #ff6079;border-radius:10px;background:rgba(28,5,10,.92);color:#ffdbe1;font:700 14px/1.35 "Segoe UI",sans-serif;opacity:0;transition:opacity .2s}.dice-error.visible{opacity:1;transition:none}
-</style></head><body><div id="diceWorld" aria-hidden="true"></div><main id="diceHud" class="dice-hud" aria-live="polite"></main><div id="diceError" class="dice-error" role="alert"></div><script src="/dice-overlay/client.js?v=__CLIENT_VERSION__"></script></body></html>`;
+</style></head><body><div id="diceWorld" aria-hidden="true"></div><main id="diceHud" class="dice-hud" aria-live="polite"></main><div id="diceError" class="dice-error" role="alert"></div>
+<script>
+(() => {
+  const runtime = window.__tempestDiceRuntime = { clientId: '', initData: '', error: '' };
+  const events = window.__tempestDiceEvents = new EventSource('/dice-overlay/events');
+  const reportFailure = () => {
+    if (!runtime.clientId || !runtime.error) return;
+    fetch('/dice-overlay/client-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: runtime.clientId, state: 'failed', renderer: 'fallback', error: runtime.error.slice(0, 500) }), cache: 'no-store' }).catch(() => {});
+  };
+  events.addEventListener('init', (event) => {
+    runtime.initData = event.data;
+    try { runtime.clientId = String(JSON.parse(event.data).clientId || ''); } catch {}
+    reportFailure();
+  });
+  window.addEventListener('error', (event) => { runtime.error = 'Dice client script error: ' + String(event.message || event.error || 'unknown error'); reportFailure(); });
+  window.addEventListener('unhandledrejection', (event) => { runtime.error = 'Dice client promise rejection: ' + String(event.reason?.message || event.reason || 'unknown error'); reportFailure(); });
+})();
+__CLIENT_SCRIPT__
+</script></body></html>`;
 
 function integer(value: unknown, name: string, minimum: number, maximum: number): number {
   const number = Number(value);
@@ -221,12 +239,15 @@ export class TempestDiceOverlay {
   private latestRoll?: TempestStudioDiceRoll;
   private history: TempestStudioDiceRoll[] = [];
   private clients = new Map<ServerResponse, string>();
+  private pollClients = new Map<string, number>();
   private clientStatuses = new Map<string, DiceClientStatus>();
   private clientHeartbeats = new Map<ServerResponse, NodeJS.Timeout>();
   private pending?: PendingRoll;
   private pendingAudioTest?: PendingAudioTest;
   private audioStatus: TempestDiceAudioStatus = { state: 'untested' };
   private completedRolls = new Map<string, { token: string; roll: TempestStudioDiceRoll }>();
+  private eventRevision = 0;
+  private browserEvents: Array<{ revision: number; type: string; payload: unknown }> = [];
   private requests = { pageLoads: 0, clientLoads: 0, eventConnections: 0, lastPageLoadedAt: '', lastClientLoadedAt: '', lastEventConnectedAt: '' };
   private readonly documentPath: string;
   private readonly customThemeDirectory: string;
@@ -279,7 +300,10 @@ export class TempestDiceOverlay {
   page(): string {
     this.requests.pageLoads++;
     this.requests.lastPageLoadedAt = new Date().toISOString();
-    return diceOverlayPage.replace('__CLIENT_VERSION__', createHash('sha256').update(tempestDiceOverlayClient).digest('hex').slice(0, 12));
+    // Embed the runtime so OBS CEF cannot reuse a stale external-script cache entry after
+    // Studio or Broadcast recovery. The standalone route remains for compatibility and
+    // diagnostics, but every overlay page is now a single atomic, no-store document.
+    return diceOverlayPage.replace('__CLIENT_SCRIPT__', () => tempestDiceOverlayClient);
   }
   client(): string {
     this.requests.clientLoads++;
@@ -294,7 +318,12 @@ export class TempestDiceOverlay {
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Connection', 'keep-alive');
+    response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders();
+    // OBS CEF's network service can hold a very small first SSE frame. Prime the stream so
+    // the initialization event reaches the renderer immediately instead of waiting for a
+    // later heartbeat or roll request.
+    response.write(`: tempest-dice-stream ${' '.repeat(2048)}\n\n`);
     const clientId = randomUUID();
     this.clients.set(response, clientId);
     this.clientStatuses.set(clientId, { state: 'connecting', updatedAt: new Date().toISOString() });
@@ -309,18 +338,36 @@ export class TempestDiceOverlay {
       const wasAuthority = this.authorityClientId() === clientId;
       this.removeClient(response);
       if (wasAuthority && this.pending) {
-        if (this.clients.size) this.sendPendingToAuthority();
+        if (this.connectedClientCount()) this.sendPendingToAuthority();
         else this.rejectPending('The active 3D Dice Browser Source disconnected before the roll settled.');
       }
-      if (wasAuthority && this.pendingAudioTest && !this.clients.size) this.resolveAudioFailure('The active 3D Dice Browser Source disconnected during its sound test.');
+      if (wasAuthority && this.pendingAudioTest && !this.connectedClientCount()) this.resolveAudioFailure('The active 3D Dice Browser Source disconnected during its sound test.');
     });
+  }
+
+  poll(input: unknown): { clientId: string; revision: number; events: Array<{ revision: number; type: string; payload: unknown }> } {
+    const report = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+    this.prunePollClients();
+    let clientId = String(report.clientId || '');
+    const isNew = !this.pollClients.has(clientId);
+    if (isNew) {
+      clientId = randomUUID();
+      this.clientStatuses.set(clientId, { state: 'connecting', renderer: 'fallback', updatedAt: new Date().toISOString() });
+    }
+    this.pollClients.set(clientId, Date.now());
+    const after = Math.max(0, Number.isFinite(Number(report.after)) ? Math.floor(Number(report.after)) : 0);
+    const events = isNew
+      ? [{ revision: this.eventRevision, type: 'init', payload: { settings: this.settings, themes: this.themes(), clientId, authority: this.authorityClientId() === clientId } }, ...(this.pending ? [{ revision: this.eventRevision, type: 'roll-request', payload: this.pending.request }] : [])]
+      : this.browserEvents.filter((event) => event.revision > after);
+    return { clientId, revision: this.eventRevision, events: structuredClone(events) };
   }
 
   reportClient(input: unknown): DiceClientStatus {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice Browser Source status must be an object.');
     const report = input as Record<string, unknown>;
     const clientId = String(report.clientId || '');
-    if (![...this.clients.values()].includes(clientId)) throw new Error('The Dice Browser Source client is no longer connected.');
+    this.prunePollClients();
+    if (![...this.clients.values()].includes(clientId) && !this.pollClients.has(clientId)) throw new Error('The Dice Browser Source client is no longer connected.');
     const state = ['connecting', 'ready', 'degraded', 'failed'].includes(String(report.state)) ? report.state as DiceClientStatus['state'] : undefined;
     if (!state) throw new Error('Dice Browser Source status is invalid.');
     const status: DiceClientStatus = {
@@ -338,7 +385,8 @@ export class TempestDiceOverlay {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Dice audio status must be an object.');
     const report = input as Record<string, unknown>;
     const clientId = String(report.clientId || '');
-    if (![...this.clients.values()].includes(clientId)) throw new Error('The Dice Browser Source client is no longer connected.');
+    this.prunePollClients();
+    if (![...this.clients.values()].includes(clientId) && !this.pollClients.has(clientId)) throw new Error('The Dice Browser Source client is no longer connected.');
     const state = report.state === 'ready' || report.state === 'failed' ? report.state : undefined;
     const method = report.method === 'media' || report.method === 'web-audio' ? report.method : undefined;
     if (!state || !method) throw new Error('Dice audio status is invalid.');
@@ -358,8 +406,9 @@ export class TempestDiceOverlay {
   }
 
   async testAudio(): Promise<TempestDiceAudioStatus> {
+    this.prunePollClients();
     const authority = this.authorityClient();
-    if (!authority) throw new Error('Open the 3D Dice Browser Source in Broadcast before testing its sound.');
+    if (!authority && !this.pollClients.size) throw new Error('Open the 3D Dice Browser Source in Broadcast before testing its sound.');
     if (this.pendingAudioTest) throw new Error('Wait for the current 3D Dice sound test to finish.');
     const id = randomUUID();
     this.audioStatus = { state: 'testing' };
@@ -372,13 +421,15 @@ export class TempestDiceOverlay {
       }, 8_000);
       timeout.unref?.();
       this.pendingAudioTest = { id, resolve, timeout };
-      this.write(authority[0], 'audio-test', { id });
+      if (authority) this.write(authority[0], 'audio-test', { id });
+      else this.queueBrowserEvent('audio-test', { id });
     });
   }
 
   async roll(input: unknown): Promise<TempestStudioDiceRoll> {
     if (!this.settings.enabled) throw new Error('The 3D Dice overlay is disabled.');
-    if (!this.clients.size) throw new Error('Open the 3D Dice Browser Source in Broadcast before rolling.');
+    this.prunePollClients();
+    if (!this.connectedClientCount()) throw new Error('Open the 3D Dice Browser Source in Broadcast before rolling.');
     const authorityStatus = this.clientStatuses.get(this.authorityClientId() || '');
     if (authorityStatus?.state === 'failed') throw new Error(`The 3D Dice Browser Source engine failed${authorityStatus.error ? `: ${authorityStatus.error}` : '.'}`);
     if (this.pending) throw new Error('Wait for the current 3D dice roll to settle before starting another.');
@@ -475,10 +526,12 @@ export class TempestDiceOverlay {
   }
 
   status(url: string): Record<string, unknown> {
+    this.prunePollClients();
     const authorityId = this.authorityClientId();
-    const clients = [...this.clients.values()].map((id) => ({ id, authority: id === authorityId, ...(this.clientStatuses.get(id) || { state: 'connecting' }) }));
+    const clientIds = [...new Set([...this.clients.values(), ...this.pollClients.keys()])];
+    const clients = clientIds.map((id) => ({ id, authority: id === authorityId, transport: this.pollClients.has(id) ? 'poll' : 'sse', ...(this.clientStatuses.get(id) || { state: 'connecting' }) }));
     return {
-      url, connectedClients: this.clients.size, rolling: Boolean(this.pending), engine: '@3d-dice/dice-box 1.1.4',
+      url, connectedClients: clientIds.length, rolling: Boolean(this.pending), engine: '@3d-dice/dice-box 1.1.4',
       clients, readyClients: clients.filter((client) => client.state === 'ready' || client.state === 'degraded').length,
       duplicateClients: Math.max(0, clients.length - 1), audio: structuredClone(this.audioStatus),
       requests: structuredClone(this.requests),
@@ -494,11 +547,29 @@ export class TempestDiceOverlay {
     this.clientHeartbeats.clear();
     for (const client of this.clients.keys()) client.end();
     this.clients.clear();
+    this.pollClients.clear();
     this.clientStatuses.clear();
   }
 
-  private authorityClient(): [ServerResponse, string] | undefined { return this.clients.entries().next().value; }
-  private authorityClientId(): string | undefined { return this.clients.values().next().value; }
+  private authorityClient(): [ServerResponse, string] | undefined {
+    const authorityId = this.authorityClientId();
+    return [...this.clients.entries()].find((entry) => entry[1] === authorityId);
+  }
+  private authorityClientId(): string | undefined {
+    const ids = [...new Set([...this.clients.values(), ...this.pollClients.keys()])];
+    return ids.find((id) => ['ready', 'degraded'].includes(this.clientStatuses.get(id)?.state || '')) || ids[0];
+  }
+
+  private connectedClientCount(): number { this.prunePollClients(); return new Set([...this.clients.values(), ...this.pollClients.keys()]).size; }
+
+  private prunePollClients(): void {
+    const cutoff = Date.now() - 10_000;
+    for (const [id, seenAt] of this.pollClients) {
+      if (seenAt >= cutoff) continue;
+      this.pollClients.delete(id);
+      if (![...this.clients.values()].includes(id)) this.clientStatuses.delete(id);
+    }
+  }
 
   private removeClient(response: ServerResponse): void {
     const clientId = this.clients.get(response);
@@ -532,15 +603,23 @@ export class TempestDiceOverlay {
 
   private sendPendingToAuthority(): void {
     if (!this.pending) return;
-    const authority = this.clients.keys().next().value as ServerResponse | undefined;
-    if (authority) this.write(authority, 'roll-request', this.pending.request);
+    const authority = this.authorityClient();
+    if (authority) this.write(authority[0], 'roll-request', this.pending.request);
+    else if (this.pollClients.size) this.queueBrowserEvent('roll-request', this.pending.request);
   }
 
   private broadcast(type: string, payload: unknown): void {
+    this.queueBrowserEvent(type, payload);
     for (const client of [...this.clients.keys()]) {
       if (client.destroyed || client.writableEnded) this.removeClient(client);
       else this.write(client, type, payload);
     }
+  }
+
+  private queueBrowserEvent(type: string, payload: unknown): void {
+    this.eventRevision++;
+    this.browserEvents.push({ revision: this.eventRevision, type, payload: structuredClone(payload) });
+    this.browserEvents = this.browserEvents.slice(-40);
   }
 
   private write(response: ServerResponse, type: string, payload: unknown): void {
