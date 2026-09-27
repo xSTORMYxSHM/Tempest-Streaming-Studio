@@ -431,7 +431,13 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayPage.headers.get('content-security-policy'), /media-src 'self' http:\/\/127\.0\.0\.1:\d+ blob:/);
   const overlayMarkup = await overlayPage.text();
   assert.match(overlayMarkup, /Tempest Studio Visual Alerts/);
-  assert.match(overlayMarkup, /new EventSource\("\/visual-alerts\/interactions\/events"\)/);
+  assert.match(overlayMarkup, /new URL\("\/visual-alerts\/interactions\/events",location\.href\)/);
+  assert.match(overlayMarkup, /eventsAddress\.searchParams\.set\('orientation',orientation\)/);
+  assert.match(overlayMarkup, /new EventSource\(eventsAddress\)/);
+  assert.match(overlayMarkup, /\/visual-alerts\/audio-status/);
+  assert.match(overlayMarkup, /reportAudio\(data,'started','direct'\)/);
+  assert.match(overlayMarkup, /reportAudio\(data,'failed','fetch'/);
+  assert.match(overlayMarkup, /reportAudio\(data,'failed','web-audio'/);
   assert.match(overlayMarkup, /id="alertAudio"/);
   assert.match(overlayMarkup, /id="alertAudio" preload="auto" autoplay/);
   assert.match(overlayMarkup, /runtimeStopTimer=setTimeout\(stopAudio/);
@@ -498,6 +504,9 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   await new Promise((resolve) => setTimeout(resolve, 1050));
   const browserSourceEvents = await fetch(`${runtime.baseUrl}/visual-alerts/interactions/events`);
   assert.equal(browserSourceEvents.status, 200);
+  const browserConnectedStatus = await fetch(`${runtime.baseUrl}/v1/visual-alerts`, { headers }).then((response) => response.json());
+  assert.equal(browserConnectedStatus.interaction.connectedClients, 1);
+  assert.equal(browserConnectedStatus.interaction.connectedAudioClients, 1);
   const browserRouted = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}/trigger`, {
     method: 'POST', headers, body: JSON.stringify({ source: 'studio.simulator', eventId: 'hype-pulse-test-browser-audio', viewerId: 'operator', simulateMissing: true, bypassCooldown: true })
   });
@@ -505,6 +514,25 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const browserRoutedResult = await browserRouted.json();
   assert.equal(browserRoutedResult.queued, false);
   assert.equal(browserRoutedResult.queuePosition, 0);
+  const unexpectedAudioStarted = await fetch(`${dedicatedAudioOrigin}/visual-alerts/audio-status`, {
+    method: 'POST',
+    headers: { Origin: runtime.baseUrl, 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ runId: 'not-an-active-alert', alertId: 'sound-alert.hype-pulse', output: 'interaction', state: 'started', method: 'direct' })
+  });
+  assert.equal(unexpectedAudioStarted.status, 409);
+  const audioStarted = await fetch(`${dedicatedAudioOrigin}/visual-alerts/audio-status`, {
+    method: 'POST',
+    headers: { Origin: runtime.baseUrl, 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ runId: browserRoutedResult.activeVisualAlert.runId, alertId: 'sound-alert.hype-pulse', output: 'interaction', state: 'started', method: 'direct' })
+  });
+  assert.equal(audioStarted.status, 204);
+  const verifiedAudioDiagnostics = await fetch(`${runtime.baseUrl}/v1/alert-diagnostics`, { headers }).then((response) => response.json());
+  assert.equal(verifiedAudioDiagnostics.audioPlayback.pending, 0);
+  assert.equal(verifiedAudioDiagnostics.audioPlayback.started, 1);
+  assert.equal(verifiedAudioDiagnostics.audioPlayback.failed, 0);
+  assert.equal(verifiedAudioDiagnostics.audioPlayback.latest[0].runId, browserRoutedResult.activeVisualAlert.runId);
+  assert.equal(verifiedAudioDiagnostics.audioPlayback.latest[0].method, 'direct');
+  assert.ok(verifiedAudioDiagnostics.audioPlayback.latest[0].latencyMs >= 0);
   const queuedStatus = await fetch(`${runtime.baseUrl}/v1/alert-queue`, { headers }).then((response) => response.json());
   assert.equal(queuedStatus.active.alertId, 'sound-alert.hype-pulse');
   assert.equal(queuedStatus.waitingCount, 0);
@@ -555,7 +583,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
 
   const twitchOverlayPage = await fetch(`${runtime.baseUrl}/visual-alerts/twitch`);
   assert.equal(twitchOverlayPage.status, 200);
-  assert.match(await twitchOverlayPage.text(), /new EventSource\("\/visual-alerts\/twitch\/events"\)/);
+  assert.match(await twitchOverlayPage.text(), /new URL\("\/visual-alerts\/twitch\/events",location\.href\)/);
   const verticalTwitchOverlayPage = await fetch(`${runtime.baseUrl}/visual-alerts/twitch?orientation=vertical`);
   const verticalTwitchOverlayMarkup = await verticalTwitchOverlayPage.text();
   assert.equal(verticalTwitchOverlayPage.status, 200);

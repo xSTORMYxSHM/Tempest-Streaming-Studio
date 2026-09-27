@@ -26,6 +26,7 @@ export interface TempestVisualAlertStatus {
   state: 'ready' | 'showing';
   url: string;
   connectedClients: number;
+  connectedAudioClients: number;
   activeAlert?: TempestVisualAlertEvent;
 }
 
@@ -71,7 +72,8 @@ const visualAlertPage = String.raw`<!doctype html>
       async function playElementAudio(encoded,contentType,volume){if(audioBlobUrl)URL.revokeObjectURL(audioBlobUrl);audioBlobUrl=URL.createObjectURL(new Blob([encoded],{type:contentType}));audio.src=audioBlobUrl;audio.volume=volume;audio.load();await bounded(audio.play(),4000,'blob media element timed out while starting');return true}
       async function playDirectAudio(url,volume){if(audioBlobUrl){URL.revokeObjectURL(audioBlobUrl);audioBlobUrl=undefined}audio.src=url;audio.volume=volume;audio.preload='auto';audio.autoplay=true;audio.load();try{await bounded(audio.play(),2500,'direct media element timed out while starting');return true}catch(error){audio.pause();audio.removeAttribute('src');audio.load();throw error}}
       async function playWebAudio(encoded,volume,current){const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)throw new Error('Web Audio is unavailable');if(!audioContext||audioContext.state==='closed')audioContext=new AudioContextClass({latencyHint:'interactive'});if(audioContext.state!=='running')await bounded(audioContext.resume(),2500,'Web Audio resume timed out');if(audioContext.state!=='running')throw new Error('Web Audio context is '+audioContext.state);const decoded=await bounded(audioContext.decodeAudioData(encoded.slice(0)),4000,'Web Audio decode timed out');if(revision!==current)return false;const source=audioContext.createBufferSource(),gain=audioContext.createGain();gain.gain.value=volume;source.buffer=decoded;source.connect(gain);gain.connect(audioContext.destination);audioSource=source;audioGain=gain;source.onended=()=>{if(audioSource===source)audioSource=undefined;if(audioGain===gain)audioGain=undefined;try{source.disconnect()}catch{}try{gain.disconnect()}catch{}};source.start(0);return true}
-      async function playAudio(data,current){if(orientation==='vertical'||revision!==current||!data.audioUrl)return;const audioAddress=new URL(data.audioUrl,__TEMPEST_ALERT_AUDIO_ORIGIN_JSON__);audioAddress.searchParams.set('run',data.runId||Date.now());const url=audioAddress.href,volume=Math.max(0,Math.min(1,Number(data.volume)||0));let directError;try{if(await playDirectAudio(url,volume))return}catch(error){directError=error;if(revision!==current)return}let payload;try{payload=await fetchAudio(url)}catch(error){if(revision!==current||error&&error.name==='AbortError')return;const direct=directError instanceof Error?directError.message:String(directError||'unknown error'),fallback=error instanceof Error?error.message:String(error);console.error('Tempest alert audio playback failed: direct media element: '+direct+'; audio request fallback: '+fallback);return}if(revision!==current)return;let elementError;try{if(await playElementAudio(payload.encoded,payload.contentType,volume)){console.warn('Tempest alert audio used the blob media compatibility fallback.');return}}catch(error){elementError=error;if(revision!==current)return}if(revision!==current)return;try{if(await playWebAudio(payload.encoded,volume,current)){console.warn('Tempest alert audio used the Web Audio compatibility fallback.');return}}catch(error){if(revision!==current)return;const direct=directError instanceof Error?directError.message:String(directError||'unknown error'),blob=elementError instanceof Error?elementError.message:String(elementError||'unknown error'),fallback=error instanceof Error?error.message:String(error);console.error('Tempest alert audio playback failed: direct media element: '+direct+'; blob media element: '+blob+'; Web Audio fallback: '+fallback)}}
+      function reportAudio(data,state,method,error){const statusAddress=new URL('/visual-alerts/audio-status',__TEMPEST_ALERT_AUDIO_ORIGIN_JSON__);fetch(statusAddress,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({runId:data.runId,alertId:data.alertId,output:__TEMPEST_ALERT_OUTPUT_JSON__,state,method,error:error?String(error).slice(0,500):undefined}),keepalive:true}).catch(()=>{})}
+      async function playAudio(data,current){if(orientation==='vertical'||revision!==current||!data.audioUrl)return;const audioAddress=new URL(data.audioUrl,__TEMPEST_ALERT_AUDIO_ORIGIN_JSON__);audioAddress.searchParams.set('run',data.runId||Date.now());const url=audioAddress.href,volume=Math.max(0,Math.min(1,Number(data.volume)||0));let directError;try{if(await playDirectAudio(url,volume)){reportAudio(data,'started','direct');return}}catch(error){directError=error;if(revision!==current)return}let payload;try{payload=await fetchAudio(url)}catch(error){if(revision!==current||error&&error.name==='AbortError')return;const direct=directError instanceof Error?directError.message:String(directError||'unknown error'),fallback=error instanceof Error?error.message:String(error),failure='direct media element: '+direct+'; audio request fallback: '+fallback;reportAudio(data,'failed','fetch',failure);console.error('Tempest alert audio playback failed: '+failure);return}if(revision!==current)return;let elementError;try{if(await playElementAudio(payload.encoded,payload.contentType,volume)){reportAudio(data,'started','blob');console.warn('Tempest alert audio used the blob media compatibility fallback.');return}}catch(error){elementError=error;if(revision!==current)return}if(revision!==current)return;try{if(await playWebAudio(payload.encoded,volume,current)){reportAudio(data,'started','web-audio');console.warn('Tempest alert audio used the Web Audio compatibility fallback.');return}}catch(error){if(revision!==current)return;const direct=directError instanceof Error?directError.message:String(directError||'unknown error'),blob=elementError instanceof Error?elementError.message:String(elementError||'unknown error'),fallback=error instanceof Error?error.message:String(error),failure='direct media element: '+direct+'; blob media element: '+blob+'; Web Audio fallback: '+fallback;reportAudio(data,'failed','web-audio',failure);console.error('Tempest alert audio playback failed: '+failure)}}
       function speak(text,design,current){if(orientation==='vertical'||revision!==current||!design.ttsEnabled||!text||!('speechSynthesis'in window))return;const utterance=new SpeechSynthesisUtterance(text);utterance.volume=design.ttsVolume;utterance.rate=design.ttsRate;utterance.pitch=design.ttsPitch;window.speechSynthesis.speak(utterance)}
       function runCustomCode(source,data,variables){cleanupCustomCode();if(!source)return;window.TempestAlertContext={data,variables,elements:{stage,placement,card,media,copy,eyebrow,name,detail,message,customHtml,audio}};const runner=document.createElement('script');runner.textContent='try{window.__tempestAlertCleanup=(()=>{const context=window.TempestAlertContext;const data=context.data;const variables=context.variables;const elements=context.elements;'+source+'\n})()||undefined}catch(error){console.error("Tempest custom alert JavaScript failed",error)}';document.body.append(runner);runner.remove()}
       function show(data){
@@ -84,7 +86,7 @@ const visualAlertPage = String.raw`<!doctype html>
         runtimeStopTimer=setTimeout(stopAudio,Math.max(1000,Number(data.maximumRuntimeMs)||Number(data.durationMs)||6000));later(()=>attachMedia(data,current),design.mediaDelayMs);later(()=>{if(revision===current)copy.classList.add('ready')},design.textDelayMs);if(design.textDurationMs>0)later(()=>{if(revision===current)copy.classList.remove('ready')},design.textDelayMs+design.textDurationMs);later(()=>playAudio(data,current),design.soundDelayMs);later(()=>speak(template(design.ttsTemplate,variables),design,current),design.soundDelayMs);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{card.classList.add('visible');card.style.transform='none'}));later(()=>{if(revision===current)clear({stopAudio:false})},Math.max(1000,Number(data.durationMs)||6000));
       }
-      const events=new EventSource(__TEMPEST_ALERT_EVENTS__);events.addEventListener('show',event=>show(JSON.parse(event.data)));events.addEventListener('clear',event=>{let data={};try{data=JSON.parse(event.data||'{}')}catch{}clear({stopAudio:data.stopAudio!==false})});events.onerror=()=>{};
+      const eventsAddress=new URL(__TEMPEST_ALERT_EVENTS__,location.href);eventsAddress.searchParams.set('orientation',orientation);const events=new EventSource(eventsAddress);events.addEventListener('show',event=>show(JSON.parse(event.data)));events.addEventListener('clear',event=>{let data={};try{data=JSON.parse(event.data||'{}')}catch{}clear({stopAudio:data.stopAudio!==false})});events.onerror=()=>{};
     })();
   </script>
 </body>
@@ -96,24 +98,27 @@ function mediaKind(uri?: string): 'image' | 'video' | undefined {
 }
 
 export class TempestVisualAlertOverlay {
-  private readonly clients = new Set<ServerResponse>();
+  private readonly clients = new Map<ServerResponse, 'horizontal' | 'vertical'>();
   private activeAlert?: TempestVisualAlertEvent;
   private clearTimer?: NodeJS.Timeout;
 
-  page(eventsPath = '/visual-alerts/events', audioOrigin = ''): string {
+  constructor(private readonly onAudioExpected?: (event: TempestVisualAlertEvent) => void) {}
+
+  page(eventsPath = '/visual-alerts/events', audioOrigin = '', output: 'interaction' | 'twitch' = 'interaction'): string {
     return visualAlertPage
       .replace('__TEMPEST_ALERT_EVENTS__', JSON.stringify(eventsPath))
-      .replace('__TEMPEST_ALERT_AUDIO_ORIGIN_JSON__', JSON.stringify(audioOrigin))
+      .replaceAll('__TEMPEST_ALERT_AUDIO_ORIGIN_JSON__', JSON.stringify(audioOrigin))
+      .replace('__TEMPEST_ALERT_OUTPUT_JSON__', JSON.stringify(output))
       .replaceAll('__TEMPEST_ALERT_AUDIO_ORIGIN__', audioOrigin);
   }
 
-  connect(response: ServerResponse): void {
+  connect(response: ServerResponse, orientation: 'horizontal' | 'vertical' = 'horizontal'): void {
     response.statusCode = 200;
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Connection', 'keep-alive');
     response.flushHeaders();
-    this.clients.add(response);
+    this.clients.set(response, orientation);
     this.write(response, this.activeAlert ? 'show' : 'clear', this.activeAlert || {});
     response.on('close', () => this.clients.delete(response));
   }
@@ -200,6 +205,7 @@ export class TempestVisualAlertOverlay {
     if (this.clearTimer) clearTimeout(this.clearTimer);
     this.activeAlert = event;
     this.broadcast('show', this.activeAlert);
+    if (event.audioUrl && this.hasAudioClients()) this.onAudioExpected?.(structuredClone(event));
     if (!event.positioning) {
       const expectedRun = event.runId;
       this.clearTimer = setTimeout(() => {
@@ -229,23 +235,28 @@ export class TempestVisualAlertOverlay {
     return this.clients.size > 0;
   }
 
+  hasAudioClients(): boolean {
+    return [...this.clients.values()].some((orientation) => orientation === 'horizontal');
+  }
+
   status(url: string): TempestVisualAlertStatus {
     return {
       state: this.activeAlert ? 'showing' : 'ready',
       url,
       connectedClients: this.clients.size,
+      connectedAudioClients: [...this.clients.values()].filter((orientation) => orientation === 'horizontal').length,
       ...(this.activeAlert ? { activeAlert: structuredClone(this.activeAlert) } : {})
     };
   }
 
   close(): void {
     this.clear();
-    for (const client of this.clients) client.end();
+    for (const client of this.clients.keys()) client.end();
     this.clients.clear();
   }
 
   private broadcast(event: string, payload: unknown): void {
-    for (const client of this.clients) this.write(client, event, payload);
+    for (const client of this.clients.keys()) this.write(client, event, payload);
   }
 
   private write(response: ServerResponse, event: string, payload: unknown): void {

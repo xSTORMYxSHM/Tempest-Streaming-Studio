@@ -29,7 +29,7 @@ import { TempestRegistry } from './registry';
 import { blackHoleWorkflow, soundAlertPerformanceWorkflow, twitchAlertReactionWorkflow, TempestWorkflowEngine } from './workflow-engine';
 import { TwitchIntegrationGateway, type TwitchCredentialStore } from './twitch-integration';
 import { TempestSoundAlertCatalog } from './sound-alerts';
-import { TempestVisualAlertOverlay } from './visual-alerts';
+import { TempestVisualAlertEvent, TempestVisualAlertOverlay } from './visual-alerts';
 import { TempestTwitchVisualAlertCatalog, resolveTwitchAlertDesignForScene, validateTwitchAlertDesign } from './twitch-visual-alerts';
 export { TempestTwitchVisualAlertCatalog, resolveTwitchAlertDesignForScene, validateTwitchAlertDesign } from './twitch-visual-alerts';
 import { TempestChatOverlay } from './chat-overlay';
@@ -427,8 +427,64 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await kickGateway.initialize();
   const soundAlerts = new TempestSoundAlertCatalog(options.dataDirectory);
   await soundAlerts.initialize();
-  const visualAlerts = new TempestVisualAlertOverlay();
-  const twitchAlertOverlay = new TempestVisualAlertOverlay();
+  let workflowEngine: TempestWorkflowEngine | null = null;
+  type BrowserAudioPlaybackState = 'pending' | 'started' | 'failed';
+  type BrowserAudioPlaybackMethod = 'direct' | 'blob' | 'web-audio' | 'fetch' | 'watchdog';
+  interface BrowserAudioPlaybackRecord {
+    runId: string;
+    alertId: string;
+    output: 'interaction' | 'twitch';
+    state: BrowserAudioPlaybackState;
+    expectedAt: string;
+    confirmedAt?: string;
+    latencyMs?: number;
+    method?: BrowserAudioPlaybackMethod;
+    error?: string;
+  }
+  const browserAudioPlaybackRecords: BrowserAudioPlaybackRecord[] = [];
+  const browserAudioPlaybackTimers = new Map<string, NodeJS.Timeout>();
+  const recordBrowserAudioPlayback = (input: { runId: string; alertId: string; output: 'interaction' | 'twitch'; state: 'started' | 'failed'; method: BrowserAudioPlaybackMethod; error?: string }): BrowserAudioPlaybackRecord => {
+    let record = browserAudioPlaybackRecords.find((entry) => entry.runId === input.runId && entry.output === input.output);
+    const now = new Date();
+    if (!record) {
+      record = { runId: input.runId, alertId: input.alertId, output: input.output, state: 'pending', expectedAt: now.toISOString() };
+      browserAudioPlaybackRecords.unshift(record);
+    }
+    const timer = browserAudioPlaybackTimers.get(`${input.output}:${input.runId}`);
+    if (timer) clearTimeout(timer);
+    browserAudioPlaybackTimers.delete(`${input.output}:${input.runId}`);
+    if (!(record.state === 'started' && input.state === 'failed')) {
+      record.state = input.state;
+      record.method = input.method;
+      record.confirmedAt = now.toISOString();
+      record.latencyMs = Math.max(0, now.getTime() - new Date(record.expectedAt).getTime());
+      if (input.error) record.error = input.error.slice(0, 500);
+      else delete record.error;
+    }
+    browserAudioPlaybackRecords.splice(200);
+    return structuredClone(record);
+  };
+  const expectBrowserAudioPlayback = (output: 'interaction' | 'twitch', event: TempestVisualAlertEvent): void => {
+    const key = `${output}:${event.runId}`;
+    const existingTimer = browserAudioPlaybackTimers.get(key);
+    if (existingTimer) clearTimeout(existingTimer);
+    let record = browserAudioPlaybackRecords.find((entry) => entry.runId === event.runId && entry.output === output);
+    if (!record) {
+      record = { runId: event.runId, alertId: event.alertId, output, state: 'pending', expectedAt: new Date().toISOString() };
+      browserAudioPlaybackRecords.unshift(record);
+      browserAudioPlaybackRecords.splice(200);
+    }
+    const configuredDelayMs = Math.max(0, Math.min(60_000, Number(event.design?.soundDelayMs) || 0));
+    const confirmationWindowMs = configuredDelayMs + 15_000;
+    const timer = setTimeout(() => {
+      const failed = recordBrowserAudioPlayback({ runId: event.runId, alertId: event.alertId, output, state: 'failed', method: 'watchdog', error: `Browser Source did not confirm audio playback within ${confirmationWindowMs / 1_000} seconds, including the configured sound delay.` });
+      workflowEngine?.recordExternalEvent('alert.audio.browser.failed', 'error', `${output === 'twitch' ? 'Twitch' : 'Interaction'} Alert audio did not start in the Browser Source.`, { playback: failed });
+    }, confirmationWindowMs);
+    timer.unref?.();
+    browserAudioPlaybackTimers.set(key, timer);
+  };
+  const visualAlerts = new TempestVisualAlertOverlay((event) => expectBrowserAudioPlayback('interaction', event));
+  const twitchAlertOverlay = new TempestVisualAlertOverlay((event) => expectBrowserAudioPlayback('twitch', event));
   const twitchVisualAlerts = new TempestTwitchVisualAlertCatalog(options.dataDirectory);
   await twitchVisualAlerts.initialize();
   const alertHistory = new TempestAlertHistory(options.dataDirectory);
@@ -446,8 +502,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   let alertQueue: TempestAlertQueue | undefined;
   let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
-
-  let workflowEngine: TempestWorkflowEngine | null = null;
 
   const activeBroadcastScene = (): string | undefined => {
     const broadcast = [...clients.values()].find((client) => client.applicationId === 'com.tempestmainframe.tempest-broadcast' || client.capabilities.includes('broadcast.status'));
@@ -529,11 +583,28 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
     }));
     const output = visualAlertOutputStatus();
+    const browserAudioStarted = browserAudioPlaybackRecords.filter((record) => record.state === 'started');
+    const browserAudioFailed = browserAudioPlaybackRecords.filter((record) => record.state === 'failed');
+    const browserAudioPending = browserAudioPlaybackRecords.filter((record) => record.state === 'pending');
     return {
       generatedAt: new Date().toISOString(),
       history: alertHistory.summary(),
       configured: { interactionAlerts: interactionAlerts.length, twitchAlerts: twitchAlerts.length, variants: twitchAlerts.reduce((sum, alert) => sum + (alert.alertVariants?.length || 0), 0), assignedAssets: assets.length, unavailableAssets: issues.length },
-      sources: { interactionClients: output.interaction.connectedClients, twitchClients: output.twitch.connectedClients },
+      sources: {
+        interactionClients: output.interaction.connectedClients,
+        interactionAudioClients: output.interaction.connectedAudioClients,
+        twitchClients: output.twitch.connectedClients,
+        twitchAudioClients: output.twitch.connectedAudioClients
+      },
+      audioPlayback: {
+        lane: 'dedicated-loopback',
+        pending: browserAudioPending.length,
+        started: browserAudioStarted.length,
+        failed: browserAudioFailed.length,
+        ...(browserAudioStarted[0]?.confirmedAt ? { lastStartedAt: browserAudioStarted[0].confirmedAt } : {}),
+        ...(browserAudioFailed[0]?.confirmedAt ? { lastFailureAt: browserAudioFailed[0].confirmedAt } : {}),
+        latest: browserAudioPlaybackRecords.slice(0, 20).map((record) => structuredClone(record))
+      },
       queue: alertQueue?.status(),
       issues
     };
@@ -633,7 +704,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         audioAssigned: Boolean(alert.audioUri),
         visualAssigned: Boolean(alert.visualUri),
         audioRoute: alert.audioUri ? 'browser-source' : 'none',
-        browserClients: twitchAlertOverlay.status('').connectedClients,
+        browserClients: twitchAlertOverlay.status('').connectedAudioClients,
         preview: source === 'studio.simulator'
       },
       execute: async () => {
@@ -711,8 +782,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         viewerName: request.viewerName,
         audioAssigned: Boolean(prepared.alert.audioUri),
         visualAssigned: Boolean(prepared.alert.visualUri),
-        audioRoute: !prepared.alert.audioUri ? 'none' : prepared.alert.broadcastAudioSource ? 'broadcast-source' : visualAlerts.status('').connectedClients ? 'browser-source' : options.soundAlertPlayback ? 'studio-local' : 'none',
-        browserClients: visualAlerts.status('').connectedClients,
+        audioRoute: !prepared.alert.audioUri ? 'none' : prepared.alert.broadcastAudioSource ? 'broadcast-source' : visualAlerts.status('').connectedAudioClients ? 'browser-source' : options.soundAlertPlayback ? 'studio-local' : 'none',
+        browserClients: visualAlerts.status('').connectedAudioClients,
         preview: request.source === 'studio.operator'
       },
       onAccepted: () => soundAlerts.commit(prepared),
@@ -745,7 +816,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           free: true
         });
         broadcastSystemEvent('sound-alert.triggered', { alert: prepared.alert, eventId: prepared.eventId, run });
-        const browserSourceOwnsAudio = Boolean(activeVisualAlert.audioUrl && visualAlerts.hasClients());
+        const browserSourceOwnsAudio = Boolean(activeVisualAlert.audioUrl && visualAlerts.hasAudioClients());
         const separateBroadcastSourceOwnsAudio = Boolean(prepared.alert.broadcastAudioSource);
         if (options.soundAlertPlayback && !browserSourceOwnsAudio && !separateBroadcastSourceOwnsAudio) {
           Promise.resolve(options.soundAlertPlayback({ phase: 'play', runId: run.id, alert: prepared.alert })).catch((error) => {
@@ -841,9 +912,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         }
       }
       const visualAlertPageRoute = requestUrl.pathname === '/visual-alerts' || requestUrl.pathname === '/visual-alerts/interactions'
-        ? { overlay: visualAlerts, eventsPath: '/visual-alerts/interactions/events' }
+        ? { overlay: visualAlerts, eventsPath: '/visual-alerts/interactions/events', output: 'interaction' as const }
         : requestUrl.pathname === '/visual-alerts/twitch'
-          ? { overlay: twitchAlertOverlay, eventsPath: '/visual-alerts/twitch/events' }
+          ? { overlay: twitchAlertOverlay, eventsPath: '/visual-alerts/twitch/events', output: 'twitch' as const }
           : undefined;
       if (request.method === 'GET' && visualAlertPageRoute) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Visual Alerts overlay is available only on this computer.' });
@@ -852,7 +923,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         response.setHeader('Cache-Control', 'no-store');
         response.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ${alertAudioBaseUrl}; img-src 'self' data:; media-src 'self' ${alertAudioBaseUrl} blob:;`);
         response.setHeader('X-Content-Type-Options', 'nosniff');
-        return response.end(visualAlertPageRoute.overlay.page(visualAlertPageRoute.eventsPath, alertAudioBaseUrl));
+        return response.end(visualAlertPageRoute.overlay.page(visualAlertPageRoute.eventsPath, alertAudioBaseUrl, visualAlertPageRoute.output));
       }
       const visualAlertEventsOverlay = requestUrl.pathname === '/visual-alerts/events' || requestUrl.pathname === '/visual-alerts/interactions/events'
         ? visualAlerts
@@ -861,7 +932,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           : undefined;
       if (request.method === 'GET' && visualAlertEventsOverlay) {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Visual Alerts overlay is available only on this computer.' });
-        visualAlertEventsOverlay.connect(response);
+        visualAlertEventsOverlay.connect(response, requestUrl.searchParams.get('orientation') === 'vertical' ? 'vertical' : 'horizontal');
         return;
       }
       if (request.method === 'GET' && requestUrl.pathname === '/chat-overlay') {
@@ -1381,7 +1452,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const activeAlert = twitchAlertOverlay.showTwitch(alert, previewEvent, previewEvent.id, resolveTwitchAlertDesignForScene(alert.design, sceneName), false, sceneName);
         const reactionRun = await triggerTwitchAlertReaction(alert, previewEvent, 'studio.simulator');
         const previewTime = new Date().toISOString();
-        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri ? 'browser-source' : 'none', browserClients: twitchAlertOverlay.status('').connectedClients, preview: true } };
+        const previewItem: TempestAlertQueueItem = { id: globalThis.crypto.randomUUID(), kind: 'twitch', alertId: alert.id, name: alert.name, source: 'studio.simulator', durationMs: alert.durationMs, state: 'playing', enqueuedAt: previewTime, startedAt: previewTime, diagnostics: { viewerName: 'Studio Operator', variantId: alert.selectedVariantId, variantName: alert.selectedVariantName, audioAssigned: Boolean(alert.audioUri), visualAssigned: Boolean(alert.visualUri), audioRoute: alert.audioUri ? 'browser-source' : 'none', browserClients: twitchAlertOverlay.status('').connectedAudioClients, preview: true } };
         alertHistory.started(previewItem);
         alertHistory.completed(previewItem);
         return sendJson(response, 202, { activeAlert, reactionRun, preview: true });
@@ -1698,6 +1769,33 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const alertAudioServer = createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${host}`);
     try {
+      const requestOrigin = request.headers.origin || '';
+      const allowedOrigin = /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(requestOrigin) ? requestOrigin : '';
+      if (request.method === 'OPTIONS') {
+        if (allowedOrigin) response.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        response.statusCode = 204;
+        return response.end();
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/visual-alerts/audio-status') {
+        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Alert audio status is accepted only from this computer.' });
+        const body = await readJson(request) as Record<string, unknown>;
+        const runId = typeof body.runId === 'string' ? body.runId.trim().slice(0, 200) : '';
+        const alertId = typeof body.alertId === 'string' ? body.alertId.trim().slice(0, 200) : '';
+        const output = body.output === 'interaction' || body.output === 'twitch' ? body.output : undefined;
+        const state = body.state === 'started' || body.state === 'failed' ? body.state : undefined;
+        const method = ['direct', 'blob', 'web-audio', 'fetch'].includes(String(body.method)) ? body.method as BrowserAudioPlaybackMethod : undefined;
+        if (!runId || !alertId || !output || !state || !method) return sendJson(response, 400, { error: 'Alert audio status is invalid.' });
+        const expected = browserAudioPlaybackRecords.find((record) => record.runId === runId && record.output === output);
+        if (!expected || expected.alertId !== alertId) return sendJson(response, 409, { error: 'This alert audio playback was not expected.' });
+        const playback = recordBrowserAudioPlayback({ runId, alertId, output, state, method, ...(typeof body.error === 'string' ? { error: body.error } : {}) });
+        if (state === 'failed') workflowEngine?.recordExternalEvent('alert.audio.browser.failed', 'error', `${output === 'twitch' ? 'Twitch' : 'Interaction'} Alert audio failed in the Browser Source.`, { playback });
+        if (allowedOrigin) response.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+        response.setHeader('Cache-Control', 'no-store');
+        response.statusCode = 204;
+        return response.end();
+      }
       if (await serveAlertAudio(request, response, requestUrl)) return;
       return sendJson(response, 404, { error: 'Tempest alert audio route was not found.' });
     } catch (error) {
@@ -1872,6 +1970,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       discordVoiceOverlay.close();
       twitchGateway.close();
       workflowEngine?.close();
+      for (const timer of browserAudioPlaybackTimers.values()) clearTimeout(timer);
+      browserAudioPlaybackTimers.clear();
       for (const client of clients.values()) client.socket.close(1001, 'Tempest Bridge shutting down');
       await new Promise<void>((resolve, reject) => webSockets.close((error) => error ? reject(error) : resolve()));
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
