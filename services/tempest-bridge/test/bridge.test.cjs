@@ -428,6 +428,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const overlayPage = await fetch(`${runtime.baseUrl}/visual-alerts`);
   assert.equal(overlayPage.status, 200);
   assert.match(overlayPage.headers.get('content-type'), /^text\/html/);
+  assert.match(overlayPage.headers.get('content-security-policy'), /media-src 'self' blob:/);
   const overlayMarkup = await overlayPage.text();
   assert.match(overlayMarkup, /Tempest Studio Visual Alerts/);
   assert.match(overlayMarkup, /new EventSource\("\/visual-alerts\/interactions\/events"\)/);

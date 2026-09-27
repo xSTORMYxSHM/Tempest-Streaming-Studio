@@ -795,7 +795,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         response.statusCode = 200;
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
         response.setHeader('Cache-Control', 'no-store');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self';");
+        response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:;");
         response.setHeader('X-Content-Type-Options', 'nosniff');
         return response.end(visualAlertPageRoute.overlay.page(visualAlertPageRoute.eventsPath));
       }
