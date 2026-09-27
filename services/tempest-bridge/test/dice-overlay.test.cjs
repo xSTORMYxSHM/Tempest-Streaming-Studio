@@ -70,7 +70,10 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /diceBox\.roll/);
   assert.match(browserClient, /diceBox\.reroll\(rejected/);
   assert.match(browserClient, /onDieComplete: \(die\) => physicalDieListener/);
+  assert.match(browserClient, /onRollComplete: \(results\) => physicalRollListener/);
   assert.match(browserClient, /Promise\.race\(\[apiResult, callbackResult\]\)/);
+  assert.match(browserClient, /settled visually but did not return its physical result within 20 seconds/);
+  assert.match(browserClient, /if \(payload\.roll\) showResult\(payload\.roll\)/);
   assert.match(browserClient, /fetch\('\/dice-overlay\/error'/);
   assert.match(browserClient, /hasOwnProperty\.call\(result, 'value'\)/);
   assert.match(browserClient, /URL\.createObjectURL\(impactWav\(\)\)/);
@@ -98,7 +101,7 @@ test('persists presentation settings separately from physical roll history', asy
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-settings-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
-  await overlay.update({ theme: 'brass', durationMs: 7000, scalePercent: 115, soundEnabled: true });
+  await overlay.update({ theme: 'brass', diceTheme: 'wooden', durationMs: 7000, scalePercent: 115, soundEnabled: true });
   const client = connectedClient(overlay);
   const rolling = overlay.roll({ expression: '1d6' });
   const request = latestEvent(client, 'roll-request');
@@ -108,6 +111,7 @@ test('persists presentation settings separately from physical roll history', asy
 
   const saved = JSON.parse(await readFile(path.join(directory, 'dice-overlay.json'), 'utf8'));
   assert.equal(saved.theme, 'brass');
+  assert.equal(saved.diceTheme, 'wooden');
   assert.equal(saved.durationMs, 7000);
   assert.equal(saved.scalePercent, 115);
   assert.equal(saved.soundEnabled, true);
@@ -116,6 +120,7 @@ test('persists presentation settings separately from physical roll history', asy
   const restored = new TempestDiceOverlay(directory);
   await restored.initialize();
   assert.equal(restored.status('local').settings.theme, 'brass');
+  assert.equal(restored.status('local').settings.diceTheme, 'wooden');
   assert.equal(restored.status('local').history.length, 0);
   restored.close();
 });

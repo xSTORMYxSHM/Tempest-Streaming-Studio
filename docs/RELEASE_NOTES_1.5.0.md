@@ -7,13 +7,15 @@ Tempest Streaming Studio 1.5.0 is a coordinated reliability and operations relea
 - Recovers Twitch and Interaction Alert audio when a local media fetch stalls by aborting the bounded request and retrying through the Browser Source's direct HTML media path.
 - Keeps blob-backed media and Web Audio compatibility paths, source-native Broadcast routing, queue order, cancellation, and explicit playback diagnostics.
 - Uses an OBS-compatible Emote Wall event stream and exposes disconnected-source diagnostics so a live source can recover without being recreated.
-- Completes Dice Box rolls from the physically settled dice before the presentation timeout, including custom-range rejection rerolls.
+- Completes Dice Box rolls from the physically settled dice before the presentation timeout, records the result in Studio, and clears the on-stream presentation on schedule, including custom-range rejection rerolls.
+- Adds eight locally bundled Dice Box styles—Classic, Smooth Edge, Gemstone, Carved Rock, Weathered Rust, Wooden, Dice of Rolling, and Blue-Green Metal—without adding the Tabletop application or a network dependency.
 
 ## Chatbot quality of life
 
 - Updates the default `!song` listener link to `https://www.tempestmainframe.com/listen` while preserving custom providers.
 - Adds optional rotating automatic messages triggered by elapsed minutes or viewer chat activity, with Twitch, Kick, or combined destinations.
 - Keeps automatic messages offline-aware and supports channel and bot-name substitutions.
+- Adds session-based numeric chat polls with 2–10 options, live aggregate results, and one final vote per Twitch or Kick account when the chatter sends only the option number.
 
 ## Studio and Broadcast ownership
 

@@ -662,3 +662,4 @@ button:disabled { opacity: .42; cursor: not-allowed; }
     transition-duration:.01ms !important;
   }
 }
+.chatbot-poll-grid{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(320px,1.15fr);gap:16px}.chatbot-poll-grid fieldset{min-width:0}.chatbot-poll-results{display:grid;gap:10px}.chatbot-poll-result{display:grid;gap:7px}.chatbot-poll-result div{display:flex;justify-content:space-between;gap:16px}.chatbot-poll-result div span{color:var(--muted);font:700 11px Consolas,monospace;white-space:nowrap}.chatbot-poll-result i{display:block;height:7px;overflow:hidden;border:1px solid rgba(84,242,235,.22);border-radius:999px;background:rgba(3,12,18,.8)}.chatbot-poll-result i b{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--cyan),#a7ff5c);box-shadow:0 0 14px rgba(84,242,235,.45);transition:width .2s ease}@media(max-width:900px){.chatbot-poll-grid{grid-template-columns:1fr}}

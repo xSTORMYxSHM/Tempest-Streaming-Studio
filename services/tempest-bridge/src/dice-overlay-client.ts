@@ -5,7 +5,7 @@ const world = document.getElementById('diceWorld');
 const hud = document.getElementById('diceHud');
 const errorBanner = document.getElementById('diceError');
 const colors = { stormglass: '#2e91ad', brass: '#a7792b', obsidian: '#3d315f' };
-let settings = { theme: 'stormglass', durationMs: 5200, soundEnabled: false, showReason: true, scalePercent: 100 };
+let settings = { theme: 'stormglass', diceTheme: 'default', durationMs: 5200, soundEnabled: false, showReason: true, scalePercent: 100 };
 let box;
 let boxPromise;
 let clearTimer = 0;
@@ -13,6 +13,8 @@ let errorTimer = 0;
 let impactAudio;
 let impactUrl;
 let physicalDieListener;
+let physicalRollListener;
+let presentedRollId = '';
 
 function themeColor() { return colors[settings.theme] || colors.stormglass; }
 
@@ -54,7 +56,8 @@ async function getBox() {
       container: '#diceWorld', assetPath: '/dice-overlay/assets/', theme: 'default', themeColor: themeColor(),
       enableShadows: true, shadowTransparency: .72, lightIntensity: 1.15, offscreen: true,
       scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)),
-      onDieComplete: (die) => physicalDieListener?.(die)
+      onDieComplete: (die) => physicalDieListener?.(die),
+      onRollComplete: (results) => physicalRollListener?.(results)
     });
     await box.init();
     return box;
@@ -66,7 +69,7 @@ async function apply(next) {
   settings = { ...settings, ...next };
   if (boxPromise) {
     const diceBox = await boxPromise;
-    await diceBox.updateConfig({ themeColor: themeColor(), scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)) });
+    await diceBox.updateConfig({ theme: settings.diceTheme || 'default', themeColor: themeColor(), scale: 5 * Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100)) });
   }
 }
 
@@ -78,19 +81,31 @@ function flatten(results) {
 }
 
 async function waitForPhysicalDice(startRoll, expectedCount) {
-  const callbackResult = new Promise((resolve) => {
+  let timer = 0;
+  const callbackResult = new Promise((resolve, reject) => {
     const settled = [];
     physicalDieListener = (die) => {
       if (!die || !Object.prototype.hasOwnProperty.call(die, 'value')) return;
       settled.push(die);
       if (settled.length >= expectedCount) resolve(settled.slice(0, expectedCount));
     };
+    physicalRollListener = (results) => {
+      const completed = flatten(results);
+      if (completed.length >= expectedCount) resolve(completed.slice(0, expectedCount));
+    };
+    timer = setTimeout(() => reject(new Error('Dice Box settled visually but did not return its physical result within 20 seconds.')), 20000);
   });
   try {
-    const apiResult = Promise.resolve().then(startRoll).then(flatten);
+    const apiResult = Promise.resolve().then(startRoll).then((results) => {
+      const completed = flatten(results);
+      if (completed.length < expectedCount) return callbackResult;
+      return completed.slice(0, expectedCount);
+    });
     return await Promise.race([apiResult, callbackResult]);
   } finally {
+    clearTimeout(timer);
     physicalDieListener = undefined;
+    physicalRollListener = undefined;
   }
 }
 
@@ -110,7 +125,7 @@ async function performRoll(request) {
     errorBanner.classList.remove('visible');
     const diceBox = await getBox();
     const notation = String(request.count) + 'd' + String(request.physicalSides);
-    let pending = await waitForPhysicalDice(() => diceBox.roll(notation, { themeColor: themeColor() }), Number(request.count));
+    let pending = await waitForPhysicalDice(() => diceBox.roll(notation, { theme: settings.diceTheme || 'default', themeColor: themeColor() }), Number(request.count));
     const accepted = [];
     let attempts = 0;
     while (pending.length && attempts < 40) {
@@ -131,8 +146,10 @@ async function performRoll(request) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Studio rejected the physical dice result.');
+    if (payload.roll) showResult(payload.roll);
   } catch (error) {
     console.error('Tempest Dice Box roll failed.', error);
+    if (box) box.clear();
     showError(error instanceof Error ? error.message : String(error));
     await reportRollFailure(request, error);
   }
@@ -140,6 +157,8 @@ async function performRoll(request) {
 
 function showResult(roll) {
   if (!roll) return;
+  const repeated = presentedRollId === roll.id;
+  presentedRollId = String(roll.id || '');
   clearTimeout(clearTimer);
   hud.replaceChildren();
   const card = document.createElement('section'); card.className = 'dice-result';
@@ -151,7 +170,7 @@ function showResult(roll) {
   if (roll.rollerName) { const roller = document.createElement('em'); roller.textContent = 'Rolled by ' + roll.rollerName; card.append(roller); }
   hud.append(card);
   hud.classList.add('visible');
-  playImpact();
+  if (!repeated) playImpact();
   clearTimer = setTimeout(clearPresentation, Math.max(2500, Number(settings.durationMs) || 5200));
 }
 
@@ -159,6 +178,7 @@ function clearPresentation() {
   clearTimeout(clearTimer);
   hud.classList.remove('visible');
   hud.replaceChildren();
+  presentedRollId = '';
   if (box) box.clear();
 }
 

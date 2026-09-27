@@ -188,7 +188,8 @@
           <article class="panel dice-settings-panel">
             <div class="panel-header"><div><span>PRESENTATION</span><h3>Browser Source appearance</h3></div><button id="saveDiceOverlaySettings" class="secondary-button" type="button">Save Appearance</button></div>
             <div class="dice-settings-grid">
-              <label><span>Dice color</span><select id="diceTheme"><option value="stormglass">Stormglass</option><option value="brass">Brass</option><option value="obsidian">Obsidian</option></select></label>
+              <label><span>Dice style</span><select id="diceTheme"><option value="default">Classic</option><option value="smooth">Smooth edge</option><option value="gemstone">Gemstone</option><option value="rock">Carved rock</option><option value="rust">Weathered rust</option><option value="wooden">Wooden</option><option value="diceOfRolling">Multicolor Dice of Rolling</option><option value="blueGreenMetal">Blue-green metal</option></select></label>
+              <label><span>Dice color</span><select id="diceColor"><option value="stormglass">Stormglass</option><option value="brass">Brass</option><option value="obsidian">Obsidian</option></select></label>
               <label><span>On-screen time</span><select id="diceDuration"><option value="3500">3.5 seconds</option><option value="5200">5.2 seconds</option><option value="7000">7 seconds</option><option value="10000">10 seconds</option></select></label>
               <label><span>Scale</span><input id="diceScale" type="number" min="60" max="140" step="5" value="100" /><small>60–140%</small></label>
               <label class="toggle-label"><input id="diceShowReason" type="checkbox" checked /><span>Show the roll reason</span></label>
@@ -539,6 +540,15 @@
               </div>
             </div>
           </article>
+
+          <form id="chatbotPollForm" class="panel chatbot-provider-panel chatbot-poll-panel">
+            <div class="panel-header"><div><span>CHAT POLL</span><h3>One numbered vote per chatter</h3><p>Start a Studio poll, then each Twitch or Kick account can vote once by sending only the option number in chat.</p></div><span id="chatbotPollBadge" class="status-badge offline">IDLE</span></div>
+            <div class="chatbot-poll-grid">
+              <fieldset><legend>POLL SETUP</legend><label>Question<input id="chatbotPollQuestion" maxlength="160" placeholder="What should we play next?" /></label><label>Numbered options<textarea id="chatbotPollOptions" rows="6" maxlength="809" placeholder="1 option per line">Option 1&#10;Option 2</textarea></label><small>Enter 2–10 options. Studio assigns numbers in order and accepts messages containing only that number.</small></fieldset>
+              <fieldset><legend>LIVE RESULTS</legend><div id="chatbotPollResults" class="chatbot-poll-results empty-state">No poll is active.</div><p id="chatbotPollStatus">Start a poll when chat is ready.</p></fieldset>
+            </div>
+            <div class="dialog-actions"><button id="clearChatbotPoll" class="secondary-button" type="button">Clear Poll</button><button id="stopChatbotPoll" class="secondary-button danger-outline" type="button">End Voting</button><button id="startChatbotPoll" class="primary-button" type="submit">Start Poll</button></div>
+          </form>
 
           <article class="panel chatbot-account-guide">
             <div class="chatbot-account-guide-icon" aria-hidden="true">02</div>

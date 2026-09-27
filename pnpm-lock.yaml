@@ -57,6 +57,9 @@ importers:
       '@3d-dice/dice-box':
         specifier: 1.1.4
         version: 1.1.4(babylonjs-gltf2interface@5.57.1)
+      '@3d-dice/dice-themes':
+        specifier: 0.2.1
+        version: 0.2.1
       '@tempest/contracts':
         specifier: workspace:*
         version: link:../../packages/tempest-contracts
@@ -123,6 +126,9 @@ packages:
 
   '@3d-dice/dice-box@1.1.4':
     resolution: {integrity: sha512-W8evh0LlCx/sorPS00cGZJO+/3I8g5eMfDqFAKAIUXF+/XVTP06bhgHSNFOCvLzWbdbEJX5za9QxB0ulDvfxyA==}
+
+  '@3d-dice/dice-themes@0.2.1':
+    resolution: {integrity: sha512-1z7k9RTZOHvPnqIZ0HMSYRXaAut+C3VJVCnDUu6xmdXdQ7CaBTeFsB5d3NySpPXQLbIsiSZ8PoUKAC78nnLQGQ==}
 
   '@babylonjs/core@5.57.1':
     resolution: {integrity: sha512-k8U+SFPVGvHgeNr651nxZL26iVCmTzjmRrdbQa0BGas+lg8PIV/tfhN4uTeWWQeRFLvjbkcHA5qD8x/Xk3EpMQ==}
@@ -1276,6 +1282,8 @@ snapshots:
       node-abort-controller: 3.1.1
     transitivePeerDependencies:
       - babylonjs-gltf2interface
+
+  '@3d-dice/dice-themes@0.2.1': {}
 
   '@babylonjs/core@5.57.1': {}
 

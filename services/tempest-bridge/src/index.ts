@@ -110,6 +110,7 @@ const simulcastStopCapability = 'broadcast.simulcast.stop';
 const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
 const diceBoxDistributionDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-box/package.json')), 'dist');
 const diceBoxAssetsDirectory = path.join(diceBoxDistributionDirectory, 'assets');
+const diceThemeAssetsDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-themes/package.json')), 'themes');
 
 const diceBoxMediaTypes: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -865,8 +866,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Dice Box assets are available only on this computer.' });
         const relativePath = decodeURIComponent(diceBoxAssetMatch[1]).replace(/\\/g, '/');
         if (!relativePath || relativePath.split('/').some((segment) => !segment || segment === '.' || segment === '..')) return sendJson(response, 400, { error: 'The Dice Box asset path is invalid.' });
-        const filePath = path.resolve(diceBoxAssetsDirectory, ...relativePath.split('/'));
-        if (!filePath.startsWith(`${path.resolve(diceBoxAssetsDirectory)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
+        const themeMatch = relativePath.match(/^themes\/(smooth|gemstone|rock|rust|wooden|diceOfRolling|blueGreenMetal)\/(.+)$/);
+        const assetRoot = themeMatch ? diceThemeAssetsDirectory : diceBoxAssetsDirectory;
+        const assetSegments = themeMatch ? [themeMatch[1], ...themeMatch[2].split('/')] : relativePath.split('/');
+        const filePath = path.resolve(assetRoot, ...assetSegments);
+        if (!filePath.startsWith(`${path.resolve(assetRoot)}${path.sep}`)) return sendJson(response, 403, { error: 'The Dice Box asset path is outside the bundled asset directory.' });
         await serveDiceBoxFile(response, filePath);
         return;
       }
@@ -1574,6 +1578,15 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/raid/test') {
         return sendJson(response, 200, await chatbot.testRaidAutomation(await readJson(request)));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/poll/start') {
+        return sendJson(response, 200, chatbot.startNumericPoll(await readJson(request)));
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/poll/stop') {
+        return sendJson(response, 200, chatbot.stopNumericPoll());
+      }
+      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/chatbot/poll') {
+        return sendJson(response, 200, chatbot.clearNumericPoll());
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/messages') {
         const body = await readJson(request) as { platform?: unknown };

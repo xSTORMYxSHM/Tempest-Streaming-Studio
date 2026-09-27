@@ -175,6 +175,40 @@ test('persists streamer-named counters shared by Twitch and Kick chat', async ()
   assert.equal(counter.counterValue, 6);
 });
 
+test('records one numeric poll vote per chat account and keeps aggregate results after voting ends', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-poll-'));
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await chatbot.initialize('client123');
+  chatbot.startNumericPoll({ question: 'What should we play?', options: ['Game One', 'Game Two', 'Game Three'] });
+  const event = (id, text, viewerId, source = 'twitch') => ({
+    schemaVersion: 1, id, topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source,
+    channel: { id: `${source}-channel`, login: 'tempest' },
+    viewer: { id: viewerId, login: viewerId, displayName: viewerId, roles: [] },
+    payload: { messageId: `message-${id}`, text }
+  });
+
+  await chatbot.processChatEvent(event('vote-1', '2', 'viewer-one'));
+  await chatbot.processChatEvent(event('vote-duplicate', '1', 'viewer-one'));
+  await chatbot.processChatEvent(event('vote-2', '2', 'viewer-two', 'kick'));
+  await chatbot.processChatEvent(event('not-a-vote', 'I choose 3', 'viewer-three'));
+  await chatbot.processChatEvent(event('out-of-range', '9', 'viewer-four'));
+
+  let poll = chatbot.status().poll;
+  assert.equal(poll.state, 'active');
+  assert.equal(poll.totalVotes, 2);
+  assert.deepEqual(poll.options.map((option) => option.votes), [0, 2, 0]);
+  assert.equal(poll.options[1].percentage, 100);
+
+  chatbot.stopNumericPoll();
+  await chatbot.processChatEvent(event('after-close', '1', 'viewer-five'));
+  poll = chatbot.status().poll;
+  assert.equal(poll.state, 'closed');
+  assert.equal(poll.totalVotes, 2);
+  chatbot.clearNumericPoll();
+  assert.deepEqual(chatbot.status().poll, { state: 'idle', options: [], totalVotes: 0 });
+  await chatbot.close();
+});
+
 test('rotates automatic messages when either the chat or time threshold is reached', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-auto-messages-'));
   const sent = [];

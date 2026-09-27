@@ -1469,6 +1469,23 @@
     $('#sharedChatMessage').disabled = !connected && !kickConnected;
     $('#sendSharedChatMessage').disabled = !connected && !kickConnected;
     $('#clearSharedChatMessages').disabled = !liveMessages.length;
+    const poll = chatbot.poll || { state: 'idle', options: [], totalVotes: 0 };
+    const pollActive = poll.state === 'active';
+    $('#chatbotPollBadge').textContent = pollActive ? `${poll.totalVotes || 0} VOTE${poll.totalVotes === 1 ? '' : 'S'}` : poll.state === 'closed' ? 'VOTING ENDED' : 'IDLE';
+    $('#chatbotPollBadge').classList.toggle('offline', !pollActive);
+    if (poll.state !== 'idle' && !$('#chatbotPollForm').contains(document.activeElement)) {
+      $('#chatbotPollQuestion').value = poll.question || '';
+      $('#chatbotPollOptions').value = (poll.options || []).map((option) => option.label).join('\n');
+    }
+    const pollResults = $('#chatbotPollResults');
+    pollResults.classList.toggle('empty-state', !(poll.options || []).length);
+    pollResults.innerHTML = (poll.options || []).length ? poll.options.map((option) => `<article class="chatbot-poll-result"><div><strong>${option.number}. ${escapeHtml(option.label)}</strong><span>${Number(option.votes || 0).toLocaleString()} · ${Number(option.percentage || 0).toLocaleString()}%</span></div><i><b style="width:${Math.max(0, Math.min(100, Number(option.percentage || 0)))}%"></b></i></article>`).join('') : 'No poll is active.';
+    $('#chatbotPollStatus').textContent = pollActive
+      ? `Voting is open. ${poll.totalVotes || 0} unique ${poll.totalVotes === 1 ? 'account has' : 'accounts have'} voted; each account's first valid number is final.`
+      : poll.state === 'closed' ? `Voting ended with ${poll.totalVotes || 0} unique vote${poll.totalVotes === 1 ? '' : 's'}. Results remain until cleared or replaced.` : 'Start a poll when chat is ready.';
+    $('#startChatbotPoll').disabled = pollActive;
+    $('#stopChatbotPoll').disabled = !pollActive;
+    $('#clearChatbotPoll').disabled = poll.state === 'idle';
     $('#chatbotAccountBadge').textContent = account ? `@${account.login}` : label(chatbot.oauth?.state);
     $('#chatbotAccountBadge').classList.toggle('offline', !authorized);
     $('#chatbotIdentityTitle').textContent = account ? `${botName} · @${account.login}` : `Connect ${botName}`;
@@ -1972,6 +1989,34 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function startChatbotPoll(event) {
+    event.preventDefault();
+    try {
+      state.chatbot = await api('/v1/chatbot/poll/start', { method: 'POST', body: {
+        question: $('#chatbotPollQuestion').value,
+        options: $('#chatbotPollOptions').value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean)
+      } });
+      renderChatbot();
+      toast('Numeric chat poll started. Each account can vote once.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function stopChatbotPoll() {
+    try {
+      state.chatbot = await api('/v1/chatbot/poll/stop', { method: 'POST', body: {} });
+      renderChatbot();
+      toast('Chat poll voting ended.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearChatbotPoll() {
+    try {
+      state.chatbot = await api('/v1/chatbot/poll', { method: 'DELETE' });
+      renderChatbot();
+      toast('Chat poll cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   function autoModFormValue() {
     const exemptRoles = [
       $('#chatbotAutoModExemptBroadcaster').checked ? 'broadcaster' : '',
@@ -2432,7 +2477,8 @@
     preview.classList.toggle('empty-state', !roll);
     preview.innerHTML = roll ? `<div><div class="dice-preview-expression">${escapeHtml(roll.expression)} · ${escapeHtml(roll.rollerName)}</div><div class="dice-preview-dice">${roll.dice.map((die) => `<span class="dice-preview-die ${die.kept ? '' : 'dropped'}" title="d${escapeHtml(die.sides)}${die.kept ? '' : ' dropped'}">${escapeHtml(die.value)}</span>`).join('')}</div></div><strong class="dice-preview-total">${escapeHtml(roll.total)}</strong>${roll.reason ? `<p class="dice-preview-reason">${escapeHtml(roll.reason)}</p>` : ''}` : 'Results appear here after the on-stream dice finish bouncing and settle.';
     if (!settings || !status.settings) return;
-    $('#diceTheme').value = status.settings.theme || 'stormglass';
+    $('#diceTheme').value = status.settings.diceTheme || 'default';
+    $('#diceColor').value = status.settings.theme || 'stormglass';
     $('#diceDuration').value = String(status.settings.durationMs || 5200);
     $('#diceScale').value = String(status.settings.scalePercent || 100);
     $('#diceShowReason').checked = status.settings.showReason !== false;
@@ -2461,7 +2507,8 @@
     try {
       const result = await api('/v1/dice-overlay/settings', { method: 'POST', body: {
         enabled: $('#diceOverlayEnabled').checked,
-        theme: $('#diceTheme').value,
+        diceTheme: $('#diceTheme').value,
+        theme: $('#diceColor').value,
         durationMs: Number($('#diceDuration').value),
         soundEnabled: $('#diceSoundEnabled').checked,
         showReason: $('#diceShowReason').checked,
@@ -4721,6 +4768,9 @@
     $('#openChatbotAuthorization').addEventListener('click', () => state.chatbotDeviceAuthorization && window.tempestStudio.openExternal(state.chatbotDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     $('#chatbotCommandForm').addEventListener('submit', saveChatbotCommand);
     $('#chatbotAutoMessagesForm').addEventListener('submit', saveChatbotAutoMessages);
+    $('#chatbotPollForm').addEventListener('submit', startChatbotPoll);
+    $('#stopChatbotPoll').addEventListener('click', stopChatbotPoll);
+    $('#clearChatbotPoll').addEventListener('click', clearChatbotPoll);
     $('#chatbotAutoModForm').addEventListener('submit', saveChatbotAutoMod);
     $('#testChatbotAutoMod').addEventListener('click', testChatbotAutoMod);
     $('#chatbotAutoModAction').addEventListener('change', () => { $('#chatbotAutoModTimeoutControl').hidden = $('#chatbotAutoModAction').value !== 'timeout'; });

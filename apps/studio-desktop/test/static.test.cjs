@@ -39,6 +39,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /data-section="dice"/);
   assert.match(html, /id="diceSection"/);
   assert.match(html, /id="diceRollForm"/);
+  assert.match(html, /id="diceColor"/);
+  assert.match(html, /value="wooden"/);
   assert.match(renderer, /\/v1\/dice-overlay\/roll/);
   assert.match(renderer, /3D Dice Browser Source URL/);
   assert.match(styles, /Studio-owned 3D dice/);
@@ -397,6 +399,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="chatbotAutoMessageThreshold"/);
   assert.match(html, /id="chatbotAutoMessagesTwitch"/);
   assert.match(html, /id="chatbotAutoMessagesKick"/);
+  assert.match(html, /id="chatbotPollForm"/);
+  assert.match(renderer, /\/v1\/chatbot\/poll\/start/);
+  assert.match(renderer, /\/v1\/chatbot\/poll\/stop/);
   assert.match(renderer, /Rotating Auto Messages saved/);
   assert.match(html, /id="chatbotAutoModForm"/);
   assert.match(html, /AutoMod \+ link protection/);

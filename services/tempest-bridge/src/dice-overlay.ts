@@ -5,11 +5,13 @@ import path from 'node:path';
 import { tempestDiceOverlayClient } from './dice-overlay-client';
 
 export type TempestDiceTheme = 'stormglass' | 'brass' | 'obsidian';
+export type TempestDiceStyle = 'default' | 'smooth' | 'gemstone' | 'rock' | 'rust' | 'wooden' | 'diceOfRolling' | 'blueGreenMetal';
 
 export interface TempestDiceOverlaySettings {
   schemaVersion: 1;
   enabled: boolean;
   theme: TempestDiceTheme;
+  diceTheme: TempestDiceStyle;
   durationMs: number;
   soundEnabled: boolean;
   showReason: boolean;
@@ -70,6 +72,7 @@ const defaultSettings: TempestDiceOverlaySettings = {
   schemaVersion: 1,
   enabled: true,
   theme: 'stormglass',
+  diceTheme: 'default',
   durationMs: 5200,
   soundEnabled: false,
   showReason: true,
@@ -107,6 +110,7 @@ export function diceBoxPhysicalSides(sides: number): number {
 function validateSettings(input: TempestDiceOverlaySettings): TempestDiceOverlaySettings {
   if (typeof input.enabled !== 'boolean' || typeof input.soundEnabled !== 'boolean' || typeof input.showReason !== 'boolean') throw new Error('Dice overlay toggles must be boolean.');
   if (!['stormglass', 'brass', 'obsidian'].includes(input.theme)) throw new Error('Dice theme must be stormglass, brass, or obsidian.');
+  if (!['default', 'smooth', 'gemstone', 'rock', 'rust', 'wooden', 'diceOfRolling', 'blueGreenMetal'].includes(input.diceTheme)) throw new Error('Dice style is not supported.');
   return {
     ...input,
     schemaVersion: 1,
@@ -170,6 +174,7 @@ export class TempestDiceOverlay {
         if (this.pending?.request.id !== presentation.id) return;
         this.pending = undefined;
         this.broadcast('roll-error', { id: presentation.id, message: 'The physical dice did not finish within 45 seconds.' });
+        this.broadcast('clear', {});
         reject(new Error('The physical dice did not finish within 45 seconds.'));
       }, 45_000);
       this.pending = { request: presentation, parsed, reason, rollerName, resolve, reject, timeout };
@@ -217,6 +222,7 @@ export class TempestDiceOverlay {
     clearTimeout(pending.timeout);
     this.pending = undefined;
     this.broadcast('roll-error', { id: pending.request.id, message });
+    this.broadcast('clear', {});
     pending.reject(new Error(message));
   }
 

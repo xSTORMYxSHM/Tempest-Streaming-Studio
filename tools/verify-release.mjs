@@ -57,6 +57,14 @@ const collectAsarEntries = (entries, prefix = '') => {
   }
 };
 collectAsarEntries(asarHeader.files);
+for (const requiredEntry of [
+  'node_modules/@3d-dice/dice-themes/package.json',
+  'node_modules/@3d-dice/dice-themes/themes/wooden/theme.config.json',
+  'node_modules/@3d-dice/dice-themes/themes/gemstone/theme.config.json',
+  'node_modules/@3d-dice/dice-themes/themes/blueGreenMetal/theme.config.json'
+]) {
+  if (!asarEntries.includes(requiredEntry)) throw new Error(`app.asar is missing required Dice Box theme asset ${requiredEntry}.`);
+}
 const forbiddenAsarEntries = asarEntries.filter((entry) => (
   (!entry.startsWith('node_modules/') && /(^|\/)(?:src|test|tests)(?:\/|$)/i.test(entry))
   || /\.map$/i.test(entry)

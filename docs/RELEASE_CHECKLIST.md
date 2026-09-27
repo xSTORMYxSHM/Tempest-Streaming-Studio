@@ -4,21 +4,21 @@ Studio and Broadcast 1.5.0 remain release candidates until every required gate b
 
 ## Scope freeze
 
-- [x] Limit Studio scope to the known Browser Source fixes, Emote Wall recovery, Dice Box completion, chatbot quality-of-life work, and release validation.
+- [x] Limit Studio scope to the known Browser Source fixes, Emote Wall recovery, Dice Box completion and styles, numeric chat polls, chatbot quality-of-life work, and release validation.
 - [x] Keep video canvases, encoders, Enhanced Broadcasting, platform output services, recording, and final audio routing owned by Broadcast.
 - [x] Keep accounts, stream information, chat/chatbot behavior, alerts, interactions, counters, Dice Box, operator readiness, and orchestration owned by Studio.
 - [x] Keep both Twitch Extension packages on their independent `0.1.0` version line; 1.5.0 does not itself authorize a Twitch-hosted extension deployment.
-- [x] Record Broadcast's matching 1.5.0 commit (`b3ef758dd347de210ae78df882f71a289cfa00dc`) and confirm the shared production contract.
+- [x] Record Broadcast's matching 1.5.0 RC2 commit (`734e952e88f532097dd0249608d61566a275b297`) and confirm the shared production contract.
 - [ ] Do not add new release features after the candidate is packaged; fixes require a new candidate and a repeated rehearsal.
 
 ## Automated Studio gates
 
 - [x] `pnpm install --frozen-lockfile`
-- [x] `pnpm check` (103 tests, 0 failures)
-- [x] `pnpm package:win`
-- [x] Packaged executable smoke test exits 0 with a new isolated profile.
-- [x] NSIS and ZIP artifacts pass checksum generation and release verification.
-- [x] Secret/path scan passes for packaged resources.
+- [x] `pnpm check` (104 tests, 0 failures)
+- [ ] `pnpm package:win`
+- [ ] Packaged executable smoke test exits 0 with a new isolated profile.
+- [ ] NSIS and ZIP artifacts pass checksum generation and release verification.
+- [ ] Secret/path scan passes for packaged resources.
 - [ ] Release audit records the exact candidate commit, artifact hashes, signatures, and test count.
 
 ## Coordinated installed-build rehearsal
@@ -32,13 +32,15 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] An Interaction Alert with assigned audio moves its own source meter and is audible through Monitor and Output.
 - [ ] Alert audio still plays when the first loopback fetch is deliberately stalled or interrupted, and the Broadcast log shows the bounded fallback rather than an unhandled timeout.
 - [ ] Emote Wall receives at least one native Twitch emote and one supported third-party emote while already live, without recreating or refreshing the Browser Source.
-- [ ] A fixed d20 and a custom-range roll visibly bounce, settle, and record their physical results without the 45-second completion failure.
+- [ ] A fixed d20 and a custom-range roll visibly bounce, settle, record their physical results, and clear on schedule without a completion failure.
+- [ ] Switch among at least Classic, Wooden, and Gemstone Dice Box styles; each style loads locally and preserves physical result reporting.
 - [ ] Studio restart/reconnect recovers only the disconnected active Studio Browser Sources and preserves their UUIDs and settings.
 - [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
 - [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
 - [ ] Twitch and Kick messages share Studio's Collaboration Center while replies remain platform-local.
 - [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
 - [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
+- [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback and temporary interactions.
 - [ ] No new error, uncaught rejection, repeated reconnect loop, or growing alert queue appears in Studio or Broadcast logs.
 

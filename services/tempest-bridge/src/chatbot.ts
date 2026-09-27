@@ -132,6 +132,28 @@ export interface ChatbotAutoMessageConfiguration {
   platforms: Array<'twitch' | 'kick'>;
 }
 
+export interface ChatbotNumericPollStatus {
+  state: 'idle' | 'active' | 'closed';
+  id?: string;
+  question?: string;
+  options: Array<{ number: number; label: string; votes: number; percentage: number }>;
+  totalVotes: number;
+  startedAt?: string;
+  endedAt?: string;
+  lastVoteAt?: string;
+}
+
+interface ChatbotNumericPollRuntime {
+  id: string;
+  state: 'active' | 'closed';
+  question: string;
+  options: Array<{ number: number; label: string; votes: number }>;
+  voters: Set<string>;
+  startedAt: string;
+  endedAt?: string;
+  lastVoteAt?: string;
+}
+
 interface ChatbotConfiguration {
   schemaVersion: 7;
   displayName: string;
@@ -219,6 +241,7 @@ export interface ChatbotStatus {
     nextTimeAt?: string;
     lastSentAt?: string;
   };
+  poll: ChatbotNumericPollStatus;
   providers: {
     weather?: ChatbotWeatherProvider;
     nowPlaying?: ChatbotNowPlayingProvider;
@@ -672,6 +695,7 @@ export class TwitchChatbot {
   private autoMessageIndex = 0;
   private autoMessageLastSentAt?: string;
   private autoMessageActivePlatforms = new Set<'twitch' | 'kick'>();
+  private numericPoll?: ChatbotNumericPollRuntime;
   private channelInfoCache?: { fetchedAt: number; title: string; gameName: string };
   private streamCache?: { fetchedAt: number; startedAt?: string; viewerCount?: number };
   private scheduleCache?: { fetchedAt: number; title?: string; startTime?: string };
@@ -837,6 +861,7 @@ export class TwitchChatbot {
           : undefined,
         lastSentAt: this.autoMessageLastSentAt
       },
+      poll: this.numericPollStatus(),
       providers: {
         weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
         nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
@@ -1077,6 +1102,40 @@ export class TwitchChatbot {
     return this.status();
   }
 
+  startNumericPoll(input: unknown): ChatbotStatus {
+    if (this.numericPoll?.state === 'active') throw new Error('End or clear the current chat poll before starting another.');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Chat poll settings must be an object.');
+    const source = input as { question?: unknown; options?: unknown };
+    const question = String(source.question || '').trim().slice(0, 160);
+    if (!question) throw new Error('A chat poll question is required.');
+    if (!Array.isArray(source.options)) throw new Error('Chat poll options must be a list.');
+    const options = source.options.map((entry) => String(entry || '').trim().slice(0, 80)).filter(Boolean);
+    if (options.length < 2 || options.length > 10) throw new Error('A chat poll needs between 2 and 10 numbered options.');
+    if (new Set(options.map((entry) => entry.toLocaleLowerCase())).size !== options.length) throw new Error('Chat poll option names must be unique.');
+    this.numericPoll = {
+      id: randomUUID(), state: 'active', question,
+      options: options.map((label, index) => ({ number: index + 1, label, votes: 0 })),
+      voters: new Set(), startedAt: new Date().toISOString()
+    };
+    this.record({ state: 'accepted', message: `Numeric chat poll started: ${question}` });
+    return this.status();
+  }
+
+  stopNumericPoll(): ChatbotStatus {
+    if (!this.numericPoll || this.numericPoll.state !== 'active') throw new Error('There is no active chat poll to end.');
+    this.numericPoll.state = 'closed';
+    this.numericPoll.endedAt = new Date().toISOString();
+    this.record({ state: 'accepted', message: `Chat poll ended with ${this.numericPoll.voters.size} vote${this.numericPoll.voters.size === 1 ? '' : 's'}.` });
+    return this.status();
+  }
+
+  clearNumericPoll(): ChatbotStatus {
+    const hadPoll = Boolean(this.numericPoll);
+    this.numericPoll = undefined;
+    if (hadPoll) this.record({ state: 'accepted', message: 'Chat poll cleared.' });
+    return this.status();
+  }
+
   async processChatEvent(event: TempestNormalizedChatEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
     if (!simulated) {
       const cutoff = Date.now() - 10 * 60 * 1000;
@@ -1123,6 +1182,7 @@ export class TwitchChatbot {
       this.autoMessageMessagesSinceLast += 1;
       this.autoMessageActivePlatforms.add(event.source === 'kick' ? 'kick' : 'twitch');
       await this.maybeSendAutoMessage();
+      this.recordNumericPollVote(event);
     }
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
@@ -1446,6 +1506,33 @@ export class TwitchChatbot {
   private record(input: Omit<ChatbotActivity, 'id' | 'timestamp'>): void {
     this.activity.unshift({ id: randomUUID(), timestamp: new Date().toISOString(), ...input });
     this.activity = this.activity.slice(0, 100);
+  }
+
+  private numericPollStatus(): ChatbotNumericPollStatus {
+    const poll = this.numericPoll;
+    if (!poll) return { state: 'idle', options: [], totalVotes: 0 };
+    const totalVotes = poll.voters.size;
+    return {
+      state: poll.state, id: poll.id, question: poll.question, totalVotes,
+      options: poll.options.map((option) => ({ ...option, percentage: totalVotes ? Math.round((option.votes / totalVotes) * 1000) / 10 : 0 })),
+      startedAt: poll.startedAt, endedAt: poll.endedAt, lastVoteAt: poll.lastVoteAt
+    };
+  }
+
+  private recordNumericPollVote(event: TempestNormalizedChatEvent): void {
+    const poll = this.numericPoll;
+    if (!poll || poll.state !== 'active') return;
+    const match = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
+    if (!match) return;
+    const option = poll.options.find((entry) => entry.number === Number(match[1]));
+    if (!option) return;
+    const identity = String(event.viewer?.id || event.viewer?.login || event.viewer?.displayName || '').trim().toLocaleLowerCase();
+    if (!identity) return;
+    const voterKey = `${event.source}:${identity}`;
+    if (poll.voters.has(voterKey)) return;
+    poll.voters.add(voterKey);
+    option.votes += 1;
+    poll.lastVoteAt = new Date().toISOString();
   }
 
   private resetAutoMessageWindow(): void {
