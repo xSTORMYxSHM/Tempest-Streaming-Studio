@@ -481,6 +481,31 @@ test('serves a configurable AzuraCast station with an outage-safe fallback', asy
   assert.equal((await failingChatbot.radioStatus()).state, 'unavailable');
 });
 
+test('migrates the official Storm Horizon !song link without changing its API or stream endpoints', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-radio-link-migration-'));
+  const oldProvider = {
+    provider: 'azuracast',
+    stationName: 'Storm Horizon Radio',
+    apiUrl: 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio',
+    publicPlayerUrl: 'https://a12.asurahosting.com/public/storm_horizon_radio',
+    streamUrl: 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3'
+  };
+  const original = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await original.initialize('client123');
+  await original.configure({ nowPlayingProvider: oldProvider });
+
+  const migrated = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await migrated.initialize('client123');
+  assert.deepEqual(migrated.status().providers.nowPlaying, {
+    ...oldProvider,
+    publicPlayerUrl: 'https://www.tempestmainframe.com/listen'
+  });
+
+  const persisted = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await persisted.initialize('client123');
+  assert.equal(persisted.status().providers.nowPlaying.publicPlayerUrl, 'https://www.tempestmainframe.com/listen');
+});
+
 test('installs a command directory and serves cached Twitch channel information without new scopes', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-builtins-'));
   const requests = [];

@@ -246,7 +246,10 @@ export interface TwitchChatbotOptions {
 }
 
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
-const legacyStormHorizonProvider: ChatbotNowPlayingProvider = { provider: 'azuracast', stationName: 'Storm Horizon Radio', apiUrl: 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio', publicPlayerUrl: 'https://a12.asurahosting.com/public/storm_horizon_radio', streamUrl: 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3' };
+const stormHorizonApiUrl = 'https://a12.asurahosting.com/api/nowplaying/storm_horizon_radio';
+const legacyStormHorizonPlayerUrl = 'https://a12.asurahosting.com/public/storm_horizon_radio';
+const tempestMainframeListenUrl = 'https://www.tempestmainframe.com/listen';
+const defaultStormHorizonProvider: ChatbotNowPlayingProvider = { provider: 'azuracast', stationName: 'Storm Horizon Radio', apiUrl: stormHorizonApiUrl, publicPlayerUrl: tempestMainframeListenUrl, streamUrl: 'https://a12.asurahosting.com/listen/storm_horizon_radio/radio.mp3' };
 const legacySeattleProvider: ChatbotWeatherProvider = { provider: 'nws', locationName: 'Seattle', latitude: 47.6062, longitude: -122.3321, timeZone: 'America/Los_Angeles' };
 const defaultRaidWelcomeMessage = 'Welcome {raider} and your {viewers} raiders! Thank you for sharing your community with us!';
 const defaultAutoModNotice = '@{user}, that message was removed by channel AutoMod ({reason}).';
@@ -662,7 +665,12 @@ export class TwitchChatbot {
       const legacyConfiguration = parsed.schemaVersion !== 6;
       const legacyProviderConfiguration = !parsed.schemaVersion || parsed.schemaVersion < 2;
       const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
-      const nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? legacyStormHorizonProvider : undefined));
+      let nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? defaultStormHorizonProvider : undefined));
+      const migratedStormHorizonPlayer = nowPlayingProvider?.provider === 'azuracast'
+        && nowPlayingProvider.stationName === defaultStormHorizonProvider.stationName
+        && nowPlayingProvider.apiUrl === stormHorizonApiUrl
+        && nowPlayingProvider.publicPlayerUrl === legacyStormHorizonPlayerUrl;
+      if (migratedStormHorizonPlayer && nowPlayingProvider) nowPlayingProvider = { ...nowPlayingProvider, publicPlayerUrl: tempestMainframeListenUrl };
       const raidAutomation = validateRaidAutomation(parsed.raidAutomation);
       const firstChatShoutouts = validateFirstChatShoutouts(parsed.firstChatShoutouts);
       const interactionAccess = validateInteractionAccess(parsed.interactionAccess);
@@ -671,7 +679,7 @@ export class TwitchChatbot {
         .map(([login, userId]) => [login, String(userId)]));
       const autoMod = validateAutoMod(parsed.autoMod);
       this.configuration = { schemaVersion: 6, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
-      if (installedDefaults || legacyConfiguration) await this.persist();
+      if (installedDefaults || legacyConfiguration || migratedStormHorizonPlayer) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
       await this.persist();
