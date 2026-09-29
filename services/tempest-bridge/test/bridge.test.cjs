@@ -132,19 +132,19 @@ test('starts free Extension dice on the physical Browser Source and enforces sha
   });
 
   const rollingResponse = fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
-    method: 'POST', headers, body: JSON.stringify(event('extension-dice-d50', 'tempest.dice.d50'))
+    method: 'POST', headers, body: JSON.stringify({ ...event('extension-dice-custom', 'tempest.dice.custom'), payload: { action: 'tempest.dice.custom', maximum: 37 } })
   });
   const commands = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, after: registered.revision })
   }).then((response) => response.json());
   const rollRequest = commands.events.find((entry) => entry.type === 'roll-request').payload;
-  assert.equal(rollRequest.expression, '1d50');
+  assert.equal(rollRequest.expression, '1d37');
   assert.equal(rollRequest.physicalSides, 100);
   assert.equal(rollRequest.rollerName, 'Twitch Viewer');
 
   const accepted = await rollingResponse;
   assert.equal(accepted.status, 202);
-  assert.deepEqual(await accepted.json(), { accepted: true, expression: '1d50', cooldownMs: 30000, eventId: 'extension-dice-d50' });
+  assert.deepEqual(await accepted.json(), { accepted: true, expression: '1d37', cooldownMs: 30000, eventId: 'extension-dice-custom' });
   const coolingDown = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
     method: 'POST', headers, body: JSON.stringify(event('extension-dice-d20', 'tempest.dice.d20'))
   });
@@ -155,7 +155,7 @@ test('starts free Extension dice on the physical Browser Source and enforces sha
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rollRequest.id, token: rollRequest.token, values: [37] })
   });
   const diceStatus = await fetch(`${runtime.baseUrl}/v1/dice-overlay`, { headers }).then((response) => response.json());
-  assert.equal(diceStatus.latestRoll.expression, '1d50');
+  assert.equal(diceStatus.latestRoll.expression, '1d37');
   assert.equal(diceStatus.latestRoll.total, 37);
 });
 

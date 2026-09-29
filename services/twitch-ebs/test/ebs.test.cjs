@@ -230,23 +230,29 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   let diceCatalog;
   while (Date.now() < diceCatalogDeadline) {
     diceCatalog = await fetch(`${ebs.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((catalogResponse) => catalogResponse.json());
-    if (diceCatalog.items?.some((item) => item.id === 'tempest.dice.d50')) break;
+    if (diceCatalog.items?.some((item) => item.id === 'tempest.dice.custom')) break;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  assert.ok(diceCatalog.items.some((item) => item.id === 'tempest.dice.d50' && item.kind === 'interaction'));
+  assert.ok(diceCatalog.items.some((item) => item.id === 'tempest.dice.custom' && item.kind === 'interaction'));
   const registeredDice = await fetch(`${bridge.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((diceResponse) => diceResponse.json());
   await fetch(`${bridge.baseUrl}/dice-overlay/client-status`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registeredDice.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })
   });
+  const invalidDiceRequestId = randomUUID();
+  const invalidDice = await fetch(`${ebs.baseUrl}/v1/extension/interactions/tempest.dice.custom/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': invalidDiceRequestId }, body: JSON.stringify({ requestId: invalidDiceRequestId, maximum: 101 })
+  });
+  assert.equal(invalidDice.status, 400);
+  assert.equal((await invalidDice.json()).code, 'dice_maximum_invalid');
   const diceRequestId = randomUUID();
-  const diceResponsePromise = fetch(`${ebs.baseUrl}/v1/extension/interactions/tempest.dice.d50/trigger`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': diceRequestId }, body: JSON.stringify({ requestId: diceRequestId })
+  const diceResponsePromise = fetch(`${ebs.baseUrl}/v1/extension/interactions/tempest.dice.custom/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': diceRequestId }, body: JSON.stringify({ requestId: diceRequestId, maximum: 37 })
   });
   const diceCommands = await fetch(`${bridge.baseUrl}/dice-overlay/poll`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registeredDice.clientId, after: registeredDice.revision })
   }).then((diceResponse) => diceResponse.json());
   const diceRequest = diceCommands.events.find((entry) => entry.type === 'roll-request').payload;
-  assert.equal(diceRequest.expression, '1d50');
+  assert.equal(diceRequest.expression, '1d37');
   const diceResponse = await diceResponsePromise;
   assert.equal(diceResponse.status, 202);
   assert.equal((await diceResponse.json()).cooldownMs, 30000);

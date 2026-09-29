@@ -120,6 +120,8 @@
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
     const dice = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
+    const customDice = dice.find((entry) => entry.id === 'tempest.dice.custom');
+    const dicePresets = dice.filter((entry) => entry.id !== 'tempest.dice.custom');
     const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
     const visibleCount = dice.length + featured.length + performances.length;
@@ -128,10 +130,13 @@
     $('#featuredRegion').hidden = featured.length === 0;
     $('#performanceRegion').hidden = performances.length === 0;
     $('#diceRegion').hidden = dice.length === 0;
-    $('#diceGrid').innerHTML = dice.map((entry) => {
+    $('#diceGrid').innerHTML = dicePresets.map((entry) => {
       const wait = remaining(entry.id);
       return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${wait ? seconds(wait) : 'ROLL'}</small></button>`;
     }).join('');
+    $('#diceCustomForm').hidden = !customDice;
+    $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
+    $('#rollCustomDice').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -186,7 +191,7 @@
     toastTimer = setTimeout(() => element.classList.remove('visible'), 3500);
   }
 
-  async function requestAlert(alert) {
+  async function requestAlert(alert, payload = {}) {
     const configuration = state.configuration;
     if (!configuration.mockMode && (!state.auth?.token || !configuration.ebsBaseUrl)) throw new Error('The Tempest interaction relay is not configured.');
     if (configuration.mockMode) {
@@ -200,7 +205,7 @@
     const response = await fetch(`${configuration.ebsBaseUrl}${route}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId },
-      body: JSON.stringify({ ...(alert.kind === 'interaction' ? {} : { alertId: alert.id }), requestId })
+      body: JSON.stringify({ ...(alert.kind === 'interaction' ? {} : { alertId: alert.id }), ...payload, requestId })
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -213,14 +218,14 @@
     return body;
   }
 
-  async function trigger(id) {
+  async function trigger(id, payload = {}) {
     const alert = state.alerts.find((entry) => entry.id === id);
     if (!alert || state.busy || remaining(id)) return;
     const diceAction = id.startsWith('tempest.dice.');
     state.busy = true;
     render();
     try {
-      const result = await requestAlert(alert);
+      const result = await requestAlert(alert, payload);
       const cooldownMs = Number(result.cooldownMs) || Math.max(5000, alert.cooldownMs || alert.durationMs);
       const cooldownUntil = Date.now() + cooldownMs;
       if (diceAction) state.alerts.filter((entry) => entry.id.startsWith('tempest.dice.')).forEach((entry) => cooldowns.set(entry.id, cooldownUntil));
@@ -324,6 +329,12 @@
     $('#featuredGrid').addEventListener('click', triggerFromClick);
     $('#alertGrid').addEventListener('click', triggerFromClick);
     $('#diceGrid').addEventListener('click', triggerFromClick);
+    $('#diceCustomForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const maximum = Number($('#diceCustomMaximum').value);
+      if (!Number.isInteger(maximum) || maximum < 2 || maximum > 100) return toast('Choose a maximum from 2 through 100.', true);
+      void trigger('tempest.dice.custom', { maximum });
+    });
     $('#pollOptions').addEventListener('click', (event) => {
       const button = event.target.closest('[data-poll-option]');
       if (button) void voteInPoll(Number(button.dataset.pollOption));

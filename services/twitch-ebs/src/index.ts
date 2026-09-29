@@ -566,10 +566,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     return result;
   };
 
-  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
+  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string, body: Record<string, unknown>) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
     const body = await readJson(request);
     const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
-    return dispatchInteraction(claims, requestId, eventFactory);
+    return dispatchInteraction(claims, requestId, (id) => eventFactory(id, body));
   };
 
   const requestHandler = async (request: IncomingMessage, response: ServerResponse) => {
@@ -794,7 +794,12 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const action = decodeURIComponent(interactionMatch[1]);
         const catalogAllowed = installation.catalog.items.some((item) => item.kind === 'interaction' && item.id === action);
         if (!catalogAllowed && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
-        const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, action));
+        const result = await processInteraction(request, claims, (requestId, body) => {
+          if (action !== 'tempest.dice.custom') return normalizedEvent(claims, requestId, action);
+          const maximum = Number(body.maximum);
+          if (!Number.isInteger(maximum) || maximum < 2 || maximum > 100) throw new HttpError(400, 'Choose a custom dice maximum from 2 through 100.', { code: 'dice_maximum_invalid' });
+          return normalizedEvent(claims, requestId, action, { maximum });
+        });
         return sendJson(response, result.status, result.body, origin);
       }
       return sendJson(response, 404, { error: 'EBS route was not found.' }, origin);

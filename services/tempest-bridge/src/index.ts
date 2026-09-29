@@ -120,6 +120,7 @@ const extensionDicePresets = [
   { id: 'tempest.dice.d50', expression: '1d50', name: 'Roll 1–50', glyph: 'D50' },
   { id: 'tempest.dice.d100', expression: '1d100', name: 'Roll d100', glyph: 'D100' }
 ] as const;
+const extensionDiceCustom = { id: 'tempest.dice.custom', name: 'Custom 1–N', glyph: '1N' } as const;
 const diceBoxDistributionDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-box/package.json')), 'dist');
 const diceBoxAssetsDirectory = path.join(diceBoxDistributionDirectory, 'assets');
 const diceThemeAssetsDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-themes/package.json')), 'themes');
@@ -1797,7 +1798,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const extensionDicePreset = event.topic === 'viewer.interaction.requested'
           ? extensionDicePresets.find((preset) => preset.id === action)
           : undefined;
-        if (extensionDicePreset) {
+        const extensionDiceMaximum = action === extensionDiceCustom.id ? Number(event.payload.maximum) : undefined;
+        const extensionDiceExpression = extensionDicePreset?.expression || (Number.isInteger(extensionDiceMaximum) && extensionDiceMaximum! >= 2 && extensionDiceMaximum! <= 100 ? `1d${extensionDiceMaximum}` : undefined);
+        if (action === extensionDiceCustom.id && !extensionDiceExpression) {
+          return sendJson(response, 400, { accepted: false, error: 'Choose a custom dice maximum from 2 through 100.', code: 'dice_maximum_invalid', eventId: event.id });
+        }
+        if (extensionDiceExpression) {
           const now = Date.now();
           for (const [viewerId, usedAt] of extensionDiceViewerUses) {
             if (now - usedAt > extensionDiceViewerCooldownMs) extensionDiceViewerUses.delete(viewerId);
@@ -1818,13 +1824,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           if (diceStatus.rolling) return sendJson(response, 409, { accepted: false, error: 'The 3D dice are already rolling. Try again when they settle.', code: 'dice_busy', retryAfterMs: extensionDiceGlobalCooldownMs, eventId: event.id });
           extensionDiceGlobalUse = now;
           extensionDiceViewerUses.set(viewerId, now);
-          void diceOverlay.roll({ expression: extensionDicePreset.expression, rollerName: 'Twitch Viewer', reason: 'Viewer roll' }).then((roll) => {
+          void diceOverlay.roll({ expression: extensionDiceExpression, rollerName: 'Twitch Viewer', reason: 'Viewer roll' }).then((roll) => {
             workflowEngine?.recordExternalEvent('studio.dice.extension-rolled', 'success', `A Twitch viewer rolled ${roll.expression} from the free Extension.`, { eventId: event.id, rollId: roll.id, expression: roll.expression, total: roll.total, viewerId });
           }).catch((error) => {
-            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A free Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDicePreset.expression, viewerId });
+            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A free Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
           });
-          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDicePreset.expression} from the free Extension.`, { eventId: event.id, expression: extensionDicePreset.expression, viewerId });
-          return sendJson(response, 202, { accepted: true, expression: extensionDicePreset.expression, cooldownMs: extensionDiceViewerCooldownMs, eventId: event.id });
+          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDiceExpression} from the free Extension.`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
+          return sendJson(response, 202, { accepted: true, expression: extensionDiceExpression, cooldownMs: extensionDiceViewerCooldownMs, eventId: event.id });
         }
         workflowEngine.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
         broadcastSystemEvent(event.topic, event);
@@ -2035,7 +2041,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const diceStatus = diceOverlay.status('') as { settings?: { enabled?: boolean; durationMs?: number } };
         if (relayOptions.extensionEdition === 'bits' || diceStatus.settings?.enabled !== true) return alerts;
         const interactionAccess = chatbot.status().interactionAccess;
-        return [...alerts, ...extensionDicePresets.map((preset) => ({
+        return [...alerts, ...[...extensionDicePresets, extensionDiceCustom].map((preset) => ({
           id: preset.id,
           name: preset.name,
           durationMs: Number(diceStatus.settings?.durationMs) || 5_200,

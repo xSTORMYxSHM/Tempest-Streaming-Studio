@@ -26,7 +26,7 @@ The installed `!roll` command (alias `!dice`) accepts the same notation as the S
 
 Twitch, Stream Together, and Kick viewers all use the same Browser Source and receive the settled physical result back on the platform where the command originated. Studio does not invent a separate server result. If the source is missing, disabled, already rolling, or cannot settle, the chatbot posts a short failure instead of claiming a number. The normal chatbot permission and Shared Chat controls apply, and the default viewer/global cooldowns are 30/5 seconds. Operators can change both in the command editor.
 
-When **Tempest Mainframe (Free)** is the active Twitch Extension, its Panel and Video Component also show a compact picker for d4, d6, d8, d10, d12, d20, 1–50, and d100. A successful click starts the local physical roll immediately and returns before the dice finish, keeping the public relay inside its response deadline. Studio—not the Extension service—checks Browser Source readiness, access, busy state, and the shared 30-second viewer/5-second global cooldown. The Bits edition does not publish this free utility.
+When **Tempest Mainframe (Free)** is the active Twitch Extension, its Panel and Video Component also show a compact picker for d4, d6, d8, d10, d12, d20, 1–50, and d100 plus an exact custom 1–N maximum from 2 through 100. A successful click starts the local physical roll immediately and returns before the dice finish, keeping the public relay inside its response deadline. Studio—not the Extension service—checks Browser Source readiness, access, busy state, and the shared 30-second viewer/5-second global cooldown. The Bits edition does not publish this free utility.
 
 ## Presentation and audio
 

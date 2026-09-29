@@ -23,7 +23,7 @@ When the streamer starts a numeric poll in **Live Desk**, the active question, n
 
 ## Free Extension 3D Dice
 
-When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons. The public service authenticates and relays the selection, but Studio alone verifies the local Browser Source, access policy, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
+When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. Studio alone verifies the local Browser Source, access policy, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
 
 ## Run the Local Test
 
