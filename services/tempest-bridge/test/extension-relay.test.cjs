@@ -43,7 +43,11 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   const nowPlayingCatalogResult = new Promise((resolve) => { resolveNowPlayingCatalogSync = resolve; });
   let resolveCounterBurst;
   const counterBurstResult = new Promise((resolve) => { resolveCounterBurst = resolve; });
+  let resolvePartialDynamicRefresh;
+  const partialDynamicRefreshResult = new Promise((resolve) => { resolvePartialDynamicRefresh = resolve; });
   let counterValue = 7;
+  let nowPlayingTitle = 'Track';
+  let scheduleFails = false;
   const result = new Promise((resolve, reject) => {
     webSockets.on('connection', (socket) => {
       socket.send(JSON.stringify({ protocolVersion: 1, type: 'interaction', requestId: randomUUID(), event }));
@@ -58,6 +62,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
             resolveNowPlayingCatalogSync();
           }
           if (message.catalog.counters?.[0]?.value === 10) resolveCounterBurst();
+          if (message.catalog.nowPlaying?.title === 'Next Track') resolvePartialDynamicRefresh(message.catalog);
         }
         if (message.type === 'result') resolve(message);
       });
@@ -70,8 +75,11 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     poll: () => ({ id: 'poll-1234567890123456', state: 'active', question: 'Choose one', options: [{ number: 1, label: 'One', votes: 2, percentage: 100 }, { number: 2, label: 'Two', votes: 0, percentage: 0 }], totalVotes: 2, startedAt: new Date().toISOString() }),
     counters: () => [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: counterValue }],
     goal: () => ({ source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' }),
-    nowPlaying: async () => ({ stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() }),
-    schedule: async () => ({ title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' }),
+    nowPlaying: async () => ({ stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: nowPlayingTitle, publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() }),
+    schedule: async () => {
+      if (scheduleFails) throw new Error('Schedule temporarily unavailable');
+      return { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' };
+    },
     stream: async () => ({ live: true, title: 'Building Tempest', category: 'Software and Game Development', startedAt: '2030-01-01T20:00:00.000Z', viewerCount: 42, checkedAt: new Date().toISOString() }),
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
@@ -100,6 +108,14 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   assert.equal(nowPlayingCatalogSync.schedule.title, 'Mainframe Monday');
   assert.equal(nowPlayingCatalogSync.stream.title, 'Building Tempest');
   assert.equal(nowPlayingCatalogSync.stream.viewerCount, 42);
+  nowPlayingTitle = 'Next Track';
+  scheduleFails = true;
+  await new Promise((resolve) => setTimeout(resolve, 1_050));
+  relay.syncCatalog();
+  const partialDynamicCatalog = await partialDynamicRefreshResult;
+  assert.equal(partialDynamicCatalog.nowPlaying.title, 'Next Track');
+  assert.equal(partialDynamicCatalog.schedule.title, 'Mainframe Monday');
+  assert.equal(partialDynamicCatalog.stream.title, 'Building Tempest');
   counterValue = 8;
   relay.syncCatalog();
   counterValue = 9;

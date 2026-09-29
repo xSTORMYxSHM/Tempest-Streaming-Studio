@@ -313,15 +313,18 @@ export class TempestExtensionRelayClient {
     this.refreshingDynamicCatalog = true;
     this.lastDynamicCatalogRefreshAt = Date.now();
     try {
-      const [nowPlaying, schedule, stream] = await Promise.all([
+      const [nowPlaying, schedule, stream] = await Promise.allSettled([
         this.options.nowPlaying?.() || Promise.resolve(undefined),
         this.options.schedule?.() || Promise.resolve(undefined),
         this.options.stream?.() || Promise.resolve(undefined)
       ]);
       if (this.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
-      this.nowPlaying = nowPlaying;
-      this.schedule = schedule;
-      this.stream = stream;
+      if (nowPlaying.status === 'fulfilled') this.nowPlaying = nowPlaying.value;
+      else this.logger.warn(nowPlaying.reason);
+      if (schedule.status === 'fulfilled') this.schedule = schedule.value;
+      else this.logger.warn(schedule.reason);
+      if (stream.status === 'fulfilled') this.stream = stream.value;
+      else this.logger.warn(stream.reason);
       this.sendCatalog(socket);
     } catch (error) {
       this.logger.warn(error);
