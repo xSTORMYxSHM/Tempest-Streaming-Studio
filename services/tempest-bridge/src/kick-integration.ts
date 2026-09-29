@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TempestNormalizedKickChatEvent } from '@tempest/contracts';
 import { boundedFetch } from './bounded-fetch';
+import { readBoundedJsonResponse } from './bounded-response';
 
 export const kickChatScopes = ['user:read', 'chat:write', 'events:subscribe'] as const;
 
@@ -75,6 +76,11 @@ export interface KickIntegrationOptions {
 }
 
 const defaultWebhookUrl = 'https://signal.tempestmainframe.com/v1/kick/events';
+const maximumProviderResponseBytes = 1024 * 1024;
+
+async function readProviderJson<T extends object>(response: Response): Promise<Partial<T>> {
+  return readBoundedJsonResponse<T>(response, maximumProviderResponseBytes).catch(() => ({}));
+}
 
 function validateClientId(value: unknown): string {
   const clientId = String(value || '').trim();
@@ -234,7 +240,7 @@ export class KickIntegrationGateway {
       code_verifier: pending.codeVerifier
     });
     const response = await this.request('https://id.kick.com/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_in?: number | string; scope?: string | string[]; message?: string; error?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number | string; scope?: string | string[]; message?: string; error?: string }>(response);
     if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(responseMessage(result, `Kick token exchange failed with ${response.status}.`));
     const scopes = Array.isArray(result.scope) ? result.scope : String(result.scope || '').split(/\s+/).filter(Boolean);
     this.credentials = { clientSecret: credentials.clientSecret, accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + Math.max(60, Number(result.expires_in) || 3600) * 1000).toISOString(), scopes };
@@ -255,7 +261,7 @@ export class KickIntegrationGateway {
       credentials = await this.refreshAuthorization();
       response = await this.request('https://api.kick.com/public/v1/users', { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
     }
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ user_id?: number | string; name?: string; profile_picture?: string }>; message?: string; error?: string };
+    const result = await readProviderJson<{ data?: Array<{ user_id?: number | string; name?: string; profile_picture?: string }>; message?: string; error?: string }>(response);
     const user = result.data?.[0];
     if (!response.ok || !user?.user_id || !user.name) throw new Error(responseMessage(result, `Kick account validation failed with ${response.status}.`));
     const missingScopes = kickChatScopes.filter((scope) => !credentials.scopes.includes(scope));
@@ -301,7 +307,7 @@ export class KickIntegrationGateway {
       headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'user', broadcaster_user_id: Number(this.identity.userId), content: message, ...(source.replyToMessageId ? { reply_to_message_id: String(source.replyToMessageId) } : {}) })
     });
-    const result = await response.json().catch(() => ({})) as { data?: { is_sent?: boolean; message_id?: string }; message?: string; error?: string };
+    const result = await readProviderJson<{ data?: { is_sent?: boolean; message_id?: string }; message?: string; error?: string }>(response);
     if (!response.ok || result.data?.is_sent === false) throw new Error(responseMessage(result, `Kick chat send failed with ${response.status}.`));
     this.messagesSent += 1;
     return { sent: true, messageId: result.data?.message_id };
@@ -375,7 +381,7 @@ export class KickIntegrationGateway {
     this.oauthState = 'refreshing';
     const body = new URLSearchParams({ grant_type: 'refresh_token', client_id: this.configuration.clientId, client_secret: credentials.clientSecret, refresh_token: credentials.refreshToken });
     const response = await this.request('https://id.kick.com/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_in?: number | string; scope?: string | string[]; message?: string; error?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number | string; scope?: string | string[]; message?: string; error?: string }>(response);
     if (!response.ok || !result.access_token) {
       this.oauthState = 'expired';
       throw new Error(responseMessage(result, `Kick token refresh failed with ${response.status}.`));
@@ -393,7 +399,7 @@ export class KickIntegrationGateway {
     const credentials = await this.activeCredentials();
     const headers = { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Type': 'application/json' };
     const list = await this.request(`https://api.kick.com/public/v1/events/subscriptions?broadcaster_user_id=${encodeURIComponent(this.identity.userId)}`, { headers });
-    const listed = await list.json().catch(() => ({})) as { data?: Array<{ id?: string; event?: string; version?: number }>; message?: string; error?: string };
+    const listed = await readProviderJson<{ data?: Array<{ id?: string; event?: string; version?: number }>; message?: string; error?: string }>(list);
     if (!list.ok) throw new Error(responseMessage(listed, `Kick event subscription lookup failed with ${list.status}.`));
     const existing = listed.data?.find((entry) => entry.event === 'chat.message.sent' && Number(entry.version) === 1);
     if (existing?.id) {
@@ -402,7 +408,7 @@ export class KickIntegrationGateway {
       return;
     }
     const response = await this.request('https://api.kick.com/public/v1/events/subscriptions', { method: 'POST', headers, body: JSON.stringify({ method: 'webhook', events: [{ name: 'chat.message.sent', version: 1 }] }) });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ subscription_id?: string; error?: string }>; message?: string; error?: string };
+    const result = await readProviderJson<{ data?: Array<{ subscription_id?: string; error?: string }>; message?: string; error?: string }>(response);
     const subscription = result.data?.[0];
     if (!response.ok || subscription?.error || !subscription?.subscription_id) throw new Error(subscription?.error || responseMessage(result, `Kick chat subscription failed with ${response.status}.`));
     this.subscriptionId = subscription.subscription_id;

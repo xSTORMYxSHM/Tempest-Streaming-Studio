@@ -50,6 +50,7 @@
 - Added a read-only Current Stream card to the free Extension with Twitch live/offline state, title, category, uptime, and viewer count. Studio reuses its existing 30-second stream and 60-second channel-information caches and requires no new OAuth scope.
 - Added a read-only chat-command directory to the free Extension. It publishes only bounded enabled triggers, aliases, permissions, and Shared Chat availability; response text, workflow links, cooldown state, and other private Chatbot configuration remain local.
 - Made free Extension counter cards display the streamer's configured Chatbot prefix instead of assuming every counter command begins with `!`.
+- Bounded Kick OAuth, identity, chat-send, and subscription response bodies to 1 MiB with a ten-second streamed-body timeout, preventing a stalled or oversized provider response from retaining Studio work indefinitely.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 
