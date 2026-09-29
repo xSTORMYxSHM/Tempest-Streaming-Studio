@@ -68,6 +68,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(panel, /id="diceRegion"/);
   assert.match(viewer, /id="diceGrid"/);
   assert.match(panel, /id="diceCustomMaximum"/);
+  assert.match(panel, /id="counterRegion"/);
+  assert.match(viewer, /id="counterGrid"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
@@ -86,5 +88,6 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /tempest\.dice\./);
   assert.match(viewerScript, /tempest\.dice\.custom/);
   assert.match(styles, /\.dice-grid/);
+  assert.match(styles, /\.counter-grid/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });

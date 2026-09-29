@@ -430,7 +430,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     rollDice: (request) => dispatchChatDice(request),
     sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
     onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); },
-    onPollChanged() { extensionRelay?.syncCatalog(); }
+    onPollChanged() { extensionRelay?.syncCatalog(); },
+    onCatalogChanged() { extensionRelay?.syncCatalog(); }
   });
   await chatbot.initialize(twitchGateway.status().clientId || '');
   kickGateway = new KickIntegrationGateway({
@@ -2075,6 +2076,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           lastVoteAt: poll.lastVoteAt
         };
       },
+      counters: () => chatbot.publicCounters(),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

@@ -10,6 +10,7 @@ import {
   MemoryTwitchEbsInstallationStore,
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
+  PublicExtensionCounter,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -209,7 +210,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -275,7 +276,26 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
       ...(lastVoteAt ? { lastVoteAt } : {})
     };
   }
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}) };
+  let counters: PublicExtensionCounter[] | undefined;
+  if (source.counters !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Counters are published only to the free Extension edition.');
+    if (!Array.isArray(source.counters) || source.counters.length > 12) throw new Error('Catalog counters must be a list of at most 12 entries.');
+    const counterIds = new Set<string>();
+    counters = source.counters.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog counter ${index + 1} is invalid.`);
+      const counter = entry as Record<string, unknown>;
+      const id = String(counter.id || '').trim();
+      const command = String(counter.command || '').trim().toLowerCase();
+      const label = String(counter.label || '').trim();
+      const counterValue = Number(counter.value);
+      if (!/^[A-Za-z0-9._-]{1,80}$/.test(id) || counterIds.has(id)) throw new Error(`Catalog counter ${index + 1} has an invalid or duplicate ID.`);
+      if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(command) || !label || label.length > 80 || /[\r\n\0]/.test(label)) throw new Error(`Catalog counter ${index + 1} has invalid display data.`);
+      if (!Number.isSafeInteger(counterValue) || Math.abs(counterValue) > 1_000_000_000) throw new Error(`Catalog counter ${index + 1} has an invalid value.`);
+      counterIds.add(id);
+      return { id, command, label, value: counterValue };
+    });
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {

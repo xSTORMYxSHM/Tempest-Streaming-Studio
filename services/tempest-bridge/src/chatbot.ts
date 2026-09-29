@@ -289,6 +289,13 @@ export interface ChatbotDiceRollResult {
   reason?: string;
 }
 
+export interface ChatbotPublicCounter {
+  id: string;
+  command: string;
+  label: string;
+  value: number;
+}
+
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
   code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
@@ -305,6 +312,7 @@ export interface TwitchChatbotOptions {
   sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
   onPollChanged?: (poll: ChatbotNumericPollStatus) => void;
+  onCatalogChanged?: () => void;
 }
 
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
@@ -956,6 +964,7 @@ export class TwitchChatbot {
       this.radioNowPlayingCache = undefined;
     }
     await this.persist();
+    this.options.onCatalogChanged?.();
     return this.status();
   }
 
@@ -967,6 +976,7 @@ export class TwitchChatbot {
     if (conflict) throw new Error(`Command name or alias conflicts with !${conflict.name}.`);
     this.configuration.commands = [command, ...this.configuration.commands.filter((entry) => entry.id !== command.id)];
     await this.persist();
+    this.options.onCatalogChanged?.();
     return copyCommand(command);
   }
 
@@ -975,6 +985,7 @@ export class TwitchChatbot {
     this.configuration.commands = this.configuration.commands.filter((command) => command.id !== id);
     if (this.configuration.commands.length === before) return false;
     await this.persist();
+    this.options.onCatalogChanged?.();
     return true;
   }
 
@@ -1080,6 +1091,13 @@ export class TwitchChatbot {
     return [...new Set(Object.values(this.configuration.assignedCreatorIds).filter((id) => /^\d{1,30}$/.test(id)))];
   }
 
+  publicCounters(): ChatbotPublicCounter[] {
+    return this.configuration.commands
+      .filter((command) => command.enabled && command.handler === 'counter')
+      .slice(0, 12)
+      .map((command) => ({ id: command.id, command: command.name, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
+  }
+
   async adjustCounter(commandId: string, delta: number, source = 'viewer interaction'): Promise<{ commandId: string; label: string; value: number; delta: number }> {
     const command = this.configuration.commands.find((entry) => entry.id === commandId && entry.handler === 'counter');
     if (!command) throw new Error('The selected counter command is not available.');
@@ -1089,6 +1107,7 @@ export class TwitchChatbot {
     command.counterValue = value;
     command.updatedAt = new Date().toISOString();
     await this.persist();
+    this.options.onCatalogChanged?.();
     this.record({ command: command.name, state: 'accepted', message: `${command.counterLabel || command.name} adjusted by ${delta} from ${source}; new value ${value}.` });
     return { commandId: command.id, label: command.counterLabel || command.name, value, delta };
   }
@@ -1269,6 +1288,7 @@ export class TwitchChatbot {
         command.counterValue = counterValue;
         command.updatedAt = new Date().toISOString();
         await this.persist();
+        this.options.onCatalogChanged?.();
       }
     } else if (command.handler === 'dice-roll') {
       if (simulated) {

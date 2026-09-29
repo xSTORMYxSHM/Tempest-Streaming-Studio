@@ -25,6 +25,10 @@ When the streamer starts a numeric poll in **Live Desk**, the active question, n
 
 When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. Studio alone verifies the local Browser Source, access policy, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
 
+## Free Extension counters
+
+Up to 12 enabled Chatbot counter commands appear as read-only live cards with the streamer-defined label, total, and chat command. Chat increments, Studio adjustments, and counter-linked viewer interactions publish updated totals immediately. The Extension has no route that can alter a counter; it only reads the current aggregate catalog value. Disabling or deleting a counter command removes its card, and counters are not published to the Bits edition.
+
 ## Run the Local Test
 
 The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.

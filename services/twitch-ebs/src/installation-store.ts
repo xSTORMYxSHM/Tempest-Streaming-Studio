@@ -32,6 +32,13 @@ export interface PublicExtensionPoll {
   lastVoteAt?: string;
 }
 
+export interface PublicExtensionCounter {
+  id: string;
+  command: string;
+  label: string;
+  value: number;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -61,6 +68,7 @@ export interface PublicExtensionCatalog {
   updatedAt: string;
   items: PublicExtensionCatalogItem[];
   poll?: PublicExtensionPoll;
+  counters?: PublicExtensionCounter[];
   panelDesign?: PublicExtensionPanelDesign;
 }
 

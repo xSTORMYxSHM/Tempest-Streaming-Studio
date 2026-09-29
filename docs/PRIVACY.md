@@ -13,6 +13,7 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - When the user confirms **Prepare HTTPS** for local Twitch Extension testing, Studio downloads the pinned mkcert 1.4.4 Windows helper from its official GitHub release and verifies its exact SHA-256 digest before execution. The resulting local CA, CA private key, and localhost certificate remain only in Studio's local data and are excluded from backups and diagnostics. **Remove HTTPS** removes that local trust material and helper.
 - During an active Studio poll, the free Twitch Extension uses Twitch's signed numeric user identity to enforce one vote per account across Extension and Twitch chat. Voter identifiers and individual choices remain in memory only for the current poll; the public catalog contains the question and aggregate totals, and clearing the poll discards its voter map.
 - Free Extension 3D Dice requests carry the Twitch-signed viewer identity and selected public die preset through the hosted relay. Studio retains only short-lived in-memory cooldown timestamps and session roll history; the hosted service does not generate or store dice results.
+- Enabled Studio counter labels, command names, and aggregate values may be published in the free Extension catalog. No per-viewer counter history or counter mutation capability is published.
 - Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 
 ## Public Twitch Extension service

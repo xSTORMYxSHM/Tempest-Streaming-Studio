@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], poll: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -124,7 +124,8 @@
     const dicePresets = dice.filter((entry) => entry.id !== 'tempest.dice.custom');
     const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
-    const visibleCount = dice.length + featured.length + performances.length;
+    const counters = state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
+    const visibleCount = dice.length + featured.length + performances.length + counters.length;
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -137,6 +138,8 @@
     $('#diceCustomForm').hidden = !customDice;
     $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
     $('#rollCustomDice').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
+    $('#counterRegion').hidden = counters.length === 0;
+    $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -173,6 +176,7 @@
       applyPanelDesign(body.panelDesign);
     }
     state.alerts = body.items;
+    state.counters = Array.isArray(body.counters) ? body.counters : [];
     const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
     state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
       ? state.poll
@@ -384,6 +388,7 @@
       ],
       startedAt: new Date().toISOString()
     } : null;
+    state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', label: 'Ship Restarts', value: 7 }] : [];
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

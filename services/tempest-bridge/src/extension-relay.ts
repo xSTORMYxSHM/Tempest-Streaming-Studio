@@ -34,6 +34,13 @@ export interface ExtensionRelayPoll {
   lastVoteAt?: string;
 }
 
+export interface ExtensionRelayCounter {
+  id: string;
+  command: string;
+  label: string;
+  value: number;
+}
+
 export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEdition']): 'sound-alert' | 'interaction' {
   return edition === 'bits' ? 'interaction' : 'sound-alert';
 }
@@ -61,6 +68,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
     kind: 'sound-alert' | 'interaction';
   }>;
   poll?(): ExtensionRelayPoll | undefined;
+  counters?(): ExtensionRelayCounter[];
   onStatus?(status: ExtensionRelayStatus): void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -192,7 +200,8 @@ export class TempestExtensionRelayClient {
     if (!this.options.catalog || socket.readyState !== WebSocket.OPEN) return;
     try {
       const poll = this.options.extensionEdition === 'bits' ? undefined : this.options.poll?.();
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}) };
+      const counters = this.options.extensionEdition === 'bits' ? [] : this.options.counters?.() || [];
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}) };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;

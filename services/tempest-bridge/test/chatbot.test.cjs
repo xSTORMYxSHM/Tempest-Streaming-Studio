@@ -197,16 +197,19 @@ test('filters links and spam with moderator-safe deletes, exemptions, previews, 
 test('persists streamer-named counters shared by Twitch and Kick chat', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-counter-'));
   const messages = [];
-  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), sendPlatformMessage: async (_platform, message) => messages.push(message) });
+  let catalogChanges = 0;
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), sendPlatformMessage: async (_platform, message) => messages.push(message), onCatalogChanged: () => { catalogChanges += 1; } });
   await chatbot.initialize('client123');
   await chatbot.upsertCommand({ name: 'death', aliases: ['deaths'], enabled: true, permission: 'everyone', response: '{counterLabel}: {counter}', handler: 'counter', counterLabel: 'Ship Restarts', counterValue: 3, viewerCooldownMs: 0, globalCooldownMs: 0 });
   const result = await chatbot.processChatEvent({ schemaVersion: 1, id: 'kick-counter-0001', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'kick', channel: { id: 'kick-channel', login: 'storm' }, viewer: { id: 'viewer-1', login: 'friend', displayName: 'Friend', roles: [] }, payload: { text: '!death' } });
   assert.equal(result.accepted, true);
   assert.equal(result.response, 'Ship Restarts: 4');
+  assert.deepEqual(chatbot.publicCounters(), [{ id: chatbot.publicCounters()[0].id, command: 'death', label: 'Ship Restarts', value: 4 }]);
   assert.deepEqual(messages, ['Ship Restarts: 4']);
   const counterId = chatbot.status().commands.find((entry) => entry.name === 'death').id;
   const adjusted = await chatbot.adjustCounter(counterId, 2, 'Twitch Bits interaction');
   assert.equal(adjusted.value, 6);
+  assert.equal(catalogChanges, 3);
   const restored = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
   await restored.initialize('client123');
   const counter = restored.status().commands.find((entry) => entry.name === 'death');

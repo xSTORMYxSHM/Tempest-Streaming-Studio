@@ -6,6 +6,7 @@
 - Added active Studio polls to the free Tempest Mainframe Twitch Extension. Identity-linked viewers can vote once from the Panel or Video Component, the same Twitch account cannot vote again through chat, and live/final totals remain visible without any Bits dependency.
 - Added a default `!roll` / `!dice` command for Twitch, Stream Together, and Kick chat. Viewer rolls use the same hardened Dice Box Browser Source, physical settled result, access rules, and adjustable command cooldowns as operator rolls, then report the result back on the originating platform.
 - Added a compact 3D Dice picker to the free Tempest Mainframe Extension. Viewers can choose d4, d6, d8, d10, d12, d20, 1–50, d100, or an exact custom 1–N maximum from 2 through 100; Studio applies its assigned-creator access policy and shared 30-second viewer/5-second global cooldowns before starting the physical on-stream roll.
+- Added read-only live counter cards to the free Extension for enabled Studio counter commands such as deaths or restarts. Values publish immediately after chat, operator, or viewer-interaction adjustments without giving the Extension a counter mutation endpoint.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

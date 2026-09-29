@@ -146,7 +146,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
     options: [{ number: 1, label: 'Game One', votes: 2, percentage: 1 }, { number: 2, label: 'Game Two', votes: 0, percentage: 99 }],
     startedAt: new Date().toISOString()
   };
-  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll } }));
+  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }] } }));
   const catalogDeadline = Date.now() + 2000;
   let published;
   while (Date.now() < catalogDeadline) {
@@ -155,6 +155,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.equal(published.poll.totalVotes, 2);
+  assert.deepEqual(published.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
   assert.deepEqual(published.poll.options.map((option) => option.percentage), [100, 0]);
 
   let relayed;
