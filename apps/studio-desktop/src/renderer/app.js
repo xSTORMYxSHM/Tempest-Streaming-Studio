@@ -95,6 +95,7 @@
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const simulcastChecklistStorageKey = 'tempest.streaming-studio.simulcast-checklist.v1';
   const simulcastOperationsStorageKey = 'tempest.streaming-studio.simulcast-operations.v1';
+  const fullRefreshIntervalMs = 60_000;
   let simulcastOperations = {
     active: false, startedAt: null, endedAt: null, incidents: [],
     previousTwitchActive: false, previousKickActive: false,
@@ -5292,7 +5293,7 @@
       if (!document.hidden) void refresh({ quiet: true });
     });
     setInterval(() => { if (!document.hidden) void refreshRuntime(); }, 1000);
-    setInterval(() => { if (!document.hidden) void refresh({ quiet: true }); }, 15000);
+    setInterval(() => { if (!document.hidden) void refresh({ quiet: true }); }, fullRefreshIntervalMs);
     window.__tempestStudioReady = true;
   }
 
