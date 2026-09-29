@@ -9,6 +9,19 @@
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
+  async function fetchWithTimeout(input, init = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Tempest Signal did not respond in time.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function setStatus(label, online = false) {
     $('#statusLabel').textContent = label;
     $('#statusDot').classList.toggle('online', online);
@@ -89,7 +102,7 @@
     }
     const [twitchProducts, serverResponse] = await Promise.all([
       loadTwitchProducts(forceTwitchProducts),
-      fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' })
+      fetchWithTimeout(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' })
     ]);
     if (state.auth?.token !== authToken) return;
     if (serverResponse.status === 304) {
@@ -140,7 +153,7 @@
     if (!receipt) throw new Error('Twitch did not provide a transaction receipt.');
     const sku = String(transaction?.product?.sku || state.busySku || '');
     const reservationToken = state.reservations.get(sku) || '';
-    const response = await fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/transactions`, {
+    const response = await fetchWithTimeout(`${state.config.ebsBaseUrl}/v1/extension/bits/transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token },
       body: JSON.stringify({ transactionReceipt: receipt, reservationToken })
@@ -151,7 +164,7 @@
   }
 
   async function reserveInteraction(sku, placement) {
-    const response = await fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/reservations`, {
+    const response = await fetchWithTimeout(`${state.config.ebsBaseUrl}/v1/extension/bits/reservations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token },
       body: JSON.stringify({ sku, ...(placement ? { placement } : {}) })

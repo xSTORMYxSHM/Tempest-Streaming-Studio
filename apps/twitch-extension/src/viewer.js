@@ -11,6 +11,19 @@
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
+  async function fetchWithTimeout(input, init = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Tempest Signal did not respond in time.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function normalizePanelDesign(value) {
     const source = value && typeof value === 'object' ? value : {};
     const color = (candidate, fallback) => /^#[0-9a-f]{6}$/i.test(String(candidate || '')) ? String(candidate).toUpperCase() : fallback;
@@ -236,7 +249,7 @@
     const configuration = state.configuration;
     if (configuration.mockMode || !configuration.ebsBaseUrl || !state.auth?.token) return;
     const authToken = state.auth.token;
-    const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/catalog`, {
+    const response = await fetchWithTimeout(`${configuration.ebsBaseUrl}/v1/extension/catalog`, {
       headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) },
       cache: 'no-store'
     });
@@ -313,7 +326,7 @@
     const route = alert.kind === 'interaction'
       ? `/v1/extension/interactions/${encodeURIComponent(alert.id)}/trigger`
       : `/v1/extension/alerts/${encodeURIComponent(alert.id)}/trigger`;
-    const response = await fetch(`${configuration.ebsBaseUrl}${route}`, {
+    const response = await fetchWithTimeout(`${configuration.ebsBaseUrl}${route}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId },
       body: JSON.stringify({ ...(alert.kind === 'interaction' ? {} : { alertId: alert.id }), ...payload, requestId })
@@ -393,7 +406,7 @@
       }
       if (!state.auth?.token || !state.configuration.ebsBaseUrl) throw new Error('The Tempest poll relay is not configured.');
       const requestId = crypto.randomUUID();
-      const response = await fetch(`${state.configuration.ebsBaseUrl}/v1/extension/poll/vote`, {
+      const response = await fetchWithTimeout(`${state.configuration.ebsBaseUrl}/v1/extension/poll/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId },
         body: JSON.stringify({ requestId, pollId: poll.id, optionNumber })
