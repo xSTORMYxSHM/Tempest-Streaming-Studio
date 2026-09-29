@@ -2833,12 +2833,7 @@
 
   function runtimeRefreshTasks(activeSection) {
     const tasks = new Map([
-      ['health', () => api('/health')],
-      ['connections', () => api('/v1/connections')],
-      ['dualFormat', () => api('/v1/broadcast/dual-format')],
-      ['simulcast', () => api('/v1/broadcast/simulcast')],
-      ['runs', () => api('/v1/runs?limit=50')],
-      ['safety', () => api('/v1/safety')]
+      ['runtimeSummary', () => api('/v1/runtime-summary')]
     ]);
     const add = (key, loader) => { if (!tasks.has(key)) tasks.set(key, loader); };
     if (activeSection === 'overviewSection') add('events', () => api('/v1/events?limit=150'));
@@ -2894,11 +2889,15 @@
       const entries = [...runtimeRefreshTasks(activeSection)];
       const values = await Promise.all(entries.map(([, loader]) => loader()));
       const refreshed = Object.fromEntries(entries.map(([key], index) => [key, values[index]]));
-      if (refreshed.health) state.health = refreshed.health;
-      if (refreshed.connections) state.connections = refreshed.connections.connections || [];
-      if (refreshed.dualFormat) state.dualFormat = refreshed.dualFormat;
-      if (refreshed.simulcast) state.simulcast = refreshed.simulcast;
-      if (refreshed.runs) state.runs = refreshed.runs.runs || [];
+      if (refreshed.runtimeSummary) {
+        const summary = refreshed.runtimeSummary;
+        state.health = summary.health;
+        state.connections = summary.connections || [];
+        state.dualFormat = summary.dualFormat;
+        state.simulcast = summary.simulcast;
+        state.runs = summary.runs || [];
+        state.safety = summary.safety;
+      }
       if (refreshed.events) state.events = refreshed.events.events || [];
       for (const key of ['safety', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];

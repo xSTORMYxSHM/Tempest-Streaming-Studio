@@ -923,6 +923,19 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
 
   let alertAudioBaseUrl = '';
 
+  const connectionsSnapshot = () => ({
+    connections: [...clients.values()].map((client) => ({
+      id: client.id,
+      applicationId: client.applicationId,
+      version: client.version,
+      capabilities: client.capabilities,
+      status: client.status,
+      connectedAt: client.connectedAt,
+      lastSeenAt: client.lastSeenAt,
+      subscriptions: [...client.subscriptions]
+    }))
+  });
+
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${host}`);
     try {
@@ -1142,6 +1155,18 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       if (await serveAlertAudio(request, response, requestUrl)) return;
       if (requestToken(request, requestUrl) !== token) return sendJson(response, 401, { error: 'A valid Tempest Bridge token is required.' });
+
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/runtime-summary') {
+        const broadcast = connectedBroadcast();
+        return sendJson(response, 200, {
+          health: health(),
+          connections: connectionsSnapshot().connections,
+          dualFormat: dualFormatSnapshot(broadcast),
+          simulcast: simulcastSnapshot(broadcast),
+          runs: workflowEngine.listRuns(50),
+          safety: workflowEngine.safetyState()
+        });
+      }
 
       if (request.method === 'GET' && requestUrl.pathname === '/v1/broadcast/simulcast') {
         return sendJson(response, 200, simulcastSnapshot(connectedBroadcast()));
@@ -1875,18 +1900,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, run });
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/connections') {
-        return sendJson(response, 200, {
-          connections: [...clients.values()].map((client) => ({
-            id: client.id,
-            applicationId: client.applicationId,
-            version: client.version,
-            capabilities: client.capabilities,
-            status: client.status,
-            connectedAt: client.connectedAt,
-            lastSeenAt: client.lastSeenAt,
-            subscriptions: [...client.subscriptions]
-          }))
-        });
+        return sendJson(response, 200, connectionsSnapshot());
       }
       return sendJson(response, 404, { error: 'Tempest Bridge route was not found.' });
     } catch (error) {

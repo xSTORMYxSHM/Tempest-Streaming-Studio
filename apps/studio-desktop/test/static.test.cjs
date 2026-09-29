@@ -159,6 +159,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /\/v1\/alert-history/);
   assert.match(renderer, /\/v1\/alert-diagnostics/);
   assert.match(renderer, /runtimeRefreshTasks/);
+  assert.match(renderer, /api\('\/v1\/runtime-summary'\)/);
   assert.match(renderer, /fullRefreshPromise/);
   assert.match(renderer, /if \(fullRefreshPromise\) \{\s*await fullRefreshPromise;/);
   assert.match(renderer, /performFullRefresh/);

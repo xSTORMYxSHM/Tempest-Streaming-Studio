@@ -210,6 +210,13 @@ test('reports adapter identity, capabilities, and published health on the connec
   assert.equal(body.connections[0].status.recording, true);
   assert.equal(body.connections[0].status.activeLeases, 1);
   assert.deepEqual(body.connections[0].status.canvasProfile, { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 });
+  const runtimeSummary = await fetch(`${runtime.baseUrl}/v1/runtime-summary`, { headers }).then((response) => response.json());
+  assert.equal(runtimeSummary.health.status, 'online');
+  assert.equal(runtimeSummary.connections[0].applicationId, 'com.tempestmainframe.tempest-broadcast');
+  assert.equal(runtimeSummary.dualFormat.state, 'update-required');
+  assert.equal(runtimeSummary.simulcast.state, 'update-required');
+  assert.deepEqual(runtimeSummary.runs, []);
+  assert.equal(runtimeSummary.safety.armed, true);
   const dualFormat = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
   assert.equal(dualFormat.state, 'update-required');
   assert.equal(dualFormat.ready, false);
