@@ -3,6 +3,9 @@
 
   const state = { auth: null, config: null, products: [], twitchProducts: [], twitchProductsLoadedAt: 0, permitted: new Map(), reservations: new Map(), busySku: '', placementSku: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay' };
   let catalogEtag = '';
+  let productRefreshPromise = null;
+  let productRefreshPending = false;
+  let productRefreshForce = false;
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -73,8 +76,9 @@
     return state.twitchProducts;
   }
 
-  async function refreshProducts(forceTwitchProducts = false) {
+  async function refreshProductsOnce(forceTwitchProducts = false) {
     if (!state.auth || !state.config?.ebsBaseUrl) return;
+    const authToken = state.auth.token;
     const features = window.Twitch.ext.features;
     if (!features?.isBitsEnabled) {
       state.products = [];
@@ -85,8 +89,9 @@
     }
     const [twitchProducts, serverResponse] = await Promise.all([
       loadTwitchProducts(forceTwitchProducts),
-      fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': state.auth.token, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' })
+      fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' })
     ]);
+    if (state.auth?.token !== authToken) return;
     if (serverResponse.status === 304) {
       state.products = twitchProducts.filter((product) => {
         const configured = state.permitted.get(product.sku);
@@ -107,6 +112,27 @@
     setStatus(state.studioConnected ? 'STUDIO ONLINE' : 'STUDIO OFFLINE', state.studioConnected);
     $('#viewerState').textContent = serverBody.studioConnected ? 'Select a signal to activate it on stream' : 'The creator must open Tempest Streaming Studio';
     render();
+  }
+
+  async function refreshProducts(forceTwitchProducts = false) {
+    productRefreshForce ||= forceTwitchProducts;
+    if (productRefreshPromise) {
+      productRefreshPending = true;
+      return productRefreshPromise;
+    }
+    productRefreshPromise = (async () => {
+      do {
+        productRefreshPending = false;
+        const force = productRefreshForce;
+        productRefreshForce = false;
+        await refreshProductsOnce(force);
+      } while (productRefreshPending);
+    })();
+    try {
+      await productRefreshPromise;
+    } finally {
+      productRefreshPromise = null;
+    }
   }
 
   async function submitTransaction(transaction) {

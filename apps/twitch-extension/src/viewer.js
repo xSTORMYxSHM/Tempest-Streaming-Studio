@@ -5,6 +5,8 @@
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
   let catalogEtag = '';
+  let catalogRefreshPromise = null;
+  let catalogRefreshPending = false;
   const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -230,13 +232,15 @@
     $('#stateLight').classList.toggle('online', online);
   }
 
-  async function refreshHostedCatalog() {
+  async function refreshHostedCatalogOnce() {
     const configuration = state.configuration;
     if (configuration.mockMode || !configuration.ebsBaseUrl || !state.auth?.token) return;
+    const authToken = state.auth.token;
     const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/catalog`, {
-      headers: { 'X-Extension-JWT': state.auth.token, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) },
+      headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) },
       cache: 'no-store'
     });
+    if (state.auth?.token !== authToken) return;
     if (response.status === 304) return;
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Signal catalog unavailable (${response.status}).`);
@@ -259,6 +263,24 @@
       : incomingPoll;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
     render();
+  }
+
+  async function refreshHostedCatalog() {
+    if (catalogRefreshPromise) {
+      catalogRefreshPending = true;
+      return catalogRefreshPromise;
+    }
+    catalogRefreshPromise = (async () => {
+      do {
+        catalogRefreshPending = false;
+        await refreshHostedCatalogOnce();
+      } while (catalogRefreshPending);
+    })();
+    try {
+      await catalogRefreshPromise;
+    } finally {
+      catalogRefreshPromise = null;
+    }
   }
 
   let toastTimer;
@@ -403,6 +425,7 @@
     }
     window.Twitch.ext.onAuthorized((authorization) => {
       state.auth = authorization;
+      catalogEtag = '';
       setConnection('TWITCH AUTHORIZED', true);
       $('#viewerState').textContent = authorization.userId?.startsWith('A') ? 'Anonymous viewer link' : 'Viewer link established';
       void refreshHostedCatalog().catch((error) => { setConnection('PAIRING REQUIRED', false); toast(error.message, true); });
