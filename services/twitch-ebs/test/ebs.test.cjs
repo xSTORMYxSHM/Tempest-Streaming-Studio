@@ -226,6 +226,34 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   assert.equal(twitchStatus.acceptedEvents, 1);
   assert.equal(twitchStatus.connections.extensionRelay, 'connected');
 
+  const diceCatalogDeadline = Date.now() + 3000;
+  let diceCatalog;
+  while (Date.now() < diceCatalogDeadline) {
+    diceCatalog = await fetch(`${ebs.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((catalogResponse) => catalogResponse.json());
+    if (diceCatalog.items?.some((item) => item.id === 'tempest.dice.d50')) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.ok(diceCatalog.items.some((item) => item.id === 'tempest.dice.d50' && item.kind === 'interaction'));
+  const registeredDice = await fetch(`${bridge.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((diceResponse) => diceResponse.json());
+  await fetch(`${bridge.baseUrl}/dice-overlay/client-status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registeredDice.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })
+  });
+  const diceRequestId = randomUUID();
+  const diceResponsePromise = fetch(`${ebs.baseUrl}/v1/extension/interactions/tempest.dice.d50/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': diceRequestId }, body: JSON.stringify({ requestId: diceRequestId })
+  });
+  const diceCommands = await fetch(`${bridge.baseUrl}/dice-overlay/poll`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registeredDice.clientId, after: registeredDice.revision })
+  }).then((diceResponse) => diceResponse.json());
+  const diceRequest = diceCommands.events.find((entry) => entry.type === 'roll-request').payload;
+  assert.equal(diceRequest.expression, '1d50');
+  const diceResponse = await diceResponsePromise;
+  assert.equal(diceResponse.status, 202);
+  assert.equal((await diceResponse.json()).cooldownMs, 30000);
+  await fetch(`${bridge.baseUrl}/dice-overlay/result`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: diceRequest.id, token: diceRequest.token, values: [42] })
+  });
+
   const startedPoll = await fetch(`${bridge.baseUrl}/v1/chatbot/poll/start`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token },
     body: JSON.stringify({ question: 'Which route?', options: ['North', 'South'] })

@@ -119,13 +119,19 @@
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
-    const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && matchesQuery(alert));
+    const dice = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
+    const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
-    const visibleCount = featured.length + performances.length;
+    const visibleCount = dice.length + featured.length + performances.length;
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
     $('#performanceRegion').hidden = performances.length === 0;
+    $('#diceRegion').hidden = dice.length === 0;
+    $('#diceGrid').innerHTML = dice.map((entry) => {
+      const wait = remaining(entry.id);
+      return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${wait ? seconds(wait) : 'ROLL'}</small></button>`;
+    }).join('');
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -210,15 +216,22 @@
   async function trigger(id) {
     const alert = state.alerts.find((entry) => entry.id === id);
     if (!alert || state.busy || remaining(id)) return;
+    const diceAction = id.startsWith('tempest.dice.');
     state.busy = true;
     render();
     try {
       const result = await requestAlert(alert);
       const cooldownMs = Number(result.cooldownMs) || Math.max(5000, alert.cooldownMs || alert.durationMs);
-      cooldowns.set(id, Date.now() + cooldownMs);
-      toast(`${alert.name} signal accepted.`);
+      const cooldownUntil = Date.now() + cooldownMs;
+      if (diceAction) state.alerts.filter((entry) => entry.id.startsWith('tempest.dice.')).forEach((entry) => cooldowns.set(entry.id, cooldownUntil));
+      else cooldowns.set(id, cooldownUntil);
+      toast(diceAction ? `${result.expression || alert.name} rolling on stream.` : `${alert.name} signal accepted.`);
     } catch (error) {
-      if (Number(error.retryAfterMs) > 0) cooldowns.set(id, Date.now() + Number(error.retryAfterMs));
+      if (Number(error.retryAfterMs) > 0) {
+        const cooldownUntil = Date.now() + Number(error.retryAfterMs);
+        if (diceAction) state.alerts.filter((entry) => entry.id.startsWith('tempest.dice.')).forEach((entry) => cooldowns.set(entry.id, cooldownUntil));
+        else cooldowns.set(id, cooldownUntil);
+      }
       if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) {
         toast('Share your Twitch identity to use this channel’s restricted interactions.', true);
         window.Twitch.ext.actions.requestIdShare();
@@ -310,6 +323,7 @@
     };
     $('#featuredGrid').addEventListener('click', triggerFromClick);
     $('#alertGrid').addEventListener('click', triggerFromClick);
+    $('#diceGrid').addEventListener('click', triggerFromClick);
     $('#pollOptions').addEventListener('click', (event) => {
       const button = event.target.closest('[data-poll-option]');
       if (button) void voteInPoll(Number(button.dataset.pollOption));

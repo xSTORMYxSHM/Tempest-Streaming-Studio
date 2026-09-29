@@ -117,6 +117,48 @@ test('enforces assigned-creator access before Extension interactions enter Studi
   assert.equal(moderator.status, 202);
 });
 
+test('starts free Extension dice on the physical Browser Source and enforces shared cooldowns', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-extension-dice-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const registered = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((response) => response.json());
+  await fetch(`${runtime.baseUrl}/dice-overlay/client-status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })
+  });
+  const event = (id, action, viewerId = 'Uviewer-dice') => ({
+    schemaVersion: 1, id, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch',
+    channel: { id: '546679431' }, viewer: { id: viewerId, roles: ['viewer'] }, payload: { action }
+  });
+
+  const rollingResponse = fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
+    method: 'POST', headers, body: JSON.stringify(event('extension-dice-d50', 'tempest.dice.d50'))
+  });
+  const commands = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, after: registered.revision })
+  }).then((response) => response.json());
+  const rollRequest = commands.events.find((entry) => entry.type === 'roll-request').payload;
+  assert.equal(rollRequest.expression, '1d50');
+  assert.equal(rollRequest.physicalSides, 100);
+  assert.equal(rollRequest.rollerName, 'Twitch Viewer');
+
+  const accepted = await rollingResponse;
+  assert.equal(accepted.status, 202);
+  assert.deepEqual(await accepted.json(), { accepted: true, expression: '1d50', cooldownMs: 30000, eventId: 'extension-dice-d50' });
+  const coolingDown = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
+    method: 'POST', headers, body: JSON.stringify(event('extension-dice-d20', 'tempest.dice.d20'))
+  });
+  assert.equal(coolingDown.status, 429);
+  assert.equal((await coolingDown.json()).code, 'dice_cooldown');
+
+  await fetch(`${runtime.baseUrl}/dice-overlay/result`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rollRequest.id, token: rollRequest.token, values: [37] })
+  });
+  const diceStatus = await fetch(`${runtime.baseUrl}/v1/dice-overlay`, { headers }).then((response) => response.json());
+  assert.equal(diceStatus.latestRoll.expression, '1d50');
+  assert.equal(diceStatus.latestRoll.total, 37);
+});
+
 test('accepts authenticated WebSocket clients and sends a welcome envelope', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-socket-test-'));
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });

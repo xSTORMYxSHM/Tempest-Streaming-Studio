@@ -21,6 +21,10 @@ For the installed channel panel, set **Panel Viewer Path** to `panel.html` and *
 
 When the streamer starts a numeric poll in **Live Desk**, the active question, numbered choices, and current totals are published to the free Tempest Mainframe Panel and Video Component. A viewer selects one option and, when needed, Twitch asks them to share identity. Studio records only one vote for that Twitch user across both the Extension and Twitch chat. Closing voting publishes final results; clearing the poll removes it from the Extension. Poll voting never opens a Bits purchase flow and is unavailable when the channel selects the Bits Extension edition.
 
+## Free Extension 3D Dice
+
+When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons. The public service authenticates and relays the selection, but Studio alone verifies the local Browser Source, access policy, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
+
 ## Run the Local Test
 
 The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.

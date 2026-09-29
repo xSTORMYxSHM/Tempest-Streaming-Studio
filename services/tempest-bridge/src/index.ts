@@ -108,6 +108,18 @@ const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
 const simulcastStartCapability = 'broadcast.simulcast.start';
 const simulcastStopCapability = 'broadcast.simulcast.stop';
 const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
+const extensionDiceViewerCooldownMs = 30_000;
+const extensionDiceGlobalCooldownMs = 5_000;
+const extensionDicePresets = [
+  { id: 'tempest.dice.d4', expression: '1d4', name: 'Roll d4', glyph: 'D4' },
+  { id: 'tempest.dice.d6', expression: '1d6', name: 'Roll d6', glyph: 'D6' },
+  { id: 'tempest.dice.d8', expression: '1d8', name: 'Roll d8', glyph: 'D8' },
+  { id: 'tempest.dice.d10', expression: '1d10', name: 'Roll d10', glyph: 'D10' },
+  { id: 'tempest.dice.d12', expression: '1d12', name: 'Roll d12', glyph: 'D12' },
+  { id: 'tempest.dice.d20', expression: '1d20', name: 'Roll d20', glyph: 'D20' },
+  { id: 'tempest.dice.d50', expression: '1d50', name: 'Roll 1–50', glyph: 'D50' },
+  { id: 'tempest.dice.d100', expression: '1d100', name: 'Roll d100', glyph: 'D100' }
+] as const;
 const diceBoxDistributionDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-box/package.json')), 'dist');
 const diceBoxAssetsDirectory = path.join(diceBoxDistributionDirectory, 'assets');
 const diceThemeAssetsDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-themes/package.json')), 'themes');
@@ -503,6 +515,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await discordVoiceOverlay.initialize();
   const diceOverlay = new TempestDiceOverlay(options.dataDirectory);
   await diceOverlay.initialize();
+  const extensionDiceViewerUses = new Map<string, number>();
+  let extensionDiceGlobalUse = 0;
   dispatchChatDice = async (request) => {
     const roll = await diceOverlay.roll({ expression: request.expression, reason: request.reason, rollerName: request.rollerName });
     workflowEngine?.recordExternalEvent('studio.dice.chat-rolled', 'success', `${roll.rollerName} rolled ${roll.expression} from chat.`, {
@@ -1780,6 +1794,38 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
             return sendJson(response, 403, { accepted: false, error: access.reason, code: access.code.replaceAll('-', '_'), eventId: event.id });
           }
         }
+        const extensionDicePreset = event.topic === 'viewer.interaction.requested'
+          ? extensionDicePresets.find((preset) => preset.id === action)
+          : undefined;
+        if (extensionDicePreset) {
+          const now = Date.now();
+          for (const [viewerId, usedAt] of extensionDiceViewerUses) {
+            if (now - usedAt > extensionDiceViewerCooldownMs) extensionDiceViewerUses.delete(viewerId);
+          }
+          const viewerId = String(event.viewer?.id || 'anonymous');
+          const retryAfterMs = Math.max(
+            0,
+            extensionDiceGlobalUse + extensionDiceGlobalCooldownMs - now,
+            (extensionDiceViewerUses.get(viewerId) || 0) + extensionDiceViewerCooldownMs - now
+          );
+          if (retryAfterMs > 0) {
+            return sendJson(response, 429, { accepted: false, error: `3D Dice is recharging for ${Math.ceil(retryAfterMs / 1000)} seconds.`, code: 'dice_cooldown', retryAfterMs, eventId: event.id });
+          }
+          const diceStatus = diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) as { connectedClients?: number; rolling?: boolean; engine?: string; settings?: { enabled?: boolean }; clients?: Array<{ state?: string; error?: string }> };
+          if (diceStatus.settings?.enabled !== true) return sendJson(response, 409, { accepted: false, error: 'The streamer has disabled 3D Dice.', code: 'dice_disabled', eventId: event.id });
+          if (!diceStatus.connectedClients) return sendJson(response, 409, { accepted: false, error: 'The 3D Dice Browser Source is not connected.', code: 'dice_source_offline', eventId: event.id });
+          if (diceStatus.clients?.some((client) => client.state === 'failed')) return sendJson(response, 409, { accepted: false, error: 'The 3D Dice Browser Source needs attention in Studio.', code: 'dice_source_failed', eventId: event.id });
+          if (diceStatus.rolling) return sendJson(response, 409, { accepted: false, error: 'The 3D dice are already rolling. Try again when they settle.', code: 'dice_busy', retryAfterMs: extensionDiceGlobalCooldownMs, eventId: event.id });
+          extensionDiceGlobalUse = now;
+          extensionDiceViewerUses.set(viewerId, now);
+          void diceOverlay.roll({ expression: extensionDicePreset.expression, rollerName: 'Twitch Viewer', reason: 'Viewer roll' }).then((roll) => {
+            workflowEngine?.recordExternalEvent('studio.dice.extension-rolled', 'success', `A Twitch viewer rolled ${roll.expression} from the free Extension.`, { eventId: event.id, rollId: roll.id, expression: roll.expression, total: roll.total, viewerId });
+          }).catch((error) => {
+            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A free Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDicePreset.expression, viewerId });
+          });
+          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDicePreset.expression} from the free Extension.`, { eventId: event.id, expression: extensionDicePreset.expression, viewerId });
+          return sendJson(response, 202, { accepted: true, expression: extensionDicePreset.expression, cooldownMs: extensionDiceViewerCooldownMs, eventId: event.id });
+        }
         workflowEngine.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
         broadcastSystemEvent(event.topic, event);
         chatOverlay.push(event);
@@ -1966,25 +2012,49 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     const nextRelay = new TempestExtensionRelayClient({
       ...relayOptions,
       logger,
-      catalog: () => soundAlerts.list().filter((alert) => alert.enabled).map((alert) => ({
-        id: alert.id,
-        name: alert.name,
-        durationMs: alert.durationMs,
-        cooldownMs: Math.max(alert.viewerCooldownMs, alert.globalCooldownMs, alert.durationMs),
-        viewerCooldownMs: alert.viewerCooldownMs,
-        globalCooldownMs: alert.globalCooldownMs,
-        category: alert.interactionCategory || 'other',
-        placementMode: alert.placementMode || 'fixed',
-        access: {
-          mode: alert.accessMode || 'everyone',
-          allowedViewerIds: alert.accessMode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : alert.allowedViewerIds || [],
-          blockedViewerIds: alert.blockedViewerIds || [],
-          hideWhenLocked: alert.hideWhenLocked === true
-        },
-        accent: alert.accent || '#54F2EB',
-        glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
-        kind: extensionCatalogKind(relayOptions.extensionEdition)
-      })),
+      catalog: () => {
+        const alerts = soundAlerts.list().filter((alert) => alert.enabled).map((alert) => ({
+          id: alert.id,
+          name: alert.name,
+          durationMs: alert.durationMs,
+          cooldownMs: Math.max(alert.viewerCooldownMs, alert.globalCooldownMs, alert.durationMs),
+          viewerCooldownMs: alert.viewerCooldownMs,
+          globalCooldownMs: alert.globalCooldownMs,
+          category: alert.interactionCategory || 'other',
+          placementMode: alert.placementMode || 'fixed',
+          access: {
+            mode: alert.accessMode || 'everyone',
+            allowedViewerIds: alert.accessMode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : alert.allowedViewerIds || [],
+            blockedViewerIds: alert.blockedViewerIds || [],
+            hideWhenLocked: alert.hideWhenLocked === true
+          },
+          accent: alert.accent || '#54F2EB',
+          glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
+          kind: extensionCatalogKind(relayOptions.extensionEdition)
+        }));
+        const diceStatus = diceOverlay.status('') as { settings?: { enabled?: boolean; durationMs?: number } };
+        if (relayOptions.extensionEdition === 'bits' || diceStatus.settings?.enabled !== true) return alerts;
+        const interactionAccess = chatbot.status().interactionAccess;
+        return [...alerts, ...extensionDicePresets.map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          durationMs: Number(diceStatus.settings?.durationMs) || 5_200,
+          cooldownMs: extensionDiceViewerCooldownMs,
+          viewerCooldownMs: extensionDiceViewerCooldownMs,
+          globalCooldownMs: extensionDiceGlobalCooldownMs,
+          category: 'community' as const,
+          placementMode: 'fixed' as const,
+          access: {
+            mode: interactionAccess.mode === 'assigned-creators' ? 'assigned-creators' as const : 'everyone' as const,
+            allowedViewerIds: interactionAccess.mode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : [],
+            blockedViewerIds: [],
+            hideWhenLocked: false
+          },
+          accent: '#A66BFF',
+          glyph: preset.glyph,
+          kind: 'interaction' as const
+        }))];
+      },
       poll: () => {
         const poll = chatbot.pollStatus();
         if (poll.state === 'idle' || !poll.id || !poll.question || !poll.startedAt) return undefined;
