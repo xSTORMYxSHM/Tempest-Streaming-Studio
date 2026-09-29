@@ -1,5 +1,4 @@
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -43,6 +42,7 @@ import {
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 import { boundedFetch } from './bounded-fetch';
+import { sha256File } from './file-checksum';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -1183,6 +1183,8 @@ function registerDesktopHandlers(): void {
     });
     if (result.canceled || !result.filePaths[0]) return null;
     const manifestPath = result.filePaths[0];
+    const manifestDetails = await stat(manifestPath);
+    if (!manifestDetails.isFile() || manifestDetails.size > 1024 * 1024) throw new Error('Application manifests must be JSON files smaller than 1 MB.');
     const parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as TempestApplicationManifest;
     const validation = validateApplicationManifest(parsed);
     if (!validation.ok || !validation.value) throw new Error(validation.errors.join('\n'));
@@ -1208,8 +1210,8 @@ function registerDesktopHandlers(): void {
     });
     if (result.canceled || !result.filePaths[0]) return null;
     const filePath = result.filePaths[0];
-    const bytes = await readFile(filePath);
     const details = await stat(filePath);
+    if (!details.isFile()) throw new Error('The selected asset is not a file.');
     const baseName = path.basename(filePath, path.extname(filePath));
     const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'asset';
     return {
@@ -1217,7 +1219,7 @@ function registerDesktopHandlers(): void {
       uri: pathToFileURL(filePath).href,
       name: baseName,
       suggestedId: `com.tempestmainframe.asset.${slug}`,
-      checksum: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      checksum: `sha256:${await sha256File(filePath)}`,
       size: details.size,
       extension: path.extname(filePath).toLowerCase()
     };
