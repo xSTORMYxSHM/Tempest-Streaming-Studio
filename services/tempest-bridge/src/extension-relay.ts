@@ -67,6 +67,15 @@ export interface ExtensionRelaySchedule {
   startTime: string;
 }
 
+export interface ExtensionRelayStream {
+  live: boolean;
+  title: string;
+  category?: string;
+  startedAt?: string;
+  viewerCount?: number;
+  checkedAt: string;
+}
+
 export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEdition']): 'sound-alert' | 'interaction' {
   return edition === 'bits' ? 'interaction' : 'sound-alert';
 }
@@ -98,6 +107,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   goal?(): ExtensionRelayGoal | undefined;
   nowPlaying?(): Promise<ExtensionRelayNowPlaying | undefined>;
   schedule?(): Promise<ExtensionRelaySchedule | undefined>;
+  stream?(): Promise<ExtensionRelayStream | undefined>;
   onStatus?(status: ExtensionRelayStatus): void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -130,6 +140,7 @@ export class TempestExtensionRelayClient {
   private dynamicCatalogSyncTimer: NodeJS.Timeout | null = null;
   private nowPlaying: ExtensionRelayNowPlaying | undefined;
   private schedule: ExtensionRelaySchedule | undefined;
+  private stream: ExtensionRelayStream | undefined;
   private refreshingDynamicCatalog = false;
   private dynamicCatalogRefreshRequested = false;
   private lastDynamicCatalogRefreshAt = 0;
@@ -270,7 +281,8 @@ export class TempestExtensionRelayClient {
       const goal = this.options.extensionEdition === 'bits' ? undefined : this.options.goal?.();
       const nowPlaying = this.options.extensionEdition === 'bits' ? undefined : this.nowPlaying;
       const schedule = this.options.extensionEdition === 'bits' ? undefined : this.schedule;
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}) };
+      const stream = this.options.extensionEdition === 'bits' ? undefined : this.stream;
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;
@@ -282,7 +294,7 @@ export class TempestExtensionRelayClient {
   }
 
   private async refreshDynamicCatalog(socket: WebSocket): Promise<void> {
-    if ((!this.options.nowPlaying && !this.options.schedule) || socket.readyState !== WebSocket.OPEN) return;
+    if ((!this.options.nowPlaying && !this.options.schedule && !this.options.stream) || socket.readyState !== WebSocket.OPEN) return;
     const delay = Math.max(0, 1_000 - (Date.now() - this.lastDynamicCatalogRefreshAt));
     if (delay) {
       if (!this.dynamicCatalogSyncTimer) {
@@ -301,13 +313,15 @@ export class TempestExtensionRelayClient {
     this.refreshingDynamicCatalog = true;
     this.lastDynamicCatalogRefreshAt = Date.now();
     try {
-      const [nowPlaying, schedule] = await Promise.all([
+      const [nowPlaying, schedule, stream] = await Promise.all([
         this.options.nowPlaying?.() || Promise.resolve(undefined),
-        this.options.schedule?.() || Promise.resolve(undefined)
+        this.options.schedule?.() || Promise.resolve(undefined),
+        this.options.stream?.() || Promise.resolve(undefined)
       ]);
       if (this.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
       this.nowPlaying = nowPlaying;
       this.schedule = schedule;
+      this.stream = stream;
       this.sendCatalog(socket);
     } catch (error) {
       this.logger.warn(error);

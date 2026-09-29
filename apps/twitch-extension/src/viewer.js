@@ -5,7 +5,7 @@
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
   let catalogEtag = '';
-  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -155,6 +155,24 @@
     $('#scheduleTime').textContent = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(start);
   }
 
+  function renderStream(visible) {
+    const stream = visible ? state.stream : null;
+    const region = $('#streamRegion');
+    region.hidden = !stream;
+    if (!stream) return;
+    region.classList.toggle('offline', !stream.live);
+    $('#streamState').textContent = stream.live ? 'LIVE NOW' : 'OFFLINE';
+    $('#streamState').classList.toggle('offline', !stream.live);
+    $('#streamTitle').textContent = stream.title;
+    $('#streamCategory').textContent = stream.category || 'No category selected';
+    const startedAt = Date.parse(stream.startedAt || '');
+    const elapsedMinutes = Number.isFinite(startedAt) ? Math.max(0, Math.floor((Date.now() - startedAt) / 60_000)) : 0;
+    const uptime = elapsedMinutes >= 60 ? `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}m` : `${elapsedMinutes}m`;
+    $('#streamMeta').textContent = stream.live
+      ? `${Number.isInteger(stream.viewerCount) ? `${Number(stream.viewerCount).toLocaleString()} viewers · ` : ''}Live for ${uptime}`
+      : 'The channel is currently offline';
+  }
+
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
@@ -169,7 +187,8 @@
     const goalVisible = state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
     const nowPlayingVisible = state.filter !== 'performances' && Boolean(state.nowPlaying) && (!query || `${state.nowPlaying.stationName} ${state.nowPlaying.artist || ''} ${state.nowPlaying.title || ''} ${state.nowPlaying.text || ''} ${state.nowPlaying.album || ''}`.toLowerCase().includes(query));
     const scheduleVisible = state.filter !== 'performances' && Boolean(state.schedule) && (!query || `${state.schedule.title || ''} next stream schedule`.toLowerCase().includes(query));
-    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0);
+    const streamVisible = state.filter !== 'performances' && Boolean(state.stream) && (!query || `${state.stream.title} ${state.stream.category || ''} ${state.stream.live ? 'live' : 'offline'} current stream`.toLowerCase().includes(query));
+    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0);
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -188,6 +207,7 @@
     renderGoal(goalVisible);
     renderNowPlaying(nowPlayingVisible);
     renderSchedule(scheduleVisible);
+    renderStream(streamVisible);
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -231,6 +251,7 @@
     state.goal = body.goal && typeof body.goal === 'object' ? body.goal : null;
     state.nowPlaying = body.nowPlaying && typeof body.nowPlaying === 'object' ? body.nowPlaying : null;
     state.schedule = body.schedule && typeof body.schedule === 'object' ? body.schedule : null;
+    state.stream = body.stream && typeof body.stream === 'object' ? body.stream : null;
     const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
     state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
       ? state.poll
@@ -481,6 +502,7 @@
     state.goal = configuration.mockMode ? { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subscribers', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' } : null;
     state.nowPlaying = configuration.mockMode ? { stationName: 'Storm Horizon Radio', state: 'online', artist: 'The Midnight', title: 'Synthetic', album: 'Endless Summer', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() } : null;
     state.schedule = configuration.mockMode ? { title: 'Signals From the Mainframe', startTime: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString() } : null;
+    state.stream = configuration.mockMode ? { live: true, title: 'Building Tempest Streaming Studio', category: 'Software and Game Development', startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), viewerCount: 42, checkedAt: new Date().toISOString() } : null;
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

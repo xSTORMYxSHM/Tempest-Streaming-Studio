@@ -14,6 +14,7 @@ import {
   PublicExtensionGoal,
   PublicExtensionNowPlaying,
   PublicExtensionSchedule,
+  PublicExtensionStream,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -31,6 +32,7 @@ export type {
   PublicExtensionGoal,
   PublicExtensionNowPlaying,
   PublicExtensionSchedule,
+  PublicExtensionStream,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -241,7 +243,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown; nowPlaying?: unknown; schedule?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown; nowPlaying?: unknown; schedule?: unknown; stream?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -374,7 +376,24 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     if ((title !== undefined && (!title || title.length > 160 || /[\r\n\0]/.test(title))) || !Number.isFinite(Date.parse(startTime))) throw new Error('Catalog schedule is invalid.');
     schedule = { ...(title ? { title } : {}), startTime: new Date(startTime).toISOString() };
   }
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}) };
+  let stream: PublicExtensionStream | undefined;
+  if (source.stream !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Stream information is published only to the free Extension edition.');
+    if (!source.stream || typeof source.stream !== 'object' || Array.isArray(source.stream)) throw new Error('Catalog stream information is invalid.');
+    const candidate = source.stream as Record<string, unknown>;
+    const live = candidate.live;
+    const title = String(candidate.title || '').trim();
+    const category = candidate.category === undefined || candidate.category === null || candidate.category === '' ? undefined : String(candidate.category).trim();
+    const startedAt = candidate.startedAt === undefined || candidate.startedAt === null || candidate.startedAt === '' ? undefined : String(candidate.startedAt);
+    const viewerCount = candidate.viewerCount === undefined || candidate.viewerCount === null ? undefined : Number(candidate.viewerCount);
+    const checkedAt = String(candidate.checkedAt || '');
+    if (typeof live !== 'boolean' || !title || title.length > 160 || /[\r\n\0]/.test(title)) throw new Error('Catalog stream identity is invalid.');
+    if (category !== undefined && (!category || category.length > 100 || /[\r\n\0]/.test(category))) throw new Error('Catalog stream category is invalid.');
+    if ((startedAt !== undefined && !Number.isFinite(Date.parse(startedAt))) || (live && !startedAt) || !Number.isFinite(Date.parse(checkedAt))) throw new Error('Catalog stream timestamps are invalid.');
+    if (viewerCount !== undefined && (!Number.isSafeInteger(viewerCount) || viewerCount < 0 || viewerCount > 1_000_000_000)) throw new Error('Catalog stream viewer count is invalid.');
+    stream = { live, title, ...(category ? { category } : {}), ...(startedAt ? { startedAt: new Date(startedAt).toISOString() } : {}), ...(viewerCount === undefined ? {} : { viewerCount }), checkedAt: new Date(checkedAt).toISOString() };
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {

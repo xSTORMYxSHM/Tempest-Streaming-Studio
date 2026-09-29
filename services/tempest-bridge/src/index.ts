@@ -2093,6 +2093,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         };
       },
       schedule: () => chatbot.publicSchedule(),
+      stream: () => chatbot.publicStream(),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

@@ -15,7 +15,7 @@ Designs are stored as validated JSON in the Studio user-data directory. The loca
 
 For a public release, enable the Twitch Extension Configuration Service and allow the broadcaster configuration segment at version `1`. Each streamer then opens the Extension's **Configuration** page, designs their channel panel, and selects **Save Panel Appearance**. Twitch stores that appearance per channel while the Extension package remains universal.
 
-The viewer surfaces poll the hosted catalog only while visible. Each successful response supplies a channel-scoped ETag; subsequent requests use `If-None-Match`, and an unchanged `304` response avoids JSON parsing and DOM rendering. Studio coalesces event-driven catalog bursts over 100 milliseconds, while Now Playing and schedule refreshes use a separate one-second trailing window and their existing provider caches.
+The viewer surfaces poll the hosted catalog only while visible. Each successful response supplies a channel-scoped ETag; subsequent requests use `If-None-Match`, and an unchanged `304` response avoids JSON parsing and DOM rendering. Studio coalesces event-driven catalog bursts over 100 milliseconds, while Current Stream, Now Playing, and schedule refreshes use a separate one-second trailing window and their existing provider caches.
 
 For the installed channel panel, set **Panel Viewer Path** to `panel.html` and **Panel Height** to `496`. The panel is designed for Twitch's narrow 318-pixel surface and scrolls its signal catalog internally.
 
@@ -46,6 +46,10 @@ When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the sta
 ## Free Extension schedule
 
 When the authorized Chatbot account can verify an upcoming Twitch schedule segment, its optional title and start time appear in a read-only **Up Next** card. The browser localizes the ISO timestamp for each viewer. Studio reuses its five-minute Twitch schedule cache, does not request a new scope, and publishes no card when Twitch returns no segment or schedule verification is unavailable. The Extension cannot edit the schedule, and the card is not published to the Bits edition.
+
+## Free Extension Current Stream
+
+When the authorized Chatbot account can read the broadcaster's public Twitch state, the Panel and Video Component show live/offline status, title, category, stream start time, and Twitch's current viewer count. The browser derives the displayed uptime from the start timestamp. Studio reuses its 30-second stream-status and 60-second channel-information caches, so Extension viewers never make Helix calls and no new scope is required. The card is read-only and is not published to the Bits edition.
 
 ## Run the Local Test
 

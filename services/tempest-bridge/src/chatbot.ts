@@ -301,6 +301,15 @@ export interface ChatbotPublicSchedule {
   startTime: string;
 }
 
+export interface ChatbotPublicStream {
+  live: boolean;
+  title: string;
+  category?: string;
+  startedAt?: string;
+  viewerCount?: number;
+  checkedAt: string;
+}
+
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
   code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
@@ -1109,6 +1118,25 @@ export class TwitchChatbot {
       const schedule = await this.loadStreamSchedule();
       if (!schedule.startTime || !Number.isFinite(Date.parse(schedule.startTime))) return undefined;
       return { ...(schedule.title ? { title: schedule.title } : {}), startTime: new Date(schedule.startTime).toISOString() };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async publicStream(): Promise<ChatbotPublicStream | undefined> {
+    if (!this.channel || !this.tokens || !this.clientId) return undefined;
+    try {
+      const [info, stream] = await Promise.all([this.loadChannelInfo(), this.loadStreamStatus()]);
+      const startedAt = stream.startedAt && Number.isFinite(Date.parse(stream.startedAt)) ? new Date(stream.startedAt).toISOString() : undefined;
+      const viewerCount = Number(stream.viewerCount);
+      return {
+        live: Boolean(startedAt),
+        title: info.title || `${this.channel.channelLogin}'s stream`,
+        ...(info.gameName ? { category: info.gameName } : {}),
+        ...(startedAt ? { startedAt } : {}),
+        ...(Number.isSafeInteger(viewerCount) && viewerCount >= 0 ? { viewerCount } : {}),
+        checkedAt: new Date().toISOString()
+      };
     } catch {
       return undefined;
     }

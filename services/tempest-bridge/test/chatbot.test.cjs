@@ -683,6 +683,13 @@ test('installs a command directory and serves cached Twitch channel information 
   assert.match(schedule.response, /Next stream:/);
   assert.match(schedule.response, /Mainframe Monday/);
   assert.deepEqual(await chatbot.publicSchedule(), { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' });
+  const publicStream = await chatbot.publicStream();
+  assert.equal(publicStream.live, true);
+  assert.equal(publicStream.title, 'Building Tempest Streaming Studio');
+  assert.equal(publicStream.category, 'Software and Game Development');
+  assert.equal(publicStream.startedAt, startedAt);
+  assert.equal(publicStream.viewerCount, 42);
+  assert.ok(Number.isFinite(Date.parse(publicStream.checkedAt)));
 
   assert.equal(requests.length, 3);
   assert.match(requests[0], /helix\/streams\?user_id=channel-1/);

@@ -66,6 +66,15 @@ export interface PublicExtensionSchedule {
   startTime: string;
 }
 
+export interface PublicExtensionStream {
+  live: boolean;
+  title: string;
+  category?: string;
+  startedAt?: string;
+  viewerCount?: number;
+  checkedAt: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -99,6 +108,7 @@ export interface PublicExtensionCatalog {
   goal?: PublicExtensionGoal;
   nowPlaying?: PublicExtensionNowPlaying;
   schedule?: PublicExtensionSchedule;
+  stream?: PublicExtensionStream;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

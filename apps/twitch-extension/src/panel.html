@@ -31,6 +31,10 @@
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
+        <div id="streamRegion" class="catalog-section stream-section" hidden>
+          <div class="section-heading"><span>CURRENT STREAM</span><i id="streamState">LIVE NOW</i></div>
+          <article class="stream-card"><span class="stream-live-dot" aria-hidden="true"></span><div><h2 id="streamTitle"></h2><p id="streamCategory"></p><small id="streamMeta"></small></div></article>
+        </div>
         <div id="nowPlayingRegion" class="catalog-section now-playing-section" hidden>
           <div class="section-heading"><span>NOW PLAYING</span><i id="nowPlayingState">ON AIR</i></div>
           <article class="now-playing-card">
