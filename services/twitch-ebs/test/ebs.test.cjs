@@ -161,6 +161,12 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
   assert.deepEqual(published.nowPlaying, { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt });
   assert.deepEqual(published.schedule, { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' });
   assert.deepEqual(published.poll.options.map((option) => option.percentage), [100, 0]);
+  const catalogResponse = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } });
+  const catalogEtag = catalogResponse.headers.get('etag');
+  assert.match(catalogEtag, /^"[A-Za-z0-9_-]{43}"$/);
+  const unchangedCatalog = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'If-None-Match': catalogEtag } });
+  assert.equal(unchangedCatalog.status, 304);
+  assert.equal(await unchangedCatalog.text(), '');
 
   let relayed;
   studio.on('message', (raw) => {

@@ -15,6 +15,8 @@ Designs are stored as validated JSON in the Studio user-data directory. The loca
 
 For a public release, enable the Twitch Extension Configuration Service and allow the broadcaster configuration segment at version `1`. Each streamer then opens the Extension's **Configuration** page, designs their channel panel, and selects **Save Panel Appearance**. Twitch stores that appearance per channel while the Extension package remains universal.
 
+The viewer surfaces poll the hosted catalog only while visible. Each successful response supplies a channel-scoped ETag; subsequent requests use `If-None-Match`, and an unchanged `304` response avoids JSON parsing and DOM rendering. Studio coalesces event-driven catalog bursts over 100 milliseconds, while Now Playing and schedule refreshes use a separate one-second trailing window and their existing provider caches.
+
 For the installed channel panel, set **Panel Viewer Path** to `panel.html` and **Panel Height** to `496`. The panel is designed for Twitch's narrow 318-pixel surface and scrolls its signal catalog internally.
 
 ## Free Extension polls

@@ -125,13 +125,17 @@ export class TempestExtensionRelayClient {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private catalogTimer: NodeJS.Timeout | null = null;
+  private catalogSyncTimer: NodeJS.Timeout | null = null;
   private dynamicCatalogTimer: NodeJS.Timeout | null = null;
+  private dynamicCatalogSyncTimer: NodeJS.Timeout | null = null;
   private nowPlaying: ExtensionRelayNowPlaying | undefined;
   private schedule: ExtensionRelaySchedule | undefined;
   private refreshingDynamicCatalog = false;
   private dynamicCatalogRefreshRequested = false;
+  private lastDynamicCatalogRefreshAt = 0;
   private lastCatalogPayload = '';
   private reconnectAttempt = 0;
+  private lastCatalogSentAt = 0;
   private stopped = true;
   private currentStatus: ExtensionRelayStatus = { state: 'disconnected' };
   private readonly url: URL;
@@ -153,10 +157,18 @@ export class TempestExtensionRelayClient {
   }
 
   syncCatalog(): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.sendCatalog(this.socket);
-      void this.refreshDynamicCatalog(this.socket);
+    const socket = this.socket;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    const delay = Math.max(0, 100 - (Date.now() - this.lastCatalogSentAt));
+    if (!delay) this.sendCatalog(socket);
+    else if (!this.catalogSyncTimer) {
+      this.catalogSyncTimer = setTimeout(() => {
+        this.catalogSyncTimer = null;
+        if (this.socket === socket && socket.readyState === WebSocket.OPEN) this.sendCatalog(socket);
+      }, delay);
+      this.catalogSyncTimer.unref?.();
     }
+    void this.refreshDynamicCatalog(socket);
   }
 
   start(): void {
@@ -170,11 +182,15 @@ export class TempestExtensionRelayClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.catalogTimer) clearInterval(this.catalogTimer);
+    if (this.catalogSyncTimer) clearTimeout(this.catalogSyncTimer);
     if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
+    if (this.dynamicCatalogSyncTimer) clearTimeout(this.dynamicCatalogSyncTimer);
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
     this.catalogTimer = null;
+    this.catalogSyncTimer = null;
     this.dynamicCatalogTimer = null;
+    this.dynamicCatalogSyncTimer = null;
     this.dynamicCatalogRefreshRequested = false;
     const socket = this.socket;
     this.socket = null;
@@ -215,9 +231,11 @@ export class TempestExtensionRelayClient {
       this.sendCatalog(socket, true);
       void this.refreshDynamicCatalog(socket);
       if (this.catalogTimer) clearInterval(this.catalogTimer);
+      if (this.catalogSyncTimer) clearTimeout(this.catalogSyncTimer);
       this.catalogTimer = setInterval(() => this.sendCatalog(socket), 30_000);
       this.catalogTimer.unref();
       if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
+      if (this.dynamicCatalogSyncTimer) clearTimeout(this.dynamicCatalogSyncTimer);
       this.dynamicCatalogTimer = setInterval(() => void this.refreshDynamicCatalog(socket), 15_000);
       this.dynamicCatalogTimer.unref();
     });
@@ -235,7 +253,9 @@ export class TempestExtensionRelayClient {
       if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
       this.heartbeatTimer = null;
       this.catalogTimer = null;
+      this.catalogSyncTimer = null;
       this.dynamicCatalogTimer = null;
+      this.dynamicCatalogSyncTimer = null;
       if (this.stopped) return this.update({ state: 'disconnected' });
       this.update({ state: 'disconnected' });
       this.scheduleReconnect();
@@ -255,6 +275,7 @@ export class TempestExtensionRelayClient {
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;
       socket.send(payload);
+      this.lastCatalogSentAt = Date.now();
     } catch (error) {
       this.logger.warn(error);
     }
@@ -262,11 +283,23 @@ export class TempestExtensionRelayClient {
 
   private async refreshDynamicCatalog(socket: WebSocket): Promise<void> {
     if ((!this.options.nowPlaying && !this.options.schedule) || socket.readyState !== WebSocket.OPEN) return;
+    const delay = Math.max(0, 1_000 - (Date.now() - this.lastDynamicCatalogRefreshAt));
+    if (delay) {
+      if (!this.dynamicCatalogSyncTimer) {
+        this.dynamicCatalogSyncTimer = setTimeout(() => {
+          this.dynamicCatalogSyncTimer = null;
+          if (this.socket === socket && socket.readyState === WebSocket.OPEN) void this.refreshDynamicCatalog(socket);
+        }, delay);
+        this.dynamicCatalogSyncTimer.unref?.();
+      }
+      return;
+    }
     if (this.refreshingDynamicCatalog) {
       this.dynamicCatalogRefreshRequested = true;
       return;
     }
     this.refreshingDynamicCatalog = true;
+    this.lastDynamicCatalogRefreshAt = Date.now();
     try {
       const [nowPlaying, schedule] = await Promise.all([
         this.options.nowPlaying?.() || Promise.resolve(undefined),

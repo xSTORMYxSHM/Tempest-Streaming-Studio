@@ -459,8 +459,24 @@ function sendJson(response: ServerResponse, status: number, body: unknown, origi
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
   response.setHeader('Vary', 'Origin');
-  if (origin) response.setHeader('Access-Control-Allow-Origin', origin);
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Expose-Headers', 'ETag');
+  }
   response.end(JSON.stringify(body));
+}
+
+function sendNotModified(response: ServerResponse, origin?: string): void {
+  response.statusCode = 304;
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('Vary', 'Origin');
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Expose-Headers', 'ETag');
+  }
+  response.end();
 }
 
 function normalizedEvent(claims: TwitchExtensionClaims, requestId: string, action: string, extra: Record<string, unknown> = {}, viewerId?: string): TempestNormalizedTwitchEvent {
@@ -656,8 +672,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         response.statusCode = 204;
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, Authorization');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, X-Kick-OAuth, Authorization');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, If-None-Match, X-Extension-JWT, X-Request-ID, X-Kick-OAuth, Authorization');
+        response.setHeader('Access-Control-Expose-Headers', 'ETag');
         response.setHeader('Access-Control-Max-Age', '600');
         response.setHeader('Vary', 'Origin');
         return response.end();
@@ -764,7 +780,11 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/catalog') {
         const { claims, installation } = await authenticateViewer(request);
-        return sendJson(response, 200, { ...installation.catalog, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+        const studioConnected = studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN;
+        const etag = `"${createHash('sha256').update(`${installation.id}:${installation.catalog.updatedAt}:${studioConnected ? 1 : 0}`).digest('base64url')}"`;
+        response.setHeader('ETag', etag);
+        if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
+        return sendJson(response, 200, { ...installation.catalog, studioConnected }, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
         const { claims, installation } = await authenticateBitsViewer(request);

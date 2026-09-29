@@ -4,6 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
+  let catalogEtag = '';
   const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -209,11 +210,13 @@
     const configuration = state.configuration;
     if (configuration.mockMode || !configuration.ebsBaseUrl || !state.auth?.token) return;
     const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/catalog`, {
-      headers: { 'X-Extension-JWT': state.auth.token },
+      headers: { 'X-Extension-JWT': state.auth.token, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) },
       cache: 'no-store'
     });
+    if (response.status === 304) return;
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Signal catalog unavailable (${response.status}).`);
+    catalogEtag = response.headers.get('ETag') || '';
     if (!Array.isArray(body.items)) throw new Error('The hosted signal catalog is invalid.');
     if (body.panelDesign && typeof body.panelDesign === 'object') {
       state.hostedPanelDesign = true;

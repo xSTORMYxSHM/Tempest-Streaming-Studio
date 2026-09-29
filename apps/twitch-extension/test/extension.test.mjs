@@ -102,5 +102,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /actions\.openUrl/);
   assert.match(styles, /\.schedule-card/);
   assert.match(viewerScript, /body\.schedule/);
+  assert.match(viewerScript, /If-None-Match/);
+  assert.match(viewerScript, /response\.status === 304/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });
