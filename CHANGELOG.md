@@ -9,6 +9,7 @@
 - Added read-only live counter cards to the free Extension for enabled Studio counter commands such as deaths or restarts. Values publish immediately after chat, operator, or viewer-interaction adjustments without giving the Extension a counter mutation endpoint.
 - Added a read-only stream-goal card to the free Extension. Twitch-native or Studio-managed goal progress publishes immediately from Studio, while local preview goals are kept private and the Extension receives no goal mutation route.
 - Added a read-only Now Playing card to the free Extension for the broadcaster's configured AzuraCast provider, including a Twitch-safe Listen action. Studio polls only while its Extension relay is connected, and the hosted catalog never receives the private API or direct stream URL.
+- Added the next scheduled Twitch stream to the free Extension as a localized read-only card. It reuses the Chatbot's five-minute Twitch schedule cache, needs no new OAuth scope, and stays hidden when Twitch has no upcoming segment or the schedule cannot be verified.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

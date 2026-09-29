@@ -682,6 +682,7 @@ test('installs a command directory and serves cached Twitch channel information 
   const schedule = await chatbot.testCommand({ message: '!schedule', viewerName: 'Viewer', roles: [] });
   assert.match(schedule.response, /Next stream:/);
   assert.match(schedule.response, /Mainframe Monday/);
+  assert.deepEqual(await chatbot.publicSchedule(), { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' });
 
   assert.equal(requests.length, 3);
   assert.match(requests[0], /helix\/streams\?user_id=channel-1/);

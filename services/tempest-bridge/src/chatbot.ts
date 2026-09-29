@@ -296,6 +296,11 @@ export interface ChatbotPublicCounter {
   value: number;
 }
 
+export interface ChatbotPublicSchedule {
+  title?: string;
+  startTime: string;
+}
+
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
   code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
@@ -1096,6 +1101,17 @@ export class TwitchChatbot {
       .filter((command) => command.enabled && command.handler === 'counter')
       .slice(0, 12)
       .map((command) => ({ id: command.id, command: command.name, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
+  }
+
+  async publicSchedule(): Promise<ChatbotPublicSchedule | undefined> {
+    if (!this.channel || !this.tokens || !this.clientId) return undefined;
+    try {
+      const schedule = await this.loadStreamSchedule();
+      if (!schedule.startTime || !Number.isFinite(Date.parse(schedule.startTime))) return undefined;
+      return { ...(schedule.title ? { title: schedule.title } : {}), startTime: new Date(schedule.startTime).toISOString() };
+    } catch {
+      return undefined;
+    }
   }
 
   async adjustCounter(commandId: string, delta: number, source = 'viewer interaction'): Promise<{ commandId: string; label: string; value: number; delta: number }> {

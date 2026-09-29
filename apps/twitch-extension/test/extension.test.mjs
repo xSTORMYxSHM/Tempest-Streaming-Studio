@@ -74,6 +74,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewer, /id="goalBar"/);
   assert.match(panel, /id="nowPlayingRegion"/);
   assert.match(viewer, /id="nowPlayingListen"/);
+  assert.match(panel, /id="scheduleRegion"/);
+  assert.match(viewer, /id="scheduleTime"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
@@ -98,5 +100,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(styles, /\.now-playing-card/);
   assert.match(viewerScript, /body\.nowPlaying/);
   assert.match(viewerScript, /actions\.openUrl/);
+  assert.match(styles, /\.schedule-card/);
+  assert.match(viewerScript, /body\.schedule/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });

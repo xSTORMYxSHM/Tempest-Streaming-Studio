@@ -61,6 +61,11 @@ export interface PublicExtensionNowPlaying {
   checkedAt: string;
 }
 
+export interface PublicExtensionSchedule {
+  title?: string;
+  startTime: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -93,6 +98,7 @@ export interface PublicExtensionCatalog {
   counters?: PublicExtensionCounter[];
   goal?: PublicExtensionGoal;
   nowPlaying?: PublicExtensionNowPlaying;
+  schedule?: PublicExtensionSchedule;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

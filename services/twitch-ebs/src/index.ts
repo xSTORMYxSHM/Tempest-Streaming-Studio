@@ -13,6 +13,7 @@ import {
   PublicExtensionCounter,
   PublicExtensionGoal,
   PublicExtensionNowPlaying,
+  PublicExtensionSchedule,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -29,6 +30,7 @@ export type {
   PublicExtensionCatalogItem,
   PublicExtensionGoal,
   PublicExtensionNowPlaying,
+  PublicExtensionSchedule,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -214,7 +216,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown; nowPlaying?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown; nowPlaying?: unknown; schedule?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -337,7 +339,17 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     if (parsedPlayerUrl.protocol !== 'https:' || parsedPlayerUrl.username || parsedPlayerUrl.password || publicPlayerUrl.length > 2048 || !Number.isFinite(Date.parse(checkedAt))) throw new Error('Catalog Now Playing source is invalid.');
     nowPlaying = { stationName, state, artist: cleanOptional('artist', 120), title: cleanOptional('title', 160), text: cleanOptional('text', 240), album: cleanOptional('album', 160), publicPlayerUrl: parsedPlayerUrl.href, checkedAt };
   }
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}) };
+  let schedule: PublicExtensionSchedule | undefined;
+  if (source.schedule !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Schedule is published only to the free Extension edition.');
+    if (!source.schedule || typeof source.schedule !== 'object' || Array.isArray(source.schedule)) throw new Error('Catalog schedule is invalid.');
+    const candidate = source.schedule as Record<string, unknown>;
+    const title = candidate.title === undefined || candidate.title === null || candidate.title === '' ? undefined : String(candidate.title).trim();
+    const startTime = String(candidate.startTime || '');
+    if ((title !== undefined && (!title || title.length > 160 || /[\r\n\0]/.test(title))) || !Number.isFinite(Date.parse(startTime))) throw new Error('Catalog schedule is invalid.');
+    schedule = { ...(title ? { title } : {}), startTime: new Date(startTime).toISOString() };
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {

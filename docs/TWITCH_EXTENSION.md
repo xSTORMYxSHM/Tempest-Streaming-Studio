@@ -37,6 +37,10 @@ When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-m
 
 When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the station name, public track metadata, provider state, last-check time, and public listen-page URL to a read-only card. The relay refreshes it every 15 seconds only while connected, uses the Chatbot's existing 15-second provider cache, and omits the provider API URL and direct audio stream URL. The **Listen** button uses Twitch's Extension URL action. The Twitch developer-console configuration must allow the broadcaster's listen-page domain for Twitch to open it. Now Playing is not published to the Bits edition.
 
+## Free Extension schedule
+
+When the authorized Chatbot account can verify an upcoming Twitch schedule segment, its optional title and start time appear in a read-only **Up Next** card. The browser localizes the ISO timestamp for each viewer. Studio reuses its five-minute Twitch schedule cache, does not request a new scope, and publishes no card when Twitch returns no segment or schedule verification is unavailable. The Extension cannot edit the schedule, and the card is not published to the Bits edition.
+
 ## Run the Local Test
 
 The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.

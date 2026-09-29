@@ -65,6 +65,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     counters: () => [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }],
     goal: () => ({ source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' }),
     nowPlaying: async () => ({ stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() }),
+    schedule: async () => ({ title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' }),
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
       handled = value;
@@ -89,5 +90,6 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   assert.deepEqual(catalogSync.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
   assert.equal(catalogSync.goal.title, 'Road to 50');
   assert.equal(nowPlayingCatalogSync.nowPlaying.title, 'Track');
+  assert.equal(nowPlayingCatalogSync.schedule.title, 'Mainframe Monday');
   assert.equal(relay.status().state, 'connected');
 });
