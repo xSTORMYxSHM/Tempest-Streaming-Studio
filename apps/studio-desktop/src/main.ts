@@ -43,6 +43,7 @@ import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, O
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 import { boundedFetch } from './bounded-fetch';
 import { sha256File } from './file-checksum';
+import { readResponseBuffer } from './bounded-response';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -1493,10 +1494,12 @@ function registerDesktopHandlers(): void {
     if (!response.ok) throw new Error(`GIPHY media download returned HTTP ${response.status}.`);
     const finalUrl = new URL(response.url);
     if (finalUrl.protocol !== 'https:' || !/^(?:media\d*|i)\.giphy\.com$/i.test(finalUrl.hostname)) throw new Error('GIPHY redirected the media download to an unapproved host.');
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (contentLength > 25 * 1024 * 1024) throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > 25 * 1024 * 1024) throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
+    let bytes: Buffer;
+    try { bytes = await readResponseBuffer(response, 25 * 1024 * 1024); }
+    catch (error) {
+      if ((error as Error).message === 'Response exceeds the permitted size.') throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
+      throw error;
+    }
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     if (!['image/gif', 'image/webp', 'video/mp4'].includes(contentType || '')) throw new Error('GIPHY returned an unsupported media format.');
     const extension = contentType === 'image/webp' ? '.webp' : contentType === 'video/mp4' ? '.mp4' : '.gif';
