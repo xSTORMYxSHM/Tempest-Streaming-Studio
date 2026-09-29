@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { DISCORD_RPC_AUTHORIZATION_SCOPES, describeDiscordRpcFailure, discordIpcPaths, encodeDiscordRpcFrame, readDiscordRpcFrames } = require('../dist/discord-rpc');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 
 test('requests Discord voice RPC permissions and explains approval failures', () => {
   assert.deepEqual(DISCORD_RPC_AUTHORIZATION_SCOPES, ['rpc', 'identify', 'rpc.voice.read']);
@@ -41,4 +43,11 @@ test('rejects oversized Discord RPC frames before allocation', () => {
   invalid.writeUInt32LE(1, 0);
   invalid.writeUInt32LE(17 * 1024 * 1024, 4);
   assert.throws(() => readDiscordRpcFrames(invalid), /oversized frame/);
+});
+
+test('cleans up Discord READY polling and bounds queued dispatch state', () => {
+  const source = readFileSync(path.join(__dirname, '..', 'dist', 'discord-rpc.js'), 'utf8');
+  assert.match(source, /clearInterval\(poll\);\s*this\.eventWaiters\.delete\(evt\);\s*reject/);
+  assert.match(source, /this\.eventWaiters\.set\(evt, \[data\]\)/);
+  assert.match(source, /this\.eventWaiters\.clear\(\)/);
 });

@@ -318,13 +318,20 @@ export class TempestDiscordRpcClient {
 
   private waitForEvent(evt: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`Discord ${evt} event timed out.`)), 8_000);
-      const poll = setInterval(() => {
+      if (!this.eventWaiters.has(evt)) this.eventWaiters.set(evt, []);
+      let poll: NodeJS.Timeout;
+      const timeout = setTimeout(() => {
+        clearInterval(poll);
+        this.eventWaiters.delete(evt);
+        reject(new Error(`Discord ${evt} event timed out.`));
+      }, 8_000);
+      poll = setInterval(() => {
         const listener = this.eventWaiters.get(evt);
         if (listener?.length) {
           const value = listener.shift();
           clearInterval(poll);
           clearTimeout(timeout);
+          this.eventWaiters.delete(evt);
           resolve(value);
         }
       }, 10);
@@ -337,9 +344,7 @@ export class TempestDiscordRpcClient {
 
   private async handleDispatch(evt: string, data: unknown): Promise<void> {
     if (evt === 'READY' || this.eventWaiters.has(evt)) {
-      const waiters = this.eventWaiters.get(evt) || [];
-      waiters.push(data);
-      this.eventWaiters.set(evt, waiters);
+      this.eventWaiters.set(evt, [data]);
     }
     if (evt === 'VOICE_CHANNEL_SELECT') await this.refreshSelectedChannel();
     else if (['VOICE_STATE_CREATE', 'VOICE_STATE_UPDATE', 'VOICE_STATE_DELETE'].includes(evt)) await this.refreshSelectedChannel();
@@ -413,5 +418,7 @@ export class TempestDiscordRpcClient {
     if (socket) { socket.removeAllListeners(); socket.destroy(); }
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Discord connection closed.')); }
     this.pending.clear();
+    this.eventWaiters.clear();
+    this.speakingUsers.clear();
   }
 }
