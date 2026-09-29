@@ -70,6 +70,7 @@
   };
   let toastTimer = null;
   let runtimeRefreshBusy = false;
+  let fullRefreshPromise = null;
   let twitchPollTimer = null;
   let chatbotPollTimer = null;
   let onboardingStep = 0;
@@ -2882,6 +2883,10 @@
   }
 
   async function refreshRuntime({ quiet = true } = {}) {
+    if (fullRefreshPromise) {
+      await fullRefreshPromise;
+      return;
+    }
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
@@ -2907,7 +2912,7 @@
     } finally { runtimeRefreshBusy = false; }
   }
 
-  async function refresh({ quiet = false } = {}) {
+  async function performFullRefresh({ quiet = false } = {}) {
     try {
       const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
       Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
@@ -2916,6 +2921,17 @@
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
+    }
+  }
+
+  async function refresh(options = {}) {
+    if (fullRefreshPromise) return fullRefreshPromise;
+    const pending = performFullRefresh(options);
+    fullRefreshPromise = pending;
+    try {
+      await pending;
+    } finally {
+      if (fullRefreshPromise === pending) fullRefreshPromise = null;
     }
   }
 
