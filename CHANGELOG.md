@@ -12,6 +12,7 @@
 - Added the next scheduled Twitch stream to the free Extension as a localized read-only card. It reuses the Chatbot's five-minute Twitch schedule cache, needs no new OAuth scope, and stays hidden when Twitch has no upcoming segment or the schedule cannot be verified.
 - Coalesced bursty Studio catalog updates into at most a leading and trailing relay message, with a separate one-second dynamic-metadata refresh window. Free Extension polling now uses catalog ETags and skips JSON parsing and rendering on unchanged responses.
 - Pinned the production `js-yaml` transitive dependency to patched version 4.3.2, removing the high-severity empty-merge CPU-exhaustion advisory inherited through the desktop updater.
+- Removed raw allow-list and block-list Twitch user IDs from Free and Bits viewer catalog responses. The hosted service now returns only per-viewer eligibility, hides configured locked items, and enforces access before relaying an interaction; Studio retains its independent enforcement as the final boundary.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

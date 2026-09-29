@@ -592,15 +592,24 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     for (const [token, reservation] of bitsReservations) if (reservation.expiresAt <= now) bitsReservations.delete(token);
   };
 
-  const bitsEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): { allowed: boolean; reason?: string; retryAfterMs: number } => {
+  const accessEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims): { allowed: boolean; reason?: string; code?: string } => {
     const viewerId = String(claims.user_id || '');
     const access = item.access;
-    if (access?.blockedViewerIds.includes(viewerId)) return { allowed: false, reason: 'Unavailable for this viewer', retryAfterMs: 0 };
+    if (viewerId && access?.blockedViewerIds.includes(viewerId)) return { allowed: false, reason: 'Unavailable for this viewer', code: 'interaction_locked' };
     const staff = claims.role === 'broadcaster' || claims.role === 'moderator';
-    if (!staff && access?.mode === 'staff') return { allowed: false, reason: 'Broadcaster and moderators only', retryAfterMs: 0 };
-    if (!staff && (access?.mode === 'assigned-creators' || access?.mode === 'specific-viewers') && !access.allowedViewerIds.includes(viewerId)) {
-      return { allowed: false, reason: access.mode === 'assigned-creators' ? 'Assigned creator group only' : 'Locked to selected viewers', retryAfterMs: 0 };
+    if (staff) return { allowed: true };
+    if (access?.mode === 'staff') return { allowed: false, reason: 'Broadcaster and moderators only', code: 'interaction_locked' };
+    if (access?.mode === 'assigned-creators' || access?.mode === 'specific-viewers') {
+      if (!viewerId) return { allowed: false, reason: 'Share your Twitch identity to use this interaction', code: 'identity_required' };
+      if (!access.allowedViewerIds.includes(viewerId)) return { allowed: false, reason: access.mode === 'assigned-creators' ? 'Assigned creator group only' : 'Locked to selected viewers', code: 'interaction_locked' };
     }
+    return { allowed: true };
+  };
+
+  const bitsEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): { allowed: boolean; reason?: string; retryAfterMs: number } => {
+    const accessDecision = accessEligibility(item, claims);
+    if (!accessDecision.allowed) return { ...accessDecision, retryAfterMs: 0 };
+    const viewerId = String(claims.user_id || '');
     expireBitsReservations(now);
     const globalKey = `${claims.channel_id}:${item.id}`;
     const viewerKey = `${globalKey}:${viewerId}`;
@@ -781,10 +790,17 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/catalog') {
         const { claims, installation } = await authenticateViewer(request);
         const studioConnected = studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN;
-        const etag = `"${createHash('sha256').update(`${installation.id}:${installation.catalog.updatedAt}:${studioConnected ? 1 : 0}`).digest('base64url')}"`;
+        const items = installation.catalog.items.flatMap((item) => {
+          const eligibility = accessEligibility(item, claims);
+          if (!eligibility.allowed && item.access?.hideWhenLocked) return [];
+          const { access: _privateAccess, ...publicItem } = item;
+          return [{ ...publicItem, eligibility }];
+        });
+        const viewerAccessKey = `${claims.user_id || claims.opaque_user_id}:${claims.role}`;
+        const etag = `"${createHash('sha256').update(`${installation.id}:${installation.catalog.updatedAt}:${studioConnected ? 1 : 0}:${viewerAccessKey}`).digest('base64url')}"`;
         response.setHeader('ETag', etag);
         if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
-        return sendJson(response, 200, { ...installation.catalog, studioConnected }, origin);
+        return sendJson(response, 200, { ...installation.catalog, items, studioConnected }, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
         const { claims, installation } = await authenticateBitsViewer(request);
@@ -793,7 +809,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           if (!interaction) return [];
           const eligibility = bitsEligibility(interaction, claims);
           if (!eligibility.allowed && interaction.access?.hideWhenLocked && eligibility.retryAfterMs === 0) return [];
-          return [{ sku, bits: mapping.bits, interaction, eligibility }];
+          const { access: _privateAccess, ...publicInteraction } = interaction;
+          return [{ sku, bits: mapping.bits, interaction: publicInteraction, eligibility }];
         });
         return sendJson(response, 200, { schemaVersion: 1, products, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
       }
@@ -878,7 +895,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const { claims, installation } = await authenticateViewer(request);
         const alertId = decodeURIComponent(alertMatch[1]);
         if (!soundAlertPattern.test(alertId)) throw new HttpError(404, 'Sound Alert was not recognized.');
-        if (!installation.catalog.items.some((item) => item.kind === 'sound-alert' && item.id === alertId) && !allowedChannelIds.has(claims.channel_id)) throw new HttpError(404, 'Sound Alert is not published by this Studio installation.');
+        const alert = installation.catalog.items.find((item) => item.kind === 'sound-alert' && item.id === alertId);
+        if (!alert && !allowedChannelIds.has(claims.channel_id)) throw new HttpError(404, 'Sound Alert is not published by this Studio installation.');
+        const alertEligibility = alert && accessEligibility(alert, claims);
+        if (alertEligibility && !alertEligibility.allowed) throw new HttpError(403, alertEligibility.reason || 'This interaction is unavailable.', { code: alertEligibility.code || 'interaction_locked' });
         const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, alertId, { alertId }));
         return sendJson(response, result.status, result.body, origin);
       }
@@ -886,8 +906,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'POST' && interactionMatch) {
         const { claims, installation } = await authenticateViewer(request);
         const action = decodeURIComponent(interactionMatch[1]);
-        const catalogAllowed = installation.catalog.items.some((item) => item.kind === 'interaction' && item.id === action);
-        if (!catalogAllowed && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
+        const interaction = installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === action);
+        if (!interaction && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
+        const interactionEligibility = interaction && accessEligibility(interaction, claims);
+        if (interactionEligibility && !interactionEligibility.allowed) throw new HttpError(403, interactionEligibility.reason || 'This interaction is unavailable.', { code: interactionEligibility.code || 'interaction_locked' });
         const result = await processInteraction(request, claims, (requestId, body) => {
           if (action !== 'tempest.dice.custom') return normalizedEvent(claims, requestId, action);
           const maximum = Number(body.maximum);

@@ -25,7 +25,7 @@ When the streamer starts a numeric poll in **Live Desk**, the active question, n
 
 ## Free Extension 3D Dice
 
-When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. Studio alone verifies the local Browser Source, access policy, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
+When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. The hosted service applies the viewer's access eligibility before relay, then Studio independently verifies access, local Browser Source readiness, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
 
 ## Free Extension counters
 
@@ -103,8 +103,9 @@ The hosted EBS now:
 1. Verifies the Twitch JWT signature, expiry, `channel_id`, role, and opaque viewer identity.
 2. Resolves the signed channel to a broadcaster-paired PostgreSQL installation.
 3. Applies per-viewer and per-channel request limits and makes repeated request identifiers idempotent.
-4. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection.
-5. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
+4. Computes eligibility for the signed viewer, removes raw allow/block identity lists from the response, omits locked items configured as hidden, and rejects ineligible triggers before relay.
+5. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection. Studio repeats the access decision before dispatch.
+6. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
 
 The public Extension Client ID belongs in front-end/EBS configuration. The shared secret belongs only in the EBS secret store. See [TWITCH_EBS.md](TWITCH_EBS.md) for deployment and Studio connection instructions.
 

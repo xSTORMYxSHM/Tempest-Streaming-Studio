@@ -374,20 +374,33 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
     type: 'catalog.sync',
     catalog: {
       schemaVersion: 1,
-      items: [{ id: 'sound-alert.creator-dance', name: 'Creator Dance', durationMs: 12000, cooldownMs: 60000, accent: '#54F2EB', glyph: 'CD', kind: 'sound-alert' }]
+      items: [
+        { id: 'sound-alert.creator-dance', name: 'Creator Dance', durationMs: 12000, cooldownMs: 60000, accent: '#54F2EB', glyph: 'CD', kind: 'sound-alert', access: { mode: 'specific-viewers', allowedViewerIds: ['778899', '112233'], blockedViewerIds: ['666999'], hideWhenLocked: false } },
+        { id: 'sound-alert.private-jump', name: 'Private Jump', durationMs: 8000, cooldownMs: 60000, accent: '#A66BFF', glyph: 'PJ', kind: 'sound-alert', access: { mode: 'specific-viewers', allowedViewerIds: ['778899'], blockedViewerIds: [], hideWhenLocked: true } }
+      ]
     }
   }));
 
   const deadline = Date.now() + 2000;
   let catalog;
   while (Date.now() < deadline) {
-    const response = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret) } });
+    const response = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } });
     catalog = await response.json();
     if (catalog.items?.length) break;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.equal(catalog.items[0].id, 'sound-alert.creator-dance');
+  assert.deepEqual(catalog.items[0].eligibility, { allowed: true });
+  assert.equal(catalog.items[0].access, undefined);
+  assert.equal(JSON.stringify(catalog).includes('112233'), false, 'viewer catalogs never expose access-list identities');
   assert.equal(catalog.studioConnected, true);
+  const lockedCatalog = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '111222' }) } }).then((response) => response.json());
+  assert.equal(lockedCatalog.items[0].eligibility.allowed, false);
+  assert.equal(lockedCatalog.items[0].eligibility.reason, 'Locked to selected viewers');
+  assert.equal(lockedCatalog.items.some((item) => item.id === 'sound-alert.private-jump'), false, 'hideWhenLocked items are omitted for ineligible viewers');
+  const lockedAlert = await postAlert(runtime, jwt(secret, { user_id: '111222' }), randomUUID(), 'sound-alert.creator-dance');
+  assert.equal(lockedAlert.status, 403);
+  assert.equal((await lockedAlert.json()).code, 'interaction_locked');
 
   const designUpdate = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
     method: 'PUT',
@@ -540,6 +553,8 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
   const lockedCatalog = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': lockedToken } }).then((result) => result.json());
   assert.equal(lockedCatalog.products[0].eligibility.allowed, false);
   assert.match(lockedCatalog.products[0].eligibility.reason, /selected viewers/i);
+  assert.equal(lockedCatalog.products[0].interaction.access, undefined);
+  assert.equal(JSON.stringify(lockedCatalog).includes('778899'), false, 'Bits catalogs never expose access-list identities');
   const lockedReservation = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
   assert.equal(lockedReservation.status, 403);
   const inactiveFreeEdition = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(freeSecret) } });

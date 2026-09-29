@@ -13,9 +13,9 @@ The production request path is:
 1. The Video Component loads Twitch's Extension Helper.
 2. `onAuthorized` supplies the current viewer JWT, opaque viewer ID, channel ID, and Extension Client ID.
 3. The component posts `{ alertId }` plus the current JWT to the HTTPS EBS.
-4. The EBS verifies the JWT signature, expiry, channel, role, and request rate. Anonymous viewers may be rejected by operator policy.
-5. Studio maintains an authenticated outbound connection to the EBS. The EBS forwards the accepted request over that connection; the local Bridge is never exposed to the public internet.
-6. Studio resolves the catalog entry, applies dedupe and cooldown policy, sends its assigned audio and visual through the local Browser Source, and starts the reversible Warudo/Broadcast workflow. A separately configured OBS audio source overrides Browser Source audio; Warudo receives the avatar cue.
+4. The EBS verifies the JWT signature, expiry, channel, role, request rate, catalog membership, and per-viewer access policy. Anonymous viewers may be rejected by operator policy; raw allow/block identity lists are never returned to viewers.
+5. Studio maintains an authenticated outbound connection to the EBS. The EBS forwards only an eligible request over that connection; the local Bridge is never exposed to the public internet.
+6. Studio independently repeats its access decision, resolves the catalog entry, applies dedupe and cooldown policy, sends its assigned audio and visual through the local Browser Source, and starts the reversible Warudo/Broadcast workflow. A separately configured OBS audio source overrides Browser Source audio; Warudo receives the avatar cue.
 
 The EBS and outbound relay are implemented in `services/twitch-ebs` and `services/tempest-bridge/src/extension-relay.ts`. Deployment requires the Twitch Extension shared secret, an allowlisted channel ID, a relay token, and a public HTTPS/WebSocket host; see `TWITCH_EBS.md`.
 

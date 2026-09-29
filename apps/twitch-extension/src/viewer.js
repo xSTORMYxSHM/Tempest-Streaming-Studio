@@ -158,6 +158,8 @@
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
+    const permitted = (alert) => alert.eligibility?.allowed !== false;
+    const accessLabel = (alert) => String(alert.eligibility?.reason || 'LOCKED').toUpperCase();
     const dice = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const customDice = dice.find((entry) => entry.id === 'tempest.dice.custom');
     const dicePresets = dice.filter((entry) => entry.id !== 'tempest.dice.custom');
@@ -175,11 +177,12 @@
     $('#diceRegion').hidden = dice.length === 0;
     $('#diceGrid').innerHTML = dicePresets.map((entry) => {
       const wait = remaining(entry.id);
-      return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${wait ? seconds(wait) : 'ROLL'}</small></button>`;
+      return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait || !permitted(entry) ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${!permitted(entry) ? escapeHtml(accessLabel(entry)) : wait ? seconds(wait) : 'ROLL'}</small></button>`;
     }).join('');
     $('#diceCustomForm').hidden = !customDice;
-    $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
-    $('#rollCustomDice').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
+    $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || !permitted(customDice)));
+    $('#rollCustomDice').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || !permitted(customDice)));
+    $('#rollCustomDice').textContent = customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
     $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
     renderGoal(goalVisible);
@@ -188,15 +191,15 @@
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
-      return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
-        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${wait ? `RECHARGING · ${seconds(wait)}` : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
+      return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || !permitted(alert) ? 'disabled' : ''}>
+        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
       </button>`;
     }).join('');
     renderPoll();
     $('#alertGrid').innerHTML = performances.map((alert) => {
       const wait = remaining(alert.id);
-      return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
-        <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
+      return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || !permitted(alert) ? 'disabled' : ''}>
+        <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
       </button>`;
     }).join('');
   }
@@ -274,7 +277,7 @@
 
   async function trigger(id, payload = {}) {
     const alert = state.alerts.find((entry) => entry.id === id);
-    if (!alert || state.busy || remaining(id)) return;
+    if (!alert || state.busy || remaining(id) || alert.eligibility?.allowed === false) return;
     const diceAction = id.startsWith('tempest.dice.');
     state.busy = true;
     render();
