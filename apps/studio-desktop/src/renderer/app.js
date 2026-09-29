@@ -301,6 +301,7 @@
     $('#sectionTitle').textContent = definition.title;
     $('#sectionKicker').textContent = definition.kicker;
     document.querySelector('main').scrollTo({ top: 0, left: 0 });
+    if (state.config) void refreshRuntime({ quiet: true });
   }
 
   async function api(path, options = {}) {
@@ -2829,34 +2830,74 @@
     }
   }
 
+  function runtimeRefreshTasks(activeSection) {
+    const tasks = new Map([
+      ['health', () => api('/health')],
+      ['connections', () => api('/v1/connections')],
+      ['dualFormat', () => api('/v1/broadcast/dual-format')],
+      ['simulcast', () => api('/v1/broadcast/simulcast')],
+      ['runs', () => api('/v1/runs?limit=50')],
+      ['safety', () => api('/v1/safety')]
+    ]);
+    const add = (key, loader) => { if (!tasks.has(key)) tasks.set(key, loader); };
+    if (activeSection === 'overviewSection') add('events', () => api('/v1/events?limit=150'));
+    else if (activeSection === 'eventsSection') {
+      add('events', () => api('/v1/events?limit=150'));
+      add('alertHistory', () => api('/v1/alert-history?limit=200'));
+      add('alertDiagnostics', () => api('/v1/alert-diagnostics'));
+    } else if (activeSection === 'soundalertsSection') add('visualAlerts', () => api('/v1/visual-alerts'));
+    else if (activeSection === 'diceSection') add('diceOverlay', () => api('/v1/dice-overlay'));
+    else if (activeSection === 'visualalertsSection') {
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('twitchExperiences', () => api('/v1/twitch-experiences'));
+    } else if (activeSection === 'chatoverlaySection') {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('chatOverlay', () => api('/v1/chat-overlay'));
+      add('emoteWall', () => api('/v1/emote-wall'));
+    } else if (activeSection === 'discordvoiceSection') {
+      add('discordVoice', () => api('/v1/discord-voice'));
+      add('discordRpc', () => window.tempestStudio.getDiscordVoiceStatus());
+    } else if (activeSection === 'twitchSection') {
+      add('localExtension', () => window.tempestStudio.getLocalExtensionStatus());
+      add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
+    } else if (activeSection === 'kickSection') {
+      add('kick', () => api('/v1/integrations/kick'));
+      add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
+    } else if (activeSection === 'chatbotSection') {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('kick', () => api('/v1/integrations/kick'));
+    } else if (activeSection === 'dualformatSection') add('visualAlerts', () => api('/v1/visual-alerts'));
+    else if (activeSection === 'apiSection') {
+      add('warudo', () => window.tempestStudio.getWarudoStatus());
+      add('vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus());
+    }
+    if ($('#onboardingDialog').open) {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('chatOverlay', () => api('/v1/chat-overlay'));
+      add('emoteWall', () => api('/v1/emote-wall'));
+      add('twitchExperiences', () => api('/v1/twitch-experiences'));
+    }
+    return tasks;
+  }
+
   async function refreshRuntime({ quiet = true } = {}) {
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const diagnosticsVisible = $('#eventsSection').classList.contains('active');
-      const [health, connections, dualFormat, simulcast, runs, events, safety, chatbot, kick, visualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), diagnosticsVisible ? api('/v1/alert-history?limit=200') : Promise.resolve(state.alertHistory), diagnosticsVisible ? api('/v1/alert-diagnostics') : Promise.resolve(state.alertDiagnostics)]);
-      state.health = health;
-      state.connections = connections.connections || [];
-      state.dualFormat = dualFormat;
-      state.simulcast = simulcast;
-      state.runs = runs.runs || [];
-      state.events = events.events || [];
-      state.safety = safety;
-      state.chatbot = chatbot;
-      state.kick = kick;
-      state.visualAlerts = visualAlerts;
-      state.diceOverlay = diceOverlay;
-      state.chatOverlay = chatOverlay;
-      state.emoteWall = emoteWall;
-      state.twitchExperiences = twitchExperiences;
-      state.discordVoice = discordVoice;
-      state.discordRpc = discordRpc;
-      state.warudo = warudo;
-      state.vtubeStudio = vtubeStudio;
-      state.localExtension = localExtension;
-      state.hostedExtension = hostedExtension;
-      state.alertHistory = alertHistory;
-      state.alertDiagnostics = alertDiagnostics;
+      const activeSection = document.querySelector('.page.active')?.id || 'overviewSection';
+      const entries = [...runtimeRefreshTasks(activeSection)];
+      const values = await Promise.all(entries.map(([, loader]) => loader()));
+      const refreshed = Object.fromEntries(entries.map(([key], index) => [key, values[index]]));
+      if (refreshed.health) state.health = refreshed.health;
+      if (refreshed.connections) state.connections = refreshed.connections.connections || [];
+      if (refreshed.dualFormat) state.dualFormat = refreshed.dualFormat;
+      if (refreshed.simulcast) state.simulcast = refreshed.simulcast;
+      if (refreshed.runs) state.runs = refreshed.runs.runs || [];
+      if (refreshed.events) state.events = refreshed.events.events || [];
+      for (const key of ['safety', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
+        if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
+      }
       renderBridgeStatus(true);
       renderSafety();
       renderRuntimeSection();

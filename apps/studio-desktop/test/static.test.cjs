@@ -158,6 +158,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /renderAlertHistory/);
   assert.match(renderer, /\/v1\/alert-history/);
   assert.match(renderer, /\/v1\/alert-diagnostics/);
+  assert.match(renderer, /runtimeRefreshTasks/);
+  assert.match(renderer, /activeSection === 'discordvoiceSection'/);
+  assert.match(renderer, /if \(\$\('#onboardingDialog'\)\.open\)/);
   assert.match(html, /Import Alert Pack/);
   assert.match(renderer, /exportAlertPack/);
   assert.match(renderer, /importAlertPack/);
