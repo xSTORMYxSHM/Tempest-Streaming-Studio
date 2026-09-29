@@ -964,10 +964,18 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const interactionEligibility = interaction && accessEligibility(interaction, claims);
         if (interactionEligibility && !interactionEligibility.allowed) throw new HttpError(403, interactionEligibility.reason || 'This interaction is unavailable.', { code: interactionEligibility.code || 'interaction_locked' });
         const result = await processInteraction(request, claims, (requestId, body) => {
-          if (action !== 'tempest.dice.custom') return normalizedEvent(claims, requestId, action);
-          const maximum = Number(body.maximum);
-          if (!Number.isInteger(maximum) || maximum < 2 || maximum > 100) throw new HttpError(400, 'Choose a custom dice maximum from 2 through 100.', { code: 'dice_maximum_invalid' });
-          return normalizedEvent(claims, requestId, action, { maximum });
+          if (action === 'tempest.dice.custom') {
+            const maximum = Number(body.maximum);
+            if (!Number.isInteger(maximum) || maximum < 2 || maximum > 100) throw new HttpError(400, 'Choose a custom dice maximum from 2 through 100.', { code: 'dice_maximum_invalid' });
+            return normalizedEvent(claims, requestId, action, { maximum });
+          }
+          if (interaction?.placementMode !== 'viewer') return normalizedEvent(claims, requestId, action);
+          const source = body.placement && typeof body.placement === 'object' && !Array.isArray(body.placement) ? body.placement as Record<string, unknown> : undefined;
+          const placement = source ? { x: Number(source.x), y: Number(source.y) } : undefined;
+          if (!placement || !Number.isFinite(placement.x) || placement.x < 0 || placement.x > 1 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 1) {
+            throw new HttpError(400, 'Choose a valid on-stream placement before activating this interaction.', { code: 'placement_required' });
+          }
+          return normalizedEvent(claims, requestId, action, { placement });
         });
         return sendJson(response, result.status, result.body, origin);
       }

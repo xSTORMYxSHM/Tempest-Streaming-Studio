@@ -16,6 +16,7 @@
 - Reduced Bits Extension background work by caching Twitch product metadata for 60 seconds and using ETag/`304 Not Modified` responses for unchanged five-second eligibility checks. Authorization and Twitch feature changes still force an immediate full refresh.
 - Bounded hosted relay rate-limit and Bits cooldown state, capped simultaneous paid-interaction reservations, and added separate per-viewer/channel request limits to Bits reservation and transaction endpoints so invalid traffic cannot grow long-running service memory without limit.
 - Reduced Studio's visible-window one-second refresh from 22 unconditional status calls to six production-critical calls plus only the active workspace's data. Switching workspaces refreshes that workspace immediately, and the setup wizard still loads every readiness source it needs.
+- Added end-to-end viewer placement to free Extension interactions. Stickers, GIFs, and effects configured as viewer-placeable now open a crosshair layer, submit bounded normalized coordinates through Tempest Signal, and use Studio's existing horizontal/vertical render mapping.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

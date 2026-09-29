@@ -382,6 +382,13 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
 
   const studio = await connectStudio(runtime, installation.relayToken);
   context.after(() => studio.close());
+  let placedInteraction;
+  studio.on('message', (raw) => {
+    const message = JSON.parse(raw.toString());
+    if (message.type !== 'interaction') return;
+    placedInteraction = message.event;
+    studio.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId: message.requestId, status: 202, body: { accepted: true } }));
+  });
   studio.send(JSON.stringify({
     protocolVersion: 1,
     type: 'catalog.sync',
@@ -389,7 +396,8 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
       schemaVersion: 1,
       items: [
         { id: 'sound-alert.creator-dance', name: 'Creator Dance', durationMs: 12000, cooldownMs: 60000, accent: '#54F2EB', glyph: 'CD', kind: 'sound-alert', access: { mode: 'specific-viewers', allowedViewerIds: ['778899', '112233'], blockedViewerIds: ['666999'], hideWhenLocked: false } },
-        { id: 'sound-alert.private-jump', name: 'Private Jump', durationMs: 8000, cooldownMs: 60000, accent: '#A66BFF', glyph: 'PJ', kind: 'sound-alert', access: { mode: 'specific-viewers', allowedViewerIds: ['778899'], blockedViewerIds: [], hideWhenLocked: true } }
+        { id: 'sound-alert.private-jump', name: 'Private Jump', durationMs: 8000, cooldownMs: 60000, accent: '#A66BFF', glyph: 'PJ', kind: 'sound-alert', access: { mode: 'specific-viewers', allowedViewerIds: ['778899'], blockedViewerIds: [], hideWhenLocked: true } },
+        { id: 'tempest.place-spark', name: 'Place Spark', durationMs: 5000, cooldownMs: 15000, accent: '#54F2EB', glyph: 'PS', kind: 'interaction', category: 'sticker', placementMode: 'viewer' }
       ]
     }
   }));
@@ -414,6 +422,17 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   const lockedAlert = await postAlert(runtime, jwt(secret, { user_id: '111222' }), randomUUID(), 'sound-alert.creator-dance');
   assert.equal(lockedAlert.status, 403);
   assert.equal((await lockedAlert.json()).code, 'interaction_locked');
+  const missingPlacement = await fetch(`${runtime.baseUrl}/v1/extension/interactions/tempest.place-spark/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) }, body: JSON.stringify({ requestId: randomUUID() })
+  });
+  assert.equal(missingPlacement.status, 400);
+  assert.equal((await missingPlacement.json()).code, 'placement_required');
+  const placementRequestId = randomUUID();
+  const placed = await fetch(`${runtime.baseUrl}/v1/extension/interactions/tempest.place-spark/trigger`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) }, body: JSON.stringify({ requestId: placementRequestId, placement: { x: 0.25, y: 0.75 } })
+  });
+  assert.equal(placed.status, 202);
+  assert.deepEqual(placedInteraction.payload.placement, { x: 0.25, y: 0.75 });
 
   const designUpdate = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
     method: 'PUT',

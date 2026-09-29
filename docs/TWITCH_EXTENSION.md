@@ -23,6 +23,10 @@ For the installed channel panel, set **Panel Viewer Path** to `panel.html` and *
 
 When the streamer starts a numeric poll in **Live Desk**, the active question, numbered choices, and current totals are published to the free Tempest Mainframe Panel and Video Component. A viewer selects one option and, when needed, Twitch asks them to share identity. Studio records only one vote for that Twitch user across both the Extension and Twitch chat. Closing voting publishes final results; clearing the poll removes it from the Extension. Poll voting never opens a Bits purchase flow and is unavailable when the channel selects the Bits Extension edition.
 
+## Viewer-placed interactions
+
+An enabled free interaction whose Studio **Placement** setting is **Viewer chooses position** is labeled **Choose position** in the Panel and Video Component. Selecting it opens a full-surface crosshair; the viewer's click or tap becomes an `x`/`y` pair bounded from `0` through `1`. Tempest Signal validates the pair before relaying it, and Studio validates it again before applying the existing alert design and Broadcast landscape/portrait mapping. Fixed-position interactions ignore unsolicited placement data. Pressing Escape cancels without triggering an interaction.
+
 ## Free Extension 3D Dice
 
 When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. The hosted service applies the viewer's access eligibility before relay, then Studio independently verifies access, local Browser Source readiness, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.

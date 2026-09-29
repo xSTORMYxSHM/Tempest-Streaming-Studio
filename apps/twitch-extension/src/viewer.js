@@ -5,7 +5,7 @@
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
   let catalogEtag = '';
-  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -192,7 +192,7 @@
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || !permitted(alert) ? 'disabled' : ''}>
-        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
+        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : alert.placementMode === 'viewer' ? 'READY · CHOOSE POSITION' : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
       </button>`;
     }).join('');
     renderPoll();
@@ -226,6 +226,7 @@
       applyPanelDesign(body.panelDesign);
     }
     state.alerts = body.items;
+    if (state.placementAlertId && !state.alerts.some((alert) => alert.id === state.placementAlertId)) cancelPlacement();
     state.counters = Array.isArray(body.counters) ? body.counters : [];
     state.goal = body.goal && typeof body.goal === 'object' ? body.goal : null;
     state.nowPlaying = body.nowPlaying && typeof body.nowPlaying === 'object' ? body.nowPlaying : null;
@@ -278,6 +279,7 @@
   async function trigger(id, payload = {}) {
     const alert = state.alerts.find((entry) => entry.id === id);
     if (!alert || state.busy || remaining(id) || alert.eligibility?.allowed === false) return;
+    if (alert.placementMode === 'viewer' && !payload.placement) return beginPlacement(id);
     const diceAction = id.startsWith('tempest.dice.');
     state.busy = true;
     render();
@@ -302,6 +304,18 @@
       state.busy = false;
       render();
     }
+  }
+
+  function beginPlacement(alertId) {
+    state.placementAlertId = alertId;
+    const layer = $('#placementLayer');
+    layer.hidden = false;
+    layer.focus();
+  }
+
+  function cancelPlacement() {
+    state.placementAlertId = '';
+    $('#placementLayer').hidden = true;
   }
 
   async function voteInPoll(optionNumber) {
@@ -421,6 +435,22 @@
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     });
+    const placementLayer = document.createElement('button');
+    placementLayer.id = 'placementLayer';
+    placementLayer.className = 'placement-layer';
+    placementLayer.type = 'button';
+    placementLayer.hidden = true;
+    placementLayer.innerHTML = '<span>PLACE INTERACTION</span><strong>Click or tap where it should appear</strong><small>Press Escape to cancel</small>';
+    placementLayer.addEventListener('click', (event) => {
+      const alertId = state.placementAlertId;
+      if (!alertId || !state.alerts.some((alert) => alert.id === alertId)) return cancelPlacement();
+      const rect = placementLayer.getBoundingClientRect();
+      const placement = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+      cancelPlacement();
+      void trigger(alertId, { placement });
+    });
+    document.body.appendChild(placementLayer);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.placementAlertId) cancelPlacement(); });
   }
 
   async function initialize() {

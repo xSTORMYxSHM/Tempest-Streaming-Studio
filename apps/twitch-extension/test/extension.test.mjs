@@ -81,6 +81,10 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(viewerScript, /kind === 'interaction'/);
   assert.match(viewerScript, /kind === 'sound-alert'/);
+  assert.match(viewerScript, /placementAlertId/);
+  assert.match(viewerScript, /PLACE INTERACTION/);
+  assert.match(viewerScript, /trigger\(alertId, \{ placement \}\)/);
+  assert.match(styles, /\.placement-layer/);
   assert.match(viewerScript, /class="card-meta"/);
   assert.match(viewerScript, /applyPanelDesign/);
   assert.match(viewerScript, /body\.panelDesign/);
