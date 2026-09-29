@@ -497,7 +497,11 @@
       $('#collapseButton').textContent = state.collapsed ? 'EXPAND' : 'MINIMIZE';
       $('#collapseButton').setAttribute('aria-expanded', String(!state.collapsed));
     });
-    setInterval(() => { if ([...cooldowns.keys()].some((id) => remaining(id) > 0)) render(); }, 1000);
+    setInterval(() => {
+      if (document.hidden) return;
+      for (const id of cooldowns.keys()) if (!remaining(id)) cooldowns.delete(id);
+      if (cooldowns.size) render();
+    }, 1000);
     setInterval(() => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     }, 10000);

@@ -115,6 +115,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /catalogRefreshPromise/);
   assert.match(viewerScript, /fetchWithTimeout/);
   assert.match(viewerScript, /controller\.abort\(\)/);
+  assert.match(viewerScript, /if \(document\.hidden\) return/);
+  assert.match(viewerScript, /cooldowns\.delete/);
   assert.match(viewerScript, /state\.auth\?\.token !== authToken/);
   assert.match(viewerScript, /eligibility\?\.allowed/);
   assert.match(viewerScript, /identityRequired/);

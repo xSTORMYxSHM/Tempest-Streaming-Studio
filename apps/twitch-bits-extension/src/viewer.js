@@ -22,6 +22,14 @@
     }
   }
 
+  function withTimeout(promise, timeoutMs, message) {
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })
+    ]).finally(() => clearTimeout(timer));
+  }
+
   function setStatus(label, online = false) {
     $('#statusLabel').textContent = label;
     $('#statusDot').classList.toggle('online', online);
@@ -83,7 +91,7 @@
 
   async function loadTwitchProducts(force = false) {
     if (!force && state.twitchProductsLoadedAt && Date.now() - state.twitchProductsLoadedAt < 60_000) return state.twitchProducts;
-    const products = await window.Twitch.ext.bits.getProducts();
+    const products = await withTimeout(window.Twitch.ext.bits.getProducts(), 10000, 'Twitch did not return the Bits product catalog in time.');
     state.twitchProducts = Array.isArray(products) ? products : [];
     state.twitchProductsLoadedAt = Date.now();
     return state.twitchProducts;
@@ -285,11 +293,14 @@
   });
   document.body.appendChild(placementLayer);
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.placementSku) cancelPlacement(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.auth && !state.busySku && !state.placementSku) void refreshProducts().catch(() => undefined);
+  });
 
   void readConfiguration().then((config) => {
     state.config = config;
     if (config.mockMode) return loadMockProducts();
     bindTwitch();
   }).catch((error) => { setStatus('CONFIGURATION ERROR'); notice(error.message, true); });
-  setInterval(() => { if (state.auth && !state.busySku && !state.placementSku) void refreshProducts().catch(() => undefined); }, 5000);
+  setInterval(() => { if (!document.hidden && state.auth && !state.busySku && !state.placementSku) void refreshProducts().catch(() => undefined); }, 5000);
 })();
