@@ -42,9 +42,12 @@ import {
 } from './hosted-extension';
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
+import { boundedFetch } from './bounded-fetch';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
+const localServiceFetch = boundedFetch(fetch, 5_000);
+const hostedServiceFetch = boundedFetch(fetch, 10_000);
 const captureArgument = process.argv.find((argument) => argument.startsWith('--capture-ui='));
 const captureSectionArgument = process.argv.find((argument) => argument.startsWith('--capture-section='));
 const captureTargetArgument = process.argv.find((argument) => argument.startsWith('--capture-target='));
@@ -893,7 +896,7 @@ function registerDesktopHandlers(): void {
   handleDesktop('studio:export-diagnostics', async () => {
     if (!bridge) throw new Error('Local control service is not running.');
     const bridgeGet = async (requestPath: string): Promise<unknown> => {
-      const response = await fetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
+      const response = await localServiceFetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
       return response.ok ? response.json() : { status: response.status };
     };
     const [health, alerts, sources, kick] = await Promise.all([bridgeGet('/health'), bridgeGet('/v1/alert-diagnostics'), bridgeGet('/v1/visual-alerts'), bridgeGet('/v1/integrations/kick')]);
@@ -919,7 +922,7 @@ function registerDesktopHandlers(): void {
     if (requestPath !== '/health' && !requestPath.startsWith('/v1/')) throw new Error('Bridge route is outside the Studio API boundary.');
     const method = String(request?.method || 'GET').toUpperCase();
     if (!['GET', 'POST', 'DELETE'].includes(method)) throw new Error('Bridge request method is not permitted.');
-    const response = await fetch(`${bridge.baseUrl}${requestPath}`, {
+    const response = await localServiceFetch(`${bridge.baseUrl}${requestPath}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -997,7 +1000,7 @@ function registerDesktopHandlers(): void {
     hostedExtensionLastError = undefined;
     const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl || OFFICIAL_HOSTED_EBS_URL);
     const officialService = ebsBaseUrl === OFFICIAL_HOSTED_EBS_URL;
-    const validation = await fetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
+    const validation = await localServiceFetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
     const validationResult = await validation.json().catch(() => ({})) as { error?: string; clientIdMode?: 'official' | 'custom' };
     if (!validation.ok) {
       throw new Error(validationResult.error || 'Validate the broadcaster authorization before pairing the hosted Extension.');
@@ -1022,7 +1025,7 @@ function registerDesktopHandlers(): void {
     }
     hostedExtensionLastError = undefined;
     try {
-      const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {
+      const response = await hostedServiceFetch(`${ebsBaseUrl}/v1/installations/pair`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': tokens.accessToken },
         body: JSON.stringify({ product: productName, productVersion: TEMPEST_STUDIO_VERSION })
@@ -1054,7 +1057,7 @@ function registerDesktopHandlers(): void {
     if (!credentials) return getHostedExtensionStatus();
     hostedExtensionLastError = undefined;
     try {
-      const response = await fetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
+      const response = await hostedServiceFetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok && response.status !== 401 && response.status !== 404) throw new Error(result.error || `Hosted Extension revocation failed with ${response.status}.`);
       await bridge.configureExtensionRelay(undefined);
@@ -1069,7 +1072,7 @@ function registerDesktopHandlers(): void {
     const [hosted, kick] = await Promise.all([loadHostedExtensionCredentials(), kickCredentialStore?.load()]);
     if (!hosted) throw new Error('Pair the Hosted Extension relay in Twitch Gateway before enabling Kick webhooks.');
     if (!kick?.accessToken) throw new Error('Connect the Kick broadcaster account first.');
-    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, {
+    const response = await hostedServiceFetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${hosted.relayToken}`, 'X-Kick-OAuth': kick.accessToken }
     });
@@ -1080,7 +1083,7 @@ function registerDesktopHandlers(): void {
   handleDesktop('studio:unlink-hosted-kick', async () => {
     const hosted = await loadHostedExtensionCredentials();
     if (!hosted) return { unlinked: true };
-    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
+    const response = await hostedServiceFetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
     const result = await response.json().catch(() => ({})) as { error?: string; unlinked?: boolean };
     if (!response.ok && response.status !== 404) throw new Error(result.error || `Hosted Kick relay unlinking failed with ${response.status}.`);
     return { unlinked: true };
@@ -1565,7 +1568,7 @@ app.whenReady().then(async () => {
   });
   const publishDiscord = async (requestPath: string, body: unknown): Promise<void> => {
     if (!bridge) return;
-    const response = await fetch(`${bridge.baseUrl}${requestPath}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(body) });
+    const response = await localServiceFetch(`${bridge.baseUrl}${requestPath}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(body) });
     if (!response.ok) {
       const result = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(result.error || `Discord Voice bridge update failed with ${response.status}.`);
@@ -1631,13 +1634,13 @@ app.whenReady().then(async () => {
       if (captureOverlay && bridge) {
         await mainWindow.loadURL(`${bridge.baseUrl}/visual-alerts`);
         for (let attempt = 0; attempt < 30; attempt += 1) {
-          const status = await fetch(`${bridge.baseUrl}/v1/visual-alerts`, { headers: { 'X-Tempest-Token': bridge.token } }).then((response) => response.json()) as { connectedClients?: number };
+          const status = await localServiceFetch(`${bridge.baseUrl}/v1/visual-alerts`, { headers: { 'X-Tempest-Token': bridge.token } }).then((response) => response.json()) as { connectedClients?: number };
           if ((status.connectedClients || 0) > 0) break;
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         const previewAlertId = capturePreviewArgument?.slice('--capture-preview='.length);
         if (previewAlertId && /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(previewAlertId)) {
-          await fetch(`${bridge.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent(previewAlertId)}/preview`, {
+          await localServiceFetch(`${bridge.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent(previewAlertId)}/preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token },
             body: '{}'

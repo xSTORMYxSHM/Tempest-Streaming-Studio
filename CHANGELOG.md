@@ -23,6 +23,7 @@
 - Added ten-second cancellation bounds to the hosted service's Twitch, Kick, and Discord identity-provider requests so a stalled upstream cannot retain pairing or authorization handlers indefinitely.
 - Return a clear `400` response for malformed signed Kick webhook JSON instead of treating a client payload error as an internal hosted-service failure.
 - Reduced Studio's visible-window one-second refresh from 22 unconditional status calls to six production-critical calls plus only the active workspace's data. Switching workspaces refreshes that workspace immediately, and the setup wizard still loads every readiness source it needs.
+- Bounded desktop calls to the local Bridge at five seconds and hosted pairing, Kick linking, and Discord token exchange at ten seconds so an unavailable service cannot leave Studio controls or refreshes pending indefinitely.
 - Added a shared bounded ten-second timeout to Chatbot, primary Twitch gateway, and Kick gateway requests so an unresponsive upstream cannot stall Extension metadata, automated messages, commands, OAuth, or account operations indefinitely.
 - Replaced per-message full scans of Chatbot EventSub deduplication state with once-per-minute pruning, and bounded expired viewer-cooldown and shoutout history so long streams cannot accumulate unbounded runtime maps.
 - Applied the same throttled pruning and 24-hour/50,000-entry bounds to Twitch gateway deduplication, Interaction Alert viewer cooldowns, and workflow viewer cooldowns, removing more per-event full-map scans from long streams.

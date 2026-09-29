@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import net, { Socket } from 'node:net';
+import { boundedFetch } from './bounded-fetch';
+
+const tokenExchangeFetch = boundedFetch(fetch, 10_000);
 
 export const OFFICIAL_DISCORD_CLIENT_ID = '1546349623701151854';
 export const OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL = 'https://signal.tempestmainframe.com/v1/discord/oauth/exchange';
@@ -233,7 +236,7 @@ export class TempestDiscordRpcClient {
   private async exchangeTokens(body: Record<string, string>, previousRefreshToken?: string): Promise<DiscordRpcTokenSet> {
     const url = new URL(this.tokenExchangeUrl);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('The Discord token exchange service must use public HTTPS.');
-    const exchange = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const exchange = await tokenExchangeFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const result = await exchange.json().catch(() => ({})) as { accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown };
     if (!exchange.ok) throw new Error(string(result.error) || `Discord authorization exchange failed with ${exchange.status}.`);
     const accessToken = string(result.accessToken) || string(result.access_token);
