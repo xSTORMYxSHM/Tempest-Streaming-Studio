@@ -33,6 +33,20 @@ test('starts with public-safe commands and no personal response providers', asyn
   assert.equal(await chatbot.radioStatus(), null);
 });
 
+test('times out an unresponsive upstream request instead of stalling chatbot work', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-request-timeout-'));
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    requestTimeoutMs: 100,
+    fetchImplementation: async (_url, options = {}) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason || new Error('aborted')), { once: true });
+    })
+  });
+  await chatbot.initialize('client123');
+  await assert.rejects(chatbot.startDeviceAuthorization(), /timed out after 1 seconds/);
+});
+
 test('runs chat-triggered 3D dice through the overlay callback and reports the physical result', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-dice-'));
   const rolls = [];

@@ -320,6 +320,7 @@ export interface TwitchChatbotOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   onEvent?: (event: TempestNormalizedChatEvent) => void | Promise<void>;
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
   rollDice?: (request: ChatbotDiceRollRequest) => ChatbotDiceRollResult | Promise<ChatbotDiceRollResult>;
@@ -764,7 +765,30 @@ export class TwitchChatbot {
   private readonly request: typeof fetch;
 
   constructor(private readonly options: TwitchChatbotOptions) {
-    this.request = options.fetchImplementation || fetch;
+    const request = options.fetchImplementation || fetch;
+    const timeoutMs = Math.min(60_000, Math.max(100, Number(options.requestTimeoutMs) || 10_000));
+    this.request = (async (input: string | URL | Request, init: RequestInit = {}) => {
+      const controller = new AbortController();
+      const upstreamSignal = init.signal;
+      let timedOut = false;
+      const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+      if (upstreamSignal?.aborted) abortFromUpstream();
+      else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      timer.unref?.();
+      try {
+        return await request(input, { ...init, signal: controller.signal });
+      } catch (error) {
+        if (timedOut) throw new Error(`Remote service request timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`);
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+      }
+    }) as typeof fetch;
   }
 
   get configurationPath(): string {
