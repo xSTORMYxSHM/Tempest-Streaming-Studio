@@ -488,9 +488,13 @@ async function readRawJson(request: IncomingMessage): Promise<{ raw: Buffer; val
     chunks.push(bytes);
   }
   const raw = Buffer.concat(chunks);
-  const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'Request body must be a JSON object.');
-  return { raw, value };
+  try {
+    const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return { raw, value };
+  } catch {
+    throw new HttpError(400, 'Request body must be a JSON object.');
+  }
 }
 
 function validOrigin(origin: string, configured: Set<string>): boolean {

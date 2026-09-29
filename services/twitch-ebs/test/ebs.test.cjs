@@ -706,6 +706,12 @@ test('links a verified Kick broadcaster and relays signed chat webhooks to its p
   assert.equal(linked.status, 200);
   assert.equal((await linked.json()).kick.username, 'kickcreator');
 
+  const malformed = await fetch(`${runtime.baseUrl}/v1/kick/events`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not-json'
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal((await malformed.json()).error, 'Request body must be a JSON object.');
+
   const studio = await connectStudio(runtime, installation.relayToken);
   context.after(() => studio.close());
   const relayed = new Promise((resolve, reject) => {
