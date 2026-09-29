@@ -163,6 +163,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /Promise\.allSettled\(entries\.map/);
   assert.match(renderer, /key === 'runtimeSummary'/);
   assert.match(renderer, /fullRefreshPromise/);
+  assert.match(renderer, /runtimeDataSignatures/);
+  assert.match(renderer, /renderRuntimeSection\(changedKeys\)/);
   assert.match(renderer, /fullRefreshIntervalMs = 60_000/);
   assert.match(renderer, /if \(fullRefreshPromise\) \{\s*await fullRefreshPromise;/);
   assert.match(renderer, /performFullRefresh/);

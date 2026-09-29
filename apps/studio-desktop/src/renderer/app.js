@@ -71,6 +71,7 @@
   let toastTimer = null;
   let runtimeRefreshBusy = false;
   let fullRefreshPromise = null;
+  const runtimeDataSignatures = new Map();
   let twitchPollTimer = null;
   let chatbotPollTimer = null;
   let onboardingStep = 0;
@@ -2803,29 +2804,31 @@
     }
   }
 
-  function renderRuntimeSection() {
+  function renderRuntimeSection(changedKeys) {
     const activeSection = document.querySelector('.page.active')?.id;
-    if (activeSection === 'overviewSection') renderOverview();
+    const changed = (...keys) => !changedKeys || keys.some((key) => changedKeys.has(key));
+    if (activeSection === 'overviewSection' && changed('runtimeSummary', 'events')) renderOverview();
     else if (activeSection === 'eventsSection') {
+      if (!changed('events', 'alertHistory', 'alertDiagnostics')) return;
       renderEvents();
       renderAlertHistory();
-    } else if (activeSection === 'soundalertsSection') renderVisualAlertStatus();
-    else if (activeSection === 'diceSection') renderDiceOverlay();
-    else if (activeSection === 'visualalertsSection') {
+    } else if (activeSection === 'soundalertsSection' && changed('visualAlerts')) renderVisualAlertStatus();
+    else if (activeSection === 'diceSection' && changed('diceOverlay')) renderDiceOverlay();
+    else if (activeSection === 'visualalertsSection' && changed('visualAlerts', 'twitchExperiences')) {
       renderVisualAlertStatus();
       renderTwitchExperiences();
-    } else if (activeSection === 'chatoverlaySection') {
+    } else if (activeSection === 'chatoverlaySection' && changed('chatbot', 'chatOverlay', 'emoteWall')) {
       renderChatOverlay();
       renderEmoteWall();
-    } else if (activeSection === 'discordvoiceSection') renderDiscordVoice();
-    else if (activeSection === 'twitchSection') {
+    } else if (activeSection === 'discordvoiceSection' && changed('discordVoice', 'discordRpc')) renderDiscordVoice();
+    else if (activeSection === 'twitchSection' && changed('localExtension', 'hostedExtension')) {
       renderLocalExtension();
       renderHostedExtension();
-    } else if (activeSection === 'kickSection') renderKick();
-    else if (activeSection === 'chatbotSection') renderChatbot();
-    else if (activeSection === 'dualformatSection') renderDualFormat();
-    else if (activeSection === 'simulcastSection') renderSimulcast();
-    else if (activeSection === 'apiSection') {
+    } else if (activeSection === 'kickSection' && changed('kick', 'hostedExtension')) renderKick();
+    else if (activeSection === 'chatbotSection' && changed('chatbot', 'kick')) renderChatbot();
+    else if (activeSection === 'dualformatSection' && changed('runtimeSummary', 'visualAlerts')) renderDualFormat();
+    else if (activeSection === 'simulcastSection' && changed('runtimeSummary')) renderSimulcast();
+    else if (activeSection === 'apiSection' && changed('runtimeSummary', 'warudo', 'vtubeStudio')) {
       renderWarudo();
       renderVTubeStudio();
       renderApi();
@@ -2890,6 +2893,7 @@
       const entries = [...runtimeRefreshTasks(activeSection)];
       const results = await Promise.allSettled(entries.map(([, loader]) => loader()));
       const refreshed = {};
+      const changedKeys = new Set();
       let optionalError;
       for (let index = 0; index < entries.length; index += 1) {
         const [key] = entries[index];
@@ -2907,13 +2911,18 @@
         state.runs = summary.runs || [];
         state.safety = summary.safety;
       }
+      for (const [key, value] of Object.entries(refreshed)) {
+        const signature = JSON.stringify(value);
+        if (runtimeDataSignatures.get(key) !== signature) changedKeys.add(key);
+        runtimeDataSignatures.set(key, signature);
+      }
       if (refreshed.events) state.events = refreshed.events.events || [];
       for (const key of ['safety', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
       renderBridgeStatus(true);
-      renderSafety();
-      renderRuntimeSection();
+      if (changedKeys.has('runtimeSummary') || Number(state.safety?.activeRuns || 0) > 0) renderSafety();
+      renderRuntimeSection(changedKeys);
       if (!quiet && optionalError) toast(optionalError?.message || 'The active workspace could not be fully refreshed.', true);
     } catch (error) {
       renderBridgeStatus(false);
@@ -2974,6 +2983,7 @@
       for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
+      for (const [key, value] of Object.entries(refreshed)) runtimeDataSignatures.set(key, JSON.stringify(value));
       renderBridgeStatus(true);
       renderAll();
       if (!quiet && optionalError) toast(optionalError?.message || 'Some optional Studio services could not be refreshed.', true);
