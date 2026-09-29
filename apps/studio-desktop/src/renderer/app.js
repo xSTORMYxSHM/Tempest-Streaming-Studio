@@ -2887,8 +2887,16 @@
     try {
       const activeSection = document.querySelector('.page.active')?.id || 'overviewSection';
       const entries = [...runtimeRefreshTasks(activeSection)];
-      const values = await Promise.all(entries.map(([, loader]) => loader()));
-      const refreshed = Object.fromEntries(entries.map(([key], index) => [key, values[index]]));
+      const results = await Promise.allSettled(entries.map(([, loader]) => loader()));
+      const refreshed = {};
+      let optionalError;
+      for (let index = 0; index < entries.length; index += 1) {
+        const [key] = entries[index];
+        const result = results[index];
+        if (result.status === 'fulfilled') refreshed[key] = result.value;
+        else if (key === 'runtimeSummary') throw result.reason;
+        else optionalError ||= result.reason;
+      }
       if (refreshed.runtimeSummary) {
         const summary = refreshed.runtimeSummary;
         state.health = summary.health;
@@ -2905,6 +2913,7 @@
       renderBridgeStatus(true);
       renderSafety();
       renderRuntimeSection();
+      if (!quiet && optionalError) toast(optionalError?.message || 'The active workspace could not be fully refreshed.', true);
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
