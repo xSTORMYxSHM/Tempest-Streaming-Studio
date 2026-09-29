@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import net, { Socket } from 'node:net';
 import { boundedFetch } from './bounded-fetch';
+import { readResponseJson } from './bounded-response';
 
 const tokenExchangeFetch = boundedFetch(fetch, 10_000);
 
@@ -239,7 +240,7 @@ export class TempestDiscordRpcClient {
     const url = new URL(this.tokenExchangeUrl);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('The Discord token exchange service must use public HTTPS.');
     const exchange = await tokenExchangeFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const result = await exchange.json().catch(() => ({})) as { accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown };
+    const result = await readResponseJson<{ accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown }>(exchange, 1024 * 1024).catch(() => ({} as { accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown }));
     if (!exchange.ok) throw new Error(string(result.error) || `Discord authorization exchange failed with ${exchange.status}.`);
     const accessToken = string(result.accessToken) || string(result.access_token);
     if (!accessToken) throw new Error('The Discord authorization service returned no access token.');

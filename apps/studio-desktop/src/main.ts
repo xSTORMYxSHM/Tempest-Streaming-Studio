@@ -43,12 +43,17 @@ import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, O
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 import { boundedFetch } from './bounded-fetch';
 import { sha256File } from './file-checksum';
-import { readResponseBuffer } from './bounded-response';
+import { readResponseBuffer, readResponseJson } from './bounded-response';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
 const localServiceFetch = boundedFetch(fetch, 5_000);
 const hostedServiceFetch = boundedFetch(fetch, 10_000);
+const maximumHostedResponseBytes = 1024 * 1024;
+
+async function readOptionalHostedJson<T extends object>(response: Response): Promise<Partial<T>> {
+  return readResponseJson<T>(response, maximumHostedResponseBytes).catch(() => ({}));
+}
 const captureArgument = process.argv.find((argument) => argument.startsWith('--capture-ui='));
 const captureSectionArgument = process.argv.find((argument) => argument.startsWith('--capture-section='));
 const captureTargetArgument = process.argv.find((argument) => argument.startsWith('--capture-target='));
@@ -1031,7 +1036,7 @@ function registerDesktopHandlers(): void {
         headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': tokens.accessToken },
         body: JSON.stringify({ product: productName, productVersion: TEMPEST_STUDIO_VERSION })
       });
-      const result = await response.json().catch(() => ({})) as { error?: string; code?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } };
+      const result = await readOptionalHostedJson<{ error?: string; code?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } }>(response);
       if (!response.ok) throw new Error(describeHostedExtensionPairingFailure(response.status, result, officialService, officialTwitchAuthorization));
       const credentials = validateHostedExtensionCredentials({
         schemaVersion: 1,
@@ -1059,7 +1064,7 @@ function registerDesktopHandlers(): void {
     hostedExtensionLastError = undefined;
     try {
       const response = await hostedServiceFetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
-      const result = await response.json().catch(() => ({})) as { error?: string };
+      const result = await readOptionalHostedJson<{ error?: string }>(response);
       if (!response.ok && response.status !== 401 && response.status !== 404) throw new Error(result.error || `Hosted Extension revocation failed with ${response.status}.`);
       await bridge.configureExtensionRelay(undefined);
       await unlink(hostedExtensionCredentialPath()).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
@@ -1077,7 +1082,7 @@ function registerDesktopHandlers(): void {
       method: 'PUT',
       headers: { Authorization: `Bearer ${hosted.relayToken}`, 'X-Kick-OAuth': kick.accessToken }
     });
-    const result = await response.json().catch(() => ({})) as { error?: string; linked?: boolean; kick?: { userId?: string; username?: string } };
+    const result = await readOptionalHostedJson<{ error?: string; linked?: boolean; kick?: { userId?: string; username?: string } }>(response);
     if (!response.ok || !result.linked) throw new Error(result.error || `Hosted Kick relay linking failed with ${response.status}.`);
     return result;
   });
@@ -1085,7 +1090,7 @@ function registerDesktopHandlers(): void {
     const hosted = await loadHostedExtensionCredentials();
     if (!hosted) return { unlinked: true };
     const response = await hostedServiceFetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
-    const result = await response.json().catch(() => ({})) as { error?: string; unlinked?: boolean };
+    const result = await readOptionalHostedJson<{ error?: string; unlinked?: boolean }>(response);
     if (!response.ok && response.status !== 404) throw new Error(result.error || `Hosted Kick relay unlinking failed with ${response.status}.`);
     return { unlinked: true };
   });
@@ -1476,7 +1481,7 @@ function registerDesktopHandlers(): void {
     url.searchParams.set('rating', 'pg-13');
     const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error(`GIPHY search returned HTTP ${response.status}.`);
-    const body = await response.json() as { data?: Array<{ id?: string; title?: string; images?: Record<string, { url?: string }> }> };
+    const body = await readResponseJson<{ data?: Array<{ id?: string; title?: string; images?: Record<string, { url?: string }> }> }>(response, maximumHostedResponseBytes, 8_000);
     return {
       results: (body.data || []).flatMap((entry) => {
         const previewUrl = entry.images?.fixed_width_small?.url || entry.images?.fixed_width?.url;

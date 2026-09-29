@@ -54,6 +54,7 @@
 - Applied the same streamed-body timeout and 1 MiB ceiling to Twitch OAuth, token validation, refresh, and EventSub subscription responses.
 - Bounded Chatbot Twitch, weather, schedule, Shared Chat, and Now Playing response bodies to 2 MiB and kept the response timeout active through their streamed downloads.
 - Bounded hosted Twitch, Kick, and Discord identity/token response bodies to 1 MiB with a streamed-body timeout, closing the same post-header stall path in Tempest Signal.
+- Bounded Studio's hosted pairing, Kick linking, Panel design, Discord token exchange, and GIPHY JSON bodies to 1 MiB with a streamed-body timeout so the desktop cannot be held after response headers arrive.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 
