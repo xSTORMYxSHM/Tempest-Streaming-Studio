@@ -2078,6 +2078,20 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       },
       counters: () => chatbot.publicCounters(),
       goal: () => twitchExperiences.publicGoal(),
+      nowPlaying: async () => {
+        const status = await chatbot.radioStatus();
+        if (!status) return undefined;
+        return {
+          stationName: status.name,
+          state: status.state,
+          artist: status.nowPlaying?.artist,
+          title: status.nowPlaying?.title,
+          text: status.nowPlaying?.text,
+          album: status.nowPlaying?.album,
+          publicPlayerUrl: status.publicPlayerUrl,
+          checkedAt: status.checkedAt
+        };
+      },
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

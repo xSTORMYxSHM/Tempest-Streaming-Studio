@@ -50,6 +50,17 @@ export interface PublicExtensionGoal {
   accent: string;
 }
 
+export interface PublicExtensionNowPlaying {
+  stationName: string;
+  state: 'online' | 'offline' | 'unavailable';
+  artist?: string;
+  title?: string;
+  text?: string;
+  album?: string;
+  publicPlayerUrl: string;
+  checkedAt: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -81,6 +92,7 @@ export interface PublicExtensionCatalog {
   poll?: PublicExtensionPoll;
   counters?: PublicExtensionCounter[];
   goal?: PublicExtensionGoal;
+  nowPlaying?: PublicExtensionNowPlaying;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

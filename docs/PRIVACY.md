@@ -15,6 +15,7 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - Free Extension 3D Dice requests carry the Twitch-signed viewer identity and selected public die preset through the hosted relay. Studio retains only short-lived in-memory cooldown timestamps and session roll history; the hosted service does not generate or store dice results.
 - Enabled Studio counter labels, command names, and aggregate values may be published in the free Extension catalog. No per-viewer counter history or counter mutation capability is published.
 - The active stream goal's title, type, current and target values, unit, and display color may be published in the free Extension catalog. Local goal previews are excluded, and the public service exposes no goal mutation capability.
+- When the optional Now Playing provider is configured, its station name, public artist/title/text/album metadata, availability, last-check time, and public listen-page URL may be published in the free Extension catalog. The provider API URL and direct audio stream URL remain in Studio and are not published.
 - Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 
 ## Public Twitch Extension service

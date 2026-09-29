@@ -37,6 +37,9 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   let catalogSync;
   let resolveCatalogSync;
   const catalogResult = new Promise((resolve) => { resolveCatalogSync = resolve; });
+  let nowPlayingCatalogSync;
+  let resolveNowPlayingCatalogSync;
+  const nowPlayingCatalogResult = new Promise((resolve) => { resolveNowPlayingCatalogSync = resolve; });
   const result = new Promise((resolve, reject) => {
     webSockets.on('connection', (socket) => {
       socket.send(JSON.stringify({ protocolVersion: 1, type: 'interaction', requestId: randomUUID(), event }));
@@ -45,6 +48,10 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
         if (message.type === 'catalog.sync') {
           catalogSync = message.catalog;
           resolveCatalogSync();
+          if (message.catalog.nowPlaying) {
+            nowPlayingCatalogSync = message.catalog;
+            resolveNowPlayingCatalogSync();
+          }
         }
         if (message.type === 'result') resolve(message);
       });
@@ -57,6 +64,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     poll: () => ({ id: 'poll-1234567890123456', state: 'active', question: 'Choose one', options: [{ number: 1, label: 'One', votes: 2, percentage: 100 }, { number: 2, label: 'Two', votes: 0, percentage: 0 }], totalVotes: 2, startedAt: new Date().toISOString() }),
     counters: () => [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }],
     goal: () => ({ source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' }),
+    nowPlaying: async () => ({ stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() }),
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
       handled = value;
@@ -71,6 +79,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   relay.start();
   const acknowledgement = await result;
   await catalogResult;
+  await nowPlayingCatalogResult;
   assert.equal(acknowledgement.status, 202);
   assert.equal(acknowledgement.body.accepted, true);
   assert.deepEqual(handled, event);
@@ -79,5 +88,6 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   assert.equal(catalogSync.poll.question, 'Choose one');
   assert.deepEqual(catalogSync.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
   assert.equal(catalogSync.goal.title, 'Road to 50');
+  assert.equal(nowPlayingCatalogSync.nowPlaying.title, 'Track');
   assert.equal(relay.status().state, 'connected');
 });

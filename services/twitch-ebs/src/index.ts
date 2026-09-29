@@ -12,6 +12,7 @@ import {
   PublicExtensionCatalogItem,
   PublicExtensionCounter,
   PublicExtensionGoal,
+  PublicExtensionNowPlaying,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -27,6 +28,7 @@ export type {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
   PublicExtensionGoal,
+  PublicExtensionNowPlaying,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -212,7 +214,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown; nowPlaying?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -314,7 +316,28 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     if (unit.length > 24 || /[\r\n\0]/.test(unit) || !/^#[0-9A-F]{6}$/.test(accent)) throw new Error('Catalog goal display data is invalid.');
     goal = { source: goalSource, kind, title, currentAmount, targetAmount, percentage: Math.round(Math.min(100, currentAmount / targetAmount * 100) * 10) / 10, unit, accent };
   }
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}) };
+  let nowPlaying: PublicExtensionNowPlaying | undefined;
+  if (source.nowPlaying !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Now Playing is published only to the free Extension edition.');
+    if (!source.nowPlaying || typeof source.nowPlaying !== 'object' || Array.isArray(source.nowPlaying)) throw new Error('Catalog Now Playing state is invalid.');
+    const candidate = source.nowPlaying as Record<string, unknown>;
+    const stationName = String(candidate.stationName || '').trim();
+    const state = ['online', 'offline', 'unavailable'].includes(String(candidate.state)) ? candidate.state as PublicExtensionNowPlaying['state'] : '';
+    const cleanOptional = (key: 'artist' | 'title' | 'text' | 'album', maximum: number): string | undefined => {
+      if (candidate[key] === undefined || candidate[key] === null || candidate[key] === '') return undefined;
+      const result = String(candidate[key]).trim();
+      if (!result || result.length > maximum || /[\r\n\0]/.test(result)) throw new Error(`Catalog Now Playing ${key} is invalid.`);
+      return result;
+    };
+    const publicPlayerUrl = String(candidate.publicPlayerUrl || '').trim();
+    const checkedAt = String(candidate.checkedAt || '');
+    let parsedPlayerUrl: URL;
+    try { parsedPlayerUrl = new URL(publicPlayerUrl); } catch { throw new Error('Catalog Now Playing listen URL is invalid.'); }
+    if (!stationName || stationName.length > 80 || /[\r\n\0]/.test(stationName) || !state) throw new Error('Catalog Now Playing identity is invalid.');
+    if (parsedPlayerUrl.protocol !== 'https:' || parsedPlayerUrl.username || parsedPlayerUrl.password || publicPlayerUrl.length > 2048 || !Number.isFinite(Date.parse(checkedAt))) throw new Error('Catalog Now Playing source is invalid.');
+    nowPlaying = { stationName, state, artist: cleanOptional('artist', 120), title: cleanOptional('title', 160), text: cleanOptional('text', 240), album: cleanOptional('album', 160), publicPlayerUrl: parsedPlayerUrl.href, checkedAt };
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {

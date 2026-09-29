@@ -39,6 +39,8 @@ Enabled Chatbot counters are published to the free Extension as read-only live t
 
 The active Twitch-native or Studio-managed stream goal is also published as a read-only progress card in the free Extension. Studio remains the source of truth, sends updates as they happen, and never publishes its local goal preview.
 
+If the Chatbot's optional AzuraCast provider is configured, the free Extension shows its current station and track with a Twitch-mediated **Listen** action. Studio refreshes this passive card only while connected to the Extension relay; the provider API and direct audio stream URL remain local.
+
 The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
 
 The **Go Live** page coordinates that Twitch Dual Format output with a separate Kick horizontal output. Broadcast encrypts the Kick stream key with Windows Data Protection, shares the already-running horizontal encoder, applies the OBS reconnect policy, and reports each destination independently. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, Kick-only recovery/stop, emergency stop, and a session-only live-operations timeline without retaining or displaying the key. See [docs/TWITCH_KICK_SIMULCAST.md](docs/TWITCH_KICK_SIMULCAST.md).

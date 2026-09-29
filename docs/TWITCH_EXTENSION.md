@@ -33,6 +33,10 @@ Up to 12 enabled Chatbot counter commands appear as read-only live cards with th
 
 When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-managed goal appears as a compact read-only progress card in the free Panel and Video Component. The title, goal type, current and target values, unit, color, and server-recomputed percentage update through the existing Studio relay. Local overlay previews are never published, the Extension cannot change goal progress, and goals are not included in the Bits edition.
 
+## Free Extension Now Playing
+
+When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the station name, public track metadata, provider state, last-check time, and public listen-page URL to a read-only card. The relay refreshes it every 15 seconds only while connected, uses the Chatbot's existing 15-second provider cache, and omits the provider API URL and direct audio stream URL. The **Listen** button uses Twitch's Extension URL action. The Twitch developer-console configuration must allow the broadcaster's listen-page domain for Twitch to open it. Now Playing is not published to the Bits edition.
+
 ## Run the Local Test
 
 The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.

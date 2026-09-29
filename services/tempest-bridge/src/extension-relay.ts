@@ -51,6 +51,17 @@ export interface ExtensionRelayGoal {
   accent: string;
 }
 
+export interface ExtensionRelayNowPlaying {
+  stationName: string;
+  state: 'online' | 'offline' | 'unavailable';
+  artist?: string;
+  title?: string;
+  text?: string;
+  album?: string;
+  publicPlayerUrl: string;
+  checkedAt: string;
+}
+
 export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEdition']): 'sound-alert' | 'interaction' {
   return edition === 'bits' ? 'interaction' : 'sound-alert';
 }
@@ -80,6 +91,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   poll?(): ExtensionRelayPoll | undefined;
   counters?(): ExtensionRelayCounter[];
   goal?(): ExtensionRelayGoal | undefined;
+  nowPlaying?(): Promise<ExtensionRelayNowPlaying | undefined>;
   onStatus?(status: ExtensionRelayStatus): void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -107,6 +119,10 @@ export class TempestExtensionRelayClient {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private catalogTimer: NodeJS.Timeout | null = null;
+  private dynamicCatalogTimer: NodeJS.Timeout | null = null;
+  private nowPlaying: ExtensionRelayNowPlaying | undefined;
+  private refreshingDynamicCatalog = false;
+  private dynamicCatalogRefreshRequested = false;
   private lastCatalogPayload = '';
   private reconnectAttempt = 0;
   private stopped = true;
@@ -130,7 +146,10 @@ export class TempestExtensionRelayClient {
   }
 
   syncCatalog(): void {
-    if (this.socket?.readyState === WebSocket.OPEN) this.sendCatalog(this.socket);
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.sendCatalog(this.socket);
+      void this.refreshDynamicCatalog(this.socket);
+    }
   }
 
   start(): void {
@@ -144,9 +163,12 @@ export class TempestExtensionRelayClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.catalogTimer) clearInterval(this.catalogTimer);
+    if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
     this.catalogTimer = null;
+    this.dynamicCatalogTimer = null;
+    this.dynamicCatalogRefreshRequested = false;
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState < WebSocket.CLOSING) {
@@ -184,9 +206,13 @@ export class TempestExtensionRelayClient {
       }, 25_000);
       this.heartbeatTimer.unref();
       this.sendCatalog(socket, true);
+      void this.refreshDynamicCatalog(socket);
       if (this.catalogTimer) clearInterval(this.catalogTimer);
       this.catalogTimer = setInterval(() => this.sendCatalog(socket), 30_000);
       this.catalogTimer.unref();
+      if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
+      this.dynamicCatalogTimer = setInterval(() => void this.refreshDynamicCatalog(socket), 15_000);
+      this.dynamicCatalogTimer.unref();
     });
 
     socket.on('message', (raw) => void this.handleMessage(socket, raw.toString()));
@@ -199,8 +225,10 @@ export class TempestExtensionRelayClient {
       this.socket = null;
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
       if (this.catalogTimer) clearInterval(this.catalogTimer);
+      if (this.dynamicCatalogTimer) clearInterval(this.dynamicCatalogTimer);
       this.heartbeatTimer = null;
       this.catalogTimer = null;
+      this.dynamicCatalogTimer = null;
       if (this.stopped) return this.update({ state: 'disconnected' });
       this.update({ state: 'disconnected' });
       this.scheduleReconnect();
@@ -213,13 +241,37 @@ export class TempestExtensionRelayClient {
       const poll = this.options.extensionEdition === 'bits' ? undefined : this.options.poll?.();
       const counters = this.options.extensionEdition === 'bits' ? [] : this.options.counters?.() || [];
       const goal = this.options.extensionEdition === 'bits' ? undefined : this.options.goal?.();
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}) };
+      const nowPlaying = this.options.extensionEdition === 'bits' ? undefined : this.nowPlaying;
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}) };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;
       socket.send(payload);
     } catch (error) {
       this.logger.warn(error);
+    }
+  }
+
+  private async refreshDynamicCatalog(socket: WebSocket): Promise<void> {
+    if (!this.options.nowPlaying || socket.readyState !== WebSocket.OPEN) return;
+    if (this.refreshingDynamicCatalog) {
+      this.dynamicCatalogRefreshRequested = true;
+      return;
+    }
+    this.refreshingDynamicCatalog = true;
+    try {
+      const nowPlaying = await this.options.nowPlaying();
+      if (this.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+      this.nowPlaying = nowPlaying;
+      this.sendCatalog(socket);
+    } catch (error) {
+      this.logger.warn(error);
+    } finally {
+      this.refreshingDynamicCatalog = false;
+      if (this.dynamicCatalogRefreshRequested) {
+        this.dynamicCatalogRefreshRequested = false;
+        if (this.socket === socket && socket.readyState === WebSocket.OPEN) void this.refreshDynamicCatalog(socket);
+      }
     }
   }
 

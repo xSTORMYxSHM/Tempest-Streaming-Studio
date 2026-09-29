@@ -8,6 +8,7 @@
 - Added a compact 3D Dice picker to the free Tempest Mainframe Extension. Viewers can choose d4, d6, d8, d10, d12, d20, 1–50, d100, or an exact custom 1–N maximum from 2 through 100; Studio applies its assigned-creator access policy and shared 30-second viewer/5-second global cooldowns before starting the physical on-stream roll.
 - Added read-only live counter cards to the free Extension for enabled Studio counter commands such as deaths or restarts. Values publish immediately after chat, operator, or viewer-interaction adjustments without giving the Extension a counter mutation endpoint.
 - Added a read-only stream-goal card to the free Extension. Twitch-native or Studio-managed goal progress publishes immediately from Studio, while local preview goals are kept private and the Extension receives no goal mutation route.
+- Added a read-only Now Playing card to the free Extension for the broadcaster's configured AzuraCast provider, including a Twitch-safe Listen action. Studio polls only while its Extension relay is connected, and the hosted catalog never receives the private API or direct stream URL.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

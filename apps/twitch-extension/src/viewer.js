@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -130,6 +130,19 @@
     $('#goalBar').style.width = `${Math.max(0, Math.min(100, Number(goal.percentage) || 0))}%`;
   }
 
+  function renderNowPlaying(visible) {
+    const playing = visible ? state.nowPlaying : null;
+    const region = $('#nowPlayingRegion');
+    region.hidden = !playing;
+    if (!playing) return;
+    const track = playing.artist && playing.title ? `${playing.artist} — ${playing.title}` : playing.title || playing.text || (playing.state === 'online' ? 'Track information unavailable' : 'Station is currently offline');
+    $('#nowPlayingState').textContent = playing.state === 'online' ? 'ON AIR' : playing.state.toUpperCase();
+    $('#nowPlayingStation').textContent = playing.stationName;
+    $('#nowPlayingTrack').textContent = track;
+    $('#nowPlayingAlbum').textContent = playing.album ? `Album · ${playing.album}` : 'Live station metadata';
+    $('#nowPlayingListen').disabled = !playing.publicPlayerUrl;
+  }
+
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
@@ -140,7 +153,8 @@
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
     const counters = state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
     const goalVisible = state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
-    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0);
+    const nowPlayingVisible = state.filter !== 'performances' && Boolean(state.nowPlaying) && (!query || `${state.nowPlaying.stationName} ${state.nowPlaying.artist || ''} ${state.nowPlaying.title || ''} ${state.nowPlaying.text || ''} ${state.nowPlaying.album || ''}`.toLowerCase().includes(query));
+    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0);
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -156,6 +170,7 @@
     $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
     renderGoal(goalVisible);
+    renderNowPlaying(nowPlayingVisible);
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -194,6 +209,7 @@
     state.alerts = body.items;
     state.counters = Array.isArray(body.counters) ? body.counters : [];
     state.goal = body.goal && typeof body.goal === 'object' ? body.goal : null;
+    state.nowPlaying = body.nowPlaying && typeof body.nowPlaying === 'object' ? body.nowPlaying : null;
     const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
     state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
       ? state.poll
@@ -360,6 +376,12 @@
       const button = event.target.closest('[data-poll-option]');
       if (button) void voteInPoll(Number(button.dataset.pollOption));
     });
+    $('#nowPlayingListen').addEventListener('click', () => {
+      const url = state.nowPlaying?.publicPlayerUrl;
+      if (!url) return;
+      if (window.Twitch?.ext?.actions?.openUrl) window.Twitch.ext.actions.openUrl(url);
+      else window.open(url, '_blank', 'noopener,noreferrer');
+    });
     document.querySelector('.signal-filters').addEventListener('click', (event) => {
       const button = event.target.closest('[data-signal-filter]');
       if (!button) return;
@@ -407,6 +429,7 @@
     } : null;
     state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', label: 'Ship Restarts', value: 7 }] : [];
     state.goal = configuration.mockMode ? { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subscribers', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' } : null;
+    state.nowPlaying = configuration.mockMode ? { stationName: 'Storm Horizon Radio', state: 'online', artist: 'The Midnight', title: 'Synthetic', album: 'Endless Summer', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() } : null;
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

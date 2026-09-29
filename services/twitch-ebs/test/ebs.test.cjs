@@ -146,7 +146,8 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
     options: [{ number: 1, label: 'Game One', votes: 2, percentage: 1 }, { number: 2, label: 'Game Two', votes: 0, percentage: 99 }],
     startedAt: new Date().toISOString()
   };
-  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }], goal: { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 999, unit: 'subs', accent: '#a7ff5c' } } }));
+  const checkedAt = new Date().toISOString();
+  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }], goal: { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 999, unit: 'subs', accent: '#a7ff5c' }, nowPlaying: { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt } } }));
   const catalogDeadline = Date.now() + 2000;
   let published;
   while (Date.now() < catalogDeadline) {
@@ -157,6 +158,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
   assert.equal(published.poll.totalVotes, 2);
   assert.deepEqual(published.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
   assert.deepEqual(published.goal, { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' });
+  assert.deepEqual(published.nowPlaying, { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt });
   assert.deepEqual(published.poll.options.map((option) => option.percentage), [100, 0]);
 
   let relayed;
@@ -200,6 +202,10 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
     port: 0,
     dataDirectory: await mkdtemp(path.join(os.tmpdir(), 'tempest-extension-e2e-')),
     extensionRelay: { url: ebs.websocketUrl, token: relayToken, channelId: '123456' },
+    chatbotFetchImplementation: async (url) => {
+      assert.equal(String(url), 'https://radio.example/api/nowplaying/station');
+      return new Response(JSON.stringify({ is_online: true, station: { name: 'Example Radio' }, now_playing: { song: { artist: 'Aster Null', title: 'Error Stars', album: 'The Coordinates Are Laughing' } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
     logger: { info() {}, warn() {}, error() {} }
   });
   context.after(async () => {
@@ -214,6 +220,24 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.equal((await fetch(`${ebs.baseUrl}/health`).then((response) => response.json())).studioConnections, 1);
+
+  const providerUpdate = await fetch(`${bridge.baseUrl}/v1/chatbot/configuration`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token },
+    body: JSON.stringify({ nowPlayingProvider: { provider: 'azuracast', stationName: 'Example Radio', apiUrl: 'https://radio.example/api/nowplaying/station', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', streamUrl: 'https://radio.example/listen/station/radio.mp3' } })
+  });
+  assert.equal(providerUpdate.status, 200);
+  const nowPlayingDeadline = Date.now() + 3000;
+  let publicNowPlaying;
+  while (Date.now() < nowPlayingDeadline) {
+    const catalog = await fetch(`${ebs.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((catalogResponse) => catalogResponse.json());
+    publicNowPlaying = catalog.nowPlaying;
+    if (publicNowPlaying?.title === 'Error Stars') break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(publicNowPlaying.stationName, 'Example Radio');
+  assert.equal(publicNowPlaying.artist, 'Aster Null');
+  assert.equal(publicNowPlaying.publicPlayerUrl, 'https://www.tempestmainframe.com/listen');
+  assert.equal(JSON.stringify(publicNowPlaying).includes('radio.example'), false, 'private provider and direct stream URLs stay out of the public catalog');
 
   const response = await postAlert(ebs, jwt(secret), randomUUID(), 'sound-alert.hype-pulse');
   assert.equal(response.status, 202);

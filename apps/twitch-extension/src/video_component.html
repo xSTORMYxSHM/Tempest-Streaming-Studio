@@ -31,6 +31,13 @@
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
+        <div id="nowPlayingRegion" class="catalog-section now-playing-section" hidden>
+          <div class="section-heading"><span>NOW PLAYING</span><i id="nowPlayingState">ON AIR</i></div>
+          <article class="now-playing-card">
+            <div><small id="nowPlayingStation"></small><h2 id="nowPlayingTrack"></h2><p id="nowPlayingAlbum"></p></div>
+            <button id="nowPlayingListen" type="button">LISTEN</button>
+          </article>
+        </div>
         <div id="goalRegion" class="catalog-section goal-section" hidden>
           <div class="section-heading"><span>STREAM GOAL</span><i id="goalKind">CUSTOM · STUDIO</i></div>
           <article class="goal-card">
