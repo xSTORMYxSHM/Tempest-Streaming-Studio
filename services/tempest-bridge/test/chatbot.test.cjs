@@ -628,6 +628,11 @@ test('serves a configurable AzuraCast station with an outage-safe fallback', asy
   await chatbot.configure({ nowPlayingProvider: provider });
   await chatbot.upsertCommand({ name: 'song', aliases: ['nowplaying'], enabled: true, permission: 'everyone', response: '', handler: 'radio-now-playing', viewerCooldownMs: 15_000, globalCooldownMs: 10_000 });
 
+  const [concurrentRadioA, concurrentRadioB] = await Promise.all([chatbot.radioStatus(), chatbot.radioStatus()]);
+  assert.equal(concurrentRadioA.nowPlaying.title, 'Error Stars');
+  assert.equal(concurrentRadioB.nowPlaying.title, 'Error Stars');
+  assert.equal(requests.length, 1, 'concurrent Now Playing readers share one provider request');
+
   const first = await chatbot.testCommand({ message: '!song', viewerName: 'SampleViewer', roles: [] });
   assert.equal(first.accepted, true);
   assert.equal(first.response, 'Now playing on Example Radio: Aster Null — Error Stars · Album: The Coordinates Are Laughing · Listen: https://radio.example/public/station');
@@ -735,4 +740,33 @@ test('installs a command directory and serves cached Twitch channel information 
   assert.match(requests[0], /helix\/streams\?user_id=channel-1/);
   assert.match(requests[1], /helix\/channels\?broadcaster_id=channel-1/);
   assert.match(requests[2], /helix\/schedule\?broadcaster_id=channel-1&first=1/);
+});
+
+test('coalesces concurrent Extension stream metadata and invalidates it when the channel changes', async () => {
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory: await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-provider-coalescing-')),
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url) => {
+      const address = String(url);
+      requests.push(address);
+      await new Promise((resolve) => setImmediate(resolve));
+      if (address.includes('/streams?')) return jsonResponse({ data: [{ started_at: '2030-01-01T00:00:00Z', viewer_count: 10 }] });
+      if (address.includes('/channels?')) return jsonResponse({ data: [{ title: `Channel ${new URL(address).searchParams.get('broadcaster_id')}`, game_name: 'Science & Technology' }] });
+      return jsonResponse({ data: { segments: [] } });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'one' });
+
+  const first = await Promise.all([chatbot.publicStream(), chatbot.publicStream(), chatbot.publicStream()]);
+  assert.ok(first.every((stream) => stream.title === 'Channel channel-1'));
+  assert.equal(requests.length, 2, 'three readers share one streams and one channels request');
+
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-2', channelLogin: 'two' });
+  const second = await chatbot.publicStream();
+  assert.equal(second.title, 'Channel channel-2');
+  assert.equal(requests.length, 4);
+  assert.ok(requests.slice(2).every((address) => address.includes('channel-2')));
 });

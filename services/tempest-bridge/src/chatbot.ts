@@ -764,6 +764,7 @@ export class TwitchChatbot {
   private weatherCache?: { fetchedAt: number; temperature: number; temperatureUnit: string; shortForecast: string; windSpeed?: string; windDirection?: string; humidity?: number; precipitation?: number };
   private radioNowPlayingCache?: { fetchedAt: number; online: boolean; stationName: string; artist?: string; title?: string; text?: string; album?: string };
   private weatherForecastUrl?: string;
+  private inFlightProviderRequests = new Map<string, Promise<unknown>>();
   private readonly request: typeof fetch;
 
   constructor(private readonly options: TwitchChatbotOptions) {
@@ -1095,7 +1096,13 @@ export class TwitchChatbot {
   async connectChannel(channel: ChatbotChannelAuthorization | null): Promise<void> {
     const changed = this.channel?.channelId !== channel?.channelId || this.channel?.clientId !== channel?.clientId;
     this.channel = channel;
-    if (changed) await this.stopConnection();
+    if (changed) {
+      this.channelInfoCache = undefined;
+      this.streamCache = undefined;
+      this.scheduleCache = undefined;
+      this.inFlightProviderRequests.clear();
+      await this.stopConnection();
+    }
     await this.ensureConnection();
   }
 
@@ -1917,6 +1924,16 @@ export class TwitchChatbot {
     return { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId };
   }
 
+  private coalesceProviderRequest<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const existing = this.inFlightProviderRequests.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const pending = operation().finally(() => {
+      if (this.inFlightProviderRequests.get(key) === pending) this.inFlightProviderRequests.delete(key);
+    });
+    this.inFlightProviderRequests.set(key, pending);
+    return pending;
+  }
+
   private async refreshAssignedCreatorIds(): Promise<void> {
     const channels = this.configuration.firstChatShoutouts.channels;
     const missing = channels.filter((login) => !this.configuration.assignedCreatorIds[login]);
@@ -1937,38 +1954,53 @@ export class TwitchChatbot {
   private async loadStreamStatus(): Promise<NonNullable<TwitchChatbot['streamCache']>> {
     if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
-    const stream = result.data?.[0];
-    this.streamCache = { fetchedAt: Date.now(), startedAt: stream?.started_at, viewerCount: stream?.viewer_count };
-    return this.streamCache;
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`stream:${channelId}`, async () => {
+      if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
+      const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
+      const result = await response.json().catch(() => ({})) as { data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string };
+      if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the streams request.');
+      const stream = result.data?.[0];
+      this.streamCache = { fetchedAt: Date.now(), startedAt: stream?.started_at, viewerCount: stream?.viewer_count };
+      return this.streamCache;
+    });
   }
 
   private async loadChannelInfo(): Promise<NonNullable<TwitchChatbot['channelInfoCache']>> {
     if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ title?: string; game_name?: string }>; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
-    const channel = result.data?.[0];
-    this.channelInfoCache = { fetchedAt: Date.now(), title: String(channel?.title || ''), gameName: String(channel?.game_name || '') };
-    return this.channelInfoCache;
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`channel:${channelId}`, async () => {
+      if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
+      const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
+      const result = await response.json().catch(() => ({})) as { data?: Array<{ title?: string; game_name?: string }>; message?: string };
+      if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the channel request.');
+      const channel = result.data?.[0];
+      this.channelInfoCache = { fetchedAt: Date.now(), title: String(channel?.title || ''), gameName: String(channel?.game_name || '') };
+      return this.channelInfoCache;
+    });
   }
 
   private async loadStreamSchedule(): Promise<NonNullable<TwitchChatbot['scheduleCache']>> {
     if (this.scheduleCache && Date.now() - this.scheduleCache.fetchedAt < 5 * 60_000) return this.scheduleCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/schedule?broadcaster_id=${encodeURIComponent(this.channel.channelId)}&first=1`, { headers: this.twitchHeaders() });
-    if (response.status === 404) {
-      this.scheduleCache = { fetchedAt: Date.now() };
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`schedule:${channelId}`, async () => {
+      if (this.scheduleCache && Date.now() - this.scheduleCache.fetchedAt < 5 * 60_000) return this.scheduleCache;
+      const response = await this.request(`https://api.twitch.tv/helix/schedule?broadcaster_id=${encodeURIComponent(channelId)}&first=1`, { headers: this.twitchHeaders() });
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the schedule request.');
+      if (response.status === 404) {
+        this.scheduleCache = { fetchedAt: Date.now() };
+        return this.scheduleCache;
+      }
+      const result = await response.json().catch(() => ({})) as { data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string };
+      if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
+      const segment = result.data?.segments?.[0];
+      this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
       return this.scheduleCache;
-    }
-    const result = await response.json().catch(() => ({})) as { data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
-    const segment = result.data?.segments?.[0];
-    this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
-    return this.scheduleCache;
+    });
   }
 
   private async radioNowPlayingResponse(): Promise<string> {
@@ -1991,28 +2023,32 @@ export class TwitchChatbot {
     const provider = this.configuration.nowPlayingProvider;
     if (!provider) throw new Error('Now Playing is not configured.');
     if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
-    const response = await this.request(provider.apiUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
-      signal: AbortSignal.timeout(5_000)
+    return this.coalesceProviderRequest(`radio:${provider.apiUrl}`, async () => {
+      if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
+      const response = await this.request(provider.apiUrl, {
+        headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
+        signal: AbortSignal.timeout(5_000)
+      });
+      const result = await response.json().catch(() => ({})) as {
+        is_online?: boolean;
+        station?: { name?: string };
+        now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
+      };
+      if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
+      if (this.configuration.nowPlayingProvider?.apiUrl !== provider.apiUrl) throw new Error('The Now Playing provider changed during the request.');
+      const song = result.now_playing?.song;
+      const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
+      this.radioNowPlayingCache = {
+        fetchedAt: Date.now(),
+        online: result.is_online === true,
+        stationName: value(result.station?.name) || provider.stationName,
+        artist: value(song?.artist),
+        title: value(song?.title),
+        text: value(song?.text),
+        album: value(song?.album)
+      };
+      return this.radioNowPlayingCache;
     });
-    const result = await response.json().catch(() => ({})) as {
-      is_online?: boolean;
-      station?: { name?: string };
-      now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
-    };
-    if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
-    const song = result.now_playing?.song;
-    const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
-    this.radioNowPlayingCache = {
-      fetchedAt: Date.now(),
-      online: result.is_online === true,
-      stationName: value(result.station?.name) || provider.stationName,
-      artist: value(song?.artist),
-      title: value(song?.title),
-      text: value(song?.text),
-      album: value(song?.album)
-    };
-    return this.radioNowPlayingCache;
   }
 
   private async localWeatherResponse(): Promise<string> {
@@ -2045,36 +2081,44 @@ export class TwitchChatbot {
     if (!provider) throw new Error('Local weather is not configured.');
     const now = Date.now();
     if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
-    try {
-      const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.1', Accept: 'application/geo+json' };
-      if (!this.weatherForecastUrl) {
-        const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
-        const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
-        if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
-        this.weatherForecastUrl = point.properties.forecastHourly;
+    const providerKey = `${provider.latitude},${provider.longitude},${provider.timeZone}`;
+    return this.coalesceProviderRequest(`weather:${providerKey}`, async () => {
+      if (this.weatherCache && Date.now() - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
+      try {
+        const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.1', Accept: 'application/geo+json' };
+        let forecastUrl = this.weatherForecastUrl;
+        if (!forecastUrl) {
+          const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
+          const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
+          if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
+          forecastUrl = point.properties.forecastHourly;
+        }
+        const forecastResponse = await this.request(forecastUrl, { headers });
+        const forecast = await forecastResponse.json() as {
+          properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
+          title?: string;
+        };
+        const period = forecast.properties?.periods?.[0];
+        if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
+        const current = this.configuration.weatherProvider;
+        if (!current || `${current.latitude},${current.longitude},${current.timeZone}` !== providerKey) throw new Error('The weather provider changed during the request.');
+        this.weatherForecastUrl = forecastUrl;
+        this.weatherCache = {
+          fetchedAt: Date.now(),
+          temperature: Number(period.temperature),
+          temperatureUnit: period.temperatureUnit,
+          shortForecast: period.shortForecast,
+          windSpeed: period.windSpeed,
+          windDirection: period.windDirection,
+          humidity: Number.isFinite(period.relativeHumidity?.value) ? Number(period.relativeHumidity?.value) : undefined,
+          precipitation: Number.isFinite(period.probabilityOfPrecipitation?.value) ? Number(period.probabilityOfPrecipitation?.value) : undefined
+        };
+        return this.weatherCache;
+      } catch (error) {
+        if (this.weatherCache && now - this.weatherCache.fetchedAt < 60 * 60 * 1000) return this.weatherCache;
+        throw error;
       }
-      const forecastResponse = await this.request(this.weatherForecastUrl, { headers });
-      const forecast = await forecastResponse.json() as {
-        properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
-        title?: string;
-      };
-      const period = forecast.properties?.periods?.[0];
-      if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
-      this.weatherCache = {
-        fetchedAt: now,
-        temperature: Number(period.temperature),
-        temperatureUnit: period.temperatureUnit,
-        shortForecast: period.shortForecast,
-        windSpeed: period.windSpeed,
-        windDirection: period.windDirection,
-        humidity: Number.isFinite(period.relativeHumidity?.value) ? Number(period.relativeHumidity?.value) : undefined,
-        precipitation: Number.isFinite(period.probabilityOfPrecipitation?.value) ? Number(period.probabilityOfPrecipitation?.value) : undefined
-      };
-      return this.weatherCache;
-    } catch (error) {
-      if (this.weatherCache && now - this.weatherCache.fetchedAt < 60 * 60 * 1000) return this.weatherCache;
-      throw error;
-    }
+    });
   }
 
   private async ensureConnection(): Promise<void> {
