@@ -258,7 +258,7 @@
     state.schedule = body.schedule && typeof body.schedule === 'object' ? body.schedule : null;
     state.stream = body.stream && typeof body.stream === 'object' ? body.stream : null;
     const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
-    state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
+    state.poll = incomingPoll && state.poll?.id === incomingPoll.id && state.poll.state === 'active' && incomingPoll.state === 'active' && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
       ? state.poll
       : incomingPoll;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));

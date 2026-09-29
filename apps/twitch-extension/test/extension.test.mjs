@@ -98,6 +98,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /identity_required/);
   assert.match(viewerScript, /\/v1\/extension\/poll\/vote/);
   assert.match(viewerScript, /tempest-extension-poll-vote/);
+  assert.match(viewerScript, /state\.poll\.state === 'active' && incomingPoll\.state === 'active'/);
   assert.match(viewerScript, /tempest\.dice\./);
   assert.match(viewerScript, /tempest\.dice\.custom/);
   assert.match(styles, /\.dice-grid/);
