@@ -2091,6 +2091,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         };
       },
       counters: () => chatbot.publicCounters(),
+      commands: () => chatbot.publicCommands(),
       goal: () => twitchExperiences.publicGoal(),
       nowPlaying: async () => {
         const status = await chatbot.radioStatus();

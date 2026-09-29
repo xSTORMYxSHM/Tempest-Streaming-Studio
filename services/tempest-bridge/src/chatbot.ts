@@ -297,6 +297,13 @@ export interface ChatbotPublicCounter {
   value: number;
 }
 
+export interface ChatbotPublicCommand {
+  trigger: string;
+  aliases: string[];
+  permission: ChatbotPermission;
+  allowSharedChat: boolean;
+}
+
 export interface ChatbotPublicSchedule {
   title?: string;
   startTime: string;
@@ -1120,6 +1127,18 @@ export class TwitchChatbot {
       .filter((command) => command.enabled && command.handler === 'counter')
       .slice(0, 12)
       .map((command) => ({ id: command.id, command: command.name, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
+  }
+
+  publicCommands(): ChatbotPublicCommand[] {
+    return this.configuration.commands
+      .filter((command) => command.enabled)
+      .slice(0, 40)
+      .map((command) => ({
+        trigger: `${this.configuration.prefix}${command.name}`,
+        aliases: command.aliases.slice(0, 5).map((alias) => `${this.configuration.prefix}${alias}`),
+        permission: command.permission,
+        allowSharedChat: command.allowSharedChat
+      }));
   }
 
   async publicSchedule(): Promise<ChatbotPublicSchedule | undefined> {

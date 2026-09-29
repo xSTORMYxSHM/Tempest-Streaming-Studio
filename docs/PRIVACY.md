@@ -18,6 +18,7 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - The active stream goal's title, type, current and target values, unit, and display color may be published in the free Extension catalog. Local goal previews are excluded, and the public service exposes no goal mutation capability.
 - When the optional Now Playing provider is configured, its station name, public artist/title/text/album metadata, availability, last-check time, and public listen-page URL may be published in the free Extension catalog. The provider API URL and direct audio stream URL remain in Studio and are not published.
 - The optional next Twitch schedule segment title and start time may be published in the free Extension catalog. The Extension receives no schedule mutation capability or additional OAuth credential.
+- Enabled Chatbot trigger names, up to five aliases, required roles, and Shared Chat availability may be published in the free Extension command directory. Reply text, workflow assignments, cooldown history, and disabled commands remain local.
 - Public Twitch live/offline state, stream title, category, start time, current viewer count, and last-check time may be published in the free Extension catalog. The card reuses the Chatbot's existing authorization and caches and cannot change Twitch stream information.
 - Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 

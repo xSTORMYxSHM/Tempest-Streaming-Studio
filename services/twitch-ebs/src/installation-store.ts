@@ -39,6 +39,13 @@ export interface PublicExtensionCounter {
   value: number;
 }
 
+export interface PublicExtensionCommand {
+  trigger: string;
+  aliases: string[];
+  permission: 'everyone' | 'subscriber' | 'moderator' | 'broadcaster';
+  allowSharedChat: boolean;
+}
+
 export interface PublicExtensionGoal {
   source: 'twitch' | 'studio';
   kind: 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
@@ -105,6 +112,7 @@ export interface PublicExtensionCatalog {
   items: PublicExtensionCatalogItem[];
   poll?: PublicExtensionPoll;
   counters?: PublicExtensionCounter[];
+  commands?: PublicExtensionCommand[];
   goal?: PublicExtensionGoal;
   nowPlaying?: PublicExtensionNowPlaying;
   schedule?: PublicExtensionSchedule;

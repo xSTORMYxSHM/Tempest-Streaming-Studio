@@ -41,6 +41,13 @@ export interface ExtensionRelayCounter {
   value: number;
 }
 
+export interface ExtensionRelayCommand {
+  trigger: string;
+  aliases: string[];
+  permission: 'everyone' | 'subscriber' | 'moderator' | 'broadcaster';
+  allowSharedChat: boolean;
+}
+
 export interface ExtensionRelayGoal {
   source: 'twitch' | 'studio';
   kind: 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
@@ -104,6 +111,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   }>;
   poll?(): ExtensionRelayPoll | undefined;
   counters?(): ExtensionRelayCounter[];
+  commands?(): ExtensionRelayCommand[];
   goal?(): ExtensionRelayGoal | undefined;
   nowPlaying?(): Promise<ExtensionRelayNowPlaying | undefined>;
   schedule?(): Promise<ExtensionRelaySchedule | undefined>;
@@ -278,11 +286,12 @@ export class TempestExtensionRelayClient {
     try {
       const poll = this.options.extensionEdition === 'bits' ? undefined : this.options.poll?.();
       const counters = this.options.extensionEdition === 'bits' ? [] : this.options.counters?.() || [];
+      const commands = this.options.extensionEdition === 'bits' ? [] : this.options.commands?.() || [];
       const goal = this.options.extensionEdition === 'bits' ? undefined : this.options.goal?.();
       const nowPlaying = this.options.extensionEdition === 'bits' ? undefined : this.nowPlaying;
       const schedule = this.options.extensionEdition === 'bits' ? undefined : this.schedule;
       const stream = this.options.extensionEdition === 'bits' ? undefined : this.stream;
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(commands.length ? { commands } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;

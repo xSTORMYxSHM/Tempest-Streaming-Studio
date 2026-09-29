@@ -70,6 +70,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(panel, /id="diceCustomMaximum"/);
   assert.match(panel, /id="counterRegion"/);
   assert.match(viewer, /id="counterGrid"/);
+  assert.match(panel, /id="commandRegion"/);
+  assert.match(viewer, /id="commandGrid"/);
   assert.match(panel, /id="goalRegion"/);
   assert.match(viewer, /id="goalBar"/);
   assert.match(panel, /id="nowPlayingRegion"/);
@@ -103,6 +105,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /tempest\.dice\.custom/);
   assert.match(styles, /\.dice-grid/);
   assert.match(styles, /\.counter-grid/);
+  assert.match(styles, /\.command-grid/);
+  assert.match(viewerScript, /body\.commands/);
   assert.match(styles, /\.goal-card/);
   assert.match(viewerScript, /body\.goal/);
   assert.match(styles, /\.now-playing-card/);

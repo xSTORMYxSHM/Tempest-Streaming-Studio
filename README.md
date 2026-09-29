@@ -45,6 +45,8 @@ The free Extension also shows the next verified Twitch schedule segment when one
 
 The free Extension's Current Stream card reuses the Chatbot's cached Twitch status and channel information to show live/offline state, title, category, uptime, and viewer count without making per-viewer Helix calls or adding an OAuth scope.
 
+The free Extension also includes a searchable read-only directory of enabled chat commands. Viewers can see each trigger, up to five aliases, its required role, and whether it accepts Stream Together Shared Chat; replies, workflow assignments, and other Chatbot configuration never leave Studio.
+
 The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
 
 The **Go Live** page coordinates that Twitch Dual Format output with a separate Kick horizontal output. Broadcast encrypts the Kick stream key with Windows Data Protection, shares the already-running horizontal encoder, applies the OBS reconnect policy, and reports each destination independently. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, Kick-only recovery/stop, emergency stop, and a session-only live-operations timeline without retaining or displaying the key. See [docs/TWITCH_KICK_SIMULCAST.md](docs/TWITCH_KICK_SIMULCAST.md).

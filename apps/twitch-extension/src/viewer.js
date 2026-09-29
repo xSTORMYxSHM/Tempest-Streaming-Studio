@@ -7,7 +7,7 @@
   let catalogEtag = '';
   let catalogRefreshPromise = null;
   let catalogRefreshPending = false;
-  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], commands: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -200,11 +200,12 @@
     const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
     const counters = state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
+    const commands = state.filter === 'performances' ? [] : state.commands.filter((command) => !query || `${command.trigger} ${command.aliases.join(' ')} ${command.permission}`.toLowerCase().includes(query));
     const goalVisible = state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
     const nowPlayingVisible = state.filter !== 'performances' && Boolean(state.nowPlaying) && (!query || `${state.nowPlaying.stationName} ${state.nowPlaying.artist || ''} ${state.nowPlaying.title || ''} ${state.nowPlaying.text || ''} ${state.nowPlaying.album || ''}`.toLowerCase().includes(query));
     const scheduleVisible = state.filter !== 'performances' && Boolean(state.schedule) && (!query || `${state.schedule.title || ''} next stream schedule`.toLowerCase().includes(query));
     const streamVisible = state.filter !== 'performances' && Boolean(state.stream) && (!query || `${state.stream.title} ${state.stream.category || ''} ${state.stream.live ? 'live' : 'offline'} current stream`.toLowerCase().includes(query));
-    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0);
+    const visibleCount = dice.length + featured.length + performances.length + counters.length + commands.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0);
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -220,6 +221,8 @@
     $('#rollCustomDice').textContent = customDice && identityRequired(customDice) ? 'SHARE ID' : customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
     $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
+    $('#commandRegion').hidden = commands.length === 0;
+    $('#commandGrid').innerHTML = commands.map((command) => `<article class="command-card"><strong>${escapeHtml(command.trigger)}</strong><span>${escapeHtml(String(command.permission).toUpperCase())}${command.allowSharedChat ? ' · SHARED CHAT' : ''}</span>${command.aliases.length ? `<small>Also ${escapeHtml(command.aliases.join(' · '))}</small>` : ''}</article>`).join('');
     renderGoal(goalVisible);
     renderNowPlaying(nowPlayingVisible);
     renderSchedule(scheduleVisible);
@@ -266,6 +269,7 @@
     state.alerts = body.items;
     if (state.placementAlertId && !state.alerts.some((alert) => alert.id === state.placementAlertId)) cancelPlacement();
     state.counters = Array.isArray(body.counters) ? body.counters : [];
+    state.commands = Array.isArray(body.commands) ? body.commands : [];
     state.goal = body.goal && typeof body.goal === 'object' ? body.goal : null;
     state.nowPlaying = body.nowPlaying && typeof body.nowPlaying === 'object' ? body.nowPlaying : null;
     state.schedule = body.schedule && typeof body.schedule === 'object' ? body.schedule : null;
@@ -551,6 +555,7 @@
       startedAt: new Date().toISOString()
     } : null;
     state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', label: 'Ship Restarts', value: 7 }] : [];
+    state.commands = configuration.mockMode ? [{ trigger: '!commands', aliases: ['!help'], permission: 'everyone', allowSharedChat: true }, { trigger: '!roll', aliases: ['!dice'], permission: 'everyone', allowSharedChat: true }] : [];
     state.goal = configuration.mockMode ? { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subscribers', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' } : null;
     state.nowPlaying = configuration.mockMode ? { stationName: 'Storm Horizon Radio', state: 'online', artist: 'The Midnight', title: 'Synthetic', album: 'Endless Summer', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() } : null;
     state.schedule = configuration.mockMode ? { title: 'Signals From the Mainframe', startTime: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString() } : null;

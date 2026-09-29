@@ -196,7 +196,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
     startedAt: new Date().toISOString()
   };
   const checkedAt = new Date().toISOString();
-  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }], goal: { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 999, unit: 'subs', accent: '#a7ff5c' }, nowPlaying: { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt }, schedule: { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00Z' }, stream: { live: true, title: 'Building Tempest', category: 'Software and Game Development', startedAt: '2030-01-01T20:00:00Z', viewerCount: 42, checkedAt } } }));
+  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }], commands: [{ trigger: '!commands', aliases: ['!help'], permission: 'everyone', allowSharedChat: true }], goal: { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 999, unit: 'subs', accent: '#a7ff5c' }, nowPlaying: { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt }, schedule: { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00Z' }, stream: { live: true, title: 'Building Tempest', category: 'Software and Game Development', startedAt: '2030-01-01T20:00:00Z', viewerCount: 42, checkedAt } } }));
   const catalogDeadline = Date.now() + 2000;
   let published;
   while (Date.now() < catalogDeadline) {
@@ -206,6 +206,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
   }
   assert.equal(published.poll.totalVotes, 2);
   assert.deepEqual(published.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
+  assert.deepEqual(published.commands, [{ trigger: '!commands', aliases: ['!help'], permission: 'everyone', allowSharedChat: true }]);
   assert.deepEqual(published.goal, { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' });
   assert.deepEqual(published.nowPlaying, { stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: 'Track', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt });
   assert.deepEqual(published.schedule, { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' });
