@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
+import { readBoundedResponseBody } from './bounded-response';
 
 export interface TempestEmoteWallSettings {
   schemaVersion: 1;
@@ -394,11 +395,10 @@ export class TempestEmoteWall {
     if (!emote) return false;
     const source = new URL(emote.sourceUrl);
     if (source.protocol !== 'https:' || !mediaHosts.has(source.hostname)) return false;
-    const fetched = await this.fetchWithLimit(source.href, mediaHosts, providerResponseLimit);
-    const contentType = String(fetched.headers.get('content-type') || '').split(';')[0].toLowerCase();
+    const fetched = await this.fetchBufferWithLimit(source.href, mediaHosts, providerResponseLimit);
+    const contentType = fetched.contentType;
     if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'].includes(contentType)) throw new Error(`${emote.provider} returned unsupported media.`);
-    const bytes = Buffer.from(await fetched.arrayBuffer());
-    if (bytes.length > providerResponseLimit) throw new Error(`${emote.provider} media exceeded the size limit.`);
+    const bytes = fetched.bytes;
     this.cacheMedia(id, bytes, contentType);
     response.statusCode = 200;
     response.setHeader('Content-Type', contentType);
@@ -494,10 +494,8 @@ export class TempestEmoteWall {
     const parsed: ProviderEmote[] = [];
     for (const endpoint of endpoints[id]) {
       try {
-        const response = await this.fetchWithLimit(endpoint, new Set(providerHosts[id]), providerResponseLimit);
-        const bytes = Buffer.from(await response.arrayBuffer());
-        if (bytes.length > providerResponseLimit) throw new Error(`${id} catalog exceeded the size limit.`);
-        const payload = JSON.parse(bytes.toString('utf8')) as unknown;
+        const response = await this.fetchBufferWithLimit(endpoint, new Set(providerHosts[id]), providerResponseLimit);
+        const payload = JSON.parse(response.bytes.toString('utf8')) as unknown;
         parsed.push(...(id === 'seventv' ? parseSevenTv(payload) : id === 'bttv' ? parseBttv(payload) : parseFfz(payload)));
       } catch (error) {
         if (endpoint === endpoints[id][0]) throw error;
@@ -506,16 +504,15 @@ export class TempestEmoteWall {
     return parsed;
   }
 
-  private async fetchWithLimit(url: string, hosts: Set<string>, maximumBytes: number): Promise<Response> {
+  private async fetchBufferWithLimit(url: string, hosts: Set<string>, maximumBytes: number): Promise<{ bytes: Buffer; contentType: string }> {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' || !hosts.has(parsed.hostname)) throw new Error('Provider URL was rejected.');
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 15000); timeout.unref?.();
     try {
       const response = await this.fetchImplementation(parsed.href, { signal: controller.signal, redirect: 'error', headers: { Accept: 'application/json,image/*' } });
       if (!response.ok) throw new Error(`Provider request failed (${response.status}).`);
-      const contentLength = Number(response.headers.get('content-length') || 0);
-      if (contentLength > maximumBytes) throw new Error('Provider response exceeded the size limit.');
-      return response;
+      const bytes = await readBoundedResponseBody(response, maximumBytes);
+      return { bytes, contentType: String(response.headers.get('content-type') || '').split(';')[0].toLowerCase() };
     } finally { clearTimeout(timeout); }
   }
 

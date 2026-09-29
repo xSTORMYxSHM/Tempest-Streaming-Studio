@@ -67,6 +67,7 @@
 - Suspended renderer polling while Studio is minimized and refreshes current state immediately when the window becomes visible again.
 - Removed alert history and media diagnostics from the fast polling path unless Activity & Diagnostics is open, and cached alert media availability checks for 30 seconds.
 - Stopped the Emote Wall animation loop whenever no emotes are active, the overlay is disabled, or its browser source is hidden.
+- Kept the third-party emote provider timeout active through body download and enforced the 4 MB catalog/media ceiling while streaming, preventing stalled or oversized provider bodies from retaining the Bridge or allocating without bound.
 
 ## 1.4.1 — Platform-centered navigation
 
