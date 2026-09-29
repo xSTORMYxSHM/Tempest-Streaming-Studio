@@ -14,6 +14,7 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - During an active Studio poll, the free Twitch Extension uses Twitch's signed numeric user identity to enforce one vote per account across Extension and Twitch chat. Voter identifiers and individual choices remain in memory only for the current poll; the public catalog contains the question and aggregate totals, and clearing the poll discards its voter map.
 - Free Extension 3D Dice requests carry the Twitch-signed viewer identity and selected public die preset through the hosted relay. Studio retains only short-lived in-memory cooldown timestamps and session roll history; the hosted service does not generate or store dice results.
 - Enabled Studio counter labels, command names, and aggregate values may be published in the free Extension catalog. No per-viewer counter history or counter mutation capability is published.
+- The active stream goal's title, type, current and target values, unit, and display color may be published in the free Extension catalog. Local goal previews are excluded, and the public service exposes no goal mutation capability.
 - Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 
 ## Public Twitch Extension service

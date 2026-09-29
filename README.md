@@ -37,6 +37,8 @@ The free Extension also publishes Studio's enabled 3D Dice utility as a compact 
 
 Enabled Chatbot counters are published to the free Extension as read-only live totals. A command such as `!death` or an operator/interaction adjustment updates the card immediately, while all counter changes continue to pass through Studio rather than a public viewer endpoint.
 
+The active Twitch-native or Studio-managed stream goal is also published as a read-only progress card in the free Extension. Studio remains the source of truth, sends updates as they happen, and never publishes its local goal preview.
+
 The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
 
 The **Go Live** page coordinates that Twitch Dual Format output with a separate Kick horizontal output. Broadcast encrypts the Kick stream key with Windows Data Protection, shares the already-running horizontal encoder, applies the OBS reconnect policy, and reports each destination independently. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, Kick-only recovery/stop, emergency stop, and a session-only live-operations timeline without retaining or displaying the key. See [docs/TWITCH_KICK_SIMULCAST.md](docs/TWITCH_KICK_SIMULCAST.md).

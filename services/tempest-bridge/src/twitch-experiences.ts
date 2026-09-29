@@ -19,6 +19,16 @@ export interface TempestStudioGoal {
   unit: string;
 }
 
+export interface TempestPublicGoal {
+  source: TempestGoalSource;
+  kind: TempestStudioGoalKind;
+  title: string;
+  currentAmount: number;
+  targetAmount: number;
+  unit: string;
+  accent: string;
+}
+
 export interface TempestTwitchExperienceDesign {
   preset: TempestTwitchExperiencePreset;
   mediaUri: string;
@@ -246,7 +256,7 @@ export class TempestTwitchExperiences {
   private goalTimer?: NodeJS.Timeout;
   private readonly documentPath: string;
 
-  constructor(private readonly dataDirectory: string) { this.documentPath = path.join(dataDirectory, 'twitch-experiences.json'); }
+  constructor(private readonly dataDirectory: string, private readonly onGoalChanged?: () => void) { this.documentPath = path.join(dataDirectory, 'twitch-experiences.json'); }
 
   async initialize(): Promise<void> {
     try { this.settings = validate(JSON.parse(await readFile(this.documentPath, 'utf8')) as Partial<TempestTwitchExperienceSettings>); }
@@ -285,11 +295,12 @@ export class TempestTwitchExperiences {
       this.state.goal = { ...event.payload, occurredAt: event.occurredAt };
       clearTimeout(this.goalTimer);
       if (event.payload.phase === 'end') {
-        this.goalTimer = setTimeout(() => { delete this.state.goal; this.broadcastState(); }, 12000);
+        this.goalTimer = setTimeout(() => { delete this.state.goal; this.broadcastState(); this.onGoalChanged?.(); }, 12000);
         this.goalTimer.unref?.();
       }
     } else return;
     this.broadcastState();
+    if (event.topic === 'channel.goal.updated') this.onGoalChanged?.();
   }
 
   preview(kind: TempestTwitchExperienceKind): void {
@@ -319,6 +330,7 @@ export class TempestTwitchExperiences {
     if (!this.settings.enabled) this.clear();
     await this.persist();
     this.broadcast('settings', this.settings);
+    this.onGoalChanged?.();
     return structuredClone(this.settings);
   }
 
@@ -345,6 +357,30 @@ export class TempestTwitchExperiences {
     clearTimeout(this.goalTimer);
     this.state = {};
     this.broadcastState();
+    this.onGoalChanged?.();
+  }
+
+  publicGoal(): TempestPublicGoal | undefined {
+    if (!this.settings.enabled || !this.settings.goalOverlayEnabled) return undefined;
+    if (this.settings.goalSource === 'studio') {
+      const goal = this.settings.studioGoal;
+      if (!goal.active) return undefined;
+      return { source: 'studio', kind: goal.kind, title: goal.title, currentAmount: goal.currentAmount, targetAmount: goal.targetAmount, unit: goal.unit, accent: this.settings.goalAccent };
+    }
+    const goal = this.state.goal;
+    if (!goal || goal.preview === true) return undefined;
+    const currentAmount = Number(goal.currentAmount);
+    const targetAmount = Number(goal.targetAmount);
+    if (!Number.isFinite(currentAmount) || currentAmount < 0 || !Number.isFinite(targetAmount) || targetAmount <= 0) return undefined;
+    const rawKind = String(goal.type || goal.kind || '').toLowerCase();
+    const kind: TempestStudioGoalKind = rawKind.includes('subscr') ? 'subscriptions'
+      : rawKind.includes('follow') ? 'followers'
+        : rawKind.includes('bit') ? 'bits'
+          : rawKind.includes('donat') ? 'donations'
+            : 'custom';
+    const title = String(goal.description || goal.title || 'Stream Goal').trim().slice(0, 100) || 'Stream Goal';
+    const unit = String(goal.unit || '').trim().slice(0, 24);
+    return { source: 'twitch', kind, title, currentAmount, targetAmount, unit, accent: this.settings.goalAccent };
   }
 
   status(url: string): Record<string, unknown> {

@@ -41,6 +41,16 @@ export interface ExtensionRelayCounter {
   value: number;
 }
 
+export interface ExtensionRelayGoal {
+  source: 'twitch' | 'studio';
+  kind: 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
+  title: string;
+  currentAmount: number;
+  targetAmount: number;
+  unit: string;
+  accent: string;
+}
+
 export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEdition']): 'sound-alert' | 'interaction' {
   return edition === 'bits' ? 'interaction' : 'sound-alert';
 }
@@ -69,6 +79,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   }>;
   poll?(): ExtensionRelayPoll | undefined;
   counters?(): ExtensionRelayCounter[];
+  goal?(): ExtensionRelayGoal | undefined;
   onStatus?(status: ExtensionRelayStatus): void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -201,7 +212,8 @@ export class TempestExtensionRelayClient {
     try {
       const poll = this.options.extensionEdition === 'bits' ? undefined : this.options.poll?.();
       const counters = this.options.extensionEdition === 'bits' ? [] : this.options.counters?.() || [];
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}) };
+      const goal = this.options.extensionEdition === 'bits' ? undefined : this.options.goal?.();
+      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(goal ? { goal } : {}) };
       const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
       if (!force && payload === this.lastCatalogPayload) return;
       this.lastCatalogPayload = payload;

@@ -511,7 +511,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await chatOverlay.initialize();
   const emoteWall = new TempestEmoteWall(options.dataDirectory, options.emoteProviderFetchImplementation);
   await emoteWall.initialize();
-  const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory);
+  const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory, () => extensionRelay?.syncCatalog());
   await twitchExperiences.initialize();
   const discordVoiceOverlay = new TempestDiscordVoiceOverlay(options.dataDirectory);
   await discordVoiceOverlay.initialize();
@@ -2077,6 +2077,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         };
       },
       counters: () => chatbot.publicCounters(),
+      goal: () => twitchExperiences.publicGoal(),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

@@ -39,6 +39,17 @@ export interface PublicExtensionCounter {
   value: number;
 }
 
+export interface PublicExtensionGoal {
+  source: 'twitch' | 'studio';
+  kind: 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
+  title: string;
+  currentAmount: number;
+  targetAmount: number;
+  percentage: number;
+  unit: string;
+  accent: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -69,6 +80,7 @@ export interface PublicExtensionCatalog {
   items: PublicExtensionCatalogItem[];
   poll?: PublicExtensionPoll;
   counters?: PublicExtensionCounter[];
+  goal?: PublicExtensionGoal;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

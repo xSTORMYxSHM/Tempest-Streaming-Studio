@@ -56,6 +56,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
     catalog: () => [{ id: 'tempest.storm-pulse', name: 'Storm Pulse', durationMs: 8000, accent: '#54F2EB', glyph: 'SP', kind: 'interaction' }],
     poll: () => ({ id: 'poll-1234567890123456', state: 'active', question: 'Choose one', options: [{ number: 1, label: 'One', votes: 2, percentage: 100 }, { number: 2, label: 'Two', votes: 0, percentage: 0 }], totalVotes: 2, startedAt: new Date().toISOString() }),
     counters: () => [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }],
+    goal: () => ({ source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' }),
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
       handled = value;
@@ -77,5 +78,6 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   assert.equal(catalogSync.items[0].id, 'tempest.storm-pulse');
   assert.equal(catalogSync.poll.question, 'Choose one');
   assert.deepEqual(catalogSync.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
+  assert.equal(catalogSync.goal.title, 'Road to 50');
   assert.equal(relay.status().state, 'connected');
 });

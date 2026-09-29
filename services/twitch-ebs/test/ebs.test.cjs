@@ -146,7 +146,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
     options: [{ number: 1, label: 'Game One', votes: 2, percentage: 1 }, { number: 2, label: 'Game Two', votes: 0, percentage: 99 }],
     startedAt: new Date().toISOString()
   };
-  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }] } }));
+  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll, counters: [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }], goal: { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 999, unit: 'subs', accent: '#a7ff5c' } } }));
   const catalogDeadline = Date.now() + 2000;
   let published;
   while (Date.now() < catalogDeadline) {
@@ -156,6 +156,7 @@ test('publishes a free Extension poll and records one identity-linked viewer vot
   }
   assert.equal(published.poll.totalVotes, 2);
   assert.deepEqual(published.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
+  assert.deepEqual(published.goal, { source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' });
   assert.deepEqual(published.poll.options.map((option) => option.percentage), [100, 0]);
 
   let relayed;
@@ -235,6 +236,28 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.ok(diceCatalog.items.some((item) => item.id === 'tempest.dice.custom' && item.kind === 'interaction'));
+  const goalEvent = {
+    schemaVersion: 1,
+    id: `123456:${randomUUID()}`,
+    topic: 'channel.goal.updated',
+    occurredAt: new Date().toISOString(),
+    source: 'twitch',
+    channel: { id: '123456' },
+    payload: { phase: 'progress', goalId: 'goal-e2e', type: 'subscription_count', description: 'Crew Goal', currentAmount: 18, targetAmount: 25, unit: 'subs' }
+  };
+  const goalIngest = await fetch(`${bridge.baseUrl}/v1/integrations/twitch/events`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(goalEvent)
+  });
+  assert.equal(goalIngest.status, 202);
+  const goalDeadline = Date.now() + 3000;
+  let publishedGoal;
+  while (Date.now() < goalDeadline) {
+    const catalog = await fetch(`${ebs.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((catalogResponse) => catalogResponse.json());
+    publishedGoal = catalog.goal;
+    if (publishedGoal?.title === 'Crew Goal') break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.deepEqual(publishedGoal, { source: 'twitch', kind: 'subscriptions', title: 'Crew Goal', currentAmount: 18, targetAmount: 25, percentage: 72, unit: 'subs', accent: '#A7FF5C' });
   const registeredDice = await fetch(`${bridge.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((diceResponse) => diceResponse.json());
   await fetch(`${bridge.baseUrl}/dice-overlay/client-status`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registeredDice.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })

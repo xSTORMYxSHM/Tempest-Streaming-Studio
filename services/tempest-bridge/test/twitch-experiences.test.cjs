@@ -10,7 +10,8 @@ const { TempestTwitchExperiences } = require('../dist/twitch-experiences');
 
 test('tracks Hype Train, Raid Portal, and goal overlay state independently', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-experiences-'));
-  const experiences = new TempestTwitchExperiences(dataDirectory);
+  let publicGoalChanges = 0;
+  const experiences = new TempestTwitchExperiences(dataDirectory, () => { publicGoalChanges += 1; });
   await experiences.initialize();
   const event = (id, topic, payload) => ({ schemaVersion: 1, id, topic, occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel' }, payload });
   experiences.ingest(event('hype', 'channel.hype-train.updated', { phase: 'progress', level: 2, progress: 400, goal: 1000, total: 1400 }));
@@ -20,6 +21,8 @@ test('tracks Hype Train, Raid Portal, and goal overlay state independently', asy
   assert.deepEqual(status.active, { hypeTrain: true, raidPortal: true, goalOverlay: true });
   assert.equal(status.experienceState.raid.fromBroadcasterName, 'Raid Leader');
   assert.equal(status.settings.raidPortalDesign.preset, 'mainframe-breach');
+  assert.deepEqual(experiences.publicGoal(), { source: 'twitch', kind: 'custom', title: 'Signal Goal', currentAmount: 7, targetAmount: 10, unit: '', accent: '#A7FF5C' });
+  assert.equal(publicGoalChanges, 1);
   const mediaPath = path.join(dataDirectory, 'raid.gif');
   await writeFile(mediaPath, Buffer.from('GIF89a', 'ascii'));
   await experiences.update({ raidPortalEnabled: false, hypeAccent: '#112233', raidPortalDesign: { preset: 'tempest', mediaUri: pathToFileURL(mediaPath).href, mediaLayer: 'foreground', mediaFit: 'contain', mediaOpacity: 0.8, customHtml: '<b>{broadcaster}</b>', customCss: '#raid{filter:none}', customJavaScript: 'elements.section.dataset.custom = variables.broadcaster;' } });
@@ -39,6 +42,7 @@ test('tracks Hype Train, Raid Portal, and goal overlay state independently', asy
   status = experiences.status('local');
   assert.equal(status.active.goalOverlay, true);
   assert.deepEqual(status.settings.studioGoal, { active: true, kind: 'subscriptions', title: 'Road to 50 Subs', currentAmount: 31, targetAmount: 50, unit: 'subs' });
+  assert.deepEqual(experiences.publicGoal(), { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subs', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' });
   assert.equal(status.experienceState.goal, undefined, 'Studio-managed goals replace stale Twitch goal state');
   experiences.ingest(event('ignored-goal', 'channel.goal.updated', { phase: 'progress', description: 'Twitch Goal', currentAmount: 1, targetAmount: 2 }));
   assert.equal(experiences.status('local').experienceState.goal, undefined, 'Twitch goal events do not replace the selected Studio-managed goal');
@@ -60,6 +64,7 @@ test('tracks Hype Train, Raid Portal, and goal overlay state independently', asy
   assert.equal(experiences.status('local').active.hypeTrain, true);
   experiences.preview('goal-overlay');
   assert.equal(experiences.status('local').experienceState.goal.preview, true);
+  assert.equal(experiences.publicGoal().title, 'Road to 50 Subs', 'local preview state never replaces the public Studio goal');
   experiences.close();
   const restored = new TempestTwitchExperiences(dataDirectory);
   await restored.initialize();

@@ -11,6 +11,7 @@ import {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
   PublicExtensionCounter,
+  PublicExtensionGoal,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -25,6 +26,7 @@ export {
 export type {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
+  PublicExtensionGoal,
   PublicExtensionPanelDesign,
   PublicExtensionPoll,
   TwitchEbsInstallation,
@@ -210,7 +212,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; goal?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -295,7 +297,24 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
       return { id, command, label, value: counterValue };
     });
   }
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}) };
+  let goal: PublicExtensionGoal | undefined;
+  if (source.goal !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Goals are published only to the free Extension edition.');
+    if (!source.goal || typeof source.goal !== 'object' || Array.isArray(source.goal)) throw new Error('Catalog goal is invalid.');
+    const candidate = source.goal as Record<string, unknown>;
+    const goalSource = candidate.source === 'twitch' ? 'twitch' : candidate.source === 'studio' ? 'studio' : '';
+    const kind = ['subscriptions', 'followers', 'bits', 'donations', 'custom'].includes(String(candidate.kind)) ? candidate.kind as PublicExtensionGoal['kind'] : '';
+    const title = String(candidate.title || '').trim();
+    const currentAmount = Number(candidate.currentAmount);
+    const targetAmount = Number(candidate.targetAmount);
+    const unit = String(candidate.unit || '').trim();
+    const accent = String(candidate.accent || '').toUpperCase();
+    if (!goalSource || !kind || !title || title.length > 100 || /[\r\n\0]/.test(title)) throw new Error('Catalog goal identity is invalid.');
+    if (!Number.isFinite(currentAmount) || currentAmount < 0 || currentAmount > 1_000_000_000 || !Number.isFinite(targetAmount) || targetAmount <= 0 || targetAmount > 1_000_000_000) throw new Error('Catalog goal progress is invalid.');
+    if (unit.length > 24 || /[\r\n\0]/.test(unit) || !/^#[0-9A-F]{6}$/.test(accent)) throw new Error('Catalog goal display data is invalid.');
+    goal = { source: goalSource, kind, title, currentAmount, targetAmount, percentage: Math.round(Math.min(100, currentAmount / targetAmount * 100) * 10) / 10, unit, accent };
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(goal ? { goal } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {

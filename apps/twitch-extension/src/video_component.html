@@ -31,6 +31,14 @@
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
+        <div id="goalRegion" class="catalog-section goal-section" hidden>
+          <div class="section-heading"><span>STREAM GOAL</span><i id="goalKind">CUSTOM · STUDIO</i></div>
+          <article class="goal-card">
+            <div class="goal-copy"><h2 id="goalTitle"></h2><strong id="goalPercentage">0%</strong></div>
+            <span class="goal-meter" aria-hidden="true"><i id="goalBar"></i></span>
+            <footer><span id="goalProgress">0</span><span id="goalTarget">0</span></footer>
+          </article>
+        </div>
         <div id="pollRegion" class="catalog-section poll-section" hidden>
           <div class="section-heading"><span>LIVE CHAT POLL</span><i id="pollState">VOTING OPEN</i></div>
           <article class="poll-card">

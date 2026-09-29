@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], poll: null, counters: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], goal: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -116,6 +116,20 @@
         : `Each linked Twitch viewer gets one vote · ${poll.totalVotes} recorded.`;
   }
 
+  function renderGoal(visible) {
+    const goal = visible ? state.goal : null;
+    const region = $('#goalRegion');
+    region.hidden = !goal;
+    if (!goal) return;
+    region.style.setProperty('--goal-accent', goal.accent);
+    $('#goalKind').textContent = `${String(goal.kind || 'custom').replaceAll('-', ' ')} · ${String(goal.source || 'studio').toUpperCase()}`;
+    $('#goalTitle').textContent = goal.title;
+    $('#goalProgress').textContent = `${Number(goal.currentAmount).toLocaleString()}${goal.unit ? ` ${goal.unit}` : ''}`;
+    $('#goalTarget').textContent = `${Number(goal.targetAmount).toLocaleString()}${goal.unit ? ` ${goal.unit}` : ''}`;
+    $('#goalPercentage').textContent = `${Number(goal.percentage).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+    $('#goalBar').style.width = `${Math.max(0, Math.min(100, Number(goal.percentage) || 0))}%`;
+  }
+
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
@@ -125,7 +139,8 @@
     const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
     const counters = state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
-    const visibleCount = dice.length + featured.length + performances.length + counters.length;
+    const goalVisible = state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
+    const visibleCount = dice.length + featured.length + performances.length + counters.length + (goalVisible ? 1 : 0);
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -140,6 +155,7 @@
     $('#rollCustomDice').disabled = state.busy || Boolean(customDice && remaining(customDice.id));
     $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
+    renderGoal(goalVisible);
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
@@ -177,6 +193,7 @@
     }
     state.alerts = body.items;
     state.counters = Array.isArray(body.counters) ? body.counters : [];
+    state.goal = body.goal && typeof body.goal === 'object' ? body.goal : null;
     const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
     state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
       ? state.poll
@@ -389,6 +406,7 @@
       startedAt: new Date().toISOString()
     } : null;
     state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', label: 'Ship Restarts', value: 7 }] : [];
+    state.goal = configuration.mockMode ? { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subscribers', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' } : null;
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

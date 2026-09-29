@@ -29,6 +29,10 @@ When Studio's 3D Dice overlay is enabled, the free Panel and Video Component pub
 
 Up to 12 enabled Chatbot counter commands appear as read-only live cards with the streamer-defined label, total, and chat command. Chat increments, Studio adjustments, and counter-linked viewer interactions publish updated totals immediately. The Extension has no route that can alter a counter; it only reads the current aggregate catalog value. Disabling or deleting a counter command removes its card, and counters are not published to the Bits edition.
 
+## Free Extension stream goal
+
+When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-managed goal appears as a compact read-only progress card in the free Panel and Video Component. The title, goal type, current and target values, unit, color, and server-recomputed percentage update through the existing Studio relay. Local overlay previews are never published, the Extension cannot change goal progress, and goals are not included in the Bits edition.
+
 ## Run the Local Test
 
 The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.
