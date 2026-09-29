@@ -115,6 +115,8 @@ The hosted EBS now:
 5. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection. Studio repeats the access decision before dispatch.
 6. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
 
+When a visible interaction is restricted to named viewers or assigned creators, an anonymous viewer sees **Share Twitch Identity** instead of an inert locked button. Selecting it opens Twitch's native identity-sharing consent. The hosted service recalculates eligibility from the newly signed identity before accepting any trigger; a denied or hidden interaction does not become available merely because identity was shared.
+
 The public Extension Client ID belongs in front-end/EBS configuration. The shared secret belongs only in the EBS secret store. See [TWITCH_EBS.md](TWITCH_EBS.md) for deployment and Studio connection instructions.
 
 ## Build hosted assets

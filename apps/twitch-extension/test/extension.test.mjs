@@ -112,6 +112,9 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /If-None-Match/);
   assert.match(viewerScript, /response\.status === 304/);
   assert.match(viewerScript, /eligibility\?\.allowed/);
+  assert.match(viewerScript, /identityRequired/);
+  assert.match(viewerScript, /SHARE TWITCH IDENTITY/);
+  assert.match(viewerScript, /requestViewerIdentity/);
   assert.match(viewerScript, /LOCKED/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });

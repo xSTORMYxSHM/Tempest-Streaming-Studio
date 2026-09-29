@@ -177,6 +177,7 @@
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
     const permitted = (alert) => alert.eligibility?.allowed !== false;
+    const identityRequired = (alert) => alert.eligibility?.code === 'identity_required';
     const accessLabel = (alert) => String(alert.eligibility?.reason || 'LOCKED').toUpperCase();
     const dice = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const customDice = dice.find((entry) => entry.id === 'tempest.dice.custom');
@@ -196,12 +197,12 @@
     $('#diceRegion').hidden = dice.length === 0;
     $('#diceGrid').innerHTML = dicePresets.map((entry) => {
       const wait = remaining(entry.id);
-      return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait || !permitted(entry) ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${!permitted(entry) ? escapeHtml(accessLabel(entry)) : wait ? seconds(wait) : 'ROLL'}</small></button>`;
+      return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait || (!permitted(entry) && !identityRequired(entry)) ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${identityRequired(entry) ? 'SHARE ID' : !permitted(entry) ? escapeHtml(accessLabel(entry)) : wait ? seconds(wait) : 'ROLL'}</small></button>`;
     }).join('');
     $('#diceCustomForm').hidden = !customDice;
-    $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || !permitted(customDice)));
-    $('#rollCustomDice').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || !permitted(customDice)));
-    $('#rollCustomDice').textContent = customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
+    $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || (!permitted(customDice) && !identityRequired(customDice))));
+    $('#rollCustomDice').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || (!permitted(customDice) && !identityRequired(customDice))));
+    $('#rollCustomDice').textContent = customDice && identityRequired(customDice) ? 'SHARE ID' : customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
     $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
     renderGoal(goalVisible);
@@ -211,15 +212,15 @@
     $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
-      return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || !permitted(alert) ? 'disabled' : ''}>
-        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : alert.placementMode === 'viewer' ? 'READY · CHOOSE POSITION' : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
+      return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
+        <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${identityRequired(alert) ? 'SHARE TWITCH IDENTITY' : !permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : alert.placementMode === 'viewer' ? 'READY · CHOOSE POSITION' : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
       </button>`;
     }).join('');
     renderPoll();
     $('#alertGrid').innerHTML = performances.map((alert) => {
       const wait = remaining(alert.id);
-      return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || !permitted(alert) ? 'disabled' : ''}>
-        <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${!permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
+      return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
+        <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${identityRequired(alert) ? 'SHARE TWITCH IDENTITY' : !permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
       </button>`;
     }).join('');
   }
@@ -270,6 +271,15 @@
     toastTimer = setTimeout(() => element.classList.remove('visible'), 3500);
   }
 
+  function requestViewerIdentity(message) {
+    if (window.Twitch?.ext?.actions?.requestIdShare) {
+      toast(message, true);
+      window.Twitch.ext.actions.requestIdShare();
+      return;
+    }
+    toast('Twitch identity sharing is unavailable in this surface.', true);
+  }
+
   async function requestAlert(alert, payload = {}) {
     const configuration = state.configuration;
     if (!configuration.mockMode && (!state.auth?.token || !configuration.ebsBaseUrl)) throw new Error('The Tempest interaction relay is not configured.');
@@ -299,7 +309,13 @@
 
   async function trigger(id, payload = {}) {
     const alert = state.alerts.find((entry) => entry.id === id);
-    if (!alert || state.busy || remaining(id) || alert.eligibility?.allowed === false) return;
+    if (!alert || state.busy || remaining(id)) return;
+    if (alert.eligibility?.allowed === false) {
+      if (alert.eligibility.code === 'identity_required') {
+        requestViewerIdentity('Share your Twitch identity to use this channel’s restricted interactions.');
+      }
+      return;
+    }
     if (alert.placementMode === 'viewer' && !payload.placement) return beginPlacement(id);
     const diceAction = id.startsWith('tempest.dice.');
     state.busy = true;
@@ -317,10 +333,8 @@
         if (diceAction) state.alerts.filter((entry) => entry.id.startsWith('tempest.dice.')).forEach((entry) => cooldowns.set(entry.id, cooldownUntil));
         else cooldowns.set(id, cooldownUntil);
       }
-      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) {
-        toast('Share your Twitch identity to use this channel’s restricted interactions.', true);
-        window.Twitch.ext.actions.requestIdShare();
-      } else toast(error.message, true);
+      if (error.code === 'identity_required') requestViewerIdentity('Share your Twitch identity to use this channel’s restricted interactions.');
+      else toast(error.message, true);
     } finally {
       state.busy = false;
       render();
@@ -373,10 +387,8 @@
       if (body.accepted || body.duplicate) sessionStorage.setItem(pollVoteKey(poll.id), String(recordedOption));
       toast(body.duplicate ? `You already voted for option ${recordedOption}.` : `Vote ${recordedOption} recorded.`);
     } catch (error) {
-      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) {
-        toast('Share your Twitch identity to cast one verified vote.', true);
-        window.Twitch.ext.actions.requestIdShare();
-      } else toast(error.message, true);
+      if (error.code === 'identity_required') requestViewerIdentity('Share your Twitch identity to cast one verified vote.');
+      else toast(error.message, true);
     } finally {
       state.pollBusy = false;
       renderPoll();
