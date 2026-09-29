@@ -5,7 +5,7 @@ const { mkdtemp } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const WebSocket = require('ws');
-const { MemoryTwitchEbsInstallationStore, SlidingWindowLimiter, startTwitchEbs } = require('../dist');
+const { MemoryTwitchEbsInstallationStore, SlidingWindowLimiter, maximumStudioWebSocketPayloadBytes, startTwitchEbs } = require('../dist');
 const { startTempestBridge } = require('@tempest/bridge');
 
 function base64url(value) {
@@ -56,6 +56,42 @@ test('bounds and expires dormant rate-limit identities', () => {
   assert.ok(limiter.consume('viewer-d', 1, 1_003) > 0);
   assert.equal(limiter.consume('viewer-new', 1, 61_004), 0);
   assert.equal(limiter.entryCount, 1);
+});
+
+test('accepts a bounded access-controlled catalog larger than the legacy 64 KiB relay ceiling', async (context) => {
+  const secret = randomBytes(32);
+  const relayToken = randomBytes(32).toString('hex');
+  const runtime = await startTwitchEbs({
+    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [secret.toString('base64')], relayToken,
+    allowedChannelIds: ['123456'], logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+  const studio = await connectStudio(runtime, relayToken);
+  context.after(() => studio.close());
+  const viewerIds = Array.from({ length: 100 }, (_, index) => String(1_000_000 + index));
+  const items = Array.from({ length: 100 }, (_, index) => ({
+    id: `sound-alert.access-${index}`,
+    name: `Access-controlled alert ${index}`,
+    durationMs: 5_000,
+    accent: '#54F2EB',
+    glyph: 'AC',
+    kind: 'sound-alert',
+    access: { mode: 'specific-viewers', allowedViewerIds: viewerIds, blockedViewerIds: viewerIds.slice(50), hideWhenLocked: false }
+  }));
+  const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, items } });
+  assert.ok(Buffer.byteLength(payload) > 64 * 1024);
+  assert.ok(Buffer.byteLength(payload) < maximumStudioWebSocketPayloadBytes);
+  studio.send(payload);
+
+  const deadline = Date.now() + 2_000;
+  let catalog;
+  while (Date.now() < deadline) {
+    catalog = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: viewerIds[0] }) } }).then((response) => response.json());
+    if (catalog.items?.length === items.length) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(catalog.items.length, items.length);
+  assert.equal(JSON.stringify(catalog).includes(viewerIds[1]), false, 'public catalogs still redact every access-list identity');
 });
 
 function connectStudio(runtime, relayToken, channelId = '123456') {

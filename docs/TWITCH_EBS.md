@@ -75,6 +75,8 @@ The official Tempest Signal service accepts only authorizations issued by the bu
 
 Studio's Twitch page reports **EXTENSION RELAY: CONNECTED** when the EBS accepts the connection. The relay reconnects with bounded exponential backoff if the network or EBS restarts.
 
+Catalog synchronization uses an authenticated, 2 MiB-bounded WebSocket envelope. This accommodates the maximum validated interaction catalog and its per-viewer access lists while the service continues to cap the catalog at 200 items and each allow/block list at 100 numeric Twitch IDs. Viewer catalog responses never include those identity lists.
+
 ## Build and upload the Extension
 
 Build the viewer ZIP against the public EBS origin:

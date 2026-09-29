@@ -39,6 +39,11 @@ export type {
   TwitchEbsInstallationStore
 } from './installation-store';
 
+// A fully populated 200-item catalog can legitimately exceed 64 KiB when
+// access-controlled interactions carry bounded Twitch ID lists. The relay is
+// authenticated and validatePublicCatalog still caps every nested collection.
+export const maximumStudioWebSocketPayloadBytes = 2 * 1024 * 1024;
+
 export interface TwitchOAuthIdentity {
   clientId: string;
   userId: string;
@@ -588,7 +593,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const lastBitsViewerUse = new Map<string, number>();
   const maximumBitsStateEntries = 50_000;
   let lastBitsCooldownPrunedAt = 0;
-  const webSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumStudioWebSocketPayloadBytes });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
   const expireResults = (now = Date.now()): void => {
