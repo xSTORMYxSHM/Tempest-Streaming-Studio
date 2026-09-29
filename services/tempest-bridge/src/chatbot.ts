@@ -5,6 +5,17 @@ import { WebSocket } from 'ws';
 import type { TempestNormalizedChatEvent, TempestNormalizedTwitchEvent, TempestSoundAlertDefinition } from '@tempest/contracts';
 import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
 import { boundedFetch } from './bounded-fetch';
+import { readBoundedJsonResponse } from './bounded-response';
+
+const maximumProviderResponseBytes = 2 * 1024 * 1024;
+
+async function readProviderJson<T>(response: Response): Promise<T> {
+  return readBoundedJsonResponse<T>(response, maximumProviderResponseBytes);
+}
+
+async function readOptionalProviderJson<T extends object>(response: Response): Promise<Partial<T>> {
+  return readProviderJson<T>(response).catch(() => ({}));
+}
 
 export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as const;
 export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
@@ -1020,7 +1031,7 @@ export class TwitchChatbot {
     if (!this.options.credentialStore?.available) throw new Error('Secure operating-system credential storage is unavailable.');
     const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' ') });
     const response = await this.request('https://id.twitch.tv/oauth2/device', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string };
+    const result = await readProviderJson<{ device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string }>(response);
     if (!response.ok || !result.device_code || !result.user_code || !result.verification_uri) throw new Error(describeTwitchOAuthError(result.message, `Chatbot authorization failed with ${response.status}.`));
     const intervalSeconds = Math.max(1, Number(result.interval) || 5);
     this.pendingDevice = { deviceCode: result.device_code, userCode: result.user_code, verificationUri: result.verification_uri, expiresAt: Date.now() + Math.max(60, Number(result.expires_in) || 1800) * 1000, intervalSeconds, nextPollAt: 0 };
@@ -1043,7 +1054,7 @@ export class TwitchChatbot {
     pending.nextPollAt = Date.now() + pending.intervalSeconds * 1000;
     const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' '), device_code: pending.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response);
     if (!response.ok) {
       if (result.message === 'authorization_pending') return { pending: true, status: this.status(), retryAfterSeconds: pending.intervalSeconds };
       this.lastError = describeTwitchOAuthError(result.message, `Chatbot token exchange failed with ${response.status}.`);
@@ -1069,7 +1080,7 @@ export class TwitchChatbot {
       await this.refreshAuthorization();
       response = await this.request('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${this.tokens.accessToken}` } });
     }
-    const result = await response.json() as { client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string };
+    const result = await readProviderJson<{ client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string }>(response);
     if (!response.ok || !result.client_id || !result.login || !result.user_id) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token validation failed with ${response.status}.`));
     if (result.client_id !== this.clientId) throw new Error('Stored chatbot token belongs to a different Twitch client ID. Reconnect the bot account.');
     const scopes = Array.isArray(result.scopes) ? result.scopes : this.tokens.scopes;
@@ -1663,14 +1674,14 @@ export class TwitchChatbot {
           body: JSON.stringify({ data: { user_id: viewerId, duration: settings.timeoutSeconds, reason: `Tempest AutoMod: ${violation.reason}` } })
         });
         if (response.status !== 200) {
-          const result = await response.json().catch(() => ({})) as { message?: string };
+          const result = await readOptionalProviderJson<{ message?: string }>(response);
           throw new Error(result.message || `Twitch timeout failed with ${response.status}.`);
         }
       } else {
         const query = new URLSearchParams({ broadcaster_id: this.channel.channelId, moderator_id: this.identity.userId, message_id: messageId });
         const response = await this.request(`https://api.twitch.tv/helix/moderation/chat?${query}`, { method: 'DELETE', headers: this.twitchHeaders() });
         if (response.status !== 204) {
-          const result = await response.json().catch(() => ({})) as { message?: string };
+          const result = await readOptionalProviderJson<{ message?: string }>(response);
           throw new Error(result.message || `Twitch message deletion failed with ${response.status}.`);
         }
       }
@@ -1798,7 +1809,7 @@ export class TwitchChatbot {
       headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
       body: JSON.stringify({ broadcaster_id: this.channel.channelId, sender_id: this.identity.userId, message: message.slice(0, 500), ...(replyParentMessageId ? { reply_parent_message_id: replyParentMessageId } : {}) })
     });
-    const result = await response.json().catch(() => ({})) as { message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> };
+    const result = await readOptionalProviderJson<{ message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> }>(response);
     if (!response.ok || result.data?.[0]?.is_sent === false) throw new Error(result.data?.[0]?.drop_reason?.message || result.message || `Twitch chat send failed with ${response.status}.`);
   }
 
@@ -1855,7 +1866,7 @@ export class TwitchChatbot {
       const query = new URLSearchParams({ from_broadcaster_id: this.channel.channelId, to_broadcaster_id: entry.targetId, moderator_id: this.identity.userId });
       const response = await this.request(`https://api.twitch.tv/helix/chat/shoutouts?${query}`, { method: 'POST', headers: this.twitchHeaders() });
       if (response.status !== 204) {
-        const result = await response.json().catch(() => ({})) as { message?: string };
+        const result = await readOptionalProviderJson<{ message?: string }>(response);
         throw new Error(result.message || `Twitch shoutout failed with ${response.status}.`);
       }
       const now = Date.now();
@@ -1961,7 +1972,7 @@ export class TwitchChatbot {
     const query = new URLSearchParams();
     for (const login of missing) query.append('login', login);
     const response = await this.request(`https://api.twitch.tv/helix/users?${query}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string }>; message?: string };
+    const result = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string }>; message?: string }>(response);
     if (!response.ok) throw new Error(result.message || `Twitch user lookup failed with ${response.status}.`);
     for (const user of result.data || []) {
       const login = String(user.login || '').toLowerCase();
@@ -1978,7 +1989,7 @@ export class TwitchChatbot {
     return this.coalesceProviderRequest(`stream:${channelId}`, async () => {
       if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
       const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
-      const result = await response.json().catch(() => ({})) as { data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string };
+      const result = await readOptionalProviderJson<{ data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string }>(response);
       if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
       if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the streams request.');
       const stream = result.data?.[0];
@@ -1994,7 +2005,7 @@ export class TwitchChatbot {
     return this.coalesceProviderRequest(`channel:${channelId}`, async () => {
       if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
       const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
-      const result = await response.json().catch(() => ({})) as { data?: Array<{ title?: string; game_name?: string }>; message?: string };
+      const result = await readOptionalProviderJson<{ data?: Array<{ title?: string; game_name?: string }>; message?: string }>(response);
       if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
       if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the channel request.');
       const channel = result.data?.[0];
@@ -2015,7 +2026,7 @@ export class TwitchChatbot {
         this.scheduleCache = { fetchedAt: Date.now() };
         return this.scheduleCache;
       }
-      const result = await response.json().catch(() => ({})) as { data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string };
+      const result = await readOptionalProviderJson<{ data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string }>(response);
       if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
       const segment = result.data?.segments?.[0];
       this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
@@ -2049,11 +2060,11 @@ export class TwitchChatbot {
         headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
         signal: AbortSignal.timeout(5_000)
       });
-      const result = await response.json().catch(() => ({})) as {
+      const result = await readOptionalProviderJson<{
         is_online?: boolean;
         station?: { name?: string };
         now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
-      };
+      }>(response);
       if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
       if (this.configuration.nowPlayingProvider?.apiUrl !== provider.apiUrl) throw new Error('The Now Playing provider changed during the request.');
       const song = result.now_playing?.song;
@@ -2109,15 +2120,15 @@ export class TwitchChatbot {
         let forecastUrl = this.weatherForecastUrl;
         if (!forecastUrl) {
           const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
-          const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
+          const point = await readProviderJson<{ properties?: { forecastHourly?: string }; title?: string }>(pointResponse);
           if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
           forecastUrl = point.properties.forecastHourly;
         }
         const forecastResponse = await this.request(forecastUrl, { headers });
-        const forecast = await forecastResponse.json() as {
+        const forecast = await readProviderJson<{
           properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
           title?: string;
-        };
+        }>(forecastResponse);
         const period = forecast.properties?.periods?.[0];
         if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
         const current = this.configuration.weatherProvider;
@@ -2295,7 +2306,7 @@ export class TwitchChatbot {
       headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, version: '1', condition, transport: { method: 'websocket', session_id: sessionId } })
     });
-    const result = await response.json().catch(() => ({})) as { message?: string; error?: string };
+    const result = await readOptionalProviderJson<{ message?: string; error?: string }>(response);
     if (response.status !== 202) throw new Error(result.message || result.error || `${type} EventSub subscription failed with ${response.status}.`);
   }
 
@@ -2331,10 +2342,10 @@ export class TwitchChatbot {
   private async loadSharedChatSession(): Promise<void> {
     if (!this.tokens || !this.channel) return;
     const response = await this.request(`https://api.twitch.tv/helix/shared_chat/session?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as {
+    const result = await readOptionalProviderJson<{
       data?: Array<{ session_id?: string; host_broadcaster_id?: string; participants?: Array<{ broadcaster_id?: string }> }>;
       message?: string;
-    };
+    }>(response);
     if (!response.ok) throw new Error(result.message || `Shared Chat session lookup failed with ${response.status}.`);
     const session = result.data?.[0];
     if (!session?.session_id) {
@@ -2347,7 +2358,7 @@ export class TwitchChatbot {
     const identities = new Map<string, { login: string; displayName: string }>();
     if (participantIds.length) {
       const usersResponse = await this.request(`https://api.twitch.tv/helix/users?${participantIds.map((id) => `id=${encodeURIComponent(id)}`).join('&')}`, { headers: this.twitchHeaders() });
-      const users = await usersResponse.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string; display_name?: string }> };
+      const users = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string; display_name?: string }> }>(usersResponse);
       if (usersResponse.ok) for (const user of users.data || []) identities.set(String(user.id || ''), { login: String(user.login || ''), displayName: String(user.display_name || '') });
     }
     const participants = participantIds.map((userId) => ({ userId, login: identities.get(userId)?.login || '', displayName: identities.get(userId)?.displayName || '', host: userId === hostId }));
@@ -2397,7 +2408,7 @@ export class TwitchChatbot {
     this.oauthState = 'refreshing';
     const body = new URLSearchParams({ client_id: this.clientId, grant_type: 'refresh_token', refresh_token: this.tokens.refreshToken });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response);
     if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token refresh failed with ${response.status}.`));
     this.tokens = { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + Math.max(1, Number(result.expires_in) || 14400) * 1000).toISOString(), scopes: Array.isArray(result.scope) ? result.scope : this.tokens.scopes };
     await this.options.credentialStore?.save(this.tokens);
