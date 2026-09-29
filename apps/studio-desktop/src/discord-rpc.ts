@@ -121,6 +121,8 @@ export class TempestDiscordRpcClient {
   private guildName = '';
   private participantCount = 0;
   private speakingUsers = new Set<string>();
+  private channelRefreshPromise: Promise<void> | null = null;
+  private channelRefreshPending = false;
   private lastError = '';
   private phase: DiscordRpcStatus['state'] = 'disconnected';
   private readonly clientId: string;
@@ -188,7 +190,7 @@ export class TempestDiscordRpcClient {
       }
       await this.subscribe('VOICE_CHANNEL_SELECT', {});
       this.phase = 'connected';
-      await this.refreshSelectedChannel();
+      await this.refreshSelectedChannelCoalesced();
       return this.status();
     } catch (error) {
       const describedError = describeDiscordRpcFailure(error);
@@ -346,8 +348,8 @@ export class TempestDiscordRpcClient {
     if (evt === 'READY' || this.eventWaiters.has(evt)) {
       this.eventWaiters.set(evt, [data]);
     }
-    if (evt === 'VOICE_CHANNEL_SELECT') await this.refreshSelectedChannel();
-    else if (['VOICE_STATE_CREATE', 'VOICE_STATE_UPDATE', 'VOICE_STATE_DELETE'].includes(evt)) await this.refreshSelectedChannel();
+    if (evt === 'VOICE_CHANNEL_SELECT') await this.refreshSelectedChannelCoalesced();
+    else if (['VOICE_STATE_CREATE', 'VOICE_STATE_UPDATE', 'VOICE_STATE_DELETE'].includes(evt)) await this.refreshSelectedChannelCoalesced();
     else if (evt === 'SPEAKING_START' || evt === 'SPEAKING_STOP') {
       const userId = string((data as { user_id?: unknown } | undefined)?.user_id);
       if (userId) {
@@ -355,6 +357,22 @@ export class TempestDiscordRpcClient {
         await this.options.publishSpeaking(userId, evt === 'SPEAKING_START');
       }
     }
+  }
+
+  private async refreshSelectedChannelCoalesced(): Promise<void> {
+    if (this.channelRefreshPromise) {
+      this.channelRefreshPending = true;
+      return this.channelRefreshPromise;
+    }
+    const pending = (async () => {
+      do {
+        this.channelRefreshPending = false;
+        await this.refreshSelectedChannel();
+      } while (this.channelRefreshPending && this.socket);
+    })();
+    this.channelRefreshPromise = pending;
+    try { await pending; }
+    finally { if (this.channelRefreshPromise === pending) this.channelRefreshPromise = null; }
   }
 
   private async refreshSelectedChannel(): Promise<void> {
@@ -420,5 +438,6 @@ export class TempestDiscordRpcClient {
     this.pending.clear();
     this.eventWaiters.clear();
     this.speakingUsers.clear();
+    this.channelRefreshPending = false;
   }
 }

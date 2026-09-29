@@ -50,4 +50,6 @@ test('cleans up Discord READY polling and bounds queued dispatch state', () => {
   assert.match(source, /clearInterval\(poll\);\s*this\.eventWaiters\.delete\(evt\);\s*reject/);
   assert.match(source, /this\.eventWaiters\.set\(evt, \[data\]\)/);
   assert.match(source, /this\.eventWaiters\.clear\(\)/);
+  assert.match(source, /refreshSelectedChannelCoalesced/);
+  assert.match(source, /this\.channelRefreshPending = true/);
 });
