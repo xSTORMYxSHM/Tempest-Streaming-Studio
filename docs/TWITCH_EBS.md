@@ -98,3 +98,5 @@ Upload the ZIP on Twitch's **Files** tab and move the version to Hosted Test. Th
 For a real end-to-end test before public deployment, follow [LOCAL_TWITCH_TEST.md](LOCAL_TWITCH_TEST.md). It runs this EBS over trusted localhost HTTPS and uses the same Twitch JWT verification and Studio relay path.
 
 If Studio, Warudo, or Broadcast is offline, the Bridge records unavailable delivery rather than exposing any local service publicly. Emergency Restore continues to stop local audio, release active actions, and disarm new viewer interactions.
+
+The in-process sliding-window limiter removes identities after their 60-second window and enforces a 50,000-key ceiling. This bounds memory across ordinary viewer interactions, pairing attempts, Discord OAuth exchange, and the separately keyed Bits reservation and transaction routes. Channel limits remain in force if a high-cardinality identity flood reaches the ceiling.

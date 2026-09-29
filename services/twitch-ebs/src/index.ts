@@ -125,12 +125,37 @@ class HttpError extends Error {
   }
 }
 
-class SlidingWindowLimiter {
+export class SlidingWindowLimiter {
   private readonly entries = new Map<string, number[]>();
+  private lastPrunedAt = 0;
+
+  constructor(private readonly maxEntries = 50_000, private readonly pruneIntervalMs = 60_000) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error('Rate limiter capacity must be a positive integer.');
+    if (!Number.isInteger(pruneIntervalMs) || pruneIntervalMs < 1) throw new Error('Rate limiter prune interval must be a positive integer.');
+  }
+
+  get entryCount(): number {
+    return this.entries.size;
+  }
+
+  private prune(now: number, reserveForNewKey: boolean): void {
+    const cutoff = now - 60_000;
+    for (const [key, timestamps] of this.entries) {
+      const active = timestamps.filter((timestamp) => timestamp > cutoff);
+      if (active.length) this.entries.set(key, active);
+      else this.entries.delete(key);
+    }
+    const targetSize = Math.max(0, this.maxEntries - (reserveForNewKey ? 1 : 0));
+    while (this.entries.size > targetSize) this.entries.delete(this.entries.keys().next().value as string);
+    this.lastPrunedAt = now;
+  }
 
   consume(key: string, limit: number, now = Date.now()): number {
+    const isNewKey = !this.entries.has(key);
+    if (now - this.lastPrunedAt >= this.pruneIntervalMs || (isNewKey && this.entries.size >= this.maxEntries)) this.prune(now, isNewKey);
     const cutoff = now - 60_000;
     const timestamps = (this.entries.get(key) || []).filter((timestamp) => timestamp > cutoff);
+    this.entries.delete(key);
     if (timestamps.length >= limit) {
       this.entries.set(key, timestamps);
       return Math.max(1, timestamps[0] + 60_000 - now);
@@ -542,6 +567,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const bitsReservations = new Map<string, BitsReservation>();
   const lastBitsGlobalUse = new Map<string, number>();
   const lastBitsViewerUse = new Map<string, number>();
+  const maximumBitsStateEntries = 50_000;
+  let lastBitsCooldownPrunedAt = 0;
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
@@ -592,6 +619,16 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     for (const [token, reservation] of bitsReservations) if (reservation.expiresAt <= now) bitsReservations.delete(token);
   };
 
+  const expireBitsCooldowns = (now = Date.now()): void => {
+    if (now - lastBitsCooldownPrunedAt < 60_000 && lastBitsGlobalUse.size <= maximumBitsStateEntries && lastBitsViewerUse.size <= maximumBitsStateEntries) return;
+    const cutoff = now - 86_400_000;
+    for (const [key, usedAt] of lastBitsGlobalUse) if (usedAt <= cutoff) lastBitsGlobalUse.delete(key);
+    for (const [key, usedAt] of lastBitsViewerUse) if (usedAt <= cutoff) lastBitsViewerUse.delete(key);
+    while (lastBitsGlobalUse.size > maximumBitsStateEntries) lastBitsGlobalUse.delete(lastBitsGlobalUse.keys().next().value as string);
+    while (lastBitsViewerUse.size > maximumBitsStateEntries) lastBitsViewerUse.delete(lastBitsViewerUse.keys().next().value as string);
+    lastBitsCooldownPrunedAt = now;
+  };
+
   const accessEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims): { allowed: boolean; reason?: string; code?: string } => {
     const viewerId = String(claims.user_id || '');
     const access = item.access;
@@ -610,7 +647,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     const accessDecision = accessEligibility(item, claims);
     if (!accessDecision.allowed) return { ...accessDecision, retryAfterMs: 0 };
     const viewerId = String(claims.user_id || '');
-    expireBitsReservations(now);
+    expireBitsCooldowns(now);
     const globalKey = `${claims.channel_id}:${item.id}`;
     const viewerKey = `${globalKey}:${viewerId}`;
     const globalRemaining = Math.max(0, (lastBitsGlobalUse.get(globalKey) || 0) + (item.globalCooldownMs ?? item.cooldownMs ?? 0) - now);
@@ -804,6 +841,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
         const { claims, installation } = await authenticateBitsViewer(request);
+        expireBitsReservations();
         const products = [...bitsProducts.entries()].flatMap(([sku, mapping]) => {
           const interaction = installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === mapping.action);
           if (!interaction) return [];
@@ -820,6 +858,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/reservations') {
         const { claims, installation } = await authenticateBitsViewer(request);
+        const viewerRetry = limiter.consume(`bits-reservation:viewer:${claims.channel_id}:${claims.user_id}`, viewerLimit);
+        const channelRetry = limiter.consume(`bits-reservation:channel:${claims.channel_id}`, channelLimit);
+        const retryAfterMs = Math.max(viewerRetry, channelRetry);
+        if (retryAfterMs) throw new HttpError(429, 'Too many Bits reservation requests. Please wait and try again.', { retryAfterMs });
         if (studioSockets.get(claims.channel_id)?.readyState !== WebSocket.OPEN) throw new HttpError(503, 'Tempest Streaming Studio must be online before a Bits interaction can start.');
         const body = await readJson(request);
         const sku = String(body.sku || '').trim();
@@ -833,6 +875,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         if (interaction.placementMode === 'viewer' && (!placement || !Number.isFinite(placement.x) || placement.x < 0 || placement.x > 1 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 1)) {
           throw new HttpError(400, 'Choose a valid on-stream placement before activating this interaction.');
         }
+        expireBitsReservations();
+        if (bitsReservations.size >= maximumBitsStateEntries) throw new HttpError(503, 'The Bits reservation service is temporarily at capacity. Please try again shortly.');
         const token = randomBytes(24).toString('base64url');
         const reservation: BitsReservation = { token, channelId: claims.channel_id, viewerId: claims.user_id!, sku, action: mapping.action, expiresAt: Date.now() + 120_000, ...(placement ? { placement } : {}) };
         bitsReservations.set(token, reservation);
@@ -840,6 +884,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/transactions') {
         const { claims, installation } = await authenticateBitsViewer(request);
+        const viewerRetry = limiter.consume(`bits-transaction:viewer:${claims.channel_id}:${claims.user_id}`, viewerLimit);
+        const channelRetry = limiter.consume(`bits-transaction:channel:${claims.channel_id}`, channelLimit);
+        const retryAfterMs = Math.max(viewerRetry, channelRetry);
+        if (retryAfterMs) throw new HttpError(429, 'Too many Bits transaction requests. Please wait and try again.', { retryAfterMs });
         const body = await readJson(request);
         const transactionReceipt = String(body.transactionReceipt || '').trim();
         const reservationToken = String(body.reservationToken || '').trim();
@@ -877,6 +925,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           const now = Date.now();
           lastBitsGlobalUse.set(`${claims.channel_id}:${interaction.id}`, now);
           lastBitsViewerUse.set(`${claims.channel_id}:${interaction.id}:${receipt.data.userId}`, now);
+          expireBitsCooldowns(now);
         }
         return sendJson(response, result.status, result.body, origin);
       }

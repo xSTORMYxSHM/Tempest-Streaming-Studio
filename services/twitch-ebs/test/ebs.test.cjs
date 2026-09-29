@@ -5,7 +5,7 @@ const { mkdtemp } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const WebSocket = require('ws');
-const { MemoryTwitchEbsInstallationStore, startTwitchEbs } = require('../dist');
+const { MemoryTwitchEbsInstallationStore, SlidingWindowLimiter, startTwitchEbs } = require('../dist');
 const { startTempestBridge } = require('@tempest/bridge');
 
 function base64url(value) {
@@ -44,6 +44,19 @@ function bitsReceipt(secret, clientId, overrides = {}) {
   const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
   return `${signingInput}.${signature}`;
 }
+
+test('bounds and expires dormant rate-limit identities', () => {
+  const limiter = new SlidingWindowLimiter(3, 60_000);
+  assert.equal(limiter.consume('viewer-a', 1, 1_000), 0);
+  assert.equal(limiter.consume('viewer-b', 1, 1_001), 0);
+  assert.equal(limiter.consume('viewer-c', 1, 1_002), 0);
+  assert.equal(limiter.entryCount, 3);
+  assert.equal(limiter.consume('viewer-d', 1, 1_003), 0);
+  assert.equal(limiter.entryCount, 3);
+  assert.ok(limiter.consume('viewer-d', 1, 1_003) > 0);
+  assert.equal(limiter.consume('viewer-new', 1, 61_004), 0);
+  assert.equal(limiter.entryCount, 1);
+});
 
 function connectStudio(runtime, relayToken, channelId = '123456') {
   return new Promise((resolve, reject) => {
@@ -514,7 +527,7 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
   const store = new MemoryTwitchEbsInstallationStore();
   const runtime = await startTwitchEbs({
     host: '127.0.0.1', port: 0, twitchExtensionSecrets: [freeSecret.toString('base64')], relayToken,
-    allowedChannelIds: ['123456'], installationStore: store,
+    allowedChannelIds: ['123456'], installationStore: store, viewerRequestsPerMinute: 4,
     bitsExtension: {
       clientId,
       secrets: [bitsSecret.toString('base64')],
@@ -564,6 +577,12 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
   assert.equal(await unchangedBitsCatalog.text(), '');
   const lockedReservation = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
   assert.equal(lockedReservation.status, 403);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const rejected = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
+    assert.equal(rejected.status, 403);
+  }
+  const limitedReservation = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
+  assert.equal(limitedReservation.status, 429);
   const inactiveFreeEdition = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(freeSecret) } });
   assert.equal(inactiveFreeEdition.status, 409);
   assert.equal((await inactiveFreeEdition.json()).activeEdition, 'bits');
@@ -599,6 +618,10 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: audioReceipt })
   });
   assert.equal(rejectedAudio.status, 403);
+  const limitedTransaction = await fetch(`${runtime.baseUrl}/v1/extension/bits/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ transactionReceipt: wrongAmount })
+  });
+  assert.equal(limitedTransaction.status, 429);
 });
 
 test('links a verified Kick broadcaster and relays signed chat webhooks to its paired Studio', async (context) => {
