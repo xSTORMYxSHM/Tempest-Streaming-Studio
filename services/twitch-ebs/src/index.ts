@@ -598,13 +598,27 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const lastBitsGlobalUse = new Map<string, number>();
   const lastBitsViewerUse = new Map<string, number>();
   const maximumBitsStateEntries = 50_000;
+  const maximumPendingRelays = 10_000;
+  const maximumCachedResults = 5_000;
+  const resultReplayWindowMs = 10 * 60_000;
+  let lastResultsPrunedAt = 0;
   let lastBitsCooldownPrunedAt = 0;
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumStudioWebSocketPayloadBytes });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
   const expireResults = (now = Date.now()): void => {
-    for (const [key, value] of results) if (now - value.storedAt > 10 * 60_000) results.delete(key);
-    while (results.size > 5_000) results.delete(results.keys().next().value as string);
+    if (now - lastResultsPrunedAt < 60_000 && results.size <= maximumCachedResults) return;
+    for (const [key, value] of results) if (now - value.storedAt > resultReplayWindowMs) results.delete(key);
+    while (results.size > maximumCachedResults) results.delete(results.keys().next().value as string);
+    lastResultsPrunedAt = now;
+  };
+
+  const cachedResult = (key: string, now = Date.now()): CachedResult | undefined => {
+    const cached = results.get(key);
+    if (!cached) return undefined;
+    if (now - cached.storedAt <= resultReplayWindowMs) return cached;
+    results.delete(key);
+    return undefined;
   };
 
   const rejectChannelPending = (channelId: string, message: string): void => {
@@ -673,7 +687,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     return { allowed: true };
   };
 
-  const bitsEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): { allowed: boolean; reason?: string; retryAfterMs: number } => {
+  const bitsEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now(), knownReservationRemaining?: number): { allowed: boolean; reason?: string; retryAfterMs: number } => {
     const accessDecision = accessEligibility(item, claims);
     if (!accessDecision.allowed) return { ...accessDecision, retryAfterMs: 0 };
     const viewerId = String(claims.user_id || '');
@@ -682,7 +696,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     const viewerKey = `${globalKey}:${viewerId}`;
     const globalRemaining = Math.max(0, (lastBitsGlobalUse.get(globalKey) || 0) + (item.globalCooldownMs ?? item.cooldownMs ?? 0) - now);
     const viewerRemaining = Math.max(0, (lastBitsViewerUse.get(viewerKey) || 0) + (item.viewerCooldownMs ?? item.cooldownMs ?? 0) - now);
-    const reservationRemaining = [...bitsReservations.values()].filter((entry) => entry.channelId === claims.channel_id && entry.action === item.id).reduce((maximum, entry) => Math.max(maximum, entry.expiresAt - now), 0);
+    const reservationRemaining = knownReservationRemaining ?? [...bitsReservations.values()].filter((entry) => entry.channelId === claims.channel_id && entry.action === item.id).reduce((maximum, entry) => Math.max(maximum, entry.expiresAt - now), 0);
     const retryAfterMs = Math.max(globalRemaining, viewerRemaining, reservationRemaining);
     return retryAfterMs > 0 ? { allowed: false, reason: `Available again in ${Math.ceil(retryAfterMs / 1000)} seconds`, retryAfterMs } : { allowed: true, retryAfterMs: 0 };
   };
@@ -719,10 +733,12 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const dispatchInteraction = async (claims: TwitchExtensionClaims, requestId: string, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent, viewerId = claims.user_id || claims.opaque_user_id): Promise<RelayResult> => {
     if (!requestIdPattern.test(requestId)) throw new HttpError(400, 'requestId must contain 16 to 128 URL-safe characters.');
     const resultKey = `${claims.channel_id}:${requestId}`;
-    expireResults();
-    const cached = results.get(resultKey);
+    const now = Date.now();
+    expireResults(now);
+    const cached = cachedResult(resultKey, now);
     if (cached) return { status: cached.status, body: cached.body };
     if (pending.has(resultKey)) throw new HttpError(409, 'This interaction request is already being processed.');
+    if (pending.size >= maximumPendingRelays) throw new HttpError(503, 'The Studio relay is temporarily at capacity. Please try again shortly.');
     const viewerRetry = limiter.consume(`viewer:${claims.channel_id}:${viewerId}`, viewerLimit);
     const channelRetry = limiter.consume(`channel:${claims.channel_id}`, channelLimit);
     const retryAfterMs = Math.max(viewerRetry, channelRetry);
@@ -871,11 +887,18 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
         const { claims, installation } = await authenticateBitsViewer(request);
-        expireBitsReservations();
+        const now = Date.now();
+        expireBitsReservations(now);
+        const interactions = new Map(installation.catalog.items.filter((item) => item.kind === 'interaction').map((item) => [item.id, item]));
+        const reservationRemainingByAction = new Map<string, number>();
+        for (const reservation of bitsReservations.values()) {
+          if (reservation.channelId !== claims.channel_id) continue;
+          reservationRemainingByAction.set(reservation.action, Math.max(reservationRemainingByAction.get(reservation.action) || 0, reservation.expiresAt - now));
+        }
         const products = [...bitsProducts.entries()].flatMap(([sku, mapping]) => {
-          const interaction = installation.catalog.items.find((item) => item.kind === 'interaction' && item.id === mapping.action);
+          const interaction = interactions.get(mapping.action);
           if (!interaction) return [];
-          const eligibility = bitsEligibility(interaction, claims);
+          const eligibility = bitsEligibility(interaction, claims, now, reservationRemainingByAction.get(interaction.id) || 0);
           if (!eligibility.allowed && interaction.access?.hideWhenLocked && eligibility.retryAfterMs === 0) return [];
           const { access: _privateAccess, ...publicInteraction } = interaction;
           return [{ sku, bits: mapping.bits, interaction: publicInteraction, eligibility }];
@@ -936,7 +959,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           throw new HttpError(403, 'This Twitch Bits product is not mapped to a published Studio interaction.');
         }
         const requestId = `bits-${createHash('sha256').update(receipt.data.transactionId).digest('hex').slice(0, 48)}`;
-        const cached = results.get(`${claims.channel_id}:${requestId}`);
+        const resultKey = `${claims.channel_id}:${requestId}`;
+        const now = Date.now();
+        expireResults(now);
+        const cached = cachedResult(resultKey, now);
         if (cached) return sendJson(response, cached.status, cached.body, origin);
         expireBitsReservations();
         const reservation = bitsReservations.get(reservationToken);
