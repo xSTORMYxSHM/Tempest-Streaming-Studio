@@ -51,6 +51,7 @@
 - Added a read-only chat-command directory to the free Extension. It publishes only bounded enabled triggers, aliases, permissions, and Shared Chat availability; response text, workflow links, cooldown state, and other private Chatbot configuration remain local.
 - Made free Extension counter cards display the streamer's configured Chatbot prefix instead of assuming every counter command begins with `!`.
 - Bounded Kick OAuth, identity, chat-send, and subscription response bodies to 1 MiB with a ten-second streamed-body timeout, preventing a stalled or oversized provider response from retaining Studio work indefinitely.
+- Applied the same streamed-body timeout and 1 MiB ceiling to Twitch OAuth, token validation, refresh, and EventSub subscription responses.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 
