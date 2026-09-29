@@ -6,7 +6,7 @@ import { URL } from 'node:url';
 import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchBitsTransactionReceipt, verifyTwitchExtensionJwt } from './jwt';
-import { boundedFetch } from './bounded-fetch';
+import { boundedFetch, readBoundedJsonResponse } from './bounded-fetch';
 import {
   MemoryTwitchEbsInstallationStore,
   PublicExtensionCatalog,
@@ -178,6 +178,7 @@ export class SlidingWindowLimiter {
 }
 
 const maximumBodyBytes = 16 * 1024;
+const maximumProviderResponseBytes = 1024 * 1024;
 const requestIdPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const actionPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const soundAlertPattern = /^sound-alert\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -217,7 +218,7 @@ function kickOAuthToken(request: IncomingMessage): string {
 async function validateKickOAuthToken(accessToken: string): Promise<KickOAuthIdentity> {
   if (!accessToken || accessToken.length > 4096 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Kick OAuth token is required.');
   const response = await externalFetch('https://api.kick.com/public/v1/users', { headers: { Authorization: `Bearer ${accessToken}` } });
-  const body = await response.json().catch(() => ({})) as { data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown };
+  const body = await readBoundedJsonResponse<{ data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown }>(response, maximumProviderResponseBytes).catch(() => ({} as { data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown }));
   const user = body.data?.[0];
   if (!response.ok || !user?.user_id || !user.name) throw new HttpError(401, String(body.message || body.error || 'Kick OAuth validation failed.'));
   return { userId: String(user.user_id), username: user.name };
@@ -236,7 +237,7 @@ function verifyKickWebhook(messageId: string, timestamp: string, rawBody: Buffer
 async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAuthIdentity> {
   if (!accessToken || accessToken.length > 2048 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Twitch OAuth token is required.');
   const response = await externalFetch('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${accessToken}` } });
-  const body = await response.json().catch(() => ({})) as { client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown };
+  const body = await readBoundedJsonResponse<{ client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown }>(response, maximumProviderResponseBytes).catch(() => ({} as { client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown }));
   if (!response.ok || typeof body.client_id !== 'string' || typeof body.user_id !== 'string' || typeof body.login !== 'string') {
     throw new HttpError(401, typeof body.message === 'string' ? body.message : 'Twitch OAuth validation failed.');
   }
@@ -810,7 +811,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const form = new URLSearchParams({ client_id: options.discordOAuth.clientId, client_secret: options.discordOAuth.clientSecret, grant_type: grantType, [grantType === 'authorization_code' ? 'code' : 'refresh_token']: credential });
         if (grantType === 'authorization_code' && options.discordOAuth.redirectUri) form.set('redirect_uri', options.discordOAuth.redirectUri);
         const discordResponse = await (options.discordOAuth.exchange || ((payload) => externalFetch('https://discord.com/api/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: payload })))(form);
-        const tokens = await discordResponse.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown };
+        const tokens = await readBoundedJsonResponse<{ access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown }>(discordResponse, maximumProviderResponseBytes).catch(() => ({} as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown }));
         if (!discordResponse.ok || typeof tokens.access_token !== 'string') throw new HttpError(502, typeof tokens.error_description === 'string' ? tokens.error_description : typeof tokens.message === 'string' ? tokens.message : 'Discord authorization exchange failed.');
         return sendJson(response, 200, { accessToken: tokens.access_token, ...(typeof tokens.refresh_token === 'string' ? { refreshToken: tokens.refresh_token } : {}), ...(Number.isFinite(Number(tokens.expires_in)) ? { expiresIn: Number(tokens.expires_in) } : {}), ...(typeof tokens.scope === 'string' ? { scope: tokens.scope } : {}), ...(typeof tokens.token_type === 'string' ? { tokenType: tokens.token_type } : {}) }, origin);
       }
