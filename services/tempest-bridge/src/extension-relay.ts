@@ -37,6 +37,7 @@ export interface ExtensionRelayPoll {
 export interface ExtensionRelayCounter {
   id: string;
   command: string;
+  trigger: string;
   label: string;
   value: number;
 }

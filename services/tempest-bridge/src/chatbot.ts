@@ -293,6 +293,7 @@ export interface ChatbotDiceRollResult {
 export interface ChatbotPublicCounter {
   id: string;
   command: string;
+  trigger: string;
   label: string;
   value: number;
 }
@@ -1126,7 +1127,7 @@ export class TwitchChatbot {
     return this.configuration.commands
       .filter((command) => command.enabled && command.handler === 'counter')
       .slice(0, 12)
-      .map((command) => ({ id: command.id, command: command.name, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
+      .map((command) => ({ id: command.id, command: command.name, trigger: `${this.configuration.prefix}${command.name}`, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
   }
 
   publicCommands(): ChatbotPublicCommand[] {

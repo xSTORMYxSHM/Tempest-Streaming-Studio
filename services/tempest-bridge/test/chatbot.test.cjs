@@ -244,7 +244,7 @@ test('persists streamer-named counters shared by Twitch and Kick chat', async ()
   const result = await chatbot.processChatEvent({ schemaVersion: 1, id: 'kick-counter-0001', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'kick', channel: { id: 'kick-channel', login: 'storm' }, viewer: { id: 'viewer-1', login: 'friend', displayName: 'Friend', roles: [] }, payload: { text: '!death' } });
   assert.equal(result.accepted, true);
   assert.equal(result.response, 'Ship Restarts: 4');
-  assert.deepEqual(chatbot.publicCounters(), [{ id: chatbot.publicCounters()[0].id, command: 'death', label: 'Ship Restarts', value: 4 }]);
+  assert.deepEqual(chatbot.publicCounters(), [{ id: chatbot.publicCounters()[0].id, command: 'death', trigger: '!death', label: 'Ship Restarts', value: 4 }]);
   assert.ok(chatbot.publicCommands().some((command) => command.trigger === '!death' && command.permission === 'everyone'));
   assert.ok(chatbot.publicCommands().every((command) => !Object.hasOwn(command, 'response') && !Object.hasOwn(command, 'workflowId')));
   assert.deepEqual(messages, ['Ship Restarts: 4']);

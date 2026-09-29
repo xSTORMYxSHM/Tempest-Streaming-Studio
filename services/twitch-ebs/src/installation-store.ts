@@ -35,6 +35,7 @@ export interface PublicExtensionPoll {
 export interface PublicExtensionCounter {
   id: string;
   command: string;
+  trigger?: string;
   label: string;
   value: number;
 }

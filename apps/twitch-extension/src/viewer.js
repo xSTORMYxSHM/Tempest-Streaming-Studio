@@ -220,7 +220,7 @@
     $('#rollCustomDice').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || (!permitted(customDice) && !identityRequired(customDice))));
     $('#rollCustomDice').textContent = customDice && identityRequired(customDice) ? 'SHARE ID' : customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
     $('#counterRegion').hidden = counters.length === 0;
-    $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>!${escapeHtml(counter.command)}</small></article>`).join('');
+    $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>${escapeHtml(counter.trigger || `!${counter.command}`)}</small></article>`).join('');
     $('#commandRegion').hidden = commands.length === 0;
     $('#commandGrid').innerHTML = commands.map((command) => `<article class="command-card"><strong>${escapeHtml(command.trigger)}</strong><span>${escapeHtml(String(command.permission).toUpperCase())}${command.allowSharedChat ? ' · SHARED CHAT' : ''}</span>${command.aliases.length ? `<small>Also ${escapeHtml(command.aliases.join(' · '))}</small>` : ''}</article>`).join('');
     renderGoal(goalVisible);
@@ -554,7 +554,7 @@
       ],
       startedAt: new Date().toISOString()
     } : null;
-    state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', label: 'Ship Restarts', value: 7 }] : [];
+    state.counters = configuration.mockMode ? [{ id: 'preview-counter', command: 'death', trigger: '!death', label: 'Ship Restarts', value: 7 }] : [];
     state.commands = configuration.mockMode ? [{ trigger: '!commands', aliases: ['!help'], permission: 'everyone', allowSharedChat: true }, { trigger: '!roll', aliases: ['!dice'], permission: 'everyone', allowSharedChat: true }] : [];
     state.goal = configuration.mockMode ? { source: 'studio', kind: 'subscriptions', title: 'Road to 50 Subscribers', currentAmount: 31, targetAmount: 50, percentage: 62, unit: 'subs', accent: '#A7FF5C' } : null;
     state.nowPlaying = configuration.mockMode ? { stationName: 'Storm Horizon Radio', state: 'online', artist: 'The Midnight', title: 'Synthetic', album: 'Endless Summer', publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() } : null;

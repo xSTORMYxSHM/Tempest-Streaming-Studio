@@ -328,13 +328,15 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
       const counter = entry as Record<string, unknown>;
       const id = String(counter.id || '').trim();
       const command = String(counter.command || '').trim().toLowerCase();
+      const trigger = counter.trigger === undefined ? undefined : String(counter.trigger).trim();
       const label = String(counter.label || '').trim();
       const counterValue = Number(counter.value);
       if (!/^[A-Za-z0-9._-]{1,80}$/.test(id) || counterIds.has(id)) throw new Error(`Catalog counter ${index + 1} has an invalid or duplicate ID.`);
       if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(command) || !label || label.length > 80 || /[\r\n\0]/.test(label)) throw new Error(`Catalog counter ${index + 1} has invalid display data.`);
+      if (trigger !== undefined && (trigger.length < 2 || trigger.length > 34 || /[\s\r\n\0]/.test(trigger))) throw new Error(`Catalog counter ${index + 1} has an invalid trigger.`);
       if (!Number.isSafeInteger(counterValue) || Math.abs(counterValue) > 1_000_000_000) throw new Error(`Catalog counter ${index + 1} has an invalid value.`);
       counterIds.add(id);
-      return { id, command, label, value: counterValue };
+      return { id, command, ...(trigger ? { trigger } : {}), label, value: counterValue };
     });
   }
   let commands: PublicExtensionCommand[] | undefined;
