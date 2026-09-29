@@ -2922,10 +2922,60 @@
 
   async function performFullRefresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const tasks = new Map([
+        ['runtimeSummary', () => api('/v1/runtime-summary')],
+        ['applications', () => api('/v1/applications')],
+        ['workflows', () => api('/v1/workflows')],
+        ['events', () => api('/v1/events?limit=150')],
+        ['twitch', () => api('/v1/integrations/twitch')],
+        ['kick', () => api('/v1/integrations/kick')],
+        ['chatbot', () => api('/v1/chatbot')],
+        ['soundAlerts', () => api('/v1/sound-alerts')],
+        ['visualAlerts', () => api('/v1/visual-alerts')],
+        ['twitchVisualAlerts', () => api('/v1/visual-alerts/twitch')],
+        ['diceOverlay', () => api('/v1/dice-overlay')],
+        ['chatOverlay', () => api('/v1/chat-overlay')],
+        ['emoteWall', () => api('/v1/emote-wall')],
+        ['twitchExperiences', () => api('/v1/twitch-experiences')],
+        ['discordVoice', () => api('/v1/discord-voice')],
+        ['discordRpc', () => window.tempestStudio.getDiscordVoiceStatus()],
+        ['warudo', () => window.tempestStudio.getWarudoStatus()],
+        ['vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus()],
+        ['localExtension', () => window.tempestStudio.getLocalExtensionStatus()],
+        ['hostedExtension', () => window.tempestStudio.getHostedExtensionStatus()],
+        ['giphy', () => window.tempestStudio.getGiphyStatus()],
+        ['alertHistory', () => api('/v1/alert-history?limit=200')],
+        ['alertDiagnostics', () => api('/v1/alert-diagnostics')]
+      ]);
+      const entries = [...tasks];
+      const results = await Promise.allSettled(entries.map(([, loader]) => loader()));
+      const refreshed = {};
+      let optionalError;
+      for (let index = 0; index < entries.length; index += 1) {
+        const [key] = entries[index];
+        const result = results[index];
+        if (result.status === 'fulfilled') refreshed[key] = result.value;
+        else if (key === 'runtimeSummary') throw result.reason;
+        else optionalError ||= result.reason;
+      }
+      const summary = refreshed.runtimeSummary;
+      Object.assign(state, {
+        health: summary.health,
+        connections: summary.connections || [],
+        dualFormat: summary.dualFormat,
+        simulcast: summary.simulcast,
+        runs: summary.runs || [],
+        safety: summary.safety,
+        ...(refreshed.applications ? { applications: refreshed.applications.applications || [] } : {}),
+        ...(refreshed.workflows ? { workflows: refreshed.workflows.workflows || [] } : {}),
+        ...(refreshed.events ? { events: refreshed.events.events || [] } : {})
+      });
+      for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
+        if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
+      }
       renderBridgeStatus(true);
       renderAll();
+      if (!quiet && optionalError) toast(optionalError?.message || 'Some optional Studio services could not be refreshed.', true);
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);

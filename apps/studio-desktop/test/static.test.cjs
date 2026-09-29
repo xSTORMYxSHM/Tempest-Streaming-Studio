@@ -165,6 +165,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /fullRefreshPromise/);
   assert.match(renderer, /if \(fullRefreshPromise\) \{\s*await fullRefreshPromise;/);
   assert.match(renderer, /performFullRefresh/);
+  assert.doesNotMatch(renderer, /const \[health, applications, connections/);
+  assert.match(renderer, /Some optional Studio services could not be refreshed/);
   assert.match(renderer, /activeSection === 'discordvoiceSection'/);
   assert.match(renderer, /if \(\$\('#onboardingDialog'\)\.open\)/);
   assert.match(html, /Import Alert Pack/);
