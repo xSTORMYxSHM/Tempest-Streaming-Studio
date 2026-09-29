@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TempestNormalizedKickChatEvent } from '@tempest/contracts';
+import { boundedFetch } from './bounded-fetch';
 
 export const kickChatScopes = ['user:read', 'chat:write', 'events:subscribe'] as const;
 
@@ -69,6 +70,7 @@ export interface KickIntegrationOptions {
   webhookUrl?: string;
   credentialStore?: KickCredentialStore;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   onChatEvent?(event: TempestNormalizedKickChatEvent): void | Promise<void>;
 }
 
@@ -116,7 +118,7 @@ export class KickIntegrationGateway {
   constructor(private readonly options: KickIntegrationOptions) {
     const timestamp = new Date().toISOString();
     this.configuration = { schemaVersion: 1, clientId: '', redirectUri: validateRedirectUri(options.defaultRedirectUri), updatedAt: timestamp };
-    this.request = options.fetchImplementation || fetch;
+    this.request = boundedFetch(options.fetchImplementation, options.requestTimeoutMs);
   }
 
   get configurationPath(): string {

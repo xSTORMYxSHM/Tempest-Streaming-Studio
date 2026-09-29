@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { WebSocket } from 'ws';
+import { boundedFetch } from './bounded-fetch';
 import {
   normalizedTwitchEventTopics,
   TempestNormalizedTwitchEvent,
@@ -92,6 +93,7 @@ export interface TwitchIntegrationGatewayOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   onEvent?: (event: TempestNormalizedTwitchEvent) => void | Promise<void>;
 }
 
@@ -193,7 +195,7 @@ export class TwitchIntegrationGateway {
 
   constructor(private readonly options: TwitchIntegrationGatewayOptions) {
     this.credentialStore = options.credentialStore;
-    this.request = options.fetchImplementation || fetch;
+    this.request = boundedFetch(options.fetchImplementation, options.requestTimeoutMs);
   }
 
   get configurationPath(): string {
