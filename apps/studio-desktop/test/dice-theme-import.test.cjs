@@ -30,6 +30,14 @@ test('rejects executable files in imported Dice Box themes', async () => {
   await assert.rejects(() => importDiceBoxTheme(source, path.join(root, 'managed')), /not a supported Dice Box theme asset/);
 });
 
+test('rejects an oversized Dice Box theme manifest before parsing it', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'tempest-dice-theme-manifest-'));
+  const source = path.join(root, 'source');
+  await mkdir(source, { recursive: true });
+  await writeFile(path.join(source, 'theme.config.json'), ' '.repeat(1024 * 1024 + 1));
+  await assert.rejects(() => importDiceBoxTheme(source, path.join(root, 'managed')), /smaller than 1 MB/);
+});
+
 test('rejects built-in names and theme assets outside the selected folder', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tempest-dice-theme-path-'));
   const source = path.join(root, 'source');
