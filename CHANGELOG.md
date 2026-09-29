@@ -33,6 +33,7 @@
 - Coalesced Studio's periodic/visibility full refreshes and pause one-second workspace polling while a full refresh is active, preventing duplicate batches of up to 28 Bridge and desktop status requests.
 - Streamed Asset Library SHA-256 calculation instead of loading an entire selected video or media file into desktop memory, and bounded imported application manifests to 1 MB before parsing.
 - Streamed GIPHY downloads through a hard 25 MB reader limit, including responses without a trustworthy Content-Length header, instead of allocating an unbounded response before validating its size.
+- Capped assigned alert audio at 100 MB and reject oversized Browser Source compatibility-fallback buffers before allocation, while leaving normal media-element streaming unchanged.
 - Collapsed Studio's six always-on one-second Bridge status calls into one authenticated runtime snapshot while retaining the individual endpoints for compatibility, removing roughly 18,000 local HTTP requests from a typical one-hour stream.
 - Isolated active-workspace refresh failures from the core runtime snapshot so a temporarily unavailable optional tool no longer makes Studio falsely report that the entire local Bridge is offline.
 - Reused the runtime snapshot in full refreshes and retained successful optional results independently, reducing each full batch by five more local requests and preventing one optional integration failure from discarding every other fresh status.

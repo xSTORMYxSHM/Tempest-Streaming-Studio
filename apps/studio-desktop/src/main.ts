@@ -1239,6 +1239,7 @@ function registerDesktopHandlers(): void {
     const filePath = path.normalize(result.filePaths[0]);
     const details = await stat(filePath);
     if (!details.isFile()) throw new Error('The selected Sound Alert audio is not a file.');
+    if (details.size > 100 * 1024 * 1024) throw new Error('Sound Alert audio must be 100 MB or smaller.');
     return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
   });
 

@@ -503,6 +503,7 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const dedicatedAudioOrigin = overlayMarkup.match(/new URL\(data\.audioUrl,"(http:\/\/127\.0\.0\.1:\d+)"\)/)?.[1];
   assert.ok(dedicatedAudioOrigin, 'the Browser Source must receive its dedicated loopback audio origin');
   assert.equal((overlayMarkup.match(/(?:async )?function playAudio\(/g) || []).length, 1);
+  assert.match(overlayMarkup, /audio exceeds 100 MB fallback limit/);
   assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
   assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(orientation==='vertical'/);
   assert.match(overlayMarkup, /id="customStyle"/);
