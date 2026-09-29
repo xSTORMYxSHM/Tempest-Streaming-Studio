@@ -189,6 +189,7 @@ export class TempestWorkflowEngine {
   private timers = new Set<NodeJS.Timeout>();
   private lastEffectTrigger = new Map<string, number>();
   private lastViewerTrigger = new Map<string, number>();
+  private lastCooldownStatePrunedAt = 0;
   private eventRuns = new Map<string, string>();
   private lastGlobalTrigger = 0;
   private armed = true;
@@ -239,6 +240,7 @@ export class TempestWorkflowEngine {
     const workflow = this.workflows.find((entry) => entry.id === workflowId);
     if (!workflow) throw new Error(`Workflow ${workflowId} is not registered.`);
     if (!workflow.enabled) throw new Error(`${workflow.name} is disabled.`);
+    this.pruneCooldownState();
     this.enforceConcurrency(workflow);
     const simulatorBypass = interaction.source === 'studio.simulator' && interaction.bypassCooldown === true;
     if (!simulatorBypass) this.enforceCooldowns(workflow, interaction);
@@ -349,6 +351,15 @@ export class TempestWorkflowEngine {
       const viewerRemaining = (this.lastViewerTrigger.get(`${workflow.id}:${viewer}`) || 0) + (cooldowns.viewerMs || 0) - now;
       if (viewerRemaining > 0) throw new Error(`${interaction.viewerName || 'This viewer'} can use ${workflow.name} again in ${Math.ceil(viewerRemaining / 1000)} seconds.`);
     }
+  }
+
+  private pruneCooldownState(now = Date.now()): void {
+    const maximumEntries = 50_000;
+    if (now - this.lastCooldownStatePrunedAt < 60_000 && this.lastViewerTrigger.size <= maximumEntries) return;
+    const cutoff = now - 86_400_000;
+    for (const [key, triggeredAt] of this.lastViewerTrigger) if (triggeredAt < cutoff) this.lastViewerTrigger.delete(key);
+    while (this.lastViewerTrigger.size > maximumEntries) this.lastViewerTrigger.delete(this.lastViewerTrigger.keys().next().value as string);
+    this.lastCooldownStatePrunedAt = now;
   }
 
   private resolveActions(actions: TempestWorkflowAction[], payload: Record<string, unknown> | undefined): TempestWorkflowAction[] {

@@ -174,6 +174,7 @@ export class TwitchIntegrationGateway {
   private oauthState: TwitchIntegrationStatus['oauth']['state'] = 'not-configured';
   private lastError?: string;
   private seenEvents = new Map<string, number>();
+  private lastSeenEventsPrunedAt = 0;
   private acceptedEvents = 0;
   private duplicateEvents = 0;
   private lastEventAt?: string;
@@ -572,10 +573,13 @@ export class TwitchIntegrationGateway {
   }
 
   private pruneSeenEvents(): void {
-    const cutoff = Date.now() - 10 * 60 * 1000;
+    const now = Date.now();
+    if (now - this.lastSeenEventsPrunedAt < 60_000 && this.seenEvents.size <= 5_000) return;
+    const cutoff = now - 10 * 60 * 1000;
     for (const [id, seenAt] of this.seenEvents) {
       if (seenAt < cutoff) this.seenEvents.delete(id);
     }
     while (this.seenEvents.size > 5000) this.seenEvents.delete(this.seenEvents.keys().next().value as string);
+    this.lastSeenEventsPrunedAt = now;
   }
 }

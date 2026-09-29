@@ -169,6 +169,7 @@ export class TempestSoundAlertCatalog {
   private lastAlertTrigger = new Map<string, number>();
   private lastViewerTrigger = new Map<string, number>();
   private eventIds = new Map<string, number>();
+  private lastRuntimeStatePrunedAt = 0;
   private readonly documentPath: string;
 
   constructor(private readonly dataDirectory: string) {
@@ -323,7 +324,7 @@ export class TempestSoundAlertCatalog {
     if (!alert.enabled && !request.bypassCooldown) throw new Error(`${alert.name} is disabled.`);
     const eventId = request.eventId?.trim() || globalThis.crypto.randomUUID();
     const now = Date.now();
-    this.expireReplayIds(now);
+    this.pruneRuntimeState(now);
     if (this.eventIds.has(eventId)) throw new Error(`Sound Alert event ${eventId} was already handled.`);
     if (!request.bypassCooldown) {
       const globalRemaining = (this.lastAlertTrigger.get(alert.id) || 0) + alert.globalCooldownMs - now;
@@ -436,8 +437,14 @@ export class TempestSoundAlertCatalog {
     } as TempestSoundAlertDefinition;
   }
 
-  private expireReplayIds(now: number): void {
+  private pruneRuntimeState(now: number): void {
+    const maximumEntries = 50_000;
+    if (now - this.lastRuntimeStatePrunedAt < 60_000 && this.eventIds.size <= maximumEntries && this.lastViewerTrigger.size <= maximumEntries) return;
     for (const [id, timestamp] of this.eventIds) if (now - timestamp > replayWindowMs) this.eventIds.delete(id);
+    for (const [key, timestamp] of this.lastViewerTrigger) if (now - timestamp > 86_400_000) this.lastViewerTrigger.delete(key);
+    while (this.eventIds.size > maximumEntries) this.eventIds.delete(this.eventIds.keys().next().value as string);
+    while (this.lastViewerTrigger.size > maximumEntries) this.lastViewerTrigger.delete(this.lastViewerTrigger.keys().next().value as string);
+    this.lastRuntimeStatePrunedAt = now;
   }
 
   private async persist(): Promise<void> {
