@@ -738,6 +738,7 @@ export class TwitchChatbot {
   private lastGlobalUse = new Map<string, number>();
   private lastViewerUse = new Map<string, number>();
   private seenEventIds = new Map<string, number>();
+  private lastRuntimeStatePrunedAt = 0;
   private raidShoutoutQueue: Array<{ eventId: string; targetId: string; targetName: string }> = [];
   private raidShoutoutTimer?: NodeJS.Timeout;
   private raidShoutoutSending = false;
@@ -1265,8 +1266,7 @@ export class TwitchChatbot {
 
   async processChatEvent(event: TempestNormalizedChatEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
     if (!simulated) {
-      const cutoff = Date.now() - 10 * 60 * 1000;
-      for (const [id, seenAt] of this.seenEventIds) if (seenAt < cutoff) this.seenEventIds.delete(id);
+      this.pruneRuntimeState();
       if (this.seenEventIds.has(event.id)) {
         this.record({ state: 'ignored', message: `Duplicate chat event ${event.id} ignored.` });
         return { matched: false, accepted: false, reason: 'Duplicate EventSub delivery.' };
@@ -1571,6 +1571,23 @@ export class TwitchChatbot {
     clearTimeout(this.autoMessageTimer);
     this.autoMessageTimer = undefined;
     await this.stopConnection();
+  }
+
+  private pruneRuntimeState(now = Date.now()): void {
+    const maximumEntries = 50_000;
+    if (now - this.lastRuntimeStatePrunedAt < 60_000 && this.seenEventIds.size <= maximumEntries && this.lastViewerUse.size <= maximumEntries && this.lastShoutoutByTarget.size <= maximumEntries) return;
+    const eventCutoff = now - 10 * 60_000;
+    const longLivedCutoff = now - 86_400_000;
+    for (const [id, seenAt] of this.seenEventIds) if (seenAt < eventCutoff) this.seenEventIds.delete(id);
+    for (const [key, usedAt] of this.lastViewerUse) if (usedAt < longLivedCutoff) this.lastViewerUse.delete(key);
+    for (const [targetId, usedAt] of this.lastShoutoutByTarget) if (usedAt < longLivedCutoff) this.lastShoutoutByTarget.delete(targetId);
+    const trim = (values: Map<string, number>) => {
+      while (values.size > maximumEntries) values.delete(values.keys().next().value as string);
+    };
+    trim(this.seenEventIds);
+    trim(this.lastViewerUse);
+    trim(this.lastShoutoutByTarget);
+    this.lastRuntimeStatePrunedAt = now;
   }
 
   private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin' | 'platform'> = {}) {

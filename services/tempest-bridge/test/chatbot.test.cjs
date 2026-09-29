@@ -47,6 +47,32 @@ test('times out an unresponsive upstream request instead of stalling chatbot wor
   await assert.rejects(chatbot.startDeviceAuthorization(), /timed out after 1 seconds/);
 });
 
+test('prunes expired chatbot runtime maps without scanning them on every message', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-runtime-pruning-'));
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await chatbot.initialize('client123');
+  const now = Date.now();
+  chatbot.seenEventIds.set('expired-event', now - 11 * 60_000);
+  chatbot.seenEventIds.set('recent-event', now);
+  chatbot.lastViewerUse.set('expired-viewer', now - 86_400_001);
+  chatbot.lastViewerUse.set('recent-viewer', now);
+  chatbot.lastShoutoutByTarget.set('expired-channel', now - 86_400_001);
+  chatbot.lastShoutoutByTarget.set('recent-channel', now);
+  await chatbot.processChatEvent({
+    schemaVersion: 1, id: 'new-event', topic: 'system.test', occurredAt: new Date(now).toISOString(), source: 'twitch',
+    channel: { id: '123456', login: 'tempest' }, payload: {}
+  });
+  assert.deepEqual([...chatbot.seenEventIds.keys()].sort(), ['new-event', 'recent-event']);
+  assert.deepEqual([...chatbot.lastViewerUse.keys()], ['recent-viewer']);
+  assert.deepEqual([...chatbot.lastShoutoutByTarget.keys()], ['recent-channel']);
+  const prunedAt = chatbot.lastRuntimeStatePrunedAt;
+  await chatbot.processChatEvent({
+    schemaVersion: 1, id: 'next-event', topic: 'system.test', occurredAt: new Date(now).toISOString(), source: 'twitch',
+    channel: { id: '123456', login: 'tempest' }, payload: {}
+  });
+  assert.equal(chatbot.lastRuntimeStatePrunedAt, prunedAt, 'the next message does not rescan the maps');
+});
+
 test('runs chat-triggered 3D dice through the overlay callback and reports the physical result', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-dice-'));
   const rolls = [];
