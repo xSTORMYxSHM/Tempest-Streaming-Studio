@@ -812,7 +812,11 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           const { access: _privateAccess, ...publicInteraction } = interaction;
           return [{ sku, bits: mapping.bits, interaction: publicInteraction, eligibility }];
         });
-        return sendJson(response, 200, { schemaVersion: 1, products, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+        const body = { schemaVersion: 1, products, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN };
+        const etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
+        response.setHeader('ETag', etag);
+        if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
+        return sendJson(response, 200, body, origin);
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/reservations') {
         const { claims, installation } = await authenticateBitsViewer(request);

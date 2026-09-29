@@ -23,6 +23,9 @@ test('uses Twitch Bits APIs and submits signed receipts only through the EBS', a
   const script = await read('viewer.js');
   assert.match(script, /features\?\.isBitsEnabled/);
   assert.match(script, /bits\.getProducts\(\)/);
+  assert.match(script, /twitchProductsLoadedAt/);
+  assert.match(script, /If-None-Match/);
+  assert.match(script, /serverResponse\.status === 304/);
   assert.match(script, /bits\.useBits\(product\.sku\)/);
   assert.match(script, /\/v1\/extension\/bits\/reservations/);
   assert.match(script, /reservationToken/);

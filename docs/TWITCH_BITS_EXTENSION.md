@@ -42,6 +42,8 @@ TEMPEST_BITS_PRODUCT_ACTIONS={"tempest.storm-pulse.50":{"action":"tempest.storm-
 
 Each mapped action must be published by the broadcaster's connected Studio as an `interaction` catalog item. Paid products cannot target a `sound-alert` item. The viewer UI intersects Twitch's live product list with the server-side mapping, and hides any SKU whose amount or Studio action does not match.
 
+While a Bits surface is visible, it refreshes eligibility and cooldown state every five seconds. The EBS gives each viewer-specific catalog an ETag, so an unchanged refresh returns `304 Not Modified` without a response body or DOM rebuild. Twitch product metadata is cached in the surface for 60 seconds; authorization and Twitch Bits feature changes invalidate that cache immediately. These optimizations do not cache reservations, purchase dialogs, or signed transaction validation.
+
 Studio's Viewer Interactions catalog supports stickers, GIFs, jumpscares, screen effects, sounds, counter changes, community actions, and future interaction types. Every item can have separate per-viewer and global cooldowns. Access can be open, staff-only, limited to assigned creators, or limited to explicit Twitch user IDs, with an additional block list. Locked products can either remain visible with a reason or be hidden from ineligible viewers. Viewer-placeable items collect a normalized click/tap position before the Bits dialog; Studio applies that position to its local visual and includes it in the Broadcast lifecycle payload for landscape and linked portrait output.
 
 ## Transaction boundary

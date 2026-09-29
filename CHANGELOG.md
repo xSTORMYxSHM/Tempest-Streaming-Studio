@@ -13,6 +13,7 @@
 - Coalesced bursty Studio catalog updates into at most a leading and trailing relay message, with a separate one-second dynamic-metadata refresh window. Free Extension polling now uses catalog ETags and skips JSON parsing and rendering on unchanged responses.
 - Pinned the production `js-yaml` transitive dependency to patched version 4.3.2, removing the high-severity empty-merge CPU-exhaustion advisory inherited through the desktop updater.
 - Removed raw allow-list and block-list Twitch user IDs from Free and Bits viewer catalog responses. The hosted service now returns only per-viewer eligibility, hides configured locked items, and enforces access before relaying an interaction; Studio retains its independent enforcement as the final boundary.
+- Reduced Bits Extension background work by caching Twitch product metadata for 60 seconds and using ETag/`304 Not Modified` responses for unchanged five-second eligibility checks. Authorization and Twitch feature changes still force an immediate full refresh.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

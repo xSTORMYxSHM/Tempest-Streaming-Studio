@@ -1,7 +1,8 @@
 (() => {
   'use strict';
 
-  const state = { auth: null, config: null, products: [], permitted: new Map(), reservations: new Map(), busySku: '', placementSku: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay' };
+  const state = { auth: null, config: null, products: [], twitchProducts: [], twitchProductsLoadedAt: 0, permitted: new Map(), reservations: new Map(), busySku: '', placementSku: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay' };
+  let catalogEtag = '';
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -64,7 +65,15 @@
     render();
   }
 
-  async function refreshProducts() {
+  async function loadTwitchProducts(force = false) {
+    if (!force && state.twitchProductsLoadedAt && Date.now() - state.twitchProductsLoadedAt < 60_000) return state.twitchProducts;
+    const products = await window.Twitch.ext.bits.getProducts();
+    state.twitchProducts = Array.isArray(products) ? products : [];
+    state.twitchProductsLoadedAt = Date.now();
+    return state.twitchProducts;
+  }
+
+  async function refreshProducts(forceTwitchProducts = false) {
     if (!state.auth || !state.config?.ebsBaseUrl) return;
     const features = window.Twitch.ext.features;
     if (!features?.isBitsEnabled) {
@@ -75,11 +84,20 @@
       return;
     }
     const [twitchProducts, serverResponse] = await Promise.all([
-      window.Twitch.ext.bits.getProducts(),
-      fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': state.auth.token }, cache: 'no-store' })
+      loadTwitchProducts(forceTwitchProducts),
+      fetch(`${state.config.ebsBaseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': state.auth.token, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' })
     ]);
+    if (serverResponse.status === 304) {
+      state.products = twitchProducts.filter((product) => {
+        const configured = state.permitted.get(product.sku);
+        return configured && Number(product.cost?.amount) === Number(configured.bits) && product.cost?.type === 'bits';
+      });
+      render();
+      return;
+    }
     const serverBody = await serverResponse.json().catch(() => ({}));
     if (!serverResponse.ok) throw new Error(serverBody.error || 'The Tempest Bits catalog is unavailable.');
+    catalogEtag = serverResponse.headers.get('ETag') || '';
     state.permitted = new Map((serverBody.products || []).map((product) => [product.sku, product]));
     state.products = (Array.isArray(twitchProducts) ? twitchProducts : []).filter((product) => {
       const configured = state.permitted.get(product.sku);
@@ -169,9 +187,15 @@
     if (!window.Twitch?.ext) return void loadMockProducts();
     window.Twitch.ext.onAuthorized((auth) => {
       state.auth = auth;
-      void refreshProducts().catch((error) => { setStatus('PAIRING REQUIRED'); notice(error.message, true); });
+      catalogEtag = '';
+      state.twitchProductsLoadedAt = 0;
+      void refreshProducts(true).catch((error) => { setStatus('PAIRING REQUIRED'); notice(error.message, true); });
     });
-    window.Twitch.ext.features?.onChanged?.(() => void refreshProducts().catch((error) => notice(error.message, true)));
+    window.Twitch.ext.features?.onChanged?.(() => {
+      catalogEtag = '';
+      state.twitchProductsLoadedAt = 0;
+      void refreshProducts(true).catch((error) => notice(error.message, true));
+    });
     window.Twitch.ext.bits.onTransactionComplete(async (transaction) => {
       const currentViewer = transaction?.initiator === 'current_user';
       $('#activity').textContent = currentViewer ? 'Confirming your signal…' : `${transaction?.product?.displayName || 'A signal'} activated on stream`;

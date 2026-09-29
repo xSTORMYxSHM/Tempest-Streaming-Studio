@@ -550,11 +550,18 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
   assert.equal(catalog.status, 200);
   assert.deepEqual((await catalog.json()).products.map((product) => product.sku), ['tempest.storm-pulse.50']);
   const lockedToken = jwt(bitsSecret, { user_id: '111222' });
-  const lockedCatalog = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': lockedToken } }).then((result) => result.json());
+  const lockedCatalogResponse = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, { headers: { 'X-Extension-JWT': lockedToken } });
+  const lockedCatalogEtag = lockedCatalogResponse.headers.get('etag');
+  const lockedCatalog = await lockedCatalogResponse.json();
   assert.equal(lockedCatalog.products[0].eligibility.allowed, false);
   assert.match(lockedCatalog.products[0].eligibility.reason, /selected viewers/i);
   assert.equal(lockedCatalog.products[0].interaction.access, undefined);
   assert.equal(JSON.stringify(lockedCatalog).includes('778899'), false, 'Bits catalogs never expose access-list identities');
+  const unchangedBitsCatalog = await fetch(`${runtime.baseUrl}/v1/extension/bits/catalog`, {
+    headers: { 'X-Extension-JWT': lockedToken, 'If-None-Match': lockedCatalogEtag }
+  });
+  assert.equal(unchangedBitsCatalog.status, 304);
+  assert.equal(await unchangedBitsCatalog.text(), '');
   const lockedReservation = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': lockedToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' }) });
   assert.equal(lockedReservation.status, 403);
   const inactiveFreeEdition = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(freeSecret) } });
