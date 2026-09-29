@@ -82,3 +82,14 @@ test('recognizes a community 1-2-3-2-1 emote pyramid and exposes one celebration
   assert.match(wall.page(), /EMOTE PYRAMID/);
   wall.close();
 });
+
+test('bounds remembered third-party emote media across long streams', async () => {
+  const wall = new TempestEmoteWall(await mkdtemp(path.join(os.tmpdir(), 'tempest-emote-source-bound-')));
+  for (let index = 0; index < 10_005; index += 1) {
+    wall.rememberMediaSource(`media-${index}`, { name: `Emote${index}`, provider: 'seventv', animated: false, sourceUrl: `https://cdn.7tv.app/emote/${index}/3x.webp` });
+  }
+  assert.equal(wall.mediaSources.size, 10_000);
+  assert.equal(wall.mediaSources.has('media-0'), false);
+  assert.equal(wall.mediaSources.has('media-10004'), true);
+  wall.close();
+});

@@ -87,6 +87,8 @@ const providerHosts: Record<EmoteProvider, string[]> = {
 const mediaHosts = new Set(['cdn.7tv.app', 'cdn.betterttv.net', 'cdn.frankerfacez.com']);
 const providerResponseLimit = 4 * 1024 * 1024;
 const mediaCacheLimit = 48 * 1024 * 1024;
+const maximumProviderEmotes = 10_000;
+const maximumRememberedMediaSources = 10_000;
 
 const emoteWallPage = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Studio Emote Wall</title>
@@ -137,11 +139,16 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function list(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 
+function emoteName(value: unknown): string {
+  const name = String(value || '').trim();
+  return name.length <= 100 && !/\s/.test(name) ? name : '';
+}
+
 function parseBttv(payload: unknown): ProviderEmote[] {
   const root = record(payload);
   const entries = Array.isArray(payload) ? payload : [...list(root?.channelEmotes), ...list(root?.sharedEmotes)];
   return entries.flatMap((value) => {
-    const item = record(value); const id = String(item?.id || ''); const name = String(item?.code || '');
+    const item = record(value); const id = String(item?.id || ''); const name = emoteName(item?.code);
     if (!/^[A-Za-z0-9]+$/.test(id) || !name) return [];
     const animated = String(item?.imageType || '').toLowerCase() === 'gif';
     return [{ name, provider: 'bttv' as const, animated, sourceUrl: `https://cdn.betterttv.net/emote/${id}/3x` }];
@@ -152,7 +159,7 @@ function parseFfz(payload: unknown): ProviderEmote[] {
   const sets = record(record(payload)?.sets);
   const entries = Object.values(sets || {}).flatMap((set) => list(record(set)?.emoticons));
   return entries.flatMap((value) => {
-    const item = record(value); const name = String(item?.name || ''); const urls = record(item?.urls);
+    const item = record(value); const name = emoteName(item?.name); const urls = record(item?.urls);
     const sourceUrl = normalizedHttpsUrl(urls?.['4'] || urls?.['2'] || urls?.['1']);
     if (!name || !sourceUrl) return [];
     return [{ name, provider: 'ffz' as const, animated: false, sourceUrl }];
@@ -163,7 +170,7 @@ function parseSevenTv(payload: unknown): ProviderEmote[] {
   const root = record(payload);
   const set = record(root?.emote_set) || root;
   return list(set?.emotes).flatMap((value) => {
-    const item = record(value); const data = record(item?.data); const host = record(data?.host); const name = String(item?.name || '');
+    const item = record(value); const data = record(item?.data); const host = record(data?.host); const name = emoteName(item?.name);
     const files = list(host?.files).map(record).filter(Boolean) as Record<string, unknown>[];
     const selected = [...files].reverse().find((file) => /\.(avif|webp|gif|png)$/i.test(String(file.name || '')));
     const sourceUrl = normalizedHttpsUrl(`${String(host?.url || '')}/${String(selected?.name || '')}`);
@@ -261,7 +268,7 @@ export class TempestEmoteWall {
         if (!match || (match.animated && !this.settings.includeAnimated)) return;
         provider = match.provider;
         const mediaId = createHash('sha256').update(`${provider}:${match.sourceUrl}`).digest('hex').slice(0, 32);
-        this.mediaSources.set(mediaId, match);
+        this.rememberMediaSource(mediaId, match);
         const item = this.createItem(event, index * 1000 + tokenIndex, { text: token }, `/emote-wall/media/${mediaId}`, provider);
         this.addItem(item); created.push(structuredClone(item));
       });
@@ -475,7 +482,10 @@ export class TempestEmoteWall {
       try {
         const emotes = await this.loadProvider(id, this.channelId);
         const catalog = new Map<string, ProviderEmote>();
-        for (const emote of emotes) if (!catalog.has(emote.name)) catalog.set(emote.name, emote);
+        for (const emote of emotes) {
+          if (!catalog.has(emote.name)) catalog.set(emote.name, emote);
+          if (catalog.size >= maximumProviderEmotes) break;
+        }
         this.providerCatalogs.set(id, catalog);
         this.providerStatuses.set(id, { id, state: 'ready', emoteCount: catalog.size, lastUpdatedAt: new Date().toISOString() });
       } catch (error) {
@@ -524,6 +534,12 @@ export class TempestEmoteWall {
       const oldest = this.mediaCache.keys().next().value as string;
       const entry = this.mediaCache.get(oldest); this.mediaCache.delete(oldest); this.mediaCacheBytes -= entry?.bytes.length || 0;
     }
+  }
+
+  private rememberMediaSource(id: string, emote: ProviderEmote): void {
+    this.mediaSources.delete(id);
+    this.mediaSources.set(id, emote);
+    while (this.mediaSources.size > maximumRememberedMediaSources) this.mediaSources.delete(this.mediaSources.keys().next().value as string);
   }
 
   private remove(id: string): void {

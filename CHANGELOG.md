@@ -34,6 +34,8 @@
 - Streamed Asset Library SHA-256 calculation instead of loading an entire selected video or media file into desktop memory, and bounded imported application manifests to 1 MB before parsing.
 - Streamed GIPHY downloads through a hard 25 MB reader limit, including responses without a trustworthy Content-Length header, instead of allocating an unbounded response before validating its size.
 - Capped assigned alert audio at 100 MB and reject oversized Browser Source compatibility-fallback buffers before allocation, while leaving normal media-element streaming unchanged.
+- Kept the third-party emote provider timeout active through body download and enforced the 4 MB catalog/media ceiling while streaming, preventing stalled or oversized provider bodies from retaining the Bridge or allocating without bound.
+- Bounded third-party emote names, each provider catalog, and the long-session media-source lookup so a high-volume chat cannot accumulate every distinct community emote until Studio exits.
 - Collapsed Studio's six always-on one-second Bridge status calls into one authenticated runtime snapshot while retaining the individual endpoints for compatibility, removing roughly 18,000 local HTTP requests from a typical one-hour stream.
 - Isolated active-workspace refresh failures from the core runtime snapshot so a temporarily unavailable optional tool no longer makes Studio falsely report that the entire local Bridge is offline.
 - Reused the runtime snapshot in full refreshes and retained successful optional results independently, reducing each full batch by five more local requests and preventing one optional integration failure from discarding every other fresh status.
@@ -68,7 +70,6 @@
 - Suspended renderer polling while Studio is minimized and refreshes current state immediately when the window becomes visible again.
 - Removed alert history and media diagnostics from the fast polling path unless Activity & Diagnostics is open, and cached alert media availability checks for 30 seconds.
 - Stopped the Emote Wall animation loop whenever no emotes are active, the overlay is disabled, or its browser source is hidden.
-- Kept the third-party emote provider timeout active through body download and enforced the 4 MB catalog/media ceiling while streaming, preventing stalled or oversized provider bodies from retaining the Bridge or allocating without bound.
 
 ## 1.4.1 — Platform-centered navigation
 
