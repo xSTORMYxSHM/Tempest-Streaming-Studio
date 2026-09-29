@@ -506,6 +506,8 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   assert.match(overlayMarkup, /audio exceeds 100 MB fallback limit/);
   assert.match(overlayMarkup, /response\.body\.getReader\(\)/);
   assert.doesNotMatch(overlayMarkup, /encoded:await response\.arrayBuffer\(\)/);
+  assert.match(overlayMarkup, /new Blob\(body\.chunks/);
+  assert.match(overlayMarkup, /playWebAudio\(joinAudioBody\(payload\.body\)/);
   assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
   assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(orientation==='vertical'/);
   assert.match(overlayMarkup, /id="customStyle"/);

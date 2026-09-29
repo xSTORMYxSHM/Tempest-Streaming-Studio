@@ -34,6 +34,7 @@
 - Streamed Asset Library SHA-256 calculation instead of loading an entire selected video or media file into desktop memory, and bounded imported application manifests to 1 MB before parsing.
 - Streamed GIPHY downloads through a hard 25 MB reader limit, including responses without a trustworthy Content-Length header, instead of allocating an unbounded response before validating its size.
 - Streamed assigned alert audio through a hard 100 MB Browser Source compatibility-fallback limit, including responses without a trustworthy Content-Length header, while leaving normal media-element streaming unchanged.
+- Deferred concatenating streamed alert-audio fallback chunks unless both media-element playback paths fail and Web Audio decoding is actually needed, reducing peak Browser Source memory in the common compatibility path.
 - Copied imported Dice Box theme assets without buffering each file in desktop memory and rejected oversized theme manifests before JSON parsing.
 - Kept the third-party emote provider timeout active through body download and enforced the 4 MB catalog/media ceiling while streaming, preventing stalled or oversized provider bodies from retaining the Bridge or allocating without bound.
 - Bounded third-party emote names, each provider catalog, and the long-session media-source lookup so a high-volume chat cannot accumulate every distinct community emote until Studio exits.
