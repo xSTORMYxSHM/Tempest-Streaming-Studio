@@ -143,12 +143,20 @@ export interface ChatbotNumericPollStatus {
   lastVoteAt?: string;
 }
 
+export interface ChatbotNumericPollVoteResult {
+  accepted: boolean;
+  duplicate: boolean;
+  code: 'accepted' | 'poll-inactive' | 'stale-poll' | 'invalid-option' | 'identity-required' | 'already-voted';
+  optionNumber?: number;
+  poll: ChatbotNumericPollStatus;
+}
+
 interface ChatbotNumericPollRuntime {
   id: string;
   state: 'active' | 'closed';
   question: string;
   options: Array<{ number: number; label: string; votes: number }>;
-  voters: Set<string>;
+  voters: Map<string, number>;
   startedAt: string;
   endedAt?: string;
   lastVoteAt?: string;
@@ -282,6 +290,7 @@ export interface TwitchChatbotOptions {
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
   sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
+  onPollChanged?: (poll: ChatbotNumericPollStatus) => void;
 }
 
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
@@ -861,7 +870,7 @@ export class TwitchChatbot {
           : undefined,
         lastSentAt: this.autoMessageLastSentAt
       },
-      poll: this.numericPollStatus(),
+      poll: this.pollStatus(),
       providers: {
         weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
         nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
@@ -1115,9 +1124,10 @@ export class TwitchChatbot {
     this.numericPoll = {
       id: randomUUID(), state: 'active', question,
       options: options.map((label, index) => ({ number: index + 1, label, votes: 0 })),
-      voters: new Set(), startedAt: new Date().toISOString()
+      voters: new Map(), startedAt: new Date().toISOString()
     };
     this.record({ state: 'accepted', message: `Numeric chat poll started: ${question}` });
+    this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
@@ -1126,6 +1136,7 @@ export class TwitchChatbot {
     this.numericPoll.state = 'closed';
     this.numericPoll.endedAt = new Date().toISOString();
     this.record({ state: 'accepted', message: `Chat poll ended with ${this.numericPoll.voters.size} vote${this.numericPoll.voters.size === 1 ? '' : 's'}.` });
+    this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
@@ -1133,6 +1144,7 @@ export class TwitchChatbot {
     const hadPoll = Boolean(this.numericPoll);
     this.numericPoll = undefined;
     if (hadPoll) this.record({ state: 'accepted', message: 'Chat poll cleared.' });
+    if (hadPoll) this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
@@ -1182,7 +1194,13 @@ export class TwitchChatbot {
       this.autoMessageMessagesSinceLast += 1;
       this.autoMessageActivePlatforms.add(event.source === 'kick' ? 'kick' : 'twitch');
       await this.maybeSendAutoMessage();
-      this.recordNumericPollVote(event);
+      const pollVote = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
+      if (pollVote) this.recordNumericPollVote({
+        pollId: this.numericPoll?.id,
+        optionNumber: Number(pollVote[1]),
+        voterId: String(event.viewer?.id || event.viewer?.login || event.viewer?.displayName || ''),
+        source: event.source
+      });
     }
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
@@ -1508,7 +1526,7 @@ export class TwitchChatbot {
     this.activity = this.activity.slice(0, 100);
   }
 
-  private numericPollStatus(): ChatbotNumericPollStatus {
+  pollStatus(): ChatbotNumericPollStatus {
     const poll = this.numericPoll;
     if (!poll) return { state: 'idle', options: [], totalVotes: 0 };
     const totalVotes = poll.voters.size;
@@ -1519,20 +1537,23 @@ export class TwitchChatbot {
     };
   }
 
-  private recordNumericPollVote(event: TempestNormalizedChatEvent): void {
+  recordNumericPollVote(input: { pollId?: string; optionNumber: number; voterId: string; source: 'twitch' | 'kick' }): ChatbotNumericPollVoteResult {
     const poll = this.numericPoll;
-    if (!poll || poll.state !== 'active') return;
-    const match = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
-    if (!match) return;
-    const option = poll.options.find((entry) => entry.number === Number(match[1]));
-    if (!option) return;
-    const identity = String(event.viewer?.id || event.viewer?.login || event.viewer?.displayName || '').trim().toLocaleLowerCase();
-    if (!identity) return;
-    const voterKey = `${event.source}:${identity}`;
-    if (poll.voters.has(voterKey)) return;
-    poll.voters.add(voterKey);
+    if (!poll || poll.state !== 'active') return { accepted: false, duplicate: false, code: 'poll-inactive', poll: this.pollStatus() };
+    if (input.pollId && input.pollId !== poll.id) return { accepted: false, duplicate: false, code: 'stale-poll', poll: this.pollStatus() };
+    const option = poll.options.find((entry) => entry.number === input.optionNumber);
+    if (!option) return { accepted: false, duplicate: false, code: 'invalid-option', poll: this.pollStatus() };
+    const identity = String(input.voterId || '').trim().toLocaleLowerCase();
+    if (!identity) return { accepted: false, duplicate: false, code: 'identity-required', poll: this.pollStatus() };
+    const voterKey = `${input.source}:${identity}`;
+    const existingVote = poll.voters.get(voterKey);
+    if (existingVote !== undefined) return { accepted: false, duplicate: true, code: 'already-voted', optionNumber: existingVote, poll: this.pollStatus() };
+    poll.voters.set(voterKey, option.number);
     option.votes += 1;
     poll.lastVoteAt = new Date().toISOString();
+    const status = this.pollStatus();
+    this.options.onPollChanged?.(status);
+    return { accepted: true, duplicate: false, code: 'accepted', optionNumber: option.number, poll: status };
   }
 
   private resetAutoMessageWindow(): void {

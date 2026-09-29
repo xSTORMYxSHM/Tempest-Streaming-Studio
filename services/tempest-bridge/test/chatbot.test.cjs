@@ -177,7 +177,8 @@ test('persists streamer-named counters shared by Twitch and Kick chat', async ()
 
 test('records one numeric poll vote per chat account and keeps aggregate results after voting ends', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-poll-'));
-  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  const pollChanges = [];
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), onPollChanged: (poll) => pollChanges.push(poll) });
   await chatbot.initialize('client123');
   chatbot.startNumericPoll({ question: 'What should we play?', options: ['Game One', 'Game Two', 'Game Three'] });
   const event = (id, text, viewerId, source = 'twitch') => ({
@@ -193,19 +194,30 @@ test('records one numeric poll vote per chat account and keeps aggregate results
   await chatbot.processChatEvent(event('not-a-vote', 'I choose 3', 'viewer-three'));
   await chatbot.processChatEvent(event('out-of-range', '9', 'viewer-four'));
 
+  const duplicatePanelVote = chatbot.recordNumericPollVote({ pollId: chatbot.status().poll.id, optionNumber: 1, voterId: 'viewer-one', source: 'twitch' });
+  assert.equal(duplicatePanelVote.accepted, false);
+  assert.equal(duplicatePanelVote.duplicate, true);
+  assert.equal(duplicatePanelVote.optionNumber, 2);
+  const panelVote = chatbot.recordNumericPollVote({ pollId: chatbot.status().poll.id, optionNumber: 1, voterId: 'viewer-five', source: 'twitch' });
+  assert.equal(panelVote.accepted, true);
+  assert.equal(panelVote.optionNumber, 1);
+
   let poll = chatbot.status().poll;
   assert.equal(poll.state, 'active');
-  assert.equal(poll.totalVotes, 2);
-  assert.deepEqual(poll.options.map((option) => option.votes), [0, 2, 0]);
-  assert.equal(poll.options[1].percentage, 100);
+  assert.equal(poll.totalVotes, 3);
+  assert.deepEqual(poll.options.map((option) => option.votes), [1, 2, 0]);
+  assert.equal(poll.options[1].percentage, 66.7);
 
   chatbot.stopNumericPoll();
   await chatbot.processChatEvent(event('after-close', '1', 'viewer-five'));
   poll = chatbot.status().poll;
   assert.equal(poll.state, 'closed');
-  assert.equal(poll.totalVotes, 2);
+  assert.equal(poll.totalVotes, 3);
   chatbot.clearNumericPoll();
   assert.deepEqual(chatbot.status().poll, { state: 'idle', options: [], totalVotes: 0 });
+  assert.deepEqual(pollChanges.map((poll) => [poll.state, poll.totalVotes]), [
+    ['active', 0], ['active', 1], ['active', 2], ['active', 3], ['closed', 3], ['idle', 0]
+  ]);
   await chatbot.close();
 });
 

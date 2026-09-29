@@ -131,6 +131,62 @@ test('reports Studio offline and protects generic interactions with an action al
   assert.equal(forbidden.status, 403);
 });
 
+test('publishes a free Extension poll and records one identity-linked viewer vote through Studio', async (context) => {
+  const secret = randomBytes(32);
+  const relayToken = randomBytes(32).toString('hex');
+  const runtime = await startTwitchEbs({
+    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [secret.toString('base64')], relayToken,
+    allowedChannelIds: ['123456'], logger: { info() {}, warn() {}, error() {} }
+  });
+  context.after(() => runtime.close());
+  const studio = await connectStudio(runtime, relayToken);
+  context.after(() => studio.close());
+  const poll = {
+    id: 'poll-1234567890123456', state: 'active', question: 'Choose the next game', totalVotes: 999,
+    options: [{ number: 1, label: 'Game One', votes: 2, percentage: 1 }, { number: 2, label: 'Game Two', votes: 0, percentage: 99 }],
+    startedAt: new Date().toISOString()
+  };
+  studio.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog: { schemaVersion: 1, extensionEdition: 'free', items: [], poll } }));
+  const catalogDeadline = Date.now() + 2000;
+  let published;
+  while (Date.now() < catalogDeadline) {
+    published = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((response) => response.json());
+    if (published.poll?.id === poll.id) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(published.poll.totalVotes, 2);
+  assert.deepEqual(published.poll.options.map((option) => option.percentage), [100, 0]);
+
+  let relayed;
+  studio.on('message', (raw) => {
+    const message = JSON.parse(raw.toString());
+    if (message.type !== 'interaction') return;
+    relayed = message;
+    studio.send(JSON.stringify({
+      protocolVersion: 1, type: 'result', requestId: message.requestId, status: 202,
+      body: { accepted: true, duplicate: false, code: 'accepted', optionNumber: 2, poll: { ...poll, totalVotes: 3, options: [{ number: 1, label: 'Game One', votes: 2, percentage: 66.7 }, { number: 2, label: 'Game Two', votes: 1, percentage: 33.3 }] } }
+    }));
+  });
+  const requestId = randomUUID();
+  const response = await fetch(`${runtime.baseUrl}/v1/extension/poll/vote`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': requestId },
+    body: JSON.stringify({ requestId, pollId: poll.id, optionNumber: 2 })
+  });
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).poll.totalVotes, 3);
+  assert.equal(relayed.event.viewer.id, '778899');
+  assert.equal(relayed.event.payload.action, 'tempest.poll.vote');
+  assert.equal(relayed.event.payload.pollId, poll.id);
+  assert.equal(relayed.event.payload.optionNumber, 2);
+
+  const unlinked = await fetch(`${runtime.baseUrl}/v1/extension/poll/vote`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret) },
+    body: JSON.stringify({ requestId: randomUUID(), pollId: poll.id, optionNumber: 1 })
+  });
+  assert.equal(unlinked.status, 403);
+  assert.equal((await unlinked.json()).code, 'identity_required');
+});
+
 test('carries a Twitch-signed alert through the real Studio relay and Bridge gateway', async (context) => {
   const secret = randomBytes(32);
   const relayToken = randomBytes(32).toString('hex');
@@ -169,6 +225,31 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   }).then((bridgeResponse) => bridgeResponse.json());
   assert.equal(twitchStatus.acceptedEvents, 1);
   assert.equal(twitchStatus.connections.extensionRelay, 'connected');
+
+  const startedPoll = await fetch(`${bridge.baseUrl}/v1/chatbot/poll/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token },
+    body: JSON.stringify({ question: 'Which route?', options: ['North', 'South'] })
+  }).then((pollResponse) => pollResponse.json());
+  const pollId = startedPoll.poll.id;
+  const pollDeadline = Date.now() + 7000;
+  let publishedPoll;
+  while (Date.now() < pollDeadline) {
+    const catalog = await fetch(`${ebs.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(secret, { user_id: '778899' }) } }).then((catalogResponse) => catalogResponse.json());
+    publishedPoll = catalog.poll;
+    if (publishedPoll?.id === pollId) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(publishedPoll.id, pollId);
+  const pollRequestId = randomUUID();
+  const pollVote = await fetch(`${ebs.baseUrl}/v1/extension/poll/vote`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': jwt(secret, { user_id: '778899' }), 'X-Request-ID': pollRequestId },
+    body: JSON.stringify({ requestId: pollRequestId, pollId, optionNumber: 2 })
+  });
+  assert.equal(pollVote.status, 202);
+  const pollResult = await pollVote.json();
+  assert.equal(pollResult.accepted, true);
+  assert.equal(pollResult.poll.totalVotes, 1);
+  assert.deepEqual(pollResult.poll.options.map((option) => option.votes), [0, 1]);
 });
 
 test('pairs public Studio installations with Twitch identity and publishes a channel-scoped catalog', async (context) => {

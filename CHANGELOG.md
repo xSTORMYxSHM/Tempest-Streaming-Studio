@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Free Extension testing and live polls
+
+- Integrated one-click localhost HTTPS preparation into Studio with a SHA-256-pinned official mkcert 1.4.4 helper, an isolated per-installation CA, a Windows-native offline fallback, visible certificate status, and complete trust/private-key removal.
+- Added active Studio polls to the free Tempest Mainframe Twitch Extension. Identity-linked viewers can vote once from the Panel or Video Component, the same Twitch account cannot vote again through chat, and live/final totals remain visible without any Bits dependency.
+
 ## 1.4.7 — 3D Dice and Browser Source audio
 
 - Added a Studio-owned 3D Dice workspace and transparent Browser Source powered by the locally bundled MIT-licensed Dice Box renderer. Real WebGL rigid-body dice roll, bounce, collide, and settle before Studio records the result; common dice, unbiased custom 1–N ranges through 100, advantage/disadvantage, optional reasons and impact audio, three colors, and configurable timing and scale are included. The feature is independent of Tempest Tabletop Engine.

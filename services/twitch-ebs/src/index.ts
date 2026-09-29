@@ -11,6 +11,7 @@ import {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
   PublicExtensionPanelDesign,
+  PublicExtensionPoll,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
@@ -24,6 +25,7 @@ export type {
   PublicExtensionCatalog,
   PublicExtensionCatalogItem,
   PublicExtensionPanelDesign,
+  PublicExtensionPoll,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
@@ -207,7 +209,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { extensionEdition?: unknown; items?: unknown };
+  const source = value as { extensionEdition?: unknown; items?: unknown; poll?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   if (!Array.isArray(source.items) || source.items.length > 200) throw new Error('Catalog sync supports at most 200 items.');
@@ -240,7 +242,40 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     seen.add(id);
     return { id, name, kind, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), ...(viewerCooldownMs === undefined ? {} : { viewerCooldownMs }), ...(globalCooldownMs === undefined ? {} : { globalCooldownMs }), category, placementMode, access, accent, glyph };
   });
-  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items };
+  let poll: PublicExtensionPoll | undefined;
+  if (source.poll !== undefined) {
+    if (extensionEdition !== 'free') throw new Error('Polls are published only to the free Extension edition.');
+    if (!source.poll || typeof source.poll !== 'object' || Array.isArray(source.poll)) throw new Error('Catalog poll is invalid.');
+    const candidate = source.poll as Record<string, unknown>;
+    const id = String(candidate.id || '').trim();
+    const state = candidate.state === 'active' ? 'active' : candidate.state === 'closed' ? 'closed' : '';
+    const question = String(candidate.question || '').trim();
+    const startedAt = String(candidate.startedAt || '');
+    const endedAt = candidate.endedAt === undefined ? undefined : String(candidate.endedAt);
+    const lastVoteAt = candidate.lastVoteAt === undefined ? undefined : String(candidate.lastVoteAt);
+    if (!/^[A-Za-z0-9-]{16,80}$/.test(id) || !state || !question || question.length > 160 || /[\r\n\0]/.test(question)) throw new Error('Catalog poll identity is invalid.');
+    if (!Number.isFinite(Date.parse(startedAt)) || (endedAt && !Number.isFinite(Date.parse(endedAt))) || (lastVoteAt && !Number.isFinite(Date.parse(lastVoteAt)))) throw new Error('Catalog poll timestamps are invalid.');
+    if (!Array.isArray(candidate.options) || candidate.options.length < 2 || candidate.options.length > 10) throw new Error('Catalog poll must contain 2 to 10 options.');
+    const options = candidate.options.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog poll option ${index + 1} is invalid.`);
+      const option = entry as Record<string, unknown>;
+      const number = Number(option.number);
+      const label = String(option.label || '').trim();
+      const votes = Number(option.votes);
+      if (number !== index + 1 || !label || label.length > 80 || /[\r\n\0]/.test(label) || !Number.isSafeInteger(votes) || votes < 0 || votes > 1_000_000_000) throw new Error(`Catalog poll option ${index + 1} is invalid.`);
+      return { number, label, votes, percentage: 0 };
+    });
+    if (new Set(options.map((option) => option.label.toLocaleLowerCase())).size !== options.length) throw new Error('Catalog poll option names must be unique.');
+    const totalVotes = options.reduce((total, option) => total + option.votes, 0);
+    poll = {
+      id, state, question,
+      options: options.map((option) => ({ ...option, percentage: totalVotes ? Math.round((option.votes / totalVotes) * 1000) / 10 : 0 })),
+      totalVotes, startedAt,
+      ...(endedAt ? { endedAt } : {}),
+      ...(lastVoteAt ? { lastVoteAt } : {})
+    };
+  }
+  return { schemaVersion: 1, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {
@@ -728,6 +763,20 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           lastBitsGlobalUse.set(`${claims.channel_id}:${interaction.id}`, now);
           lastBitsViewerUse.set(`${claims.channel_id}:${interaction.id}:${receipt.data.userId}`, now);
         }
+        return sendJson(response, result.status, result.body, origin);
+      }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/poll/vote') {
+        const { claims, installation } = await authenticateViewer(request);
+        if (!claims.user_id || claims.opaque_user_id.startsWith('A')) throw new HttpError(403, 'Share your Twitch identity to vote in this poll.', { code: 'identity_required' });
+        const body = await readJson(request);
+        const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
+        const pollId = String(body.pollId || '').trim();
+        const optionNumber = Number(body.optionNumber);
+        const poll = installation.catalog.poll;
+        if (!poll || poll.state !== 'active') throw new HttpError(409, 'This poll is no longer accepting votes.', { code: 'poll_inactive' });
+        if (poll.id !== pollId) throw new HttpError(409, 'The active poll changed before this vote arrived.', { code: 'stale_poll' });
+        if (!poll.options.some((option) => option.number === optionNumber)) throw new HttpError(400, 'Choose one of the available poll options.', { code: 'invalid_option' });
+        const result = await dispatchInteraction(claims, requestId, (id) => normalizedEvent(claims, id, 'tempest.poll.vote', { pollId, optionNumber }, claims.user_id), claims.user_id);
         return sendJson(response, result.status, result.body, origin);
       }
       const alertMatch = requestUrl.pathname.match(/^\/v1\/extension\/alerts\/([^/]+)\/trigger$/);

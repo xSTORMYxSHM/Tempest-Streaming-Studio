@@ -21,6 +21,17 @@ export interface PublicExtensionCatalogItem {
   kind: 'sound-alert' | 'interaction';
 }
 
+export interface PublicExtensionPoll {
+  id: string;
+  state: 'active' | 'closed';
+  question: string;
+  options: Array<{ number: number; label: string; votes: number; percentage: number }>;
+  totalVotes: number;
+  startedAt: string;
+  endedAt?: string;
+  lastVoteAt?: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -49,6 +60,7 @@ export interface PublicExtensionCatalog {
   extensionEdition: 'free' | 'bits';
   updatedAt: string;
   items: PublicExtensionCatalogItem[];
+  poll?: PublicExtensionPoll;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

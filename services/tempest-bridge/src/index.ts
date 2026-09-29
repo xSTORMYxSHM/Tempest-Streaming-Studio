@@ -390,6 +390,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const clients = new Map<string, BridgeClient>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumBodyBytes });
   let ingestChatEvent: (event: TempestNormalizedChatEvent) => Promise<void> = async () => {};
+  let extensionRelay: TempestExtensionRelayClient | null = null;
   const twitchGateway = new TwitchIntegrationGateway({ dataDirectory: options.dataDirectory, credentialStore: options.twitchCredentialStore, onEvent: (event) => ingestChatEvent(event) });
   await twitchGateway.initialize();
   const connectedBroadcast = (): BridgeClient | undefined => [...clients.values()].find((client) => client.applicationId === broadcastApplicationId);
@@ -413,7 +414,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     onEvent: (event) => ingestChatEvent(event),
     onCommand: (dispatch) => dispatchChatCommand(dispatch),
     sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
-    onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); }
+    onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); },
+    onPollChanged() { extensionRelay?.syncCatalog(); }
   });
   await chatbot.initialize(twitchGateway.status().clientId || '');
   kickGateway = new KickIntegrationGateway({
@@ -500,7 +502,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const diceOverlay = new TempestDiceOverlay(options.dataDirectory);
   await diceOverlay.initialize();
   let alertQueue: TempestAlertQueue | undefined;
-  let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
 
   const activeBroadcastScene = (): string | undefined => {
@@ -1727,6 +1728,38 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const configuredAlert = typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
           : typeof event.payload.cue === 'string' ? soundAlerts.find(event.payload.cue)
             : action ? soundAlerts.find(action) : undefined;
+        if (event.topic === 'viewer.interaction.requested' && action === 'tempest.poll.vote') {
+          const pollId = String(event.payload.pollId || '').trim();
+          const optionNumber = Number(event.payload.optionNumber);
+          const vote = chatbot.recordNumericPollVote({
+            pollId,
+            optionNumber,
+            voterId: String(event.viewer?.id || ''),
+            source: 'twitch'
+          });
+          workflowEngine.recordExternalEvent(
+            vote.accepted ? 'studio.poll.vote.accepted' : 'studio.poll.vote.ignored',
+            vote.accepted ? 'success' : 'info',
+            vote.accepted ? `Twitch viewer vote ${optionNumber} was recorded.` : `Twitch viewer poll vote was not recorded: ${vote.code}.`,
+            { eventId: event.id, pollId, optionNumber, viewerId: event.viewer?.id, voteCode: vote.code }
+          );
+          const pollVoteErrors: Record<string, string> = {
+            'poll-inactive': 'This poll is no longer accepting votes.',
+            'stale-poll': 'The active poll changed before this vote arrived.',
+            'invalid-option': 'That poll option is no longer available.',
+            'identity-required': 'A verified Twitch identity is required to vote.',
+            'already-voted': `This Twitch account already voted for option ${vote.optionNumber}.`
+          };
+          return sendJson(response, vote.accepted ? 202 : vote.duplicate ? 200 : 409, {
+            accepted: vote.accepted,
+            duplicate: vote.duplicate,
+            code: vote.code.replaceAll('-', '_'),
+            ...(!vote.accepted ? { error: pollVoteErrors[vote.code] || 'The poll vote was not accepted.' } : {}),
+            optionNumber: vote.optionNumber,
+            poll: vote.poll,
+            eventId: event.id
+          });
+        }
         if (event.topic === 'viewer.interaction.requested') {
           const access = await chatbot.authorizeInteraction(event, configuredAlert);
           if (!access.allowed) {
@@ -1939,6 +1972,20 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
         kind: extensionCatalogKind(relayOptions.extensionEdition)
       })),
+      poll: () => {
+        const poll = chatbot.pollStatus();
+        if (poll.state === 'idle' || !poll.id || !poll.question || !poll.startedAt) return undefined;
+        return {
+          id: poll.id,
+          state: poll.state,
+          question: poll.question,
+          options: poll.options,
+          totalVotes: poll.totalVotes,
+          startedAt: poll.startedAt,
+          endedAt: poll.endedAt,
+          lastVoteAt: poll.lastVoteAt
+        };
+      },
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayState(status.state, status.lastError);
       },

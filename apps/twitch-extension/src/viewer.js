@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -88,6 +88,34 @@
     return Math.max(0, (cooldowns.get(id) || 0) - Date.now());
   }
 
+  function pollVoteKey(pollId) {
+    return `tempest-extension-poll-vote:${pollId}`;
+  }
+
+  function savedPollVote(pollId) {
+    const value = Number(sessionStorage.getItem(pollVoteKey(pollId)));
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }
+
+  function renderPoll() {
+    const poll = state.poll;
+    const region = $('#pollRegion');
+    region.hidden = !poll;
+    if (!poll) return;
+    const selected = savedPollVote(poll.id);
+    const closed = poll.state !== 'active';
+    $('#pollState').textContent = closed ? 'FINAL RESULTS' : 'VOTING OPEN';
+    $('#pollQuestion').textContent = poll.question;
+    $('#pollOptions').innerHTML = poll.options.map((option) => `<button class="poll-option${selected === option.number ? ' selected' : ''}" type="button" data-poll-option="${option.number}" ${closed || state.pollBusy || selected ? 'disabled' : ''} aria-label="Vote ${option.number}: ${escapeHtml(option.label)}">
+      <span class="poll-option-copy"><b>${option.number}</b><strong>${escapeHtml(option.label)}</strong><i>${option.votes} · ${option.percentage}%</i></span>
+      <span class="poll-meter" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, Number(option.percentage) || 0))}%"></i></span>
+    </button>`).join('');
+    $('#pollSummary').textContent = selected
+      ? `Your vote: ${selected} · ${poll.totalVotes} total vote${poll.totalVotes === 1 ? '' : 's'}.`
+      : closed ? `${poll.totalVotes} final vote${poll.totalVotes === 1 ? '' : 's'}.`
+        : `Each linked Twitch viewer gets one vote · ${poll.totalVotes} recorded.`;
+  }
+
   function render() {
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
@@ -98,13 +126,14 @@
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
     $('#performanceRegion').hidden = performances.length === 0;
-    $('#emptyState').hidden = visibleCount !== 0;
+    $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
         <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${wait ? `RECHARGING · ${seconds(wait)}` : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
       </button>`;
     }).join('');
+    renderPoll();
     $('#alertGrid').innerHTML = performances.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
@@ -133,6 +162,10 @@
       applyPanelDesign(body.panelDesign);
     }
     state.alerts = body.items;
+    const incomingPoll = body.poll && typeof body.poll === 'object' ? body.poll : null;
+    state.poll = incomingPoll && state.poll?.id === incomingPoll.id && Number(state.poll.totalVotes) > Number(incomingPoll.totalVotes)
+      ? state.poll
+      : incomingPoll;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
     render();
   }
@@ -196,6 +229,50 @@
     }
   }
 
+  async function voteInPoll(optionNumber) {
+    const poll = state.poll;
+    if (!poll || poll.state !== 'active' || state.pollBusy || savedPollVote(poll.id)) return;
+    state.pollBusy = true;
+    renderPoll();
+    try {
+      if (state.configuration.mockMode) {
+        const option = poll.options.find((entry) => entry.number === optionNumber);
+        if (!option) throw new Error('That poll choice is no longer available.');
+        option.votes += 1;
+        poll.totalVotes += 1;
+        poll.options = poll.options.map((entry) => ({ ...entry, percentage: poll.totalVotes ? Math.round((entry.votes / poll.totalVotes) * 1000) / 10 : 0 }));
+        sessionStorage.setItem(pollVoteKey(poll.id), String(optionNumber));
+        toast(`Vote ${optionNumber} recorded in local preview.`);
+        return;
+      }
+      if (!state.auth?.token || !state.configuration.ebsBaseUrl) throw new Error('The Tempest poll relay is not configured.');
+      const requestId = crypto.randomUUID();
+      const response = await fetch(`${state.configuration.ebsBaseUrl}/v1/extension/poll/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId },
+        body: JSON.stringify({ requestId, pollId: poll.id, optionNumber })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body.error || `Poll vote was rejected with status ${response.status}.`);
+        error.code = body.code;
+        throw error;
+      }
+      if (body.poll && typeof body.poll === 'object') state.poll = body.poll;
+      const recordedOption = Number(body.optionNumber || optionNumber);
+      if (body.accepted || body.duplicate) sessionStorage.setItem(pollVoteKey(poll.id), String(recordedOption));
+      toast(body.duplicate ? `You already voted for option ${recordedOption}.` : `Vote ${recordedOption} recorded.`);
+    } catch (error) {
+      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) {
+        toast('Share your Twitch identity to cast one verified vote.', true);
+        window.Twitch.ext.actions.requestIdShare();
+      } else toast(error.message, true);
+    } finally {
+      state.pollBusy = false;
+      renderPoll();
+    }
+  }
+
   function bindTwitch() {
     if (!window.Twitch?.ext) {
       setConnection('LOCAL PREVIEW', true);
@@ -233,6 +310,10 @@
     };
     $('#featuredGrid').addEventListener('click', triggerFromClick);
     $('#alertGrid').addEventListener('click', triggerFromClick);
+    $('#pollOptions').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-poll-option]');
+      if (button) void voteInPoll(Number(button.dataset.pollOption));
+    });
     document.querySelector('.signal-filters').addEventListener('click', (event) => {
       const button = event.target.closest('[data-signal-filter]');
       if (!button) return;
@@ -248,7 +329,7 @@
     setInterval(() => { if ([...cooldowns.keys()].some((id) => remaining(id) > 0)) render(); }, 1000);
     setInterval(() => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
-    }, 15000);
+    }, 10000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     });
@@ -270,6 +351,14 @@
       ...(await response.json()).map((entry) => ({ ...entry, kind: 'sound-alert' }))
     ];
     state.alerts = configuration.mockMode ? bundledAlerts : [];
+    state.poll = configuration.mockMode ? {
+      id: 'local-preview-poll-0001', state: 'active', question: 'What should happen next?', totalVotes: 12,
+      options: [
+        { number: 1, label: 'Roll the 3D dice', votes: 7, percentage: 58.3 },
+        { number: 2, label: 'Trigger a stream effect', votes: 5, percentage: 41.7 }
+      ],
+      startedAt: new Date().toISOString()
+    } : null;
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

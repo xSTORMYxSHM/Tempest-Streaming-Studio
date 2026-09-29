@@ -31,6 +31,14 @@
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
+        <div id="pollRegion" class="catalog-section poll-section" hidden>
+          <div class="section-heading"><span>LIVE CHAT POLL</span><i id="pollState">VOTING OPEN</i></div>
+          <article class="poll-card">
+            <h2 id="pollQuestion"></h2>
+            <div id="pollOptions" class="poll-options"></div>
+            <small id="pollSummary">Each linked Twitch viewer gets one vote.</small>
+          </article>
+        </div>
         <div id="featuredRegion" class="catalog-section">
           <div class="section-heading"><span>FEATURED EVENT</span><i>STREAM EFFECT</i></div>
           <div id="featuredGrid"></div>

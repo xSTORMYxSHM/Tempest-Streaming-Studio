@@ -58,10 +58,13 @@ test('allows Twitch Extension Supervisor to embed local-test assets', async () =
 });
 
 test('ships the compact categorized signal deck for Twitch panels', async () => {
+  const viewer = await readFile(path.join(appDirectory, 'dist', 'video_component.html'), 'utf8');
   const panel = await readFile(path.join(appDirectory, 'dist', 'panel.html'), 'utf8');
   const styles = await readFile(path.join(appDirectory, 'dist', 'styles.css'), 'utf8');
   const viewerScript = await readFile(path.join(appDirectory, 'dist', 'viewer.js'), 'utf8');
   assert.match(panel, /id="featuredGrid"/);
+  assert.match(panel, /id="pollRegion"/);
+  assert.match(viewer, /id="pollRegion"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
@@ -71,9 +74,11 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /applyPanelDesign/);
   assert.match(viewerScript, /body\.panelDesign/);
   assert.match(viewerScript, /hostedPanelDesign/);
-  assert.match(viewerScript, /15000/);
+  assert.match(viewerScript, /10000/);
   assert.match(viewerScript, /configuration\.broadcaster/);
   assert.match(viewerScript, /requestIdShare/);
   assert.match(viewerScript, /identity_required/);
+  assert.match(viewerScript, /\/v1\/extension\/poll\/vote/);
+  assert.match(viewerScript, /tempest-extension-poll-vote/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });
