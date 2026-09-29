@@ -12,6 +12,7 @@ Clean installations include these public-safe commands. They allow Shared Chat b
 | `!title` | — | Reports the current Twitch stream title. | Twitch Get Channel Information; no new scope |
 | `!game` | `!category` | Reports the current Twitch category. | Twitch Get Channel Information; no new scope |
 | `!schedule` | `!nextstream` | Reports the next Twitch schedule segment in the configured/system time zone. | A schedule configured on Twitch; no new read scope |
+| `!roll [dice] [reason]` | `!dice` | Rolls physical 3D dice on stream and reports the settled result to the originating chat. Defaults to `1d20`. | Connected 3D Dice Browser Source |
 | `!lurk` | — | Acknowledges a viewer entering lurk mode. | None |
 | `!unlurk` | `!back` | Welcomes a viewer back from lurk mode. | None |
 

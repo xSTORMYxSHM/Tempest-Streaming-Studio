@@ -45,7 +45,7 @@ import {
   TempestExtensionRelayClient,
   extensionCatalogKind
 } from './extension-relay';
-import { ChatbotDispatch, TwitchChatbot } from './chatbot';
+import { TwitchChatbot, type ChatbotDiceRollRequest, type ChatbotDiceRollResult, type ChatbotDispatch } from './chatbot';
 import { KickIntegrationGateway, type KickCredentialStore } from './kick-integration';
 
 export type { TwitchCredentialStore, TwitchTokenSet } from './twitch-integration';
@@ -406,6 +406,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     return message.id;
   };
   let dispatchChatCommand: (dispatch: ChatbotDispatch) => Promise<void> = async () => {};
+  let dispatchChatDice: (request: ChatbotDiceRollRequest) => Promise<ChatbotDiceRollResult> = async () => { throw new Error('3D Dice is not ready.'); };
   let kickGateway!: KickIntegrationGateway;
   const chatbot = new TwitchChatbot({
     dataDirectory: options.dataDirectory,
@@ -413,6 +414,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     fetchImplementation: options.chatbotFetchImplementation,
     onEvent: (event) => ingestChatEvent(event),
     onCommand: (dispatch) => dispatchChatCommand(dispatch),
+    rollDice: (request) => dispatchChatDice(request),
     sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
     onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); },
     onPollChanged() { extensionRelay?.syncCatalog(); }
@@ -501,6 +503,17 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await discordVoiceOverlay.initialize();
   const diceOverlay = new TempestDiceOverlay(options.dataDirectory);
   await diceOverlay.initialize();
+  dispatchChatDice = async (request) => {
+    const roll = await diceOverlay.roll({ expression: request.expression, reason: request.reason, rollerName: request.rollerName });
+    workflowEngine?.recordExternalEvent('studio.dice.chat-rolled', 'success', `${roll.rollerName} rolled ${roll.expression} from chat.`, {
+      rollId: roll.id,
+      expression: roll.expression,
+      total: roll.total,
+      reason: roll.reason,
+      rollerName: roll.rollerName
+    });
+    return { expression: roll.expression, total: roll.total, reason: roll.reason };
+  };
   let alertQueue: TempestAlertQueue | undefined;
   let runtime!: TempestBridgeRuntime;
 

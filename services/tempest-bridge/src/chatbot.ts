@@ -9,7 +9,7 @@ export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as co
 export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
-export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing', 'counter'] as const;
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing', 'dice-roll', 'counter'] as const;
 export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
 
 export interface ChatbotCommand {
@@ -276,6 +276,19 @@ export interface ChatbotDispatch {
   simulated: boolean;
 }
 
+export interface ChatbotDiceRollRequest {
+  expression: string;
+  reason: string;
+  rollerName: string;
+  simulated: boolean;
+}
+
+export interface ChatbotDiceRollResult {
+  expression: string;
+  total: number;
+  reason?: string;
+}
+
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
   code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
@@ -288,6 +301,7 @@ export interface TwitchChatbotOptions {
   fetchImplementation?: typeof fetch;
   onEvent?: (event: TempestNormalizedChatEvent) => void | Promise<void>;
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
+  rollDice?: (request: ChatbotDiceRollRequest) => ChatbotDiceRollResult | Promise<ChatbotDiceRollResult>;
   sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
   onPollChanged?: (poll: ChatbotNumericPollStatus) => void;
@@ -522,6 +536,20 @@ function defaultConfiguration(): ChatbotConfiguration {
       handler: 'stream-schedule',
       viewerCooldownMs: 30_000,
       globalCooldownMs: 15_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'roll',
+      name: 'roll',
+      aliases: ['dice'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'dice-roll',
+      viewerCooldownMs: 30_000,
+      globalCooldownMs: 5_000,
       createdAt: timestamp,
       updatedAt: timestamp
     }, {
@@ -1230,6 +1258,10 @@ export class TwitchChatbot {
     if (!simulated) this.lastGlobalUse.set(command.id, now);
     let responseTemplate: string;
     let counterValue: number | undefined;
+    let diceExpression = args[0] || '1d20';
+    let diceTotal = '';
+    let diceReason = args.slice(1).join(' ').trim().slice(0, 160);
+    let handlerError: string | undefined;
     if (command.handler === 'counter') {
       counterValue = Number(command.counterValue || 0) + 1;
       responseTemplate = command.response || '{counterLabel}: {counter}';
@@ -1237,6 +1269,24 @@ export class TwitchChatbot {
         command.counterValue = counterValue;
         command.updatedAt = new Date().toISOString();
         await this.persist();
+      }
+    } else if (command.handler === 'dice-roll') {
+      if (simulated) {
+        responseTemplate = command.response || '{user} would roll {dice} in the 3D Dice Browser Source{reason}.';
+      } else if (!this.options.rollDice) {
+        handlerError = '3D Dice is not connected to the chatbot.';
+        responseTemplate = `3D dice could not roll for {user}: ${handlerError}`;
+      } else {
+        try {
+          const roll = await this.options.rollDice({ expression: diceExpression, reason: diceReason, rollerName: viewerName, simulated: false });
+          diceExpression = roll.expression;
+          diceTotal = String(roll.total);
+          diceReason = String(roll.reason ?? diceReason).trim().slice(0, 160);
+          responseTemplate = command.response || '{user} rolled {dice}: {roll}{reason}';
+        } catch (error) {
+          handlerError = String((error as Error).message || 'The 3D Dice Browser Source could not finish the roll.').replace(/[\r\n\0]+/g, ' ').slice(0, 240);
+          responseTemplate = `3D dice could not roll for {user}: ${handlerError}`;
+        }
       }
     } else {
       responseTemplate = await this.resolveCommandResponse(command, event);
@@ -1246,10 +1296,13 @@ export class TwitchChatbot {
       .replaceAll('{bot}', this.status().botName)
       .replaceAll('{command}', `${this.configuration.prefix}${command.name}`)
       .replaceAll('{args}', args.join(' '))
+      .replaceAll('{dice}', diceExpression)
+      .replaceAll('{roll}', diceTotal)
+      .replaceAll('{reason}', diceReason ? ` · ${diceReason}` : '')
       .replaceAll('{counterLabel}', command.counterLabel || command.name)
       .replaceAll('{counter}', String(counterValue ?? command.counterValue ?? 0));
     try {
-      await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
+      if (!handlerError) await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
       if (response && !simulated) {
         const replyId = command.replyToViewer ? String(event.payload.messageId || '') : undefined;
         if (event.source === 'kick') {
@@ -1257,6 +1310,10 @@ export class TwitchChatbot {
           await this.options.sendPlatformMessage('kick', response, replyId);
         }
         else await this.sendMessage(response, replyId);
+      }
+      if (handlerError) {
+        this.record({ command: command.name, viewerName, ...activityContext, state: 'error', message: handlerError });
+        return { matched: true, accepted: false, command: copyCommand(command), response, reason: handlerError };
       }
       this.commandsTriggered += simulated ? 0 : 1;
       this.record({ command: command.name, viewerName, ...activityContext, state: 'accepted', message: simulated ? `Simulated !${command.name}.` : `Accepted !${command.name} from ${viewerName}.` });

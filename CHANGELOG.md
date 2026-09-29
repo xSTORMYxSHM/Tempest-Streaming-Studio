@@ -4,6 +4,7 @@
 
 - Integrated one-click localhost HTTPS preparation into Studio with a SHA-256-pinned official mkcert 1.4.4 helper, an isolated per-installation CA, a Windows-native offline fallback, visible certificate status, and complete trust/private-key removal.
 - Added active Studio polls to the free Tempest Mainframe Twitch Extension. Identity-linked viewers can vote once from the Panel or Video Component, the same Twitch account cannot vote again through chat, and live/final totals remain visible without any Bits dependency.
+- Added a default `!roll` / `!dice` command for Twitch, Stream Together, and Kick chat. Viewer rolls use the same hardened Dice Box Browser Source, physical settled result, access rules, and adjustable command cooldowns as operator rolls, then report the result back on the originating platform.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

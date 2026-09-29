@@ -28,8 +28,47 @@ test('starts with public-safe commands and no personal response providers', asyn
   assert.equal(status.providers.weather, undefined);
   assert.equal(status.providers.nowPlaying, undefined);
   assert.ok(status.commands.some((command) => command.name === 'studio' && command.aliases.includes('tempest')));
+  assert.ok(status.commands.some((command) => command.name === 'roll' && command.aliases.includes('dice') && command.handler === 'dice-roll'));
   assert.equal(status.commands.some((command) => command.handler === 'local-weather' || command.handler === 'seattle-weather' || command.handler === 'radio-now-playing'), false);
   assert.equal(await chatbot.radioStatus(), null);
+});
+
+test('runs chat-triggered 3D dice through the overlay callback and reports the physical result', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-dice-'));
+  const rolls = [];
+  const messages = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    rollDice: async (request) => {
+      rolls.push(request);
+      return { expression: '2d6+3', total: 11, reason: request.reason };
+    },
+    sendPlatformMessage: async (platform, message) => messages.push({ platform, message })
+  });
+  await chatbot.initialize('client123');
+
+  const preview = await chatbot.testCommand({ message: '!roll 1d20 initiative', viewerName: 'StudioTester', roles: [] });
+  assert.equal(preview.accepted, true);
+  assert.equal(preview.response, 'StudioTester would roll 1d20 in the 3D Dice Browser Source · initiative.');
+  assert.equal(rolls.length, 0);
+
+  const event = {
+    schemaVersion: 1,
+    id: 'kick-dice-0001',
+    topic: 'viewer.chat.message',
+    occurredAt: new Date().toISOString(),
+    source: 'kick',
+    channel: { id: 'kick-channel', login: 'tempest' },
+    viewer: { id: 'viewer-1', login: 'dicefan', displayName: 'DiceFan', roles: [] },
+    payload: { messageId: 'kick-message-1', text: '!dice 2d6+3 initiative' }
+  };
+  const result = await chatbot.processChatEvent(event);
+  assert.equal(result.accepted, true);
+  assert.equal(result.response, 'DiceFan rolled 2d6+3: 11 · initiative');
+  assert.deepEqual(rolls, [{ expression: '2d6+3', reason: 'initiative', rollerName: 'DiceFan', simulated: false }]);
+  assert.deepEqual(messages, [{ platform: 'kick', message: 'DiceFan rolled 2d6+3: 11 · initiative' }]);
+  await chatbot.close();
 });
 
 test('persists commands and simulates permissions, replies, and workflow dispatch', async () => {
