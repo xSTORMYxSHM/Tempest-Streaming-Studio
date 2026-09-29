@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   stopLocalExtension: () => ipcRenderer.invoke('studio:stop-local-extension'),
   forgetLocalExtensionSecret: () => ipcRenderer.invoke('studio:forget-local-extension-secret'),
   prepareLocalExtensionCertificate: () => ipcRenderer.invoke('studio:prepare-local-extension-certificate'),
+  removeLocalExtensionCertificate: () => ipcRenderer.invoke('studio:remove-local-extension-certificate'),
   openLocalExtensionPanel: () => ipcRenderer.invoke('studio:open-local-extension-panel'),
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),

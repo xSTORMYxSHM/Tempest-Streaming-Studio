@@ -255,6 +255,38 @@ function extensionCertificatePath(): string {
   return path.join(extensionCertificateDirectory(), 'localhost.pfx');
 }
 
+function extensionCertificateMetadataPath(): string {
+  return path.join(extensionCertificateDirectory(), 'certificate.json');
+}
+
+interface LocalExtensionCertificateMetadata {
+  schemaVersion: 1;
+  provider: 'mkcert' | 'windows-native';
+  providerVersion: string;
+  trusted: boolean;
+  hosts: string[];
+  expiresAt: string;
+}
+
+async function loadLocalExtensionCertificateMetadata(): Promise<LocalExtensionCertificateMetadata | null> {
+  try {
+    const parsed = JSON.parse(await readFile(extensionCertificateMetadataPath(), 'utf8')) as Partial<LocalExtensionCertificateMetadata>;
+    if (parsed.schemaVersion !== 1 || !['mkcert', 'windows-native'].includes(String(parsed.provider))) return null;
+    const hosts = Array.isArray(parsed.hosts) ? parsed.hosts.map(String).filter((host) => ['localhost', '127.0.0.1', '::1'].includes(host)) : [];
+    if (!parsed.providerVersion || !parsed.expiresAt || !Number.isFinite(Date.parse(parsed.expiresAt))) return null;
+    return {
+      schemaVersion: 1,
+      provider: parsed.provider as LocalExtensionCertificateMetadata['provider'],
+      providerVersion: String(parsed.providerVersion).slice(0, 80),
+      trusted: parsed.trusted === true,
+      hosts,
+      expiresAt: new Date(parsed.expiresAt).toISOString()
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface StoredLocalExtensionSettings {
   schemaVersion: 1;
   channelId: string;
@@ -524,15 +556,21 @@ async function saveLocalExtensionSettings(settings: StoredLocalExtensionSettings
 }
 
 async function getLocalExtensionStatus(): Promise<LocalExtensionStatus> {
-  const [stored, certificate] = await Promise.all([
+  const [stored, certificate, certificateMetadata] = await Promise.all([
     loadLocalExtensionSettings().catch(() => null),
-    stat(extensionCertificatePath()).catch(() => null)
+    stat(extensionCertificatePath()).catch(() => null),
+    loadLocalExtensionCertificateMetadata()
   ]);
   return {
     running: Boolean(localExtension),
     channelId: localExtension?.status().channelId || stored?.channelId,
     ...localExtensionUrls,
     certificateAvailable: Boolean(certificate?.isFile()),
+    certificateProvider: certificateMetadata?.provider,
+    certificateProviderVersion: certificateMetadata?.providerVersion,
+    certificateTrusted: certificateMetadata?.trusted,
+    certificateExpiresAt: certificateMetadata?.expiresAt,
+    certificateHosts: certificateMetadata?.hosts,
     secretStored: Boolean(stored),
     lastError: localExtensionLastError
   };
@@ -543,6 +581,20 @@ async function stopLocalExtension(): Promise<void> {
   localExtension = null;
   if (runtime) await runtime.close();
   await restoreHostedExtensionRelay().catch((error) => { hostedExtensionLastError = (error as Error).message; });
+}
+
+async function runExtensionCertificateScript(argumentsList: string[], action: string): Promise<void> {
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), ...argumentsList], {
+    cwd: supportRoot,
+    windowsHide: true,
+    stdio: 'ignore',
+    shell: false
+  });
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code) => resolve(code ?? 1));
+  });
+  if (exitCode !== 0) throw new Error(`Local certificate ${action} failed with exit code ${exitCode}.`);
 }
 
 function createWindow(): BrowserWindow {
@@ -1081,25 +1133,33 @@ function registerDesktopHandlers(): void {
     const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
       type: 'warning',
       title: 'Trust a localhost development certificate?',
-      message: 'Studio will create a localhost certificate and add it to the current Windows user trusted root store.',
-      detail: 'This is only needed for Twitch local Extension testing. You can remove it later with the Untrust command in the local testing guide.',
+      message: 'Studio will prepare and trust a localhost certificate for Twitch Extension testing.',
+      detail: 'Studio downloads the pinned official mkcert 1.4.4 Windows helper, verifies its SHA-256 hash before running it, and keeps its private local CA inside Studio data. If the download is unavailable, Studio uses its offline Windows certificate generator instead. Nothing is installed silently without this confirmation.',
       buttons: ['Cancel', 'Create and trust'],
       defaultId: 0,
       cancelId: 0,
       noLink: true
     });
     if (confirmation.response !== 1) throw new Error('Local certificate preparation was canceled.');
-    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), '-Trust'], {
-      cwd: supportRoot,
-      windowsHide: true,
-      stdio: 'ignore',
-      shell: false
+    await runExtensionCertificateScript(['-Trust'], 'preparation');
+    return getLocalExtensionStatus();
+  });
+
+  handleDesktop('studio:remove-local-extension-certificate', async () => {
+    const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'warning',
+      title: 'Remove local Twitch test trust?',
+      message: 'Studio will stop the Local Extension and remove its localhost certificate and local certificate authority.',
+      detail: 'Your encrypted Extension Secret and normal Twitch authorization are not removed. Local HTTPS testing will remain unavailable until you prepare another certificate.',
+      buttons: ['Cancel', 'Remove certificate'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
     });
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('exit', (code) => resolve(code ?? 1));
-    });
-    if (exitCode !== 0) throw new Error(`Local certificate preparation failed with exit code ${exitCode}.`);
+    if (confirmation.response !== 1) throw new Error('Local certificate removal was canceled.');
+    await stopLocalExtension();
+    await runExtensionCertificateScript(['-Untrust'], 'removal');
+    localExtensionLastError = undefined;
     return getLocalExtensionStatus();
   });
 

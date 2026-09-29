@@ -288,6 +288,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /EXTENSION RELAY/);
   assert.match(html, /SINGLE-CHANNEL EXTENSION/);
   assert.match(html, /Start Local Panel/);
+  assert.match(html, /id="prepareLocalExtensionCertificate"[^>]*>Prepare HTTPS</);
+  assert.match(html, /id="removeLocalExtensionCertificate"[^>]*>Remove HTTPS</);
+  assert.match(renderer, /removeLocalExtensionCertificate/);
+  assert.match(main, /studio:remove-local-extension-certificate/);
+  assert.match(main, /loadLocalExtensionCertificateMetadata/);
+  assert.match(preload, /studio:remove-local-extension-certificate/);
   assert.match(html, /Use Official Twitch Sign-In/);
   assert.match(html, /Connect My Channel/);
   assert.match(html, /name="twitchExtensionEdition" value="free"/);
@@ -479,4 +485,18 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(main, /setWindowOpenHandler/);
   assert.doesNotMatch(main, /sandbox:\s*false/);
   assert.doesNotMatch(html, /nodeIntegration\s*:\s*true/);
+});
+
+test('pins and contains the mkcert local trust workflow behind Studio confirmation', async () => {
+  const script = await readFile(path.join(__dirname, '..', '..', '..', 'tools', 'create-extension-certificate.ps1'), 'utf8');
+  assert.match(script, /mkcertVersion = '1\.4\.4'/);
+  assert.match(script, /github\.com\/FiloSottile\/mkcert\/releases\/download\/v1\.4\.4\/mkcert-v1\.4\.4-windows-amd64\.exe/);
+  assert.match(script, /D2660B50A9ED59EADA480750561C96ABC2ED4C9A38C6A24D93E30E0977631398/);
+  assert.match(script, /Get-FileHash[^\n]+SHA256/);
+  assert.match(script, /\$env:CAROOT = \$mkcertCaDirectory/);
+  assert.match(script, /'-install'/);
+  assert.match(script, /\$mkcertPath -uninstall/);
+  assert.match(script, /'localhost', '127\.0\.0\.1', '::1'/);
+  assert.match(script, /New-WindowsCertificate/);
+  assert.doesNotMatch(script, /rootCA-key\.pem[^\n]*(?:Copy|Move|Write)/i);
 });

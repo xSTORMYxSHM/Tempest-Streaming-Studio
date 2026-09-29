@@ -19,7 +19,7 @@ For the installed channel panel, set **Panel Viewer Path** to `panel.html` and *
 
 ## Run the Local Test
 
-The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, prepare the certificate once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio uses the authorized account's numeric channel ID and stores the secret with operating-system encryption.
+The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.
 
 The commands below remain available for asset-only development and diagnostics.
 
@@ -41,9 +41,9 @@ If Twitch's iframe rejects the certificate, explicitly add it to the current Win
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Trust
 ```
 
-The `-Trust` switch changes the current user's Windows certificate trust store. The generated PFX and certificate are local development artifacts under `.tempest-extension/` and are excluded from source control.
+The `-Trust` switch changes the current user's Windows certificate trust store. Studio pins mkcert 1.4.4 by its official Windows x64 SHA-256 digest and falls back to Windows certificate APIs when it cannot acquire that exact build. The generated PFX, downloaded helper, and isolated CA are local development artifacts excluded from source control, Studio backups, diagnostics, and release packages. Never copy or share `rootCA-key.pem`.
 
-Remove the local certificate and its trust entry when testing is complete:
+Select **Remove HTTPS** in Studio when testing is complete, or use the diagnostic command below. Removal also deletes the isolated CA private key and the downloaded helper:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Untrust

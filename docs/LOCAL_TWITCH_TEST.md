@@ -8,13 +8,13 @@ The Extension secret is stored with operating-system encryption. It is never wri
 
 ## One-time setup
 
-Use **Twitch Gateway → Single-channel Extension → Prepare Certificate**. Studio asks for confirmation before adding the localhost certificate to the current Windows user's trust store. The diagnostic command-line equivalent is:
+Use **Twitch Gateway → Single-channel Extension → Prepare HTTPS**. Studio asks for confirmation, downloads the pinned official mkcert 1.4.4 Windows helper, verifies its SHA-256 hash, and creates a locally trusted certificate for `localhost`, `127.0.0.1`, and `::1`. The helper, isolated local CA, and certificate stay inside Studio's local data and are excluded from source control, backups, diagnostics, and release packages. If GitHub is unavailable, Studio automatically uses its offline Windows certificate generator instead. The diagnostic command-line equivalent is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Trust
 ```
 
-When local Twitch testing is finished, remove the generated certificate files and the matching certificates from the current user's Personal and Trusted Root stores:
+When local Twitch testing is finished, select **Remove HTTPS** in Studio. This removes the local certificate, trust entry, downloaded helper, and isolated CA—including its private key. The diagnostic command-line equivalent is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Untrust

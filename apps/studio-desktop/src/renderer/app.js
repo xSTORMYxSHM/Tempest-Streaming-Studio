@@ -1820,7 +1820,10 @@
     $('#localExtensionBadge').textContent = local.running ? 'RUNNING' : 'STOPPED';
     $('#localExtensionBadge').classList.toggle('offline', !local.running);
     $('#localExtensionSecretState').textContent = local.secretStored ? 'WINDOWS ENCRYPTED' : 'NOT STORED';
-    $('#localExtensionCertificateState').textContent = local.certificateAvailable ? 'CERT FILE READY' : 'NOT READY';
+    const certificateProvider = local.certificateProvider === 'mkcert'
+      ? `MKCERT ${local.certificateProviderVersion || ''}`.trim()
+      : local.certificateProvider === 'windows-native' ? 'WINDOWS HTTPS' : 'CERT FILE READY';
+    $('#localExtensionCertificateState').textContent = local.certificateAvailable ? certificateProvider : 'NOT READY';
     $('#localExtensionChannelState').textContent = local.channelId || accountChannelId || '—';
     $('#localExtensionPanelUrl').textContent = local.panelUrl || 'https://localhost:8080/panel.html';
     $('#localExtensionSecret').placeholder = local.secretStored ? 'Stored securely; leave blank to reuse' : 'Paste once; stored with Windows encryption';
@@ -1828,14 +1831,23 @@
     $('#stopLocalExtension').disabled = !local.running;
     $('#openLocalExtensionPanel').disabled = !local.running;
     $('#prepareLocalExtensionCertificate').disabled = Boolean(local.running);
+    $('#removeLocalExtensionCertificate').disabled = Boolean(local.running) || !Boolean(local.certificateAvailable);
     $('#forgetLocalExtensionSecret').disabled = !local.secretStored && !local.running;
+    const certificateExpiry = local.certificateExpiresAt && Number.isFinite(Date.parse(local.certificateExpiresAt))
+      ? new Date(local.certificateExpiresAt).toLocaleDateString()
+      : '';
+    const certificateReadyMessage = local.certificateTrusted === false
+      ? 'A local HTTPS certificate exists but is not marked trusted; run Prepare HTTPS before using Twitch Extension testing.'
+      : local.certificateProvider === 'mkcert'
+        ? `Trusted local HTTPS is ready through verified mkcert ${local.certificateProviderVersion || ''}${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`
+        : `Local HTTPS is ready${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`;
     $('#localExtensionMessage').textContent = bitsEdition && !local.running
       ? 'Local Panel testing currently runs Tempest Mainframe (Free). Select the Free edition to use these local controls; test Bits through Twitch\'s hosted sandbox.'
       : local.lastError || (local.running
       ? 'Your single-channel Extension services are running. Refresh the installed Twitch panel to send signals into Studio.'
       : !local.certificateAvailable ? 'Prepare the trusted localhost certificate once, then start the Local Panel.'
-        : local.secretStored ? 'The Extension secret is stored with Windows encryption. Start the Local Panel whenever you want to test it.'
-          : 'Paste the revealed Extension Secret once. Studio will encrypt it and start the panel services without PowerShell.');
+        : local.secretStored ? `${certificateReadyMessage} The Extension secret is stored with Windows encryption; start the Local Panel whenever you want to test it.`
+          : `${certificateReadyMessage} Paste the revealed Extension Secret once; Studio will encrypt it and start the panel services without PowerShell.`);
   }
 
   function parseRewardMappings() {
@@ -2396,6 +2408,14 @@
       state.localExtension = await window.tempestStudio.prepareLocalExtensionCertificate();
       renderLocalExtension();
       toast('Local Extension certificate is ready.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function removeLocalExtensionCertificate() {
+    try {
+      state.localExtension = await window.tempestStudio.removeLocalExtensionCertificate();
+      renderLocalExtension();
+      toast('Local Extension HTTPS trust removed.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -5068,6 +5088,7 @@
     $('#stopLocalExtension').addEventListener('click', stopLocalExtension);
     $('#openLocalExtensionPanel').addEventListener('click', () => window.tempestStudio.openLocalExtensionPanel().catch((error) => toast(error.message, true)));
     $('#prepareLocalExtensionCertificate').addEventListener('click', prepareLocalExtensionCertificate);
+    $('#removeLocalExtensionCertificate').addEventListener('click', removeLocalExtensionCertificate);
     $('#forgetLocalExtensionSecret').addEventListener('click', forgetLocalExtensionSecret);
     $('#panelDesignForm').addEventListener('submit', savePanelDesign);
     $('#panelDesignForm').querySelectorAll('input, select').forEach((input) => input.addEventListener('input', updatePanelDesignPreview));
