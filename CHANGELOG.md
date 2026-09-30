@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — Free Extension live utilities
+## 1.5.1 — Free Extension utilities and production hardening
+
+Released 2026-09-29.
 
 - Integrated one-click localhost HTTPS preparation into Studio with a SHA-256-pinned official mkcert 1.4.4 helper, an isolated per-installation CA, a Windows-native offline fallback, visible certificate status, and complete trust/private-key removal.
 - Added active Studio polls to the free Tempest Mainframe Twitch Extension. Identity-linked viewers can vote once from the Panel or Video Component, the same Twitch account cannot vote again through chat, and live/final totals remain visible without any Bits dependency.

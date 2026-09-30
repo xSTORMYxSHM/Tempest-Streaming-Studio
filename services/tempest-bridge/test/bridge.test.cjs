@@ -6,7 +6,7 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const WebSocket = require('ws');
 const { startTempestBridge, TempestTwitchVisualAlertCatalog } = require('../dist');
-const { createBridgeMessage } = require('@tempest/contracts');
+const { createBridgeMessage, TEMPEST_STUDIO_VERSION } = require('@tempest/contracts');
 
 const application = {
   schemaVersion: 1,
@@ -63,7 +63,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, '1.3.1');
+  assert.equal(health.productVersion, TEMPEST_STUDIO_VERSION);
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);

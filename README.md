@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current development version: **1.5.0 release candidate** (not published)
+Current stable version: **1.5.1**
 
 Tempest Streaming Studio is the interaction and orchestration hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed workflows across Tempest 2D, Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Studio also manages application registrations and shared assets, while creative rendering and live production stay inside focused applications.
 
