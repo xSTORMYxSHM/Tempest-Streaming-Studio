@@ -1,15 +1,12 @@
-# Tempest Bits Extension
+# Deferred Tempest Bits Extension prototype
 
-Tempest's Bits experience is a second Twitch Extension. It does not change the already-approved free Extension and uses a separate Twitch client ID and shared secret.
+The Bits-capable experience is retained in source as a deferred prototype for possible future Twitch monetization onboarding. It is not exposed in the normal Studio workflow, is not the active viewer extension, and must not be published or presented as production-ready.
 
-## Studio edition selection
+## Current product direction
 
-In Studio, open **Twitch** and choose the Extension installed on the channel:
+**Tempest Streaming Extension** is the primary Twitch Extension. It provides the existing viewer utilities and interactions without Bits products, purchases, or transaction processing. Studio always publishes the no-Bits edition to Tempest Signal, and older saved Bits selections are normalized automatically.
 
-- **Tempest Mainframe (Free)** enables the existing free viewer interaction routes and disables Bits product and transaction routes for that channel.
-- **Tempest Streaming (Bits)** enables only the separately installed Bits Extension routes. Twitch-signed products must still match the server-side SKU, amount, and published Studio interaction.
-
-The choice is saved in `twitch-extension-edition.json`, included in Studio backups, and published to Tempest Signal with the channel's viewer-safe catalog. Existing installations default to the Free edition. Changing the selection updates the relay without exposing either Extension secret, and the inactive Extension receives an `EXTENSION_EDITION_INACTIVE` response.
+The separate package and its EBS transaction validation remain available for engineering work so they can be resumed without rebuilding the security boundary. Re-enabling them requires completed Twitch onboarding, a deliberate Studio product decision, current Twitch policy review, and a new production-readiness audit.
 
 ## Supported surfaces
 
@@ -21,7 +18,7 @@ The choice is saved in `twitch-extension-edition.json`, included in Studio backu
 
 Build with `pnpm extension:bits:build`. For a no-charge visual preview, set `TEMPEST_BITS_EXTENSION_MOCK_MODE=1` before building. Do not submit the development SKUs in `mock-products.json`; they exist only to exercise the layouts locally.
 
-## Twitch console setup
+## Future Twitch console setup
 
 Create a new Extension in the Twitch developer console, complete monetization onboarding, enable Bits, and configure each product there. SKU values are immutable once saved, so choose the final naming scheme before creating production products. Point each Twitch surface at the matching file listed above and add `https://signal.tempestmainframe.com` to the allowlist for URL fetching.
 

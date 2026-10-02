@@ -24,11 +24,11 @@ The bundled `com.tempestmainframe.workflow.blackhole` workflow handles `tempest.
 
 ## Twitch boundary
 
-The free Tempest Mainframe Extension and the separate Tempest Streaming Bits Extension are viewer interaction surfaces. Their public Extension Backend Service verifies Twitch identity and authorization, applies abuse controls, and forwards a normalized action over Studio's authenticated outbound relay. The selected Extension edition is enforced on both sides so the free and Bits products cannot trigger the same channel accidentally. Channel-point mappings enter through the same normalized trigger boundary without changing downstream applications.
+Tempest Streaming Extension is the primary no-Bits viewer interaction surface. Its public Extension Backend Service verifies Twitch identity and authorization, applies abuse controls, and forwards a normalized action over Studio's authenticated outbound relay. The previous Bits-capable package is dormant pending future onboarding and is not selectable in Studio. Channel-point mappings enter through the same normalized trigger boundary without changing downstream applications.
 
 The localhost Bridge is never exposed directly to the public internet. Studio opens the outbound relay, the service verifies signed viewer requests, and both layers enforce action allowlists, access rules, cooldowns, request idempotency, and bounded payloads.
 
-Studio records Twitch cheers like other normalized observations, but no bundled workflow binds a cheer or Bits amount to an action. Free Extension interactions use `viewer.interaction.requested`. Optional channel-point mappings use `viewer.reward.redeemed`; their payload action is assigned by Studio configuration rather than trusted directly from Twitch reward text. If an operator has a legitimate Sound Alerts setup driven by Bits, they may explicitly register a `twitch.cheer` workflow and assign its action in Studio. Merely receiving a cheer never creates that mapping.
+Studio records Twitch cheers like other normalized observations, but no bundled workflow binds a cheer or Bits amount to an action. Tempest Streaming Extension interactions use `viewer.interaction.requested`. Optional channel-point mappings use `viewer.reward.redeemed`; their payload action is assigned by Studio configuration rather than trusted directly from Twitch reward text. If an operator has a legitimate Sound Alerts setup driven by Bits, they may explicitly register a `twitch.cheer` workflow and assign its action in Studio. Merely receiving a cheer never creates that mapping.
 
 ## Sound Alert Performance
 

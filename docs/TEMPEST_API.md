@@ -72,7 +72,7 @@ Raw EventSub, chat, and Extension payloads terminate in Studio. Downstream clien
 
 | Topic | Required payload fields | Workflow behavior |
 | --- | --- | --- |
-| `viewer.interaction.requested` | `action`; optional `input` | Routes a free Extension interaction by action |
+| `viewer.interaction.requested` | `action`; optional `input` | Routes a Tempest Streaming Extension interaction by action |
 | `viewer.chat.message` | `messageId`, `text` | Observation; a Studio rule may translate commands later |
 | `viewer.reward.redeemed` | `redemptionId`, `rewardId`, `rewardTitle`; optional `rewardCost`, `input`, `action` | Routes only when Studio assigned an action |
 | `viewer.followed` | Event-specific metadata | Observation |

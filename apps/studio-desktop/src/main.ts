@@ -31,6 +31,7 @@ import {
   HostedExtensionStatus,
   OFFICIAL_HOSTED_EBS_URL,
   TwitchExtensionEdition,
+  activeTwitchExtensionEdition,
   describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
   syncHostedExtensionPanelDesign,
@@ -410,18 +411,24 @@ function twitchExtensionEditionPath(): string {
 async function loadTwitchExtensionEdition(): Promise<TwitchExtensionEdition> {
   try {
     const saved = JSON.parse(await readFile(twitchExtensionEditionPath(), 'utf8')) as { edition?: unknown };
-    return validateTwitchExtensionEdition(saved.edition);
+    const savedEdition = validateTwitchExtensionEdition(saved.edition);
+    const activeEdition = activeTwitchExtensionEdition(savedEdition);
+    if (savedEdition !== activeEdition) await persistTwitchExtensionEdition(activeEdition);
+    return activeEdition;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'free';
     throw new Error(`Could not read the Twitch Extension edition: ${(error as Error).message}`);
   }
 }
 
-async function saveTwitchExtensionEdition(value: unknown): Promise<TwitchExtensionEdition> {
-  const edition = validateTwitchExtensionEdition(value);
-  if (edition === 'bits' && localExtension) throw new Error('Stop the Local Free Panel before selecting Tempest Streaming (Bits).');
+async function persistTwitchExtensionEdition(edition: TwitchExtensionEdition): Promise<void> {
   await mkdir(path.dirname(twitchExtensionEditionPath()), { recursive: true });
   await writeFile(twitchExtensionEditionPath(), `${JSON.stringify({ schemaVersion: 1, edition }, null, 2)}\n`, { mode: 0o600 });
+}
+
+async function saveTwitchExtensionEdition(value: unknown): Promise<TwitchExtensionEdition> {
+  const edition = activeTwitchExtensionEdition(value);
+  await persistTwitchExtensionEdition(edition);
   if (bridge && !localExtension) {
     const credentials = await loadHostedExtensionCredentials();
     await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, edition) : undefined);
@@ -1099,7 +1106,6 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:start-local-extension', async (_event, input: { channelId?: unknown; extensionSecret?: unknown }) => {
     if (!bridge) throw new Error('Tempest Bridge is not running.');
-    if (await loadTwitchExtensionEdition() === 'bits') throw new Error('The Local Panel runs Tempest Mainframe (Free). Select the Free edition for local testing.');
     if (localExtension) return getLocalExtensionStatus();
     const stored = await loadLocalExtensionSettings();
     const channelId = String(input?.channelId || stored?.channelId || '').trim();

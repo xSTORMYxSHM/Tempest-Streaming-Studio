@@ -1,4 +1,4 @@
-# Tempest Streaming Studio Twitch Extension
+# Tempest Streaming Extension
 
 The viewer interface supports a Twitch **Video Component**, **Panel**, and **Mobile** surface. The Video Component stays beside the player during a stream; the Panel can be opened and tested while the channel is offline. Twitch's Local Test version paths map directly to:
 
@@ -19,37 +19,37 @@ The viewer surfaces poll the hosted catalog only while visible. Each successful 
 
 For the installed channel panel, set **Panel Viewer Path** to `panel.html` and **Panel Height** to `496`. The panel is designed for Twitch's narrow 318-pixel surface and scrolls its signal catalog internally.
 
-## Free Extension polls
+## Polls
 
-When the streamer starts a numeric poll in **Live Desk**, the active question, numbered choices, and current totals are published to the free Tempest Mainframe Panel and Video Component. A viewer selects one option and, when needed, Twitch asks them to share identity. Studio records only one vote for that Twitch user across both the Extension and Twitch chat. Closing voting publishes final results; clearing the poll removes it from the Extension. Poll voting never opens a Bits purchase flow and is unavailable when the channel selects the Bits Extension edition.
+When the streamer starts a numeric poll in **Live Desk**, the active question, numbered choices, and current totals are published to the Tempest Streaming Panel and Video Component. A viewer selects one option and, when needed, Twitch asks them to share identity. Studio records only one vote for that Twitch user across both the Extension and Twitch chat. Closing voting publishes final results; clearing the poll removes it from the Extension. Poll voting never opens a Bits purchase flow.
 
 ## Viewer-placed interactions
 
-An enabled free interaction whose Studio **Placement** setting is **Viewer chooses position** is labeled **Choose position** in the Panel and Video Component. Selecting it opens a full-surface crosshair; the viewer's click or tap becomes an `x`/`y` pair bounded from `0` through `1`. Tempest Signal validates the pair before relaying it, and Studio validates it again before applying the existing alert design and Broadcast landscape/portrait mapping. Fixed-position interactions ignore unsolicited placement data. Pressing Escape cancels without triggering an interaction.
+An enabled interaction whose Studio **Placement** setting is **Viewer chooses position** is labeled **Choose position** in the Panel and Video Component. Selecting it opens a full-surface crosshair; the viewer's click or tap becomes an `x`/`y` pair bounded from `0` through `1`. Tempest Signal validates the pair before relaying it, and Studio validates it again before applying the existing alert design and Broadcast landscape/portrait mapping. Fixed-position interactions ignore unsolicited placement data. Pressing Escape cancels without triggering an interaction.
 
-## Free Extension 3D Dice
+## 3D Dice
 
-When Studio's 3D Dice overlay is enabled, the free Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. The hosted service applies the viewer's access eligibility before relay, then Studio independently verifies access, local Browser Source readiness, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
+When Studio's 3D Dice overlay is enabled, the Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. The hosted service applies the viewer's access eligibility before relay, then Studio independently verifies access, local Browser Source readiness, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
 
-## Free Extension counters
+## Counters
 
-Up to 12 enabled Chatbot counter commands appear as read-only live cards with the streamer-defined label, total, and chat command. Chat increments, Studio adjustments, and counter-linked viewer interactions publish updated totals immediately. The Extension has no route that can alter a counter; it only reads the current aggregate catalog value. Disabling or deleting a counter command removes its card, and counters are not published to the Bits edition.
+Up to 12 enabled Chatbot counter commands appear as read-only live cards with the streamer-defined label, total, and chat command. Chat increments, Studio adjustments, and counter-linked viewer interactions publish updated totals immediately. The Extension has no route that can alter a counter; it only reads the current aggregate catalog value. Disabling or deleting a counter command removes its card.
 
-## Free Extension stream goal
+## Stream goal
 
-When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-managed goal appears as a compact read-only progress card in the free Panel and Video Component. The title, goal type, current and target values, unit, color, and server-recomputed percentage update through the existing Studio relay. Local overlay previews are never published, the Extension cannot change goal progress, and goals are not included in the Bits edition.
+When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-managed goal appears as a compact read-only progress card in the Panel and Video Component. The title, goal type, current and target values, unit, color, and server-recomputed percentage update through the existing Studio relay. Local overlay previews are never published, and the Extension cannot change goal progress.
 
-## Free Extension Now Playing
+## Now Playing
 
-When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the station name, public track metadata, provider state, last-check time, and public listen-page URL to a read-only card. The relay refreshes it every 15 seconds only while connected, uses the Chatbot's existing 15-second provider cache, and omits the provider API URL and direct audio stream URL. The **Listen** button uses Twitch's Extension URL action. The Twitch developer-console configuration must allow the broadcaster's listen-page domain for Twitch to open it. Now Playing is not published to the Bits edition.
+When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the station name, public track metadata, provider state, last-check time, and public listen-page URL to a read-only card. The relay refreshes it every 15 seconds only while connected, uses the Chatbot's existing 15-second provider cache, and omits the provider API URL and direct audio stream URL. The **Listen** button uses Twitch's Extension URL action. The Twitch developer-console configuration must allow the broadcaster's listen-page domain for Twitch to open it.
 
-## Free Extension schedule
+## Schedule
 
-When the authorized Chatbot account can verify an upcoming Twitch schedule segment, its optional title and start time appear in a read-only **Up Next** card. The browser localizes the ISO timestamp for each viewer. Studio reuses its five-minute Twitch schedule cache, does not request a new scope, and publishes no card when Twitch returns no segment or schedule verification is unavailable. The Extension cannot edit the schedule, and the card is not published to the Bits edition.
+When the authorized Chatbot account can verify an upcoming Twitch schedule segment, its optional title and start time appear in a read-only **Up Next** card. The browser localizes the ISO timestamp for each viewer. Studio reuses its five-minute Twitch schedule cache, does not request a new scope, and publishes no card when Twitch returns no segment or schedule verification is unavailable. The Extension cannot edit the schedule.
 
-## Free Extension Current Stream
+## Current Stream
 
-When the authorized Chatbot account can read the broadcaster's public Twitch state, the Panel and Video Component show live/offline status, title, category, stream start time, and Twitch's current viewer count. The browser derives the displayed uptime from the start timestamp. Studio reuses its 30-second stream-status and 60-second channel-information caches, so Extension viewers never make Helix calls and no new scope is required. The card is read-only and is not published to the Bits edition.
+When the authorized Chatbot account can read the broadcaster's public Twitch state, the Panel and Video Component show live/offline status, title, category, stream start time, and Twitch's current viewer count. The browser derives the displayed uptime from the start timestamp. Studio reuses its 30-second stream-status and 60-second channel-information caches, so Extension viewers never make Helix calls and no new scope is required. The card is read-only.
 
 ## Run the Local Test
 

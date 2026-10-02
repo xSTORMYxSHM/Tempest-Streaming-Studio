@@ -7,7 +7,12 @@ export type TwitchExtensionEdition = 'free' | 'bits';
 export function validateTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
   if (value === undefined || value === null || value === '' || value === 'free') return 'free';
   if (value === 'bits') return 'bits';
-  throw new Error('Choose either Tempest Mainframe (Free) or Tempest Streaming (Bits).');
+  throw new Error('The saved Twitch Extension edition is invalid.');
+}
+
+export function activeTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
+  validateTwitchExtensionEdition(value);
+  return 'free';
 }
 
 export interface HostedExtensionCredentials {
@@ -83,7 +88,7 @@ export function hostedExtensionRelayOptions(credentials: HostedExtensionCredenti
     url: url.href,
     token: credentials.relayToken,
     channelId: credentials.channelId,
-    extensionEdition: validateTwitchExtensionEdition(extensionEdition),
+    extensionEdition: activeTwitchExtensionEdition(extensionEdition),
     allowUnauthorizedLocalTls: false
   };
 }

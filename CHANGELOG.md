@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Tempest Streaming Extension pivot
+
+- Promoted the existing no-Bits viewer experience to **Tempest Streaming Extension**, the single primary Twitch Extension in Studio.
+- Removed the Free/Bits selector from the normal Studio workflow and automatically normalize legacy Bits selections to the no-Bits edition before connecting the relay.
+- Kept the Bits-capable implementation dormant in source for possible future onboarding without exposing payment or transaction controls to current streamers or viewers.
+- Updated the default Panel, Video Component, configuration branding, local test workflow, and current documentation around the primary extension.
+
 ## 1.5.1 — Free Extension utilities and production hardening
 
 Released 2026-09-29.

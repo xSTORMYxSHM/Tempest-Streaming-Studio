@@ -1851,11 +1851,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           extensionDiceGlobalUse = now;
           extensionDiceViewerUses.set(viewerId, now);
           void diceOverlay.roll({ expression: extensionDiceExpression, rollerName: 'Twitch Viewer', reason: 'Viewer roll' }).then((roll) => {
-            workflowEngine?.recordExternalEvent('studio.dice.extension-rolled', 'success', `A Twitch viewer rolled ${roll.expression} from the free Extension.`, { eventId: event.id, rollId: roll.id, expression: roll.expression, total: roll.total, viewerId });
+            workflowEngine?.recordExternalEvent('studio.dice.extension-rolled', 'success', `A Twitch viewer rolled ${roll.expression} from Tempest Streaming Extension.`, { eventId: event.id, rollId: roll.id, expression: roll.expression, total: roll.total, viewerId });
           }).catch((error) => {
-            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A free Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
+            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A Tempest Streaming Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
           });
-          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDiceExpression} from the free Extension.`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
+          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDiceExpression} from Tempest Streaming Extension.`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
           return sendJson(response, 202, { accepted: true, expression: extensionDiceExpression, cooldownMs: extensionDiceViewerCooldownMs, eventId: event.id });
         }
         workflowEngine.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });

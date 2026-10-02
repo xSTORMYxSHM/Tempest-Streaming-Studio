@@ -24,9 +24,9 @@ export interface TwitchPanelDesign {
 export const defaultTwitchPanelDesign: TwitchPanelDesign = {
   schemaVersion: 1,
   preset: 'tempest',
-  brandName: 'TEMPEST STREAMING STUDIO',
-  eyebrow: 'VIEWER CONTROL NODE',
-  title: 'Signal deck',
+  brandName: 'TEMPEST STREAMING',
+  eyebrow: 'VIEWER EXTENSION',
+  title: 'Live utilities',
   accent: '#54F2EB',
   background: '#05090E',
   surface: '#09131B',

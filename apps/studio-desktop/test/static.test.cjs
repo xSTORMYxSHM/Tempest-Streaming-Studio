@@ -310,13 +310,13 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(preload, /studio:remove-local-extension-certificate/);
   assert.match(html, /Use Official Twitch Sign-In/);
   assert.match(html, /Connect My Channel/);
-  assert.match(html, /name="twitchExtensionEdition" value="free"/);
-  assert.match(html, /name="twitchExtensionEdition" value="bits"/);
-  assert.match(html, /TEMPEST MAINFRAME/);
-  assert.match(html, /TEMPEST STREAMING/);
+  assert.match(html, /Tempest Streaming Extension/);
+  assert.match(html, /NO BITS/);
+  assert.doesNotMatch(html, /name="twitchExtensionEdition"/);
+  assert.doesNotMatch(html, /Bits enabled/);
   assert.match(preload, /studio:set-twitch-extension-edition/);
   assert.match(main, /twitch-extension-edition\.json/);
-  assert.match(renderer, /setTwitchExtensionEdition/);
+  assert.doesNotMatch(renderer, /setTwitchExtensionEdition/);
   assert.match(html, /No developer setup required/);
   assert.match(html, /securely connects your public Twitch panel automatically/);
   assert.doesNotMatch(html, /id="hostedExtensionUrl"/);

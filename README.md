@@ -29,21 +29,21 @@ The **Discord Guests** page provides a local Reactive Images-style source at `ht
 
 The **Chatbot** page includes a native Stream Together Collaboration Center. Studio monitors home-channel and Shared Chat messages through EventSub, detects Shared Chat session changes, shows the host and participating channels, and can post through the connected bot account. The live monitor is memory-only and removes the need to keep a separate browser open just to watch Shared Chat; Twitch continues to own the audio/video Backstage call.
 
-Studio numeric polls also appear in the free Tempest Mainframe Twitch Extension while voting is active and retain final results until the operator clears them. A viewer who shares Twitch identity can vote once from the Panel or Video Component; the same numeric Twitch account is deduplicated across Extension and chat voting. Kick viewers continue voting from Kick chat, so all responses feed the same Studio totals without involving Bits.
+Studio numeric polls also appear in Tempest Streaming Extension while voting is active and retain final results until the operator clears them. A viewer who shares Twitch identity can vote once from the Panel or Video Component; the same numeric Twitch account is deduplicated across Extension and chat voting. Kick viewers continue voting from Kick chat, so all responses feed the same Studio totals without involving Bits.
 
-The free Extension also publishes Studio's enabled 3D Dice utility as a compact preset picker with an exact custom 1–N maximum from 2 through 100. Viewer rolls honor the same open/assigned-creator access policy as other panel interactions, share bounded cooldowns across every die choice, and start only when the local Dice Browser Source is ready. The physical result remains on stream; no roll is generated in the public service.
+Tempest Streaming Extension also publishes Studio's enabled 3D Dice utility as a compact preset picker with an exact custom 1–N maximum from 2 through 100. Viewer rolls honor the same open/assigned-creator access policy as other panel interactions, share bounded cooldowns across every die choice, and start only when the local Dice Browser Source is ready. The physical result remains on stream; no roll is generated in the public service.
 
-Enabled Chatbot counters are published to the free Extension as read-only live totals. A command such as `!death` or an operator/interaction adjustment updates the card immediately, while all counter changes continue to pass through Studio rather than a public viewer endpoint.
+Enabled Chatbot counters are published to Tempest Streaming Extension as read-only live totals. A command such as `!death` or an operator/interaction adjustment updates the card immediately, while all counter changes continue to pass through Studio rather than a public viewer endpoint.
 
-The active Twitch-native or Studio-managed stream goal is also published as a read-only progress card in the free Extension. Studio remains the source of truth, sends updates as they happen, and never publishes its local goal preview.
+The active Twitch-native or Studio-managed stream goal is also published as a read-only progress card in Tempest Streaming Extension. Studio remains the source of truth, sends updates as they happen, and never publishes its local goal preview.
 
-If the Chatbot's optional AzuraCast provider is configured, the free Extension shows its current station and track with a Twitch-mediated **Listen** action. Studio refreshes this passive card only while connected to the Extension relay; the provider API and direct audio stream URL remain local.
+If the Chatbot's optional AzuraCast provider is configured, Tempest Streaming Extension shows its current station and track with a Twitch-mediated **Listen** action. Studio refreshes this passive card only while connected to the Extension relay; the provider API and direct audio stream URL remain local.
 
-The free Extension also shows the next verified Twitch schedule segment when one exists, formatted in each viewer's local time. It reuses Studio's existing schedule cache and disappears cleanly when no upcoming stream is listed.
+Tempest Streaming Extension also shows the next verified Twitch schedule segment when one exists, formatted in each viewer's local time. It reuses Studio's existing schedule cache and disappears cleanly when no upcoming stream is listed.
 
-The free Extension's Current Stream card reuses the Chatbot's cached Twitch status and channel information to show live/offline state, title, category, uptime, and viewer count without making per-viewer Helix calls or adding an OAuth scope.
+Tempest Streaming Extension's Current Stream card reuses the Chatbot's cached Twitch status and channel information to show live/offline state, title, category, uptime, and viewer count without making per-viewer Helix calls or adding an OAuth scope.
 
-The free Extension also includes a searchable read-only directory of enabled chat commands. Viewers can see each trigger, up to five aliases, its required role, and whether it accepts Stream Together Shared Chat; replies, workflow assignments, and other Chatbot configuration never leave Studio.
+Tempest Streaming Extension also includes a searchable read-only directory of enabled chat commands. Viewers can see each trigger, up to five aliases, its required role, and whether it accepts Stream Together Shared Chat; replies, workflow assignments, and other Chatbot configuration never leave Studio.
 
 The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
 

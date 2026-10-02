@@ -1788,28 +1788,24 @@
   function renderHostedExtension() {
     const hosted = state.hostedExtension || {};
     const paired = Boolean(hosted.paired);
-    const extensionEdition = hosted.extensionEdition === 'bits' ? 'bits' : 'free';
-    const editionName = extensionEdition === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)';
+    const editionName = 'Tempest Streaming Extension';
     const authorized = state.twitch?.oauth?.state === 'authorized';
     const officialTwitchAuthorization = state.twitch?.clientIdMode === 'official';
     const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
-    document.querySelectorAll('input[name="twitchExtensionEdition"]').forEach((input) => { input.checked = input.value === extensionEdition; });
-    $('#twitchExtensionEditionBadge').textContent = extensionEdition === 'bits' ? 'BITS ENABLED' : 'FREE';
+    $('#twitchExtensionEditionBadge').textContent = 'NO BITS';
     $('#twitchExtensionEditionBadge').classList.remove('offline');
-    $('#twitchExtensionEditionMessage').textContent = extensionEdition === 'bits'
-      ? 'Tempest Streaming (Bits) is active. Tempest Signal accepts only Twitch-verified, configured Bits products for this channel.'
-      : 'Tempest Mainframe (Free) is active. Bits product and transaction routes are disabled for this channel.';
+    $('#twitchExtensionEditionMessage').textContent = 'Tempest Streaming Extension is active. Bits product and transaction routes are disabled.';
     $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
     $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
     $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
     $('#hostedExtensionChannelState').textContent = hosted.channel?.login ? `@${hosted.channel.login}` : hosted.channel?.id || '—';
     $('#hostedExtensionRelayState').textContent = relayState;
     $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired || !officialTwitchAuthorization;
-    $('#pairHostedExtension').textContent = `Connect ${extensionEdition === 'bits' ? 'Tempest Streaming' : 'Tempest Mainframe'}`;
+    $('#pairHostedExtension').textContent = 'Connect Tempest Streaming';
     $('#switchHostedExtensionToOfficialTwitch').hidden = paired || officialTwitchAuthorization;
     $('#revokeHostedExtension').disabled = !paired;
     $('#hostedExtensionMessage').textContent = paired
-      ? relayState === 'CONNECTED' ? `${editionName} is selected. Studio publishes its enabled signal catalog and edition lock to Tempest Signal automatically.` : `The installation is paired for ${editionName}. Studio will keep retrying the hosted relay connection.`
+      ? relayState === 'CONNECTED' ? `${editionName} is connected. Studio publishes its enabled signal catalog to Tempest Signal automatically.` : `The installation is paired for ${editionName}. Studio will keep retrying the hosted relay connection.`
       : !officialTwitchAuthorization ? 'The public Extension requires the built-in Tempest Twitch application. Switch sign-in once, reconnect Twitch, then connect your channel.'
         : hosted.lastError || (!authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
           : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
@@ -1817,7 +1813,6 @@
 
   function renderLocalExtension() {
     const local = state.localExtension || {};
-    const bitsEdition = state.hostedExtension?.extensionEdition === 'bits';
     const accountChannelId = state.twitch?.oauth?.account?.userId || '';
     const channelInput = $('#localExtensionChannelId');
     if (document.activeElement !== channelInput && !channelInput.value.trim()) channelInput.value = local.channelId || accountChannelId;
@@ -1831,7 +1826,7 @@
     $('#localExtensionChannelState').textContent = local.channelId || accountChannelId || '—';
     $('#localExtensionPanelUrl').textContent = local.panelUrl || 'https://localhost:8080/panel.html';
     $('#localExtensionSecret').placeholder = local.secretStored ? 'Stored securely; leave blank to reuse' : 'Paste once; stored with Windows encryption';
-    $('#startLocalExtension').disabled = bitsEdition || Boolean(local.running) || !Boolean(local.certificateAvailable);
+    $('#startLocalExtension').disabled = Boolean(local.running) || !Boolean(local.certificateAvailable);
     $('#stopLocalExtension').disabled = !local.running;
     $('#openLocalExtensionPanel').disabled = !local.running;
     $('#prepareLocalExtensionCertificate').disabled = Boolean(local.running);
@@ -1845,9 +1840,7 @@
       : local.certificateProvider === 'mkcert'
         ? `Trusted local HTTPS is ready through verified mkcert ${local.certificateProviderVersion || ''}${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`
         : `Local HTTPS is ready${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`;
-    $('#localExtensionMessage').textContent = bitsEdition && !local.running
-      ? 'Local Panel testing currently runs Tempest Mainframe (Free). Select the Free edition to use these local controls; test Bits through Twitch\'s hosted sandbox.'
-      : local.lastError || (local.running
+    $('#localExtensionMessage').textContent = local.lastError || (local.running
       ? 'Your single-channel Extension services are running. Refresh the installed Twitch panel to send signals into Studio.'
       : !local.certificateAvailable ? 'Prepare the trusted localhost certificate once, then start the Local Panel.'
         : local.secretStored ? `${certificateReadyMessage} The Extension secret is stored with Windows encryption; start the Local Panel whenever you want to test it.`
@@ -2347,8 +2340,7 @@
     try {
       state.hostedExtension = await window.tempestStudio.pairHostedExtension({});
       await refresh({ quiet: true });
-      const editionName = state.hostedExtension.extensionEdition === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)';
-      toast(`${editionName} connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
+      toast(`Tempest Streaming Extension connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
     } catch (error) {
       state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
       renderHostedExtension();
@@ -2787,21 +2779,6 @@
     renderChatbot();
     renderAbout();
     renderUpdateStatus();
-  }
-
-  async function saveTwitchExtensionEdition(event) {
-    const edition = event.currentTarget.value;
-    try {
-      state.hostedExtension = await window.tempestStudio.setTwitchExtensionEdition(edition);
-      renderHostedExtension();
-      renderLocalExtension();
-      toast(edition === 'bits' ? 'Tempest Streaming (Bits) selected.' : 'Tempest Mainframe (Free) selected.');
-    } catch (error) {
-      state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
-      renderHostedExtension();
-      renderLocalExtension();
-      toast(error.message, true);
-    }
   }
 
   function renderRuntimeSection(changedKeys) {
@@ -5207,7 +5184,6 @@
     $('#sharedChatPlatform').addEventListener('change', renderChatbot);
     $('#clearSharedChatMessages').addEventListener('click', clearSharedChatMessages);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
-    document.querySelectorAll('input[name="twitchExtensionEdition"]').forEach((input) => input.addEventListener('change', saveTwitchExtensionEdition));
     $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
     $('#switchHostedExtensionToOfficialTwitch').addEventListener('click', switchHostedExtensionToOfficialTwitch);
     $('#revokeHostedExtension').addEventListener('click', revokeHostedExtension);
