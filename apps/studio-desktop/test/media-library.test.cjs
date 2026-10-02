@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { access, mkdtemp, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { importManagedMediaAsset, removeManagedMediaAsset } = require('../dist/media-library');
+const { importManagedMediaAsset, importManagedMediaBuffer, removeManagedMediaAsset } = require('../dist/media-library');
 
 test('copies, hashes, deduplicates, and removes managed alert media', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tempest-media-library-'));
@@ -27,6 +27,21 @@ test('copies, hashes, deduplicates, and removes managed alert media', async () =
 
   assert.equal(await removeManagedMediaAsset(imported.manifest.uri, library), true);
   assert.equal(await removeManagedMediaAsset(imported.manifest.uri, library), false);
+});
+
+test('stores verified downloaded media directly in the managed library', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'tempest-media-library-buffer-'));
+  const library = path.join(root, 'library');
+  const bytes = Buffer.from('GIF89a-managed-download', 'ascii');
+  const imported = await importManagedMediaBuffer(bytes, '.gif', library, { originalName: 'GIPHY Celebration.gif', tags: ['giphy'] });
+  assert.equal(imported.manifest.type, 'tempest.media.visual');
+  assert.equal(imported.manifest.name, 'GIPHY Celebration');
+  assert.deepEqual(imported.manifest.tags, ['visual', 'gif', 'managed', 'giphy']);
+  assert.equal(imported.reused, false);
+  const duplicate = await importManagedMediaBuffer(bytes, 'gif', library, { originalName: 'Another Name.gif', tags: ['giphy'] });
+  assert.equal(duplicate.manifest.id, imported.manifest.id);
+  assert.equal(duplicate.path, imported.path);
+  assert.equal(duplicate.reused, true);
 });
 
 test('rejects unsupported files and removal outside the managed library', async () => {

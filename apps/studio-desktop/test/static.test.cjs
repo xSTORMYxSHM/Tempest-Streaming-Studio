@@ -121,11 +121,17 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /id="assetsSection"/);
   assert.match(html, /STUDIO-MANAGED MEDIA/);
   assert.match(html, /id="importMediaAsset"/);
+  assert.match(html, /id="adoptAssignedMedia"/);
   assert.match(renderer, /renderAssetLibrary/);
   assert.match(renderer, /\/v1\/assets/);
   assert.match(renderer, /assignLibraryAsset/);
   assert.match(main, /importManagedMediaAsset/);
   assert.match(preload, /studio:select-asset/);
+  assert.match(main, /studio:adopt-assigned-assets/);
+  assert.match(preload, /studio:adopt-assigned-assets/);
+  assert.match(renderer, /registerManagedManifests/);
+  assert.match(renderer, /registerManagedSelection\(imported\)/);
+  assert.match(renderer, /unmanagedAssignedMediaUris/);
   assert.doesNotMatch(renderer, /renderWorkflows|renderSoftware/);
   assert.match(html, /Event Log/);
   assert.match(html, /TWITCH PLATFORM/);

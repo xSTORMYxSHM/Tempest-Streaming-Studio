@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
 import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
@@ -21,7 +21,7 @@ import {
   validateLocalExtensionSettings
 } from './local-extension';
 import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign } from './panel-design';
-import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
+import { buildTempestAlertPack, importTempestAlertPack, inspectTempestAlertPack } from './alert-packs';
 import { buildTempestDiscordProfilePack, importTempestDiscordProfilePack } from './discord-profile-packs';
 import { importDiceBoxTheme } from './dice-theme-import';
 import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
@@ -44,7 +44,7 @@ import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, O
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 import { boundedFetch } from './bounded-fetch';
 import { readResponseBuffer, readResponseJson } from './bounded-response';
-import { importManagedMediaAsset, removeManagedMediaAsset } from './media-library';
+import { importManagedMediaAsset, importManagedMediaBuffer, removeManagedMediaAsset } from './media-library';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -1231,6 +1231,39 @@ function registerDesktopHandlers(): void {
     return { removed: await removeManagedMediaAsset(String(uri || ''), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media')) };
   });
 
+  handleDesktop('studio:adopt-assigned-assets', async (_event, value: unknown) => {
+    if (!bridge) throw new Error('Local control service is not running.');
+    if (!Array.isArray(value) || value.length > 200) throw new Error('Assigned media adoption accepts at most 200 files at once.');
+    const requested = [...new Set(value.map((entry) => String(entry || '')).filter((entry) => entry.length > 0 && entry.length <= 4096))];
+    const readAlerts = async (requestPath: string): Promise<{ alerts?: Array<Record<string, unknown>> }> => {
+      const response = await localServiceFetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
+      if (!response.ok) throw new Error(`Could not read assigned alert media (${response.status}).`);
+      return readResponseJson(response, 2 * 1024 * 1024);
+    };
+    const [interactionDocument, twitchDocument] = await Promise.all([readAlerts('/v1/sound-alerts'), readAlerts('/v1/visual-alerts/twitch')]);
+    const assigned = new Set<string>();
+    const remember = (alert: Record<string, unknown>): void => {
+      for (const key of ['audioUri', 'visualUri']) if (typeof alert[key] === 'string') assigned.add(alert[key] as string);
+      if (Array.isArray(alert.alertVariants)) for (const variant of alert.alertVariants) if (variant && typeof variant === 'object' && !Array.isArray(variant)) remember(variant as Record<string, unknown>);
+    };
+    for (const alert of [...(interactionDocument.alerts || []), ...(twitchDocument.alerts || [])]) remember(alert);
+    const imports = [];
+    const failures: Array<{ sourceUri: string; message: string }> = [];
+    const libraryDirectory = path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media');
+    for (const sourceUri of requested) {
+      try {
+        if (!assigned.has(sourceUri)) throw new Error('The file is no longer assigned to an alert.');
+        const sourceUrl = new URL(sourceUri);
+        if (sourceUrl.protocol !== 'file:') throw new Error('Only assigned local files can be adopted.');
+        const imported = await importManagedMediaAsset(fileURLToPath(sourceUrl), libraryDirectory, { tags: ['adopted'] });
+        imports.push({ sourceUri, ...imported });
+      } catch (error) {
+        failures.push({ sourceUri, message: (error as Error).message });
+      }
+    }
+    return { imports, failures };
+  });
+
   handleDesktop('studio:select-sound-alert-audio', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
       title: 'Assign Sound Alert Audio',
@@ -1383,12 +1416,12 @@ function registerDesktopHandlers(): void {
     const details = await stat(filePath);
     if (!details.isFile() || details.size > 205 * 1024 * 1024) throw new Error('Alert Packs must be smaller than 205 MB.');
     const document = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-    const imported = await importTempestAlertPack(document, path.join(app.getPath('userData'), 'bridge', 'visual-alerts', 'imported'));
-    if (imported.containsCustomCode) {
+    const inspection = inspectTempestAlertPack(document);
+    if (inspection.containsCustomCode) {
       const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
         type: 'warning',
         title: 'Custom Alert Code',
-        message: `${imported.name} contains custom HTML, CSS, or JavaScript.`,
+        message: `${inspection.name} contains custom HTML, CSS, or JavaScript.`,
         detail: 'Custom code runs only inside the local Browser Source, but you should import packs only from creators you trust.',
         buttons: ['Cancel Import', 'Import Trusted Pack'],
         defaultId: 0,
@@ -1397,6 +1430,7 @@ function registerDesktopHandlers(): void {
       });
       if (decision.response !== 1) return null;
     }
+    const imported = await importTempestAlertPack(document, path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
     return { ...imported, sourcePath: filePath };
   });
 
@@ -1486,9 +1520,10 @@ function registerDesktopHandlers(): void {
     };
   });
 
-  handleDesktop('studio:import-giphy-visual', async (_event, input: { id?: unknown; mediaUrl?: unknown }) => {
+  handleDesktop('studio:import-giphy-visual', async (_event, input: { id?: unknown; title?: unknown; mediaUrl?: unknown }) => {
     const id = String(input?.id || '').trim();
     if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('The selected GIPHY result has an invalid identifier.');
+    const title = String(input?.title || '').trim().replace(/[\r\n\0]/g, ' ').slice(0, 120) || `GIPHY ${id}`;
     const mediaUrl = new URL(String(input?.mediaUrl || ''));
     if (mediaUrl.protocol !== 'https:' || !/^(?:media\d*|i)\.giphy\.com$/i.test(mediaUrl.hostname)) throw new Error('Only GIPHY-hosted media can be imported through this picker.');
     const response = await fetch(mediaUrl, { signal: AbortSignal.timeout(15000) });
@@ -1504,11 +1539,8 @@ function registerDesktopHandlers(): void {
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     if (!['image/gif', 'image/webp', 'video/mp4'].includes(contentType || '')) throw new Error('GIPHY returned an unsupported media format.');
     const extension = contentType === 'image/webp' ? '.webp' : contentType === 'video/mp4' ? '.mp4' : '.gif';
-    const directory = path.join(app.getPath('userData'), 'bridge', 'visual-alerts', 'giphy');
-    await mkdir(directory, { recursive: true });
-    const filePath = path.join(directory, `${id}${extension}`);
-    await writeFile(filePath, bytes, { mode: 0o600 });
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: `GIPHY ${id}${extension}`, size: bytes.length };
+    const imported = await importManagedMediaBuffer(bytes, extension, path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'), { originalName: `${title}${extension}`, tags: ['giphy'] });
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   handleDesktop('studio:launch-application', async (_event, input: unknown) => {

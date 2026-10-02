@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
   selectAsset: () => ipcRenderer.invoke('studio:select-asset'),
   removeManagedAsset: (uri: string) => ipcRenderer.invoke('studio:remove-managed-asset', uri),
+  adoptAssignedAssets: (uris: string[]) => ipcRenderer.invoke('studio:adopt-assigned-assets', uris),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
   selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
   selectTwitchExperienceMedia: () => ipcRenderer.invoke('studio:select-twitch-experience-media'),
@@ -81,7 +82,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   getGiphyStatus: () => ipcRenderer.invoke('studio:get-giphy-status'),
   saveGiphyApiKey: (apiKey: string) => ipcRenderer.invoke('studio:save-giphy-api-key', apiKey),
   searchGiphy: (query: string) => ipcRenderer.invoke('studio:search-giphy', query),
-  importGiphyVisual: (input: { id: string; mediaUrl: string }) => ipcRenderer.invoke('studio:import-giphy-visual', input),
+  importGiphyVisual: (input: { id: string; title?: string; mediaUrl: string }) => ipcRenderer.invoke('studio:import-giphy-visual', input),
   onSoundAlertPlayback: (listener: (command: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => listener(command);
     ipcRenderer.on('studio:sound-alert-playback', handler);

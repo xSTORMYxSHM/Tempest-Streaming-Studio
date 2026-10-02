@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { TempestTwitchAlertVariant } from '@tempest/contracts';
+import { fileURLToPath } from 'node:url';
+import { TempestAssetManifest, TempestTwitchAlertVariant } from '@tempest/contracts';
 import { validateTwitchAlertDesign } from '@tempest/bridge';
+import { importManagedMediaBuffer } from './media-library';
 
 export type TempestAlertPackKind = 'twitch' | 'interaction';
 
@@ -45,6 +46,7 @@ export interface ImportedTempestAlertPack {
   assetCount: number;
   totalAssetBytes: number;
   containsCustomCode: boolean;
+  assets: TempestAssetManifest[];
 }
 
 const maximumAssetBytes = 64 * 1024 * 1024;
@@ -65,6 +67,19 @@ function hasCustomCode(design: unknown): boolean {
   if (!design || typeof design !== 'object') return false;
   const source = design as Record<string, unknown>;
   return ['customHtml', 'customCss', 'customJavaScript'].some((key) => typeof source[key] === 'string' && source[key]!.trim().length > 0);
+}
+
+export function inspectTempestAlertPack(value: unknown): { name: string; containsCustomCode: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Alert Pack document must be an object.');
+  const document = value as Partial<TempestAlertPackDocument>;
+  if (document.schemaVersion !== 1 || document.type !== 'tempest.alert-pack') throw new Error('This is not a supported Tempest Alert Pack.');
+  if (!document.alert || typeof document.alert !== 'object' || Array.isArray(document.alert)) throw new Error('Alert Pack has no alert definition.');
+  const alert = document.alert as Record<string, unknown>;
+  const variants = Array.isArray(alert.alertVariants) ? alert.alertVariants : [];
+  return {
+    name: safeName(document.name, safeName(alert.name, 'Tempest Alert')),
+    containsCustomCode: hasCustomCode(alert.design) || variants.some((variant) => variant && typeof variant === 'object' && !Array.isArray(variant) && hasCustomCode((variant as Record<string, unknown>).design))
+  };
 }
 
 function sanitizeAlert(kind: TempestAlertPackKind, input: unknown): { alert: Record<string, unknown>; uris: { audio?: string; visual?: string; variants: Array<{ id: string; audio?: string; visual?: string }> } } {
@@ -185,11 +200,11 @@ export async function importTempestAlertPack(value: unknown, destinationDirector
   const totalAssetBytes = validatedAssets.reduce((sum, entry) => sum + entry.bytes.length, 0);
   if (totalAssetBytes > maximumPackAssetBytes) throw new Error('Alert Pack media exceeds the 150 MB total limit.');
   const assetUris = new Map<string, string>();
-  await mkdir(destinationDirectory, { recursive: true });
+  const manifests = new Map<string, TempestAssetManifest>();
   for (const { asset, bytes } of validatedAssets) {
-    const filePath = path.join(destinationDirectory, `${asset.sha256}${asset.extension}`);
-    await writeFile(filePath, bytes, { mode: 0o600 });
-    assetUris.set(asset.id, pathToFileURL(filePath).href);
+    const imported = await importManagedMediaBuffer(bytes, asset.extension, destinationDirectory, { originalName: asset.fileName, tags: ['alert-pack'] });
+    assetUris.set(asset.id, imported.manifest.uri);
+    manifests.set(imported.manifest.id, imported.manifest);
   }
   if (!document.alert || typeof document.alert !== 'object' || Array.isArray(document.alert)) throw new Error('Alert Pack has no alert definition.');
   const alert = copy(document.alert as Record<string, unknown>);
@@ -224,6 +239,7 @@ export async function importTempestAlertPack(value: unknown, destinationDirector
     alert,
     assetCount: validatedAssets.length,
     totalAssetBytes,
-    containsCustomCode
+    containsCustomCode,
+    assets: [...manifests.values()]
   };
 }

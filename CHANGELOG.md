@@ -11,6 +11,8 @@
 - Added a Studio-managed Media Library for reusable alert audio, images, GIFs, and videos. Imports are copied into local Studio data, streamed through SHA-256 verification, content-addressed, deduplicated, searchable, and assignable to Interaction Alerts, Twitch Alerts, and alert variants.
 - Made new alert file assignments register their managed media automatically, prevent deletion while an alert still uses an item, and delete only Studio's copy after explicit removal. The original imported file is never changed.
 - Included managed Media Library items in portable Studio backups even when they are not assigned to an alert, while continuing to exclude externally registered asset paths.
+- Unified GIPHY downloads and verified Alert Pack media with the managed Media Library, preserving friendly names, source tags, deduplication, reuse, and backup behavior instead of leaving media in feature-specific folders.
+- Added explicit **Adopt Assigned Media** migration for alert files configured before the library existed. Studio verifies each file is still assigned, copies it into managed storage, updates every affected base alert and variant, and leaves the original untouched.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

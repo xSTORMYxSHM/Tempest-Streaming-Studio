@@ -673,6 +673,25 @@
     return uses;
   }
 
+  function assignedMediaUris() {
+    const uris = [];
+    const remember = (entry) => {
+      if (entry?.audioUri) uris.push(entry.audioUri);
+      if (entry?.visualUri) uris.push(entry.visualUri);
+    };
+    for (const alert of state.soundAlerts?.alerts || []) remember(alert);
+    for (const alert of state.twitchVisualAlerts?.alerts || []) {
+      remember(alert);
+      for (const variant of alert.alertVariants || []) remember(variant);
+    }
+    return [...new Set(uris)];
+  }
+
+  function unmanagedAssignedMediaUris() {
+    const managedUris = new Set((state.assets || []).filter((asset) => asset.metadata?.managed === true).map((asset) => asset.uri));
+    return assignedMediaUris().filter((uri) => !managedUris.has(uri));
+  }
+
   function assetTargetOptions() {
     const interactions = (state.soundAlerts?.alerts || []).map((alert) => `<option value="interaction|${escapeHtml(alert.id)}">Interaction · ${escapeHtml(alert.name)}</option>`);
     const twitch = (state.twitchVisualAlerts?.alerts || []).flatMap((alert) => [
@@ -711,6 +730,10 @@
     $('#assetLibraryAudioCount').textContent = enriched.filter((entry) => entry.role === 'audio').length;
     $('#assetLibraryVisualCount').textContent = enriched.filter((entry) => entry.role === 'visual').length;
     $('#assetLibraryUsedCount').textContent = enriched.filter((entry) => entry.uses.length).length;
+    const adoptButton = $('#adoptAssignedMedia');
+    const unmanagedCount = unmanagedAssignedMediaUris().length;
+    adoptButton.disabled = unmanagedCount === 0;
+    adoptButton.textContent = unmanagedCount ? `Adopt Assigned Media (${unmanagedCount})` : 'Assigned Media Managed';
     const grid = $('#assetLibraryGrid');
     grid.classList.toggle('empty-state', !filtered.length);
     grid.innerHTML = filtered.length ? filtered.map(({ asset, role, uses }) => {
@@ -734,6 +757,70 @@
       renderAssetLibrary();
       toast(`${result.asset.name} ${imported.reused ? 'was already in' : 'was copied into'} the Media Library.`);
     } catch (error) { toast(error.message, true); }
+  }
+
+  async function registerManagedManifests(manifests) {
+    for (const manifest of manifests || []) {
+      const existing = state.assets.find((asset) => asset.id === manifest.id && asset.metadata?.managed === true);
+      const merged = existing ? {
+        ...manifest,
+        name: existing.name,
+        tags: [...new Set([...(existing.tags || []), ...(manifest.tags || [])])],
+        metadata: { ...(manifest.metadata || {}), ...(existing.metadata || {}), managed: true }
+      } : manifest;
+      const result = await api('/v1/assets', { method: 'POST', body: merged });
+      state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)];
+    }
+    state.assets.sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async function adoptAssignedMedia() {
+    const candidates = unmanagedAssignedMediaUris();
+    if (!candidates.length) return toast('Every assigned alert file is already managed by the Media Library.');
+    if (!confirm(`Copy ${candidates.length} assigned media file${candidates.length === 1 ? '' : 's'} into Studio-managed storage and update the alerts to use those verified copies? Your original files will remain untouched.`)) return;
+    const button = $('#adoptAssignedMedia');
+    button.disabled = true;
+    button.textContent = 'Adopting…';
+    try {
+      const result = await window.tempestStudio.adoptAssignedAssets(candidates);
+      for (const imported of result.imports || []) await registerManagedSelection(imported);
+      const replacements = new Map((result.imports || []).map((entry) => [entry.sourceUri, entry.manifest.uri]));
+      let updatedAlerts = 0;
+      for (const alert of [...(state.soundAlerts?.alerts || [])]) {
+        const patch = {};
+        if (replacements.has(alert.audioUri) && replacements.get(alert.audioUri) !== alert.audioUri) patch.audioUri = replacements.get(alert.audioUri);
+        if (replacements.has(alert.visualUri) && replacements.get(alert.visualUri) !== alert.visualUri) patch.visualUri = replacements.get(alert.visualUri);
+        if (Object.keys(patch).length) {
+          const response = await api(`/v1/sound-alerts/${encodeURIComponent(alert.id)}`, { method: 'POST', body: patch });
+          state.soundAlerts.alerts[state.soundAlerts.alerts.findIndex((entry) => entry.id === alert.id)] = response.alert;
+          updatedAlerts += 1;
+        }
+      }
+      for (const alert of [...(state.twitchVisualAlerts?.alerts || [])]) {
+        const patch = {};
+        if (replacements.has(alert.audioUri) && replacements.get(alert.audioUri) !== alert.audioUri) patch.audioUri = replacements.get(alert.audioUri);
+        if (replacements.has(alert.visualUri) && replacements.get(alert.visualUri) !== alert.visualUri) patch.visualUri = replacements.get(alert.visualUri);
+        let variantsChanged = false;
+        const alertVariants = (alert.alertVariants || []).map((variant) => {
+          const next = { ...variant };
+          if (replacements.has(variant.audioUri) && replacements.get(variant.audioUri) !== variant.audioUri) { next.audioUri = replacements.get(variant.audioUri); variantsChanged = true; }
+          if (replacements.has(variant.visualUri) && replacements.get(variant.visualUri) !== variant.visualUri) { next.visualUri = replacements.get(variant.visualUri); variantsChanged = true; }
+          return next;
+        });
+        if (variantsChanged) patch.alertVariants = alertVariants;
+        if (Object.keys(patch).length) {
+          const response = await api(`/v1/visual-alerts/twitch/${encodeURIComponent(alert.id)}`, { method: 'POST', body: patch });
+          state.twitchVisualAlerts.alerts[state.twitchVisualAlerts.alerts.findIndex((entry) => entry.id === alert.id)] = response.alert;
+          updatedAlerts += 1;
+        }
+      }
+      renderSoundAlerts();
+      renderVisualAlerts();
+      renderAssetLibrary();
+      const failed = result.failures?.length || 0;
+      toast(`${result.imports.length} assigned media file${result.imports.length === 1 ? '' : 's'} adopted and ${updatedAlerts} alert${updatedAlerts === 1 ? '' : 's'} updated.${failed ? ` ${failed} file${failed === 1 ? '' : 's'} could not be adopted.` : ''}`, failed > 0);
+    } catch (error) { toast(error.message, true); }
+    finally { renderAssetLibrary(); }
   }
 
   async function assignLibraryAsset(id) {
@@ -3253,6 +3340,7 @@
       if (!imported) return;
       const alert = imported.alert;
       if (imported.kind === 'interaction') {
+        await registerManagedManifests(imported.assets);
         const id = uniqueImportedAlertId('sound-alert', alert.id || imported.name, state.soundAlerts.alerts);
         const result = await api('/v1/sound-alerts', { method: 'POST', body: { ...alert, id, cue: id, custom: undefined, updatedAt: undefined } });
         state.soundAlerts.alerts.push(result.alert);
@@ -3266,8 +3354,10 @@
       const existing = state.twitchVisualAlerts.alerts.find((entry) => entry.topic === alert.topic && (entry.topic !== 'viewer.subscription.started' || (entry.variant || 'standard') === subscriptionVariant));
       if (existing) {
         if (!confirm(`${existing.name} already handles ${alert.topic}${subscriptionVariant ? ` (${subscriptionVariant})` : ''}. Replace its design, media, timing, and variants with ${imported.name}?`)) return;
+        await registerManagedManifests(imported.assets);
         await updateTwitchVisualAlert(existing.id, { enabled: alert.enabled !== false, durationMs: alert.durationMs, audioUri: alert.audioUri || null, volume: alert.volume, visualUri: alert.visualUri || null, accent: alert.accent, design: alert.design, alertVariants: alert.alertVariants || [] }, `${imported.name} imported into ${existing.name}.`);
       } else {
+        await registerManagedManifests(imported.assets);
         const id = uniqueImportedAlertId('twitch', alert.id || imported.name, state.twitchVisualAlerts.alerts);
         const result = await api('/v1/visual-alerts/twitch', { method: 'POST', body: { ...alert, id, custom: undefined, updatedAt: undefined } });
         state.twitchVisualAlerts.alerts.push(result.alert);
@@ -3353,8 +3443,7 @@
 
   async function registerManagedSelection(selection) {
     if (!selection?.manifest) return selection;
-    const result = await api('/v1/assets', { method: 'POST', body: selection.manifest });
-    state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)].sort((left, right) => left.name.localeCompare(right.name));
+    await registerManagedManifests([selection.manifest]);
     return selection;
   }
 
@@ -4529,7 +4618,7 @@
       grid.textContent = 'Searching GIPHY…';
       const result = await window.tempestStudio.searchGiphy(query);
       grid.classList.toggle('empty-state', !result.results.length);
-      grid.innerHTML = result.results.length ? result.results.map((entry) => `<article class="giphy-result"><img src="${escapeHtml(entry.previewUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" /><div><strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong><button data-giphy-result="${escapeHtml(entry.id)}" data-giphy-media-url="${escapeHtml(entry.mediaUrl)}" aria-label="Assign this GIF to ${escapeHtml(alertName)}">Assign GIF</button></div></article>`).join('') : 'No GIFs matched that search.';
+      grid.innerHTML = result.results.length ? result.results.map((entry) => `<article class="giphy-result"><img src="${escapeHtml(entry.previewUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" /><div><strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong><button data-giphy-result="${escapeHtml(entry.id)}" data-giphy-title="${escapeHtml(entry.title)}" data-giphy-media-url="${escapeHtml(entry.mediaUrl)}" aria-label="Assign this GIF to ${escapeHtml(alertName)}">Assign GIF</button></div></article>`).join('') : 'No GIFs matched that search.';
       $('#giphyResultSummary').textContent = `${result.results.length} result${result.results.length === 1 ? '' : 's'} for “${query}”`;
       $('#giphyTargetSummary').textContent = result.results.length
         ? `Select a GIF to download and assign it to ${alertName}.`
@@ -4544,7 +4633,7 @@
     }
   }
 
-  async function chooseGiphyResult(id, mediaUrl, button) {
+  async function chooseGiphyResult(id, title, mediaUrl, button) {
     const originalLabel = button?.textContent || 'Assign GIF';
     const card = button?.closest('.giphy-result');
     try {
@@ -4552,7 +4641,8 @@
       if (!target) throw new Error('Choose an alert before selecting a GIF.');
       if (button) { button.disabled = true; button.textContent = 'Downloading…'; }
       card?.classList.add('assigning');
-      const imported = await window.tempestStudio.importGiphyVisual({ id, mediaUrl });
+      const imported = await window.tempestStudio.importGiphyVisual({ id, title, mediaUrl });
+      await registerManagedSelection(imported);
       if (target.kind === 'interaction') await updateSoundAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
       else if (target.kind === 'twitch') await updateTwitchVisualAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
       else await updateTwitchVariant(target.alertId, target.variantId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
@@ -5177,7 +5267,7 @@
     if (button.dataset.twitchVisualPreview) return previewTwitchVisualAlert(button.dataset.twitchVisualPreview);
     if (button.dataset.giphySave) return saveGiphyKey();
     if (button.dataset.giphySearch) return searchGiphy();
-    if (button.dataset.giphyResult) return chooseGiphyResult(button.dataset.giphyResult, button.dataset.giphyMediaUrl, button);
+    if (button.dataset.giphyResult) return chooseGiphyResult(button.dataset.giphyResult, button.dataset.giphyTitle, button.dataset.giphyMediaUrl, button);
     if (button.dataset.giphyAlertTarget) return openGiphyForAlert(button.dataset.giphyAlertTarget);
     if (button.dataset.chatOverlaySave) return saveChatOverlaySettings();
     if (button.dataset.chatOverlayPreview) return previewChatOverlay();
@@ -5308,6 +5398,7 @@
     }
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
     $('#importMediaAsset').addEventListener('click', importMediaAsset);
+    $('#adoptAssignedMedia').addEventListener('click', adoptAssignedMedia);
     $('#assetLibrarySearch').addEventListener('input', renderAssetLibrary);
     $('#assetLibraryFilter').addEventListener('change', renderAssetLibrary);
     $('#viewerGroupForm').addEventListener('submit', saveViewerGroup);
