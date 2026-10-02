@@ -521,7 +521,7 @@
         </section>
 
         <section id="extensiondesignerSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">CHANNEL-SPECIFIC EXTENSION THEME</p><h2>Twitch Panel Designer</h2><p>Customize how the universal Tempest Extension looks on your channel. Appearance is saved as safe configuration data—never arbitrary viewer-facing code.</p></div><span id="panelDesignStateBadge" class="status-badge">SAVED LOCALLY</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">CHANNEL-SPECIFIC EXTENSION CONTROL</p><h2>Twitch Panel Designer</h2><p>Control the panel's appearance and every viewer-facing module here. Each module links to its single source editor so settings never drift between screens.</p></div><span id="panelDesignStateBadge" class="status-badge">SAVED LOCALLY</span></div>
           <div class="extension-designer-layout">
             <form id="panelDesignForm" class="panel extension-design-controls">
               <div class="panel-header"><div><span>APPEARANCE</span><h3>Channel theme</h3></div><button id="resetPanelDesign" type="button" class="text-button">Reset</button></div>
@@ -534,6 +534,19 @@
               <div class="form-row panel-design-three"><label>Typography<select id="panelDesignFont"><option value="inter">Inter</option><option value="system">System</option><option value="condensed">Condensed</option><option value="serif">Serif</option></select></label><label>Card layout<select id="panelDesignCardLayout"><option value="grid">Two-column grid</option><option value="list">Single-column list</option></select></label><label>Density<select id="panelDesignDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label></div>
               <label>Corner radius <output id="panelDesignRadiusValue">10 px</output><input id="panelDesignRadius" type="range" min="0" max="24" step="1" /></label>
               <div class="panel-design-toggles"><label><input id="panelDesignShowLogo" type="checkbox" /> Logo</label><label><input id="panelDesignShowStatus" type="checkbox" /> Status</label><label><input id="panelDesignShowSearch" type="checkbox" /> Search</label><label><input id="panelDesignShowFilters" type="checkbox" /> Filters</label><label><input id="panelDesignShowPattern" type="checkbox" /> Grid pattern</label><label><input id="panelDesignUppercase" type="checkbox" /> Uppercase cards</label></div>
+              <div class="panel-design-subheading"><div><span>VIEWER-FACING MODULES</span><h3>Panel content</h3></div><small>Hide a module without disabling its Studio feature.</small></div>
+              <div class="panel-module-controls">
+                <article><label><input id="panelDesignShowCurrentStream" type="checkbox" /><span><strong>Current Stream</strong><small>Live title, category, viewers, and uptime.</small></span></label><button type="button" data-go="twitch">Edit source</button></article>
+                <article><label><input id="panelDesignShowNowPlaying" type="checkbox" /><span><strong>Now Playing</strong><small>Station and current song information.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowSchedule" type="checkbox" /><span><strong>Schedule</strong><small>The channel's next scheduled stream.</small></span></label><button type="button" data-go="twitch">Edit source</button></article>
+                <article><label><input id="panelDesignShowGoal" type="checkbox" /><span><strong>Goal</strong><small>Subscription, follower, Bits, or custom progress.</small></span></label><button type="button" data-go="visualalerts">Edit source</button></article>
+                <article><label><input id="panelDesignShowPoll" type="checkbox" /><span><strong>Poll</strong><small>Active one-vote-per-viewer poll.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowCounters" type="checkbox" /><span><strong>Counters</strong><small>Viewer-facing death, restart, or custom counts.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowCommands" type="checkbox" /><span><strong>Commands</strong><small>Published chat commands and permissions.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowDice" type="checkbox" /><span><strong>3D Dice</strong><small>Preset and custom viewer rolls.</small></span></label><button type="button" data-go="dice">Edit source</button></article>
+                <article><label><input id="panelDesignShowFeatured" type="checkbox" /><span><strong>Viewer Interactions</strong><small>Stickers, GIFs, effects, and placed interactions.</small></span></label><button type="button" data-go="soundalerts">Edit source</button></article>
+                <article><label><input id="panelDesignShowPerformances" type="checkbox" /><span><strong>Performances</strong><small>Sound and performance alert triggers.</small></span></label><button type="button" data-go="soundalerts">Edit source</button></article>
+              </div>
               <div class="extension-design-actions"><button type="submit" class="primary-button">Save Panel Design</button><button id="openDesignedPanel" type="button" class="secondary-button">Open Real Panel</button><span id="panelDesignSaveState">Changes are previewed live.</span></div>
             </form>
             <article class="panel extension-preview-panel">
@@ -544,7 +557,18 @@
                   <section class="preview-intro"><div><small id="panelPreviewEyebrow">VIEWER CONTROL NODE</small><h3 id="panelPreviewTitle">Signal deck</h3></div><b>6 AVAILABLE</b></section>
                   <div id="panelPreviewSearch" class="preview-search">⌕ <span>Search signals</span></div>
                   <nav id="panelPreviewFilters"><b>ALL</b><span>EVENTS</span><span>PERFORMANCES</span></nav>
-                  <main><small>FEATURED INTERACTION</small><div class="preview-featured"><i>FX</i><div><strong>Scene Shift</strong><span>READY · 15s EFFECT</span></div><b>›</b></div><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Celebration</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Spotlight</strong><span>READY TO PLAY · 12s</span></div></div></main>
+                  <main>
+                    <section id="panelPreviewCurrentStream" class="preview-module preview-stream"><small>LIVE NOW</small><strong>Building the next Tempest release</strong><span>Science &amp; Technology · 42 viewers</span></section>
+                    <section id="panelPreviewNowPlaying" class="preview-module"><small>NOW PLAYING</small><strong>The Midnight — Synthetic</strong><span>LISTEN NOW</span></section>
+                    <section id="panelPreviewSchedule" class="preview-module"><small>NEXT STREAM</small><strong>Tomorrow · 7:00 PM</strong><span>Pacific Time</span></section>
+                    <section id="panelPreviewGoal" class="preview-module preview-goal"><small>SUBSCRIPTION GOAL</small><strong>Road to 50 · 31 / 50</strong><i><b></b></i></section>
+                    <section id="panelPreviewPoll" class="preview-module"><small>VOTING OPEN</small><strong>What should happen next?</strong><span>1 · Roll dice &nbsp; 2 · Trigger effect</span></section>
+                    <section id="panelPreviewCounters" class="preview-module"><small>COUNTERS</small><strong>Ship Restarts · 7</strong><span>!death</span></section>
+                    <section id="panelPreviewCommands" class="preview-module"><small>COMMANDS</small><strong>!commands · !roll · !song</strong><span>EVERYONE</span></section>
+                    <section id="panelPreviewDice" class="preview-module"><small>3D DICE</small><strong>D6 · D20 · CUSTOM</strong><span>ROLL ON STREAM</span></section>
+                    <section id="panelPreviewFeatured"><small>VIEWER INTERACTION</small><div class="preview-featured"><i>FX</i><div><strong>Scene Shift</strong><span>READY · 15s EFFECT</span></div><b>›</b></div></section>
+                    <section id="panelPreviewPerformances"><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Celebration</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Spotlight</strong><span>READY TO PLAY · 12s</span></div></div></section>
+                  </main>
                   <footer>Viewer link established</footer>
                 </div>
               </div>

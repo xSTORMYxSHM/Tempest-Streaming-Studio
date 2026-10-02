@@ -19,14 +19,17 @@ test('keeps the local Extension on loopback HTTPS ports', () => {
   assert.equal(localExtensionUrls.ebsUrl, 'https://localhost:8090');
 });
 
-test('validates channel-specific Twitch Panel appearance without executable code', () => {
-  const design = validateTwitchPanelDesign({ brandName: 'Creator Studio', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false });
+test('validates channel-specific Twitch Panel appearance and content visibility without executable code', () => {
+  const design = validateTwitchPanelDesign({ brandName: 'Creator Studio', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false, showPoll: false, showDice: false });
   assert.equal(design.brandName, 'Creator Studio');
   assert.equal(design.preset, 'neon');
   assert.equal(design.accent, '#A66BFF');
   assert.equal(design.cornerRadius, 24);
   assert.equal(design.cardLayout, 'list');
   assert.equal(design.showSearch, false);
+  assert.equal(design.showPoll, false);
+  assert.equal(design.showDice, false);
+  assert.equal(design.showCurrentStream, true);
   assert.equal(Object.hasOwn(design, 'javascript'), false);
 });
 

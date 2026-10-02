@@ -475,13 +475,15 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   const designUpdate = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${installation.relayToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ panelDesign: { preset: 'neon', title: 'Creator deck', accent: '#a66bff', showSearch: false } })
+    body: JSON.stringify({ panelDesign: { preset: 'neon', title: 'Creator deck', accent: '#a66bff', showSearch: false, showPoll: false, showDice: false } })
   });
   assert.equal(designUpdate.status, 200);
   const savedDesign = (await designUpdate.json()).panelDesign;
   assert.equal(savedDesign.title, 'Creator deck');
   assert.equal(savedDesign.accent, '#A66BFF');
   assert.equal(savedDesign.showSearch, false);
+  assert.equal(savedDesign.showPoll, false);
+  assert.equal(savedDesign.showDice, false);
 
   studio.send(JSON.stringify({
     protocolVersion: 1,
@@ -501,6 +503,8 @@ test('pairs public Studio installations with Twitch identity and publishes a cha
   assert.equal(catalog.panelDesign.title, 'Creator deck');
   assert.equal(catalog.panelDesign.accent, '#A66BFF');
   assert.equal(catalog.panelDesign.showSearch, false);
+  assert.equal(catalog.panelDesign.showPoll, false);
+  assert.equal(catalog.panelDesign.showDice, false);
 
   const unauthorizedDesign = await fetch(`${runtime.baseUrl}/v1/installations/current/panel-design`, {
     method: 'PUT', headers: { Authorization: 'Bearer invalid', 'Content-Type': 'application/json' }, body: JSON.stringify({ panelDesign: {} })

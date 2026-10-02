@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — Tempest Streaming Extension pivot
+## 1.6.0 — Extension platform and managed media
+
+Released 2026-10-02.
 
 - Promoted the existing no-Bits viewer experience to **Tempest Streaming Extension**, the single primary Twitch Extension in Studio.
 - Removed the Free/Bits selector from the normal Studio workflow and automatically normalize legacy Bits selections to the no-Bits edition before connecting the relay.
@@ -19,6 +21,7 @@
 - Added a separate Linux CI gate that validates the hosted boundary and builds the exact production Railway EBS image without production secrets, preventing desktop-only checks from masking a broken hosted deployment.
 - Completed the Extension pivot terminology pass across active service errors, clean-install UI, privacy and architecture documentation, while preserving the legacy `free|bits` wire values solely for saved-data and hosted-service compatibility.
 - Added the missing Twitch Asset Hosting entry files for Mobile and Video - Fullscreen. They are verified aliases of the responsive viewer component, and hosted packaging now fails if any configured surface path is absent.
+- Expanded the Twitch Panel Designer so streamers can show or hide every viewer-facing module from one screen, jump to each module's source settings, and preview the resulting panel before publishing it.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

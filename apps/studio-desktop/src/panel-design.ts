@@ -19,6 +19,16 @@ export interface TwitchPanelDesign {
   showFilters: boolean;
   showPattern: boolean;
   uppercaseLabels: boolean;
+  showCurrentStream: boolean;
+  showNowPlaying: boolean;
+  showSchedule: boolean;
+  showGoal: boolean;
+  showPoll: boolean;
+  showCounters: boolean;
+  showCommands: boolean;
+  showDice: boolean;
+  showFeatured: boolean;
+  showPerformances: boolean;
 }
 
 export const defaultTwitchPanelDesign: TwitchPanelDesign = {
@@ -41,7 +51,17 @@ export const defaultTwitchPanelDesign: TwitchPanelDesign = {
   showSearch: true,
   showFilters: true,
   showPattern: true,
-  uppercaseLabels: true
+  uppercaseLabels: true,
+  showCurrentStream: true,
+  showNowPlaying: true,
+  showSchedule: true,
+  showGoal: true,
+  showPoll: true,
+  showCounters: true,
+  showCommands: true,
+  showDice: true,
+  showFeatured: true,
+  showPerformances: true
 };
 
 function choice<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -80,6 +100,16 @@ export function validateTwitchPanelDesign(input: unknown): TwitchPanelDesign {
     showSearch: source.showSearch !== false,
     showFilters: source.showFilters !== false,
     showPattern: source.showPattern !== false,
-    uppercaseLabels: source.uppercaseLabels !== false
+    uppercaseLabels: source.uppercaseLabels !== false,
+    showCurrentStream: source.showCurrentStream !== false,
+    showNowPlaying: source.showNowPlaying !== false,
+    showSchedule: source.showSchedule !== false,
+    showGoal: source.showGoal !== false,
+    showPoll: source.showPoll !== false,
+    showCounters: source.showCounters !== false,
+    showCommands: source.showCommands !== false,
+    showDice: source.showDice !== false,
+    showFeatured: source.showFeatured !== false,
+    showPerformances: source.showPerformances !== false
   };
 }

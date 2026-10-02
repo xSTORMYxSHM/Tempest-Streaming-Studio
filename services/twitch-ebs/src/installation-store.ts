@@ -104,6 +104,16 @@ export interface PublicExtensionPanelDesign {
   showFilters: boolean;
   showPattern: boolean;
   uppercaseLabels: boolean;
+  showCurrentStream: boolean;
+  showNowPlaying: boolean;
+  showSchedule: boolean;
+  showGoal: boolean;
+  showPoll: boolean;
+  showCounters: boolean;
+  showCommands: boolean;
+  showDice: boolean;
+  showFeatured: boolean;
+  showPerformances: boolean;
 }
 
 export interface PublicExtensionCatalog {

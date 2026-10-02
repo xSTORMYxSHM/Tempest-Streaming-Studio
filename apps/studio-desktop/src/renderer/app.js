@@ -2792,7 +2792,7 @@
   }
 
   function defaultPanelDesign() {
-    return { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
+    return { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true, showCurrentStream: true, showNowPlaying: true, showSchedule: true, showGoal: true, showPoll: true, showCounters: true, showCommands: true, showDice: true, showFeatured: true, showPerformances: true };
   }
 
   const panelPresetValues = {
@@ -2823,11 +2823,21 @@
     $('#panelDesignShowFilters').checked = design.showFilters;
     $('#panelDesignShowPattern').checked = design.showPattern;
     $('#panelDesignUppercase').checked = design.uppercaseLabels;
+    $('#panelDesignShowCurrentStream').checked = design.showCurrentStream;
+    $('#panelDesignShowNowPlaying').checked = design.showNowPlaying;
+    $('#panelDesignShowSchedule').checked = design.showSchedule;
+    $('#panelDesignShowGoal').checked = design.showGoal;
+    $('#panelDesignShowPoll').checked = design.showPoll;
+    $('#panelDesignShowCounters').checked = design.showCounters;
+    $('#panelDesignShowCommands').checked = design.showCommands;
+    $('#panelDesignShowDice').checked = design.showDice;
+    $('#panelDesignShowFeatured').checked = design.showFeatured;
+    $('#panelDesignShowPerformances').checked = design.showPerformances;
     updatePanelDesignPreview();
   }
 
   function readPanelDesign() {
-    return { schemaVersion: 1, preset: $('#panelDesignPreset').value, brandName: $('#panelDesignBrandName').value.trim(), eyebrow: $('#panelDesignEyebrow').value.trim(), title: $('#panelDesignTitle').value.trim(), accent: $('#panelDesignAccent').value, background: $('#panelDesignBackground').value, surface: $('#panelDesignSurface').value, text: $('#panelDesignText').value, muted: $('#panelDesignMuted').value, font: $('#panelDesignFont').value, cardLayout: $('#panelDesignCardLayout').value, density: $('#panelDesignDensity').value, cornerRadius: Number($('#panelDesignRadius').value), showLogo: $('#panelDesignShowLogo').checked, showStatus: $('#panelDesignShowStatus').checked, showSearch: $('#panelDesignShowSearch').checked, showFilters: $('#panelDesignShowFilters').checked, showPattern: $('#panelDesignShowPattern').checked, uppercaseLabels: $('#panelDesignUppercase').checked };
+    return { schemaVersion: 1, preset: $('#panelDesignPreset').value, brandName: $('#panelDesignBrandName').value.trim(), eyebrow: $('#panelDesignEyebrow').value.trim(), title: $('#panelDesignTitle').value.trim(), accent: $('#panelDesignAccent').value, background: $('#panelDesignBackground').value, surface: $('#panelDesignSurface').value, text: $('#panelDesignText').value, muted: $('#panelDesignMuted').value, font: $('#panelDesignFont').value, cardLayout: $('#panelDesignCardLayout').value, density: $('#panelDesignDensity').value, cornerRadius: Number($('#panelDesignRadius').value), showLogo: $('#panelDesignShowLogo').checked, showStatus: $('#panelDesignShowStatus').checked, showSearch: $('#panelDesignShowSearch').checked, showFilters: $('#panelDesignShowFilters').checked, showPattern: $('#panelDesignShowPattern').checked, uppercaseLabels: $('#panelDesignUppercase').checked, showCurrentStream: $('#panelDesignShowCurrentStream').checked, showNowPlaying: $('#panelDesignShowNowPlaying').checked, showSchedule: $('#panelDesignShowSchedule').checked, showGoal: $('#panelDesignShowGoal').checked, showPoll: $('#panelDesignShowPoll').checked, showCounters: $('#panelDesignShowCounters').checked, showCommands: $('#panelDesignShowCommands').checked, showDice: $('#panelDesignShowDice').checked, showFeatured: $('#panelDesignShowFeatured').checked, showPerformances: $('#panelDesignShowPerformances').checked };
   }
 
   function updatePanelDesignPreview() {
@@ -2850,6 +2860,16 @@
     preview.classList.toggle('no-filters', !design.showFilters);
     preview.classList.toggle('no-pattern', !design.showPattern);
     preview.classList.toggle('uppercase', design.uppercaseLabels);
+    $('#panelPreviewCurrentStream').hidden = !design.showCurrentStream;
+    $('#panelPreviewNowPlaying').hidden = !design.showNowPlaying;
+    $('#panelPreviewSchedule').hidden = !design.showSchedule;
+    $('#panelPreviewGoal').hidden = !design.showGoal;
+    $('#panelPreviewPoll').hidden = !design.showPoll;
+    $('#panelPreviewCounters').hidden = !design.showCounters;
+    $('#panelPreviewCommands').hidden = !design.showCommands;
+    $('#panelPreviewDice').hidden = !design.showDice;
+    $('#panelPreviewFeatured').hidden = !design.showFeatured;
+    $('#panelPreviewPerformances').hidden = !design.showPerformances;
     $('#panelPreviewBrand').textContent = design.brandName || 'YOUR CHANNEL';
     $('#panelPreviewEyebrow').textContent = design.eyebrow || 'VIEWER INTERACTIONS';
     $('#panelPreviewTitle').textContent = design.title || 'Signal deck';

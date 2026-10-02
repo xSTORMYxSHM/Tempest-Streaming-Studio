@@ -2,7 +2,7 @@
   'use strict';
 
   const storageKey = 'tempest-extension-configuration-v1';
-  const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING', eyebrow: 'VIEWER EXTENSION', title: 'Live utilities', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
+  const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING', eyebrow: 'VIEWER EXTENSION', title: 'Live utilities', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true, showCurrentStream: true, showNowPlaying: true, showSchedule: true, showGoal: true, showPoll: true, showCounters: true, showCommands: true, showDice: true, showFeatured: true, showPerformances: true };
   const cooldowns = new Map();
   let catalogEtag = '';
   let catalogRefreshPromise = null;
@@ -51,7 +51,17 @@
       showSearch: source.showSearch !== false,
       showFilters: source.showFilters !== false,
       showPattern: source.showPattern !== false,
-      uppercaseLabels: source.uppercaseLabels !== false
+      uppercaseLabels: source.uppercaseLabels !== false,
+      showCurrentStream: source.showCurrentStream !== false,
+      showNowPlaying: source.showNowPlaying !== false,
+      showSchedule: source.showSchedule !== false,
+      showGoal: source.showGoal !== false,
+      showPoll: source.showPoll !== false,
+      showCounters: source.showCounters !== false,
+      showCommands: source.showCommands !== false,
+      showDice: source.showDice !== false,
+      showFeatured: source.showFeatured !== false,
+      showPerformances: source.showPerformances !== false
     };
   }
 
@@ -113,8 +123,8 @@
     return Number.isInteger(value) && value > 0 ? value : 0;
   }
 
-  function renderPoll() {
-    const poll = state.poll;
+  function renderPoll(visible = true) {
+    const poll = visible && state.configuration.panelDesign.showPoll !== false ? state.poll : null;
     const region = $('#pollRegion');
     region.hidden = !poll;
     if (!poll) return;
@@ -189,23 +199,25 @@
   }
 
   function render() {
+    const design = state.configuration.panelDesign;
     const query = $('#alertSearch').value.trim().toLowerCase();
     const matchesQuery = (alert) => !query || `${alert.name} ${alert.id}`.toLowerCase().includes(query);
     const permitted = (alert) => alert.eligibility?.allowed !== false;
     const identityRequired = (alert) => alert.eligibility?.code === 'identity_required';
     const accessLabel = (alert) => String(alert.eligibility?.reason || 'LOCKED').toUpperCase();
-    const dice = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
+    const dice = design.showDice === false || state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
     const customDice = dice.find((entry) => entry.id === 'tempest.dice.custom');
     const dicePresets = dice.filter((entry) => entry.id !== 'tempest.dice.custom');
-    const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
-    const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
-    const counters = state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
-    const commands = state.filter === 'performances' ? [] : state.commands.filter((command) => !query || `${command.trigger} ${command.aliases.join(' ')} ${command.permission}`.toLowerCase().includes(query));
-    const goalVisible = state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
-    const nowPlayingVisible = state.filter !== 'performances' && Boolean(state.nowPlaying) && (!query || `${state.nowPlaying.stationName} ${state.nowPlaying.artist || ''} ${state.nowPlaying.title || ''} ${state.nowPlaying.text || ''} ${state.nowPlaying.album || ''}`.toLowerCase().includes(query));
-    const scheduleVisible = state.filter !== 'performances' && Boolean(state.schedule) && (!query || `${state.schedule.title || ''} next stream schedule`.toLowerCase().includes(query));
-    const streamVisible = state.filter !== 'performances' && Boolean(state.stream) && (!query || `${state.stream.title} ${state.stream.category || ''} ${state.stream.live ? 'live' : 'offline'} current stream`.toLowerCase().includes(query));
-    const visibleCount = dice.length + featured.length + performances.length + counters.length + commands.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0);
+    const featured = design.showFeatured === false || state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && !alert.id.startsWith('tempest.dice.') && matchesQuery(alert));
+    const performances = design.showPerformances === false || state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
+    const counters = design.showCounters === false || state.filter === 'performances' ? [] : state.counters.filter((counter) => !query || `${counter.label} ${counter.command}`.toLowerCase().includes(query));
+    const commands = design.showCommands === false || state.filter === 'performances' ? [] : state.commands.filter((command) => !query || `${command.trigger} ${command.aliases.join(' ')} ${command.permission}`.toLowerCase().includes(query));
+    const goalVisible = design.showGoal !== false && state.filter !== 'performances' && Boolean(state.goal) && (!query || `${state.goal.title} ${state.goal.kind} ${state.goal.unit}`.toLowerCase().includes(query));
+    const nowPlayingVisible = design.showNowPlaying !== false && state.filter !== 'performances' && Boolean(state.nowPlaying) && (!query || `${state.nowPlaying.stationName} ${state.nowPlaying.artist || ''} ${state.nowPlaying.title || ''} ${state.nowPlaying.text || ''} ${state.nowPlaying.album || ''}`.toLowerCase().includes(query));
+    const scheduleVisible = design.showSchedule !== false && state.filter !== 'performances' && Boolean(state.schedule) && (!query || `${state.schedule.title || ''} next stream schedule`.toLowerCase().includes(query));
+    const streamVisible = design.showCurrentStream !== false && state.filter !== 'performances' && Boolean(state.stream) && (!query || `${state.stream.title} ${state.stream.category || ''} ${state.stream.live ? 'live' : 'offline'} current stream`.toLowerCase().includes(query));
+    const pollVisible = design.showPoll !== false && state.filter !== 'performances' && Boolean(state.poll) && (!query || `${state.poll.question} poll vote`.toLowerCase().includes(query));
+    const visibleCount = dice.length + featured.length + performances.length + counters.length + commands.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0) + (pollVisible ? 1 : 0);
     $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
     $('#featuredRegion').hidden = featured.length === 0;
@@ -227,14 +239,14 @@
     renderNowPlaying(nowPlayingVisible);
     renderSchedule(scheduleVisible);
     renderStream(streamVisible);
-    $('#emptyState').hidden = visibleCount !== 0 || Boolean(state.poll);
+    $('#emptyState').hidden = visibleCount !== 0;
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
         <span class="featured-glyph">${escapeHtml(alert.glyph)}</span><span class="featured-copy"><strong>${escapeHtml(alert.name)}</strong><small>${identityRequired(alert) ? 'SHARE TWITCH IDENTITY' : !permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGING · ${seconds(wait)}` : alert.placementMode === 'viewer' ? 'READY · CHOOSE POSITION' : `READY · ${seconds(alert.durationMs)} EFFECT`}</small></span><i class="signal-arrow" aria-hidden="true">›</i>
       </button>`;
     }).join('');
-    renderPoll();
+    renderPoll(pollVisible);
     $('#alertGrid').innerHTML = performances.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
@@ -453,7 +465,10 @@
         const content = window.Twitch.ext.configuration.broadcaster?.content;
         if (!content) return;
         const configuration = JSON.parse(content);
-        if (!state.hostedPanelDesign) applyPanelDesign(configuration.panelDesign || configuration);
+        if (!state.hostedPanelDesign) {
+          applyPanelDesign(configuration.panelDesign || configuration);
+          render();
+        }
       } catch { /* Invalid channel configuration leaves the last safe design active. */ }
     });
     setTimeout(() => {

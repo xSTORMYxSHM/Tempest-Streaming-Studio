@@ -22,6 +22,8 @@ test('ships the exact Twitch local-test entry paths', async () => {
   assert.match(configuration, /config\.js/);
   assert.match(configuration, /Local mock mode/);
   assert.match(configuration, /SAVE PANEL APPEARANCE/);
+  assert.match(configuration, /id="configPanelShowCurrentStream"/);
+  assert.match(configuration, /id="configPanelShowPerformances"/);
   assert.equal(fullscreen, viewer);
   assert.equal(fullscreenCompatibility, viewer);
   assert.equal(mobile, viewer);
@@ -103,6 +105,10 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /configuration\.broadcaster/);
   assert.match(viewerScript, /requestIdShare/);
   assert.match(viewerScript, /renderStream/);
+  assert.match(viewerScript, /design\.showCurrentStream/);
+  assert.match(viewerScript, /design\.showPoll/);
+  assert.match(viewerScript, /design\.showDice/);
+  assert.match(viewerScript, /design\.showPerformances/);
   assert.match(viewerScript, /identity_required/);
   assert.match(viewerScript, /\/v1\/extension\/poll\/vote/);
   assert.match(viewerScript, /tempest-extension-poll-vote/);
