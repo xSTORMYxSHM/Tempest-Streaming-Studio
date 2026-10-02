@@ -76,6 +76,8 @@ For Twitch Local Test assets, continue using:
 - Base URI: `https://localhost:8080/`
 - Configuration path: `config.html`
 - Viewer component path: `video_component.html`
+- Video - Fullscreen viewer path: `video_overlay.html`
+- Mobile path: `mobile.html`
 - Panel viewer path: `panel.html` (set Panel Height to `496`)
 
 Before submitting the Extension for review, add `https://localhost:8090` to **Allowlist for URL Fetching Domains** for this local phase. Replace it with the public EBS HTTPS origin in the hosted build. Twitch locks these allowlists after review submission.

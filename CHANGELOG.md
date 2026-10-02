@@ -18,6 +18,7 @@
 - Added one-command hosted release preparation that rebuilds and tests the EBS and primary no-Bits Extension, validates the official Signal origin and secret-free upload surface, packages a Twitch-ready ZIP, and records its SHA-256 manifest.
 - Added a separate Linux CI gate that validates the hosted boundary and builds the exact production Railway EBS image without production secrets, preventing desktop-only checks from masking a broken hosted deployment.
 - Completed the Extension pivot terminology pass across active service errors, clean-install UI, privacy and architecture documentation, while preserving the legacy `free|bits` wire values solely for saved-data and hosted-service compatibility.
+- Added the missing Twitch Asset Hosting entry files for Mobile and Video - Fullscreen. They are verified aliases of the responsive viewer component, and hosted packaging now fails if any configured surface path is absent.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

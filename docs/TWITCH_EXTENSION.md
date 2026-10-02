@@ -2,7 +2,9 @@
 
 The viewer interface supports a Twitch **Video Component**, **Panel**, and **Mobile** surface. The Video Component stays beside the player during a stream; the Panel can be opened and tested while the channel is offline. Twitch's Local Test version paths map directly to:
 
-- `video_component.html` — viewer signal drawer
+- `video_component.html` — Video Component viewer signal drawer
+- `video_overlay.html` — Video - Fullscreen viewer path using the same responsive signal deck
+- `mobile.html` — Mobile viewer path using the same responsive signal deck
 - `panel.html` — offline-friendly channel panel
 - `config.html` — broadcaster/local test configuration
 - `https://localhost:8080/` — Local Test Base URI
@@ -18,6 +20,8 @@ For a public release, enable the Twitch Extension Configuration Service and allo
 The viewer surfaces poll the hosted catalog only while visible. Each successful response supplies a channel-scoped ETag; subsequent requests use `If-None-Match`, and an unchanged `304` response avoids JSON parsing and DOM rendering. Studio coalesces event-driven catalog bursts over 100 milliseconds, while Current Stream, Now Playing, and schedule refreshes use a separate one-second trailing window and their existing provider caches.
 
 For the installed channel panel, set **Panel Viewer Path** to `panel.html` and **Panel Height** to `496`. The panel is designed for Twitch's narrow 318-pixel surface and scrolls its signal catalog internally.
+
+In Twitch Asset Hosting, set **Video - Component Viewer Path** to `video_component.html`, **Video - Fullscreen Viewer Path** to `video_overlay.html`, and **Mobile Path** to `mobile.html`. The build also contains `video_fullscreen.html` as a compatibility alias, but `video_overlay.html` is the canonical fullscreen path.
 
 ## Polls
 

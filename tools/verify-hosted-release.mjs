@@ -17,10 +17,13 @@ const requiredFiles = [
   'config.html',
   'config.js',
   'interactions.json',
+  'mobile.html',
   'panel.html',
   'runtime-config.json',
   'styles.css',
   'video_component.html',
+  'video_fullscreen.html',
+  'video_overlay.html',
   'viewer.js'
 ];
 

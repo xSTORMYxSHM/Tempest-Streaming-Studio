@@ -8,6 +8,9 @@ const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 test('ships the exact Twitch local-test entry paths', async () => {
   const viewer = await readFile(path.join(appDirectory, 'dist', 'video_component.html'), 'utf8');
+  const fullscreen = await readFile(path.join(appDirectory, 'dist', 'video_overlay.html'), 'utf8');
+  const fullscreenCompatibility = await readFile(path.join(appDirectory, 'dist', 'video_fullscreen.html'), 'utf8');
+  const mobile = await readFile(path.join(appDirectory, 'dist', 'mobile.html'), 'utf8');
   const panel = await readFile(path.join(appDirectory, 'dist', 'panel.html'), 'utf8');
   const configuration = await readFile(path.join(appDirectory, 'dist', 'config.html'), 'utf8');
   assert.match(viewer, /twitch-ext\.min\.js/);
@@ -19,6 +22,9 @@ test('ships the exact Twitch local-test entry paths', async () => {
   assert.match(configuration, /config\.js/);
   assert.match(configuration, /Local mock mode/);
   assert.match(configuration, /SAVE PANEL APPEARANCE/);
+  assert.equal(fullscreen, viewer);
+  assert.equal(fullscreenCompatibility, viewer);
+  assert.equal(mobile, viewer);
   assert.doesNotMatch(viewer + panel + configuration, /http-equiv="Content-Security-Policy"/i);
   assert.doesNotMatch(viewer + panel + configuration, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });
