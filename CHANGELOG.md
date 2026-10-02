@@ -13,6 +13,7 @@
 - Included managed Media Library items in portable Studio backups even when they are not assigned to an alert, while continuing to exclude externally registered asset paths.
 - Unified GIPHY downloads and verified Alert Pack media with the managed Media Library, preserving friendly names, source tags, deduplication, reuse, and backup behavior instead of leaving media in feature-specific folders.
 - Added explicit **Adopt Assigned Media** migration for alert files configured before the library existed. Studio verifies each file is still assigned, copies it into managed storage, updates every affected base alert and variant, and leaves the original untouched.
+- Added lazy Media Library previews, editable display names and tags, streamer-defined collections, and favorites. Visual files load only when previewed, only one audio preview plays at a time, and organization metadata reuses the same verified file.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

@@ -94,6 +94,8 @@
   let alertDesignScenePlacements = [];
   let alertDesignSceneScope = '';
   let editingViewerGroupId = '';
+  const assetPreviewIds = new Set();
+  let assetPreviewAudio = null;
   const twitchExperienceDraftMedia = Object.create(null);
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const simulcastChecklistStorageKey = 'tempest.streaming-studio.simulcast-checklist.v1';
@@ -708,23 +710,44 @@
     return `${bytes} B`;
   }
 
+  function assetExtension(asset) {
+    return String(asset?.metadata?.extension || '').toLowerCase();
+  }
+
+  function assetPreviewMarkup(asset, role) {
+    if (!assetPreviewIds.has(asset.id) || role !== 'visual') return '';
+    const extension = assetExtension(asset);
+    if (extension === '.mp4' || extension === '.webm') return `<div class="asset-library-preview"><video src="${escapeHtml(asset.uri)}" controls muted playsinline preload="metadata"></video></div>`;
+    return `<div class="asset-library-preview"><img src="${escapeHtml(asset.uri)}" alt="Preview of ${escapeHtml(asset.name)}" loading="lazy" /></div>`;
+  }
+
   function renderAssetLibrary() {
     const assets = state.assets || [];
     const query = ($('#assetLibrarySearch')?.value || '').trim().toLowerCase();
     const filter = $('#assetLibraryFilter')?.value || 'all';
-    const enriched = assets.map((asset) => ({ asset, role: assetRole(asset), uses: assetUses(asset.uri) }));
+    const collectionFilter = $('#assetLibraryCollection')?.value || '';
+    const enriched = assets.map((asset) => ({ asset, role: assetRole(asset), uses: assetUses(asset.uri) }))
+      .sort((left, right) => Number(Boolean(right.asset.metadata?.favorite)) - Number(Boolean(left.asset.metadata?.favorite)) || left.asset.name.localeCompare(right.asset.name));
     const targetSelect = $('#assetLibraryTarget');
     const selectedTarget = targetSelect?.value || '';
     if (targetSelect) {
       targetSelect.innerHTML = assetTargetOptions();
       if ([...targetSelect.options].some((option) => option.value === selectedTarget)) targetSelect.value = selectedTarget;
     }
+    const collectionSelect = $('#assetLibraryCollection');
+    if (collectionSelect) {
+      const collections = [...new Set(assets.map((asset) => String(asset.metadata?.collection || '').trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+      collectionSelect.innerHTML = '<option value="">All collections</option>' + collections.map((collection) => `<option value="${escapeHtml(collection)}">${escapeHtml(collection)}</option>`).join('');
+      if (collections.includes(collectionFilter)) collectionSelect.value = collectionFilter;
+    }
     const filtered = enriched.filter(({ asset, role, uses }) => {
+      if (filter === 'favorites' && asset.metadata?.favorite !== true) return false;
       if (filter === 'audio' && role !== 'audio') return false;
       if (filter === 'visual' && role !== 'visual') return false;
       if (filter === 'used' && !uses.length) return false;
       if (filter === 'unused' && uses.length) return false;
-      return !query || [asset.name, asset.type, ...(asset.tags || [])].join(' ').toLowerCase().includes(query);
+      if (collectionFilter && asset.metadata?.collection !== collectionFilter) return false;
+      return !query || [asset.name, asset.type, asset.metadata?.collection || '', ...(asset.tags || [])].join(' ').toLowerCase().includes(query);
     });
     $('#assetLibraryCount').textContent = assets.length;
     $('#assetLibraryAudioCount').textContent = enriched.filter((entry) => entry.role === 'audio').length;
@@ -740,10 +763,13 @@
       const size = Number(asset.metadata?.size || 0);
       const managed = asset.metadata?.managed === true;
       const checksum = String(asset.checksum || '').replace(/^sha256:/, '').slice(0, 12);
-      return `<article class="asset-library-card ${uses.length ? 'used' : ''}">
+      const favorite = asset.metadata?.favorite === true;
+      const collection = String(asset.metadata?.collection || '').trim();
+      return `<article class="asset-library-card ${uses.length ? 'used' : ''} ${favorite ? 'favorite' : ''}">
         <div class="asset-library-icon ${escapeHtml(role)}">${role === 'audio' ? '♪' : role === 'visual' ? '▣' : '◇'}</div>
-        <div class="asset-library-copy"><span>${escapeHtml(role.toUpperCase())} · ${managed ? 'STUDIO MANAGED' : 'INDEXED'}</span><h3>${escapeHtml(asset.name)}</h3><p>${escapeHtml((asset.tags || []).join(' · ') || asset.type)}</p><small>${formatAssetBytes(size)}${checksum ? ` · SHA-256 ${escapeHtml(checksum)}…` : ''}</small><em>${uses.length ? escapeHtml(uses.slice(0, 2).join(' · ')) : 'Not assigned to an alert'}</em></div>
-        <div class="asset-library-actions"><button data-asset-assign="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>Assign to Selected Alert</button><button class="danger-outline" data-asset-remove="${escapeHtml(asset.id)}" ${uses.length ? 'disabled title="Remove this media from every alert before deleting it"' : ''}>Remove</button></div>
+        <div class="asset-library-copy"><span>${favorite ? '★ FAVORITE · ' : ''}${escapeHtml(role.toUpperCase())} · ${managed ? 'STUDIO MANAGED' : 'INDEXED'}</span><h3>${escapeHtml(asset.name)}</h3><p>${escapeHtml((asset.tags || []).join(' · ') || asset.type)}</p><small>${collection ? `${escapeHtml(collection)} · ` : ''}${formatAssetBytes(size)}${checksum ? ` · SHA-256 ${escapeHtml(checksum)}…` : ''}</small><em>${uses.length ? escapeHtml(uses.slice(0, 2).join(' · ')) : 'Not assigned to an alert'}</em></div>
+        ${assetPreviewMarkup(asset, role)}
+        <div class="asset-library-actions"><button data-asset-preview="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>${assetPreviewIds.has(asset.id) && role === 'visual' ? 'Hide Preview' : 'Preview'}</button><button data-asset-edit="${escapeHtml(asset.id)}">Edit Details</button><button data-asset-assign="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>Assign</button><button class="danger-outline" data-asset-remove="${escapeHtml(asset.id)}" ${uses.length ? 'disabled title="Remove this media from every alert before deleting it"' : ''}>Remove</button></div>
       </article>`;
     }).join('') : (assets.length ? 'No media matches this search or filter.' : 'No media has been imported yet.');
   }
@@ -756,6 +782,65 @@
       state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)].sort((left, right) => left.name.localeCompare(right.name));
       renderAssetLibrary();
       toast(`${result.asset.name} ${imported.reused ? 'was already in' : 'was copied into'} the Media Library.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    if (assetRole(asset) === 'audio') {
+      try {
+        if (assetPreviewAudio) { assetPreviewAudio.pause(); assetPreviewAudio = null; }
+        const audio = new Audio(asset.uri);
+        assetPreviewAudio = audio;
+        audio.volume = 0.75;
+        audio.addEventListener('ended', () => { if (assetPreviewAudio === audio) assetPreviewAudio = null; }, { once: true });
+        await audio.play();
+        toast(`Previewing ${asset.name}.`);
+      } catch (error) { toast(`Could not preview ${asset.name}: ${error.message}`, true); }
+      return;
+    }
+    if (assetPreviewIds.has(id)) assetPreviewIds.delete(id);
+    else assetPreviewIds.add(id);
+    renderAssetLibrary();
+  }
+
+  function openAssetEditor(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    $('#assetEditorId').value = asset.id;
+    $('#assetEditorName').value = asset.name;
+    $('#assetEditorTags').value = (asset.tags || []).filter((tag) => !['audio', 'visual', 'managed'].includes(tag)).join(', ');
+    $('#assetEditorCollection').value = String(asset.metadata?.collection || '');
+    $('#assetEditorFavorite').checked = asset.metadata?.favorite === true;
+    $('#assetEditorDialog').showModal();
+    $('#assetEditorName').focus();
+  }
+
+  async function saveAssetDetails(event) {
+    event.preventDefault();
+    const id = $('#assetEditorId').value;
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return $('#assetEditorDialog').close();
+    const name = $('#assetEditorName').value.trim().slice(0, 120);
+    if (!name) return toast('Media display name is required.', true);
+    const reservedTags = [assetRole(asset), assetExtension(asset).replace(/^\./, ''), ...(asset.metadata?.managed === true ? ['managed'] : [])].filter(Boolean);
+    const customTags = $('#assetEditorTags').value.split(',').map((tag) => tag.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 40)).filter(Boolean);
+    const tags = [...new Set([...reservedTags, ...customTags])].slice(0, 20);
+    const collection = $('#assetEditorCollection').value.trim().replace(/[\r\n\0]/g, ' ').slice(0, 60);
+    try {
+      const result = await api('/v1/assets', { method: 'POST', body: {
+        ...asset,
+        name,
+        tags,
+        metadata: { ...(asset.metadata || {}), favorite: $('#assetEditorFavorite').checked, collection }
+      } });
+      state.assets = [result.asset, ...state.assets.filter((entry) => entry.id !== id)].sort((left, right) => left.name.localeCompare(right.name));
+      $('#assetEditorDialog').close();
+      renderAssetLibrary();
+      renderSoundAlerts();
+      renderVisualAlerts();
+      toast(`${result.asset.name} details saved.`);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -5202,6 +5287,8 @@
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
     if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
     if (button.dataset.viewerGroupDelete) return deleteViewerGroup(button.dataset.viewerGroupDelete);
+    if (button.dataset.assetPreview) return previewLibraryAsset(button.dataset.assetPreview);
+    if (button.dataset.assetEdit) return openAssetEditor(button.dataset.assetEdit);
     if (button.dataset.assetAssign) return assignLibraryAsset(button.dataset.assetAssign);
     if (button.dataset.assetRemove) return removeLibraryAsset(button.dataset.assetRemove);
     if (button.dataset.clearAlertHistory) return clearAlertHistory();
@@ -5401,6 +5488,8 @@
     $('#adoptAssignedMedia').addEventListener('click', adoptAssignedMedia);
     $('#assetLibrarySearch').addEventListener('input', renderAssetLibrary);
     $('#assetLibraryFilter').addEventListener('change', renderAssetLibrary);
+    $('#assetLibraryCollection').addEventListener('change', renderAssetLibrary);
+    $('#assetEditorForm').addEventListener('submit', saveAssetDetails);
     $('#viewerGroupForm').addEventListener('submit', saveViewerGroup);
     $('#cancelViewerGroupEdit').addEventListener('click', resetViewerGroupForm);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);

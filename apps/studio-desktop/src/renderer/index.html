@@ -195,7 +195,8 @@
           <div class="sound-alert-note"><strong>Managed storage:</strong> Imported media is copied into Studio data and deduplicated by SHA-256 content hash. Removing an unused managed item deletes only Studio's copy; the original file you imported is never changed.</div>
           <div class="asset-library-toolbar">
             <label>Search<input id="assetLibrarySearch" type="search" placeholder="Name, type, or tag" /></label>
-            <label>Show<select id="assetLibraryFilter"><option value="all">All media</option><option value="audio">Audio</option><option value="visual">Visuals</option><option value="used">In use</option><option value="unused">Unused</option></select></label>
+            <label>Show<select id="assetLibraryFilter"><option value="all">All media</option><option value="favorites">Favorites</option><option value="audio">Audio</option><option value="visual">Visuals</option><option value="used">In use</option><option value="unused">Unused</option></select></label>
+            <label>Collection<select id="assetLibraryCollection"><option value="">All collections</option></select></label>
             <label>Assign to<select id="assetLibraryTarget"><option value="">Choose an alert</option></select></label>
           </div>
           <div id="assetLibraryGrid" class="asset-library-grid empty-state">No media has been imported yet.</div>
@@ -922,6 +923,18 @@
       </div>
     </dialog>
 
+    <dialog id="assetEditorDialog">
+      <form id="assetEditorForm">
+        <input id="assetEditorId" type="hidden" />
+        <div class="dialog-header"><div><span>MEDIA LIBRARY</span><h2>Edit Media Details</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>
+        <p class="dialog-help">Names, tags, collections, and favorites organize Studio's catalog without changing the underlying verified file.</p>
+        <label>Display name<input id="assetEditorName" required maxlength="120" /></label>
+        <label>Tags<input id="assetEditorTags" maxlength="300" placeholder="celebration, raid, community" /><small>Separate up to 20 tags with commas.</small></label>
+        <label>Collection<input id="assetEditorCollection" maxlength="60" placeholder="Seasonal Alerts" /></label>
+        <label class="interaction-integration-toggle"><input id="assetEditorFavorite" type="checkbox" /><span><strong>Favorite</strong><small>Keep this item at the top of the library.</small></span></label>
+        <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Save Details</button></div>
+      </form>
+    </dialog>
     <dialog id="interactionAlertDialog">
       <form id="interactionAlertForm">
         <div class="dialog-header"><div><span>CUSTOM INTERACTION</span><h2>Create Interaction Alert</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>

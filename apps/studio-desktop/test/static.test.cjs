@@ -122,6 +122,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /STUDIO-MANAGED MEDIA/);
   assert.match(html, /id="importMediaAsset"/);
   assert.match(html, /id="adoptAssignedMedia"/);
+  assert.match(html, /id="assetEditorDialog"/);
+  assert.match(html, /id="assetLibraryCollection"/);
   assert.match(renderer, /renderAssetLibrary/);
   assert.match(renderer, /\/v1\/assets/);
   assert.match(renderer, /assignLibraryAsset/);
@@ -132,6 +134,9 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /registerManagedManifests/);
   assert.match(renderer, /registerManagedSelection\(imported\)/);
   assert.match(renderer, /unmanagedAssignedMediaUris/);
+  assert.match(renderer, /previewLibraryAsset/);
+  assert.match(renderer, /saveAssetDetails/);
+  assert.match(renderer, /metadata\?\.favorite/);
   assert.doesNotMatch(renderer, /renderWorkflows|renderSoftware/);
   assert.match(html, /Event Log/);
   assert.match(html, /TWITCH PLATFORM/);
