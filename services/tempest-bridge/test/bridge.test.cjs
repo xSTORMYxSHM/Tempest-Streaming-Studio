@@ -117,7 +117,7 @@ test('enforces assigned-creator access before Extension interactions enter Studi
   assert.equal(moderator.status, 202);
 });
 
-test('starts free Extension dice on the physical Browser Source and enforces shared cooldowns', async (context) => {
+test('starts Tempest Streaming Extension dice on the physical Browser Source and enforces shared cooldowns', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-extension-dice-test-'));
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
   context.after(() => runtime.close());
@@ -404,7 +404,7 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
   assert.equal(blocked.status, 409);
 });
 
-test('owns a free Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
+test('owns the primary Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-sound-alert-test-'));
   const visualPath = path.join(dataDirectory, 'hype-pulse.png');
   const audioPath = path.join(dataDirectory, 'hype-pulse.mp3');

@@ -1,5 +1,7 @@
 # Public Release UI Generalization Plan
 
+> Completed. The public UI, settings, capability, onboarding, privacy, diagnostics, packaging, and compatibility work described here shipped across the releases through 1.5.1. The active Extension and hosted-service work is tracked in [CURRENT_ROADMAP.md](CURRENT_ROADMAP.md).
+
 ## Goal
 
 Prepare Tempest Streaming Studio for public use without removing the Tempest brand. The application should remain recognizably **Tempest Streaming Studio**, while its controls, defaults, examples, and setup language describe the user's streaming environment instead of the original Tempest creator setup.

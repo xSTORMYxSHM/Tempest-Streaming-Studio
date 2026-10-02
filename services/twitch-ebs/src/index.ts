@@ -46,6 +46,7 @@ export type {
 // access-controlled interactions carry bounded Twitch ID lists. The relay is
 // authenticated and validatePublicCatalog still caps every nested collection.
 export const maximumStudioWebSocketPayloadBytes = 2 * 1024 * 1024;
+const primaryExtensionName = 'Tempest Streaming Extension';
 const externalFetch = boundedFetch();
 
 export interface TwitchOAuthIdentity {
@@ -288,7 +289,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   });
   let poll: PublicExtensionPoll | undefined;
   if (source.poll !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Polls are published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Polls are published only to ${primaryExtensionName}.`);
     if (!source.poll || typeof source.poll !== 'object' || Array.isArray(source.poll)) throw new Error('Catalog poll is invalid.');
     const candidate = source.poll as Record<string, unknown>;
     const id = String(candidate.id || '').trim();
@@ -321,7 +322,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let counters: PublicExtensionCounter[] | undefined;
   if (source.counters !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Counters are published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Counters are published only to ${primaryExtensionName}.`);
     if (!Array.isArray(source.counters) || source.counters.length > 12) throw new Error('Catalog counters must be a list of at most 12 entries.');
     const counterIds = new Set<string>();
     counters = source.counters.map((entry, index) => {
@@ -342,7 +343,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let commands: PublicExtensionCommand[] | undefined;
   if (source.commands !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Commands are published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Commands are published only to ${primaryExtensionName}.`);
     if (!Array.isArray(source.commands) || source.commands.length > 40) throw new Error('Catalog commands must be a list of at most 40 entries.');
     const triggers = new Set<string>();
     commands = source.commands.map((entry, index) => {
@@ -360,7 +361,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let goal: PublicExtensionGoal | undefined;
   if (source.goal !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Goals are published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Goals are published only to ${primaryExtensionName}.`);
     if (!source.goal || typeof source.goal !== 'object' || Array.isArray(source.goal)) throw new Error('Catalog goal is invalid.');
     const candidate = source.goal as Record<string, unknown>;
     const goalSource = candidate.source === 'twitch' ? 'twitch' : candidate.source === 'studio' ? 'studio' : '';
@@ -377,7 +378,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let nowPlaying: PublicExtensionNowPlaying | undefined;
   if (source.nowPlaying !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Now Playing is published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Now Playing is published only to ${primaryExtensionName}.`);
     if (!source.nowPlaying || typeof source.nowPlaying !== 'object' || Array.isArray(source.nowPlaying)) throw new Error('Catalog Now Playing state is invalid.');
     const candidate = source.nowPlaying as Record<string, unknown>;
     const stationName = String(candidate.stationName || '').trim();
@@ -398,7 +399,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let schedule: PublicExtensionSchedule | undefined;
   if (source.schedule !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Schedule is published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Schedule is published only to ${primaryExtensionName}.`);
     if (!source.schedule || typeof source.schedule !== 'object' || Array.isArray(source.schedule)) throw new Error('Catalog schedule is invalid.');
     const candidate = source.schedule as Record<string, unknown>;
     const title = candidate.title === undefined || candidate.title === null || candidate.title === '' ? undefined : String(candidate.title).trim();
@@ -408,7 +409,7 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   }
   let stream: PublicExtensionStream | undefined;
   if (source.stream !== undefined) {
-    if (extensionEdition !== 'free') throw new Error('Stream information is published only to the free Extension edition.');
+    if (extensionEdition !== 'free') throw new Error(`Stream information is published only to ${primaryExtensionName}.`);
     if (!source.stream || typeof source.stream !== 'object' || Array.isArray(source.stream)) throw new Error('Catalog stream information is invalid.');
     const candidate = source.stream as Record<string, unknown>;
     const live = candidate.live;
@@ -675,7 +676,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const requireExtensionEdition = (installation: TwitchEbsInstallation, expected: 'free' | 'bits'): void => {
     const activeEdition = installation.catalog.extensionEdition === 'bits' ? 'bits' : 'free';
     if (activeEdition !== expected) {
-      throw new HttpError(409, `${expected === 'bits' ? 'Tempest Streaming (Bits)' : 'Tempest Mainframe (Free)'} is not the active Extension for this channel.`, {
+      throw new HttpError(409, `${expected === 'bits' ? 'the deferred Bits prototype' : primaryExtensionName} is not the active Extension for this channel.`, {
         code: 'EXTENSION_EDITION_INACTIVE',
         activeEdition
       });

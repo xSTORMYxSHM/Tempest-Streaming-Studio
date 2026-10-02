@@ -335,6 +335,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Connect My Channel/);
   assert.match(html, /Tempest Streaming Extension/);
   assert.match(html, /NO BITS/);
+  assert.doesNotMatch(html, /Listen to Storm Horizon Radio/);
+  assert.match(html, /Use !commands to see what \{bot\} can do/);
   assert.doesNotMatch(html, /name="twitchExtensionEdition"/);
   assert.doesNotMatch(html, /Bits enabled/);
   assert.match(preload, /studio:set-twitch-extension-edition/);

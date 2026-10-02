@@ -39,7 +39,7 @@ Network render source ─────── NDI ──────────�
 
 ## Interaction path
 
-External integrations authenticate and normalize platform-specific events before they reach the workflow engine. For example, a free Twitch Extension interaction becomes `tempest.blackhole`; none of the downstream applications need Twitch-specific code. The engine checks safety state, concurrency, and cooldowns, creates a run, then issues capability-addressed commands.
+External integrations authenticate and normalize platform-specific events before they reach the workflow engine. For example, a Tempest Streaming Extension interaction becomes `tempest.blackhole`; none of the downstream applications need Twitch-specific code. The engine checks safety state, concurrency, and cooldowns, creates a run, then issues capability-addressed commands.
 
 Reversible commands carry leases. When a lease expires, Studio sends a release command. Emergency Restore cancels pending actions, releases active actions, marks runs stopped, and disarms new interactions. This makes temporary effects self-restoring even if an integration forgets to send a corresponding “off” event.
 

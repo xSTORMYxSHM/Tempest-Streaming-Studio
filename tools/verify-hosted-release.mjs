@@ -58,6 +58,10 @@ const browserCode = await Promise.all(['viewer.js', 'config.js'].map((file) => r
 if (/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])/i.test(browserCode.join('\n'))) {
   throw new Error('Hosted Extension browser code contains a localhost endpoint.');
 }
+const publicText = await Promise.all(files.filter((file) => /\.(?:html|js|css|json|svg)$/i.test(file)).map((file) => readFile(path.join(extensionOutput, ...file.split('/')), 'utf8')));
+if (/Tempest Mainframe \(Free\)|\bfree Extension\b/i.test(publicText.join('\n'))) {
+  throw new Error('Hosted Extension contains retired edition branding.');
+}
 
 const dockerfiles = await Promise.all([
   readFile(path.join(workspace, 'Dockerfile'), 'utf8'),

@@ -180,7 +180,7 @@ test('reports Studio offline and protects generic interactions with an action al
   assert.equal(forbidden.status, 403);
 });
 
-test('publishes a free Extension poll and records one identity-linked viewer vote through Studio', async (context) => {
+test('publishes a Tempest Streaming Extension poll and records one identity-linked viewer vote through Studio', async (context) => {
   const secret = randomBytes(32);
   const relayToken = randomBytes(32).toString('hex');
   const runtime = await startTwitchEbs({
@@ -642,7 +642,10 @@ test('verifies Twitch Bits receipts and relays only mapped published interaction
   assert.equal(limitedReservation.status, 429);
   const inactiveFreeEdition = await fetch(`${runtime.baseUrl}/v1/extension/catalog`, { headers: { 'X-Extension-JWT': jwt(freeSecret) } });
   assert.equal(inactiveFreeEdition.status, 409);
-  assert.equal((await inactiveFreeEdition.json()).activeEdition, 'bits');
+  const inactivePrimaryBody = await inactiveFreeEdition.json();
+  assert.equal(inactivePrimaryBody.activeEdition, 'bits');
+  assert.match(inactivePrimaryBody.error, /Tempest Streaming Extension/);
+  assert.doesNotMatch(inactivePrimaryBody.error, /Tempest Mainframe \(Free\)/);
 
   const reservationResponse = await fetch(`${runtime.baseUrl}/v1/extension/bits/reservations`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken }, body: JSON.stringify({ sku: 'tempest.storm-pulse.50' })
