@@ -136,6 +136,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /318 × 496 Twitch Panel/);
   assert.match(html, /Interaction Alerts/);
   assert.match(html, /New Interaction/);
+  assert.match(html, /id="viewerGroupForm"/);
+  assert.match(html, /Reusable viewer groups/);
+  assert.match(renderer, /accessMode === 'viewer-group'/);
+  assert.match(renderer, /viewerGroupId/);
+  assert.doesNotMatch(html, /FREE \+ BITS READY/);
+  assert.doesNotMatch(html, /Bits-enabled stickers/);
   assert.match(html, /id="interactionAlertForm"/);
   assert.match(html, /New Twitch Alert/);
   assert.match(html, /id="twitchAlertForm"/);
@@ -232,7 +238,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Test Release/);
   assert.match(html, /tempestPerformance/);
   assert.match(html, /ws:\/\/localhost:4770/);
-  assert.match(html, /FREE \+ BITS READY/);
+  assert.match(html, /NO BITS/);
   assert.match(html, /Control audio via OBS/);
   assert.match(html, /VOD-safe routing/);
   assert.match(html, /Alert Queue/);

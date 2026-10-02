@@ -26,3 +26,17 @@ test('preserves an existing creator catalog without injecting new public starter
   assert.equal(alerts[0].warudoEnabled, true);
   assert.equal(alerts.some((entry) => entry.id === 'sound-alert.hype-pulse'), false);
 });
+
+test('persists a reusable viewer-group assignment on an interaction', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-sound-alert-viewer-group-'));
+  const catalog = new TempestSoundAlertCatalog(dataDirectory);
+  await catalog.initialize();
+  const alert = await catalog.update('sound-alert.hype-pulse', { accessMode: 'viewer-group', viewerGroupId: 'campaign-players' });
+  assert.equal(alert.accessMode, 'viewer-group');
+  assert.equal(alert.viewerGroupId, 'campaign-players');
+
+  const restored = new TempestSoundAlertCatalog(dataDirectory);
+  await restored.initialize();
+  assert.equal(restored.find('sound-alert.hype-pulse').viewerGroupId, 'campaign-players');
+  await assert.rejects(catalog.update('sound-alert.hype-pulse', { viewerGroupId: 'INVALID GROUP' }), /viewerGroupId/);
+});

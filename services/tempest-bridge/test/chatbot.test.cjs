@@ -580,6 +580,39 @@ test('restricts Extension interactions to Twitch-verified assigned creators with
   await chatbot.close();
 });
 
+test('resolves reusable viewer groups locally and enforces them per interaction', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-viewer-groups-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url) => {
+      requests.push(String(url));
+      return jsonResponse({ data: [{ id: '111', login: 'campaign_player' }, { id: '222', login: 'trusted_regular' }] });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: '900' };
+  await chatbot.configure({ viewerGroups: [{ id: 'campaign-players', name: 'Campaign Players', logins: ['@Campaign_Player', 'trusted_regular'] }] });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(chatbot.status().viewerGroups, [{ id: 'campaign-players', name: 'Campaign Players', logins: ['campaign_player', 'trusted_regular'], resolvedViewers: 2 }]);
+  assert.deepEqual(chatbot.resolvedViewerGroupIds('campaign-players'), ['111', '222']);
+  const interaction = (viewer) => ({ schemaVersion: 1, id: `group-${viewer.id}`, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1' }, viewer, payload: { action: 'sound-alert.group-only' } });
+  const alert = { accessMode: 'viewer-group', viewerGroupId: 'campaign-players' };
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '111', roles: ['viewer'] }), alert)).allowed, true);
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '333', roles: ['viewer'] }), alert)).code, 'not-allowed');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: 'Uopaqueviewer', roles: ['viewer'] }), alert)).code, 'identity-required');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '333', roles: ['moderator'] }), alert)).allowed, true);
+  await chatbot.close();
+
+  const restored = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await restored.initialize('client123');
+  assert.deepEqual(restored.resolvedViewerGroupIds('campaign-players'), ['111', '222']);
+  assert.equal(restored.status().viewerGroups[0].resolvedViewers, 2);
+  await restored.close();
+});
+
 test('serves optional local weather from the National Weather Service without an API key', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-weather-'));
   const requests = [];

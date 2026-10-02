@@ -6,6 +6,8 @@
 - Removed the Free/Bits selector from the normal Studio workflow and automatically normalize legacy Bits selections to the no-Bits edition before connecting the relay.
 - Kept the Bits-capable implementation dormant in source for possible future onboarding without exposing payment or transaction controls to current streamers or viewers.
 - Updated the default Panel, Video Component, configuration branding, local test workflow, and current documentation around the primary extension.
+- Added reusable streamer-named viewer groups for per-interaction access. Studio verifies Twitch logins locally, caches their numeric identities, keeps group names and rosters out of viewer responses, and flattens only eligible IDs into the existing hosted enforcement boundary.
+- Removed the stale Bits-ready label from Viewer Interactions now that the no-Bits Tempest Streaming Extension is the primary surface.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

@@ -113,6 +113,12 @@ export interface ChatbotFirstChatShoutoutConfiguration {
   channels: string[];
 }
 
+export interface ChatbotViewerGroup {
+  id: string;
+  name: string;
+  logins: string[];
+}
+
 export interface ChatbotInteractionAccessConfiguration {
   mode: 'everyone' | 'assigned-creators';
   allowBroadcasterAndModerators: boolean;
@@ -175,7 +181,7 @@ interface ChatbotNumericPollRuntime {
 }
 
 interface ChatbotConfiguration {
-  schemaVersion: 7;
+  schemaVersion: 8;
   displayName: string;
   prefix: string;
   commands: ChatbotCommand[];
@@ -183,6 +189,8 @@ interface ChatbotConfiguration {
   firstChatShoutouts: ChatbotFirstChatShoutoutConfiguration;
   interactionAccess: ChatbotInteractionAccessConfiguration;
   assignedCreatorIds: Record<string, string>;
+  viewerGroups: ChatbotViewerGroup[];
+  viewerGroupIds: Record<string, Record<string, string>>;
   autoMod: ChatbotAutoModConfiguration;
   autoMessages: ChatbotAutoMessageConfiguration;
   weatherProvider?: ChatbotWeatherProvider;
@@ -248,6 +256,7 @@ export interface ChatbotStatus {
     assignedCreators: number;
     resolvedCreators: number;
   };
+  viewerGroups: Array<ChatbotViewerGroup & { resolvedViewers: number }>;
   autoMod: ChatbotAutoModConfiguration & {
     deleteAuthorized: boolean;
     timeoutAuthorized: boolean;
@@ -475,6 +484,28 @@ function validateFirstChatShoutouts(value: unknown, fallback: ChatbotFirstChatSh
   return { enabled: typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled, channels };
 }
 
+function validateViewerGroups(value: unknown, fallback: ChatbotViewerGroup[] = []): ChatbotViewerGroup[] {
+  if (value === undefined) return fallback.map((group) => ({ ...group, logins: [...group.logins] }));
+  if (!Array.isArray(value)) throw new Error('Viewer Groups must be a list.');
+  if (value.length > 20) throw new Error('Viewer Groups supports up to 20 reusable groups.');
+  const groups = value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Viewer Group ${index + 1} is invalid.`);
+    const source = entry as { id?: unknown; name?: unknown; logins?: unknown };
+    const id = String(source.id || '').trim().toLowerCase();
+    const name = String(source.name || '').trim();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || id.length > 48) throw new Error(`Viewer Group ${index + 1} needs a lowercase ID of 48 characters or fewer.`);
+    if (!name || name.length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error(`Viewer Group ${index + 1} needs a safe name of 60 characters or fewer.`);
+    const rawLogins = Array.isArray(source.logins) ? source.logins : typeof source.logins === 'string' ? source.logins.split(/[\s,]+/) : [];
+    const logins = [...new Set(rawLogins.map((login) => String(login || '').trim().replace(/^@+/, '').toLowerCase()).filter(Boolean))];
+    if (!logins.length || logins.length > 50) throw new Error(`${name} must contain between 1 and 50 Twitch logins.`);
+    const invalid = logins.find((login) => !/^[a-z0-9_]{1,25}$/.test(login));
+    if (invalid) throw new Error(`@${invalid} is not a valid Twitch login.`);
+    return { id, name, logins };
+  });
+  if (new Set(groups.map((group) => group.id)).size !== groups.length) throw new Error('Viewer Group IDs must be unique.');
+  return groups;
+}
+
 function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionAccessConfiguration = { mode: 'everyone', allowBroadcasterAndModerators: true }): ChatbotInteractionAccessConfiguration {
   if (value === undefined) return { ...fallback };
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Interaction access settings are invalid.');
@@ -489,13 +520,15 @@ function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionA
 function defaultConfiguration(): ChatbotConfiguration {
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     displayName: '',
     prefix: '!',
     raidAutomation: validateRaidAutomation(undefined),
     firstChatShoutouts: validateFirstChatShoutouts(undefined),
     interactionAccess: validateInteractionAccess(undefined),
     assignedCreatorIds: {},
+    viewerGroups: [],
+    viewerGroupIds: {},
     autoMod: validateAutoMod(undefined),
     autoMessages: validateAutoMessages(undefined),
     commands: [{
@@ -820,7 +853,7 @@ export class TwitchChatbot {
           installedDefaults = true;
         }
       }
-      const legacyConfiguration = parsed.schemaVersion !== 7;
+      const legacyConfiguration = parsed.schemaVersion !== 8;
       const legacyProviderConfiguration = !parsed.schemaVersion || parsed.schemaVersion < 2;
       const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
       let nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? defaultStormHorizonProvider : undefined));
@@ -835,9 +868,22 @@ export class TwitchChatbot {
       const assignedCreatorIds = Object.fromEntries(Object.entries(parsed.assignedCreatorIds || {})
         .filter(([login, userId]) => firstChatShoutouts.channels.includes(login) && /^\d{1,30}$/.test(String(userId)))
         .map(([login, userId]) => [login, String(userId)]));
+      const viewerGroups = validateViewerGroups(parsed.viewerGroups);
+      const persistedViewerGroupIds = parsed.viewerGroupIds && typeof parsed.viewerGroupIds === 'object' && !Array.isArray(parsed.viewerGroupIds)
+        ? parsed.viewerGroupIds as Record<string, Record<string, unknown>>
+        : {};
+      const viewerGroupIds = Object.fromEntries(viewerGroups.map((group) => {
+        const persisted = persistedViewerGroupIds[group.id];
+        const ids = persisted && typeof persisted === 'object' && !Array.isArray(persisted)
+          ? Object.fromEntries(Object.entries(persisted)
+            .filter(([login, userId]) => group.logins.includes(login) && /^\d{1,30}$/.test(String(userId)))
+            .map(([login, userId]) => [login, String(userId)]))
+          : {};
+        return [group.id, ids];
+      }));
       const autoMod = validateAutoMod(parsed.autoMod);
       const autoMessages = validateAutoMessages(parsed.autoMessages);
-      this.configuration = { schemaVersion: 7, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, autoMessages, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      this.configuration = { schemaVersion: 8, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, viewerGroups, viewerGroupIds, autoMod, autoMessages, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
       if (installedDefaults || legacyConfiguration || migratedStormHorizonPlayer) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
@@ -924,6 +970,11 @@ export class TwitchChatbot {
         assignedCreators: this.configuration.firstChatShoutouts.channels.length,
         resolvedCreators: Object.keys(this.configuration.assignedCreatorIds).length
       },
+      viewerGroups: this.configuration.viewerGroups.map((group) => ({
+        ...group,
+        logins: [...group.logins],
+        resolvedViewers: Object.keys(this.configuration.viewerGroupIds[group.id] || {}).length
+      })),
       autoMod: {
         ...this.configuration.autoMod,
         deleteAuthorized: Boolean(this.tokens?.scopes.includes('moderator:manage:chat_messages')),
@@ -954,7 +1005,7 @@ export class TwitchChatbot {
 
   async configure(input: unknown): Promise<ChatbotStatus> {
     if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
-    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; autoMod?: unknown; autoMessages?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
+    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; viewerGroups?: unknown; autoMod?: unknown; autoMessages?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
     const prefix = String(source.prefix ?? this.configuration.prefix);
     if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
     const nextFirstChatShoutouts = Object.prototype.hasOwnProperty.call(source, 'firstChatShoutouts')
@@ -979,6 +1030,14 @@ export class TwitchChatbot {
     }
     if (Object.prototype.hasOwnProperty.call(source, 'interactionAccess')) {
       this.configuration.interactionAccess = nextInteractionAccess;
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'viewerGroups')) {
+      this.configuration.viewerGroups = validateViewerGroups(source.viewerGroups, this.configuration.viewerGroups);
+      this.configuration.viewerGroupIds = Object.fromEntries(this.configuration.viewerGroups.map((group) => {
+        const existing = this.configuration.viewerGroupIds[group.id] || {};
+        return [group.id, Object.fromEntries(Object.entries(existing).filter(([login]) => group.logins.includes(login)))];
+      }));
+      await this.refreshViewerGroupIds().catch(() => undefined);
     }
     if (this.configuration.interactionAccess.mode === 'assigned-creators') {
       await this.refreshAssignedCreatorIds().catch(() => undefined);
@@ -1123,6 +1182,7 @@ export class TwitchChatbot {
       await this.stopConnection();
     }
     await this.ensureConnection();
+    await this.refreshViewerGroupIds().catch(() => undefined);
   }
 
   async interactionGroupViewerIds(): Promise<string[]> {
@@ -1132,6 +1192,10 @@ export class TwitchChatbot {
 
   resolvedInteractionGroupViewerIds(): string[] {
     return [...new Set(Object.values(this.configuration.assignedCreatorIds).filter((id) => /^\d{1,30}$/.test(id)))];
+  }
+
+  resolvedViewerGroupIds(groupId: string): string[] {
+    return [...new Set(Object.values(this.configuration.viewerGroupIds[groupId] || {}).filter((id) => /^\d{1,30}$/.test(id)))];
   }
 
   publicCounters(): ChatbotPublicCounter[] {
@@ -1197,7 +1261,7 @@ export class TwitchChatbot {
     return { commandId: command.id, label: command.counterLabel || command.name, value, delta };
   }
 
-  async authorizeInteraction(event: TempestNormalizedTwitchEvent, alert?: Pick<TempestSoundAlertDefinition, 'accessMode' | 'allowedViewerIds' | 'blockedViewerIds'>): Promise<ChatbotInteractionAccessDecision> {
+  async authorizeInteraction(event: TempestNormalizedTwitchEvent, alert?: Pick<TempestSoundAlertDefinition, 'accessMode' | 'viewerGroupId' | 'allowedViewerIds' | 'blockedViewerIds'>): Promise<ChatbotInteractionAccessDecision> {
     const settings = this.configuration.interactionAccess;
     const roles = new Set(event.viewer?.roles || []);
     const viewerId = String(event.viewer?.id || '');
@@ -1222,6 +1286,15 @@ export class TwitchChatbot {
       return alert?.allowedViewerIds?.includes(viewerId)
         ? { allowed: true, code: 'allowed' }
         : { allowed: false, code: 'not-allowed', reason: 'This interaction is locked to selected viewers.' };
+    }
+    if (mode === 'viewer-group') {
+      const group = this.configuration.viewerGroups.find((entry) => entry.id === alert?.viewerGroupId);
+      if (!group) return { allowed: false, code: 'not-allowed', reason: 'This interaction is assigned to a viewer group that is no longer available.' };
+      try { await this.refreshViewerGroupIds(group.id); }
+      catch (error) { return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify ${group.name}: ${(error as Error).message}` }; }
+      return this.resolvedViewerGroupIds(group.id).includes(viewerId)
+        ? { allowed: true, code: 'allowed' }
+        : { allowed: false, code: 'not-allowed', reason: `This interaction is limited to ${group.name}.` };
     }
     try { await this.refreshAssignedCreatorIds(); }
     catch (error) { return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator group: ${(error as Error).message}` }; }
@@ -1963,6 +2036,39 @@ export class TwitchChatbot {
     });
     this.inFlightProviderRequests.set(key, pending);
     return pending;
+  }
+
+  private async refreshViewerGroupIds(groupId?: string): Promise<void> {
+    const groups = groupId ? this.configuration.viewerGroups.filter((group) => group.id === groupId) : this.configuration.viewerGroups;
+    const missing = [...new Set(groups.flatMap((group) => group.logins.filter((login) => !this.configuration.viewerGroupIds[group.id]?.[login])))];
+    if (!missing.length) return;
+    const resolved = new Map<string, string>();
+    for (let index = 0; index < missing.length; index += 100) {
+      const query = new URLSearchParams();
+      for (const login of missing.slice(index, index + 100)) query.append('login', login);
+      const response = await this.request(`https://api.twitch.tv/helix/users?${query}`, { headers: this.twitchHeaders() });
+      const result = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string }>; message?: string }>(response);
+      if (!response.ok) throw new Error(result.message || `Twitch user lookup failed with ${response.status}.`);
+      for (const user of result.data || []) {
+        const login = String(user.login || '').toLowerCase();
+        const userId = String(user.id || '');
+        if (missing.includes(login) && /^\d{1,30}$/.test(userId)) resolved.set(login, userId);
+      }
+    }
+    let changed = false;
+    for (const group of groups) {
+      const ids = this.configuration.viewerGroupIds[group.id] ||= {};
+      for (const login of group.logins) {
+        const userId = resolved.get(login);
+        if (userId && ids[login] !== userId) {
+          ids[login] = userId;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return;
+    await this.persist();
+    this.options.onCatalogChanged?.();
   }
 
   private async refreshAssignedCreatorIds(): Promise<void> {

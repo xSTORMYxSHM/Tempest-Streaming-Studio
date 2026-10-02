@@ -119,7 +119,20 @@
         </section>
 
         <section id="soundalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build free or Bits-enabled stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions from one reusable catalog.</p></div><div class="page-toolbar-actions"><span class="status-badge">FREE + BITS READY</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
+          <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions for the Tempest Streaming Extension.</p></div><div class="page-toolbar-actions"><span class="status-badge">NO BITS</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
+          <article class="panel viewer-groups-panel">
+            <div class="viewer-groups-heading"><div><span>VIEWER ACCESS</span><h3>Reusable viewer groups</h3><p>Use Twitch logins to build private groups for campaign players, regulars, collaborators, or any interaction audience.</p></div><strong id="viewerGroupCount" class="state-chip">0 GROUPS</strong></div>
+            <div class="viewer-groups-layout">
+              <form id="viewerGroupForm" class="viewer-group-form">
+                <input id="viewerGroupId" type="hidden" />
+                <label>Group name<input id="viewerGroupName" maxlength="60" required placeholder="Campaign players" /></label>
+                <label>Twitch logins<textarea id="viewerGroupLogins" rows="4" required placeholder="stormy_viewer, tabletop_friend"></textarea></label>
+                <small>Studio verifies these logins with Twitch. Group names and logins stay in your local Studio data; viewers never receive the group roster.</small>
+                <div><button id="cancelViewerGroupEdit" type="button" class="secondary-button" hidden>Cancel</button><button type="submit" class="primary-button">Save Group</button></div>
+              </form>
+              <div id="viewerGroupList" class="viewer-group-list empty-state">No reusable viewer groups yet.</div>
+            </div>
+          </article>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>

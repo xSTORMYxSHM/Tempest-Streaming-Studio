@@ -2044,8 +2044,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           category: alert.interactionCategory || 'other',
           placementMode: alert.placementMode || 'fixed',
           access: {
-            mode: alert.accessMode || 'everyone',
-            allowedViewerIds: alert.accessMode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : alert.allowedViewerIds || [],
+            mode: alert.accessMode === 'viewer-group' ? 'specific-viewers' : alert.accessMode || 'everyone',
+            allowedViewerIds: alert.accessMode === 'assigned-creators'
+              ? chatbot.resolvedInteractionGroupViewerIds()
+              : alert.accessMode === 'viewer-group'
+                ? chatbot.resolvedViewerGroupIds(alert.viewerGroupId || '')
+                : alert.allowedViewerIds || [],
             blockedViewerIds: alert.blockedViewerIds || [],
             hideWhenLocked: alert.hideWhenLocked === true
           },

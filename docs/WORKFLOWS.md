@@ -28,6 +28,8 @@ Tempest Streaming Extension is the primary no-Bits viewer interaction surface. I
 
 The localhost Bridge is never exposed directly to the public internet. Studio opens the outbound relay, the service verifies signed viewer requests, and both layers enforce action allowlists, access rules, cooldowns, request idempotency, and bounded payloads.
 
+Per-interaction access can use everyone, broadcaster/moderators, assigned creators, individual Twitch IDs, or a reusable streamer-named viewer group. Group membership is configured and resolved in Studio; the outbound catalog converts it to the same numeric allow-list already enforced by Tempest Signal, while Studio independently repeats the group decision before dispatch.
+
 Studio records Twitch cheers like other normalized observations, but no bundled workflow binds a cheer or Bits amount to an action. Tempest Streaming Extension interactions use `viewer.interaction.requested`. Optional channel-point mappings use `viewer.reward.redeemed`; their payload action is assigned by Studio configuration rather than trusted directly from Twitch reward text. If an operator has a legitimate Sound Alerts setup driven by Bits, they may explicitly register a `twitch.cheer` workflow and assign its action in Studio. Merely receiving a cheer never creates that mapping.
 
 ## Sound Alert Performance

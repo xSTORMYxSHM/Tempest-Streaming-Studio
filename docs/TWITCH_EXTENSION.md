@@ -117,6 +117,8 @@ The hosted EBS now:
 
 When a visible interaction is restricted to named viewers or assigned creators, an anonymous viewer sees **Share Twitch Identity** instead of an inert locked button. Selecting it opens Twitch's native identity-sharing consent. The hosted service recalculates eligibility from the newly signed identity before accepting any trigger; a denied or hidden interaction does not become available merely because identity was shared.
 
+Studio also supports reusable streamer-named viewer groups. The streamer enters Twitch logins once, the connected Chatbot account resolves them to numeric Twitch IDs, and any interaction can select that group. Group names and login rosters remain local to Studio; the relay publishes only the resolved numeric eligibility list through the existing access-control schema, and viewer catalog responses still contain only the requesting viewer's eligibility.
+
 The public Extension Client ID belongs in front-end/EBS configuration. The shared secret belongs only in the EBS secret store. See [TWITCH_EBS.md](TWITCH_EBS.md) for deployment and Studio connection instructions.
 
 ## Build hosted assets

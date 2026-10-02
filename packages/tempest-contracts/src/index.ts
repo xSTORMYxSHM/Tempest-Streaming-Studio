@@ -264,7 +264,8 @@ export interface TempestSoundAlertDefinition {
   globalCooldownMs: number;
   interactionCategory?: 'sticker' | 'gif' | 'jumpscare' | 'screen-effect' | 'sound' | 'counter' | 'community' | 'other';
   placementMode?: 'fixed' | 'viewer';
-  accessMode?: 'everyone' | 'staff' | 'assigned-creators' | 'specific-viewers';
+  accessMode?: 'everyone' | 'staff' | 'assigned-creators' | 'viewer-group' | 'specific-viewers';
+  viewerGroupId?: string;
   allowedViewerIds?: string[];
   blockedViewerIds?: string[];
   hideWhenLocked?: boolean;

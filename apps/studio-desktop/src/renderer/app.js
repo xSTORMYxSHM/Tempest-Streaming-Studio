@@ -92,6 +92,7 @@
   let alertDesignBasePlacement = null;
   let alertDesignScenePlacements = [];
   let alertDesignSceneScope = '';
+  let editingViewerGroupId = '';
   const twitchExperienceDraftMedia = Object.create(null);
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const simulcastChecklistStorageKey = 'tempest.streaming-studio.simulcast-checklist.v1';
@@ -661,7 +662,79 @@
     return preserved + placeholder + hotkeys.map((hotkey) => `<option value="${escapeHtml(hotkey.hotkeyID)}" ${hotkey.hotkeyID === selected ? 'selected' : ''}>${escapeHtml(hotkey.name)} · ${escapeHtml(hotkey.type)}</option>`).join('');
   }
 
+  function viewerGroupOptions(selected = '') {
+    const groups = state.chatbot?.viewerGroups || [];
+    const known = groups.some((group) => group.id === selected);
+    const preserved = selected && !known ? `<option value="${escapeHtml(selected)}" selected>Unavailable viewer group</option>` : '';
+    const placeholder = groups.length ? '<option value="">Choose a viewer group</option>' : '<option value="">Create a viewer group above</option>';
+    return preserved + placeholder + groups.map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === selected ? 'selected' : ''}>${escapeHtml(group.name)} · ${group.resolvedViewers}/${group.logins.length} verified</option>`).join('');
+  }
+
+  function renderViewerGroups() {
+    const groups = state.chatbot?.viewerGroups || [];
+    $('#viewerGroupCount').textContent = `${groups.length} GROUP${groups.length === 1 ? '' : 'S'}`;
+    const list = $('#viewerGroupList');
+    list.classList.toggle('empty-state', !groups.length);
+    list.innerHTML = groups.length ? groups.map((group) => `<article class="viewer-group-card">
+      <div><strong>${escapeHtml(group.name)}</strong><span>${group.resolvedViewers}/${group.logins.length} Twitch accounts verified</span><small>${group.logins.map((login) => `@${escapeHtml(login)}`).join(', ')}</small></div>
+      <div><button type="button" data-viewer-group-edit="${escapeHtml(group.id)}">Edit</button><button type="button" class="danger-outline" data-viewer-group-delete="${escapeHtml(group.id)}">Delete</button></div>
+    </article>`).join('') : 'No reusable viewer groups yet.';
+  }
+
+  function resetViewerGroupForm() {
+    editingViewerGroupId = '';
+    $('#viewerGroupForm').reset();
+    $('#viewerGroupId').value = '';
+    $('#cancelViewerGroupEdit').hidden = true;
+  }
+
+  function editViewerGroup(id) {
+    const group = state.chatbot?.viewerGroups?.find((entry) => entry.id === id);
+    if (!group) return;
+    editingViewerGroupId = group.id;
+    $('#viewerGroupId').value = group.id;
+    $('#viewerGroupName').value = group.name;
+    $('#viewerGroupLogins').value = group.logins.join(', ');
+    $('#cancelViewerGroupEdit').hidden = false;
+    $('#viewerGroupName').focus();
+  }
+
+  async function saveViewerGroup(event) {
+    event.preventDefault();
+    const name = $('#viewerGroupName').value.trim();
+    const logins = $('#viewerGroupLogins').value.split(/[\s,]+/).map((login) => login.trim().replace(/^@+/, '').toLowerCase()).filter(Boolean);
+    const current = state.chatbot?.viewerGroups || [];
+    let id = editingViewerGroupId;
+    if (!id) {
+      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 42) || 'viewer-group';
+      id = base;
+      for (let suffix = 2; current.some((group) => group.id === id); suffix += 1) id = `${base}-${suffix}`.slice(0, 48);
+    }
+    const viewerGroups = editingViewerGroupId
+      ? current.map((group) => group.id === editingViewerGroupId ? { id, name, logins } : { id: group.id, name: group.name, logins: group.logins })
+      : [...current.map((group) => ({ id: group.id, name: group.name, logins: group.logins })), { id, name, logins }];
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { viewerGroups } });
+      resetViewerGroupForm();
+      renderSoundAlerts();
+      toast(`${name} saved as a reusable viewer group.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function deleteViewerGroup(id) {
+    const group = state.chatbot?.viewerGroups?.find((entry) => entry.id === id);
+    if (!group || !confirm(`Delete ${group.name}? Alerts assigned to it will remain locked until you choose another group.`)) return;
+    const viewerGroups = state.chatbot.viewerGroups.filter((entry) => entry.id !== id).map((entry) => ({ id: entry.id, name: entry.name, logins: entry.logins }));
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { viewerGroups } });
+      if (editingViewerGroupId === id) resetViewerGroupForm();
+      renderSoundAlerts();
+      toast(`${group.name} removed.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
   function renderSoundAlerts() {
+    renderViewerGroups();
     const alerts = state.soundAlerts?.alerts || [];
     const inventory = broadcastSourceInventory();
     $('#soundAlertCount').textContent = alerts.length;
@@ -707,7 +780,8 @@
           <label>Placement <select data-alert-placement="${escapeHtml(alert.id)}"><option value="fixed" ${(alert.placementMode || 'fixed') === 'fixed' ? 'selected' : ''}>STREAMER PLACED</option><option value="viewer" ${alert.placementMode === 'viewer' ? 'selected' : ''}>VIEWER CLICK / TAP</option></select></label>
           <label>Viewer cooldown <span><input data-alert-viewer-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.viewerCooldownMs / 1000)}" /> sec</span></label>
           <label>Global cooldown <span><input data-alert-global-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.globalCooldownMs / 1000)}" /> sec</span></label>
-          <label>Who can activate <select data-alert-access="${escapeHtml(alert.id)}"><option value="everyone" ${(alert.accessMode || 'everyone') === 'everyone' ? 'selected' : ''}>EVERYONE</option><option value="staff" ${alert.accessMode === 'staff' ? 'selected' : ''}>BROADCASTER + MODS</option><option value="assigned-creators" ${alert.accessMode === 'assigned-creators' ? 'selected' : ''}>ASSIGNED CREATORS</option><option value="specific-viewers" ${alert.accessMode === 'specific-viewers' ? 'selected' : ''}>SPECIFIC TWITCH IDS</option></select></label>
+          <label>Who can activate <select data-alert-access="${escapeHtml(alert.id)}"><option value="everyone" ${(alert.accessMode || 'everyone') === 'everyone' ? 'selected' : ''}>EVERYONE</option><option value="staff" ${alert.accessMode === 'staff' ? 'selected' : ''}>BROADCASTER + MODS</option><option value="assigned-creators" ${alert.accessMode === 'assigned-creators' ? 'selected' : ''}>ASSIGNED CREATORS</option><option value="viewer-group" ${alert.accessMode === 'viewer-group' ? 'selected' : ''}>VIEWER GROUP</option><option value="specific-viewers" ${alert.accessMode === 'specific-viewers' ? 'selected' : ''}>SPECIFIC TWITCH IDS</option></select></label>
+          <label>Viewer group <select data-alert-viewer-group="${escapeHtml(alert.id)}">${viewerGroupOptions(alert.viewerGroupId || '')}</select></label>
           <label>Allowed Twitch IDs <input data-alert-allowed-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Comma-separated numeric IDs" value="${escapeHtml((alert.allowedViewerIds || []).join(', '))}" /></label>
           <label>Blocked Twitch IDs <input data-alert-blocked-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Optional numeric IDs" value="${escapeHtml((alert.blockedViewerIds || []).join(', '))}" /></label>
           <label class="toggle-label"><input data-alert-hide-locked="${escapeHtml(alert.id)}" type="checkbox" ${alert.hideWhenLocked ? 'checked' : ''} /> Hide when viewer is locked out</label>
@@ -2789,7 +2863,10 @@
       if (!changed('events', 'alertHistory', 'alertDiagnostics')) return;
       renderEvents();
       renderAlertHistory();
-    } else if (activeSection === 'soundalertsSection' && changed('visualAlerts')) renderVisualAlertStatus();
+    } else if (activeSection === 'soundalertsSection' && changed('visualAlerts', 'chatbot')) {
+      if (changed('chatbot')) renderSoundAlerts();
+      renderVisualAlertStatus();
+    }
     else if (activeSection === 'diceSection' && changed('diceOverlay')) renderDiceOverlay();
     else if (activeSection === 'visualalertsSection' && changed('visualAlerts', 'twitchExperiences')) {
       renderVisualAlertStatus();
@@ -2822,7 +2899,10 @@
       add('events', () => api('/v1/events?limit=150'));
       add('alertHistory', () => api('/v1/alert-history?limit=200'));
       add('alertDiagnostics', () => api('/v1/alert-diagnostics'));
-    } else if (activeSection === 'soundalertsSection') add('visualAlerts', () => api('/v1/visual-alerts'));
+    } else if (activeSection === 'soundalertsSection') {
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('chatbot', () => api('/v1/chatbot'));
+    }
     else if (activeSection === 'diceSection') add('diceOverlay', () => api('/v1/dice-overlay'));
     else if (activeSection === 'visualalertsSection') {
       add('visualAlerts', () => api('/v1/visual-alerts'));
@@ -4767,6 +4847,7 @@
     const interactionCategory = document.querySelector(`[data-alert-category="${selectorId}"]`).value;
     const placementMode = document.querySelector(`[data-alert-placement="${selectorId}"]`).value;
     const accessMode = document.querySelector(`[data-alert-access="${selectorId}"]`).value;
+    const viewerGroupId = document.querySelector(`[data-alert-viewer-group="${selectorId}"]`).value;
     const allowedViewerIds = document.querySelector(`[data-alert-allowed-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
     const blockedViewerIds = document.querySelector(`[data-alert-blocked-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
     const hideWhenLocked = document.querySelector(`[data-alert-hide-locked="${selectorId}"]`).checked;
@@ -4790,6 +4871,7 @@
       interactionCategory,
       placementMode,
       accessMode,
+      viewerGroupId,
       allowedViewerIds,
       blockedViewerIds,
       hideWhenLocked,
@@ -4882,6 +4964,8 @@
     if (button.dataset.copyText) return copyToClipboard(button.dataset.copyText, button);
     if (button.dataset.exportStudioBackup) return exportStudioBackup();
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
+    if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
+    if (button.dataset.viewerGroupDelete) return deleteViewerGroup(button.dataset.viewerGroupDelete);
     if (button.dataset.clearAlertHistory) return clearAlertHistory();
     if (button.dataset.designCodeTab) return switchAlertCodeTab(button.dataset.designCodeTab);
     if (button.dataset.onboardingStep !== undefined) {
@@ -5075,6 +5159,8 @@
       });
     }
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
+    $('#viewerGroupForm').addEventListener('submit', saveViewerGroup);
+    $('#cancelViewerGroupEdit').addEventListener('click', resetViewerGroupForm);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);
     $('#interactionAlertForm').addEventListener('submit', createInteractionAlert);
     $('#twitchAlertForm').addEventListener('submit', createTwitchAlert);
