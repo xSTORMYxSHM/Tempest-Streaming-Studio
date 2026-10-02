@@ -13,6 +13,8 @@
     "extension:start": "pnpm --filter @tempest/twitch-extension start",
     "extension:bits:build": "pnpm --filter @tempest/twitch-bits-extension build",
     "extension:bits:start": "pnpm --filter @tempest/twitch-bits-extension start",
+    "hosted:prepare": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/prepare-hosted-release.ps1",
+    "hosted:verify": "node tools/verify-hosted-release.mjs",
     "ebs:build": "pnpm --filter @tempest/twitch-ebs build",
     "ebs:start": "pnpm --filter @tempest/twitch-ebs start",
     "warudo:start": "pnpm --filter @tempest/warudo-adapter start",

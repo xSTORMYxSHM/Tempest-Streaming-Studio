@@ -29,7 +29,7 @@ TEMPEST_EBS_TWITCH_CLIENT_IDS=n04l25zbygbsnq6nj7gupboyeji820
 
 ### Railway
 
-The repository's root `Dockerfile` is the Railway entry point and starts only the Twitch EBS. Connect Railway to the GitHub repository with the repository root as its source directory. Do not set a custom build or start command.
+The repository's root `Dockerfile` is the Railway entry point and starts only the Twitch EBS. Its final image contains the production EBS package and runtime dependencies rather than the desktop, Extension sources, tests, or monorepo development dependencies. It runs as the unprivileged Node user and includes an HTTP healthcheck. Connect Railway to the GitHub repository with the repository root as its source directory. Do not set a custom build or start command.
 
 Add a PostgreSQL service to the same Railway project first. Railway normally names it `Postgres`; use a reference variable so the password remains managed by Railway rather than copied into Git or Studio.
 
@@ -49,6 +49,8 @@ In **Settings**:
 2. Keep one replica for the initial WebSocket relay deployment. PostgreSQL persists installations; a future shared live-connection layer can enable horizontal replicas safely.
 3. Generate a public Railway domain.
 4. Prefer a US West region for a Seattle-based Studio connection when that region is available.
+
+Keep those Railway settings in the service dashboard. Do not add a new `railway.json` or `railway.toml`: Railway has deprecated its legacy Config-as-Code path for new services. The repository Dockerfile remains the versioned build boundary, while Railway owns its healthcheck path, replica count, region, domain, and secret references.
 
 After deployment, open `https://<railway-domain>/health`. A successful response reports `"status":"online"`; `studioConnections` may remain `0` until Studio is configured with the relay URL and restarted.
 
@@ -82,12 +84,10 @@ Catalog synchronization uses an authenticated, 2 MiB-bounded WebSocket envelope.
 Build the viewer ZIP against the public EBS origin:
 
 ```powershell
-$env:TEMPEST_EXTENSION_EBS_URL='https://extensions.example.com'
-pnpm extension:build
-Compress-Archive -Path 'apps/twitch-extension/dist/*' -DestinationPath 'apps/twitch-extension/tempest-twitch-extension-hosted.zip' -Force
+pnpm run hosted:prepare
 ```
 
-Upload the ZIP on Twitch's **Files** tab and move the version to Hosted Test. The built `runtime-config.json` contains only the public EBS origin and locks mock mode off.
+Upload `release/Tempest-Streaming-Extension-0.1.0-hosted.zip` on Twitch's **Files** tab and move the version to Hosted Test. The generated manifest records the upload bundle's SHA-256 digest. The built `runtime-config.json` contains only the official public EBS origin and locks mock mode off.
 
 ## Runtime path
 

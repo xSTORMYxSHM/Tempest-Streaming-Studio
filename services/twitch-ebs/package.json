@@ -5,6 +5,7 @@
   "description": "Hosted Twitch Extension Backend Service and secure relay for Tempest Streaming Studio.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist"],
   "bin": {
     "tempest-twitch-ebs": "dist/cli.js"
   },
