@@ -34,6 +34,7 @@
     health: null,
     safety: { armed: false, activeRuns: 0 },
     applications: [],
+    assets: [],
     connections: [],
     dualFormat: null,
     simulcast: null,
@@ -617,6 +618,8 @@
 
   function soundAlertAudioName(uri) {
     if (!uri) return 'No local audio assigned';
+    const managed = state.assets.find((asset) => asset.uri === uri);
+    if (managed) return managed.name;
     try {
       const pathname = decodeURIComponent(new URL(uri).pathname);
       return pathname.split('/').filter(Boolean).at(-1) || 'Local audio assigned';
@@ -625,6 +628,8 @@
 
   function soundAlertVisualName(uri) {
     if (!uri) return 'No local visual assigned';
+    const managed = state.assets.find((asset) => asset.uri === uri);
+    if (managed) return managed.name;
     try {
       const pathname = decodeURIComponent(new URL(uri).pathname);
       return pathname.split('/').filter(Boolean).at(-1) || 'Local visual assigned';
@@ -642,6 +647,121 @@
       audio: Array.isArray(inventory?.audio) ? inventory.audio.filter((entry) => typeof entry === 'string') : [],
       visual: Array.isArray(inventory?.visual) ? inventory.visual.filter((entry) => typeof entry === 'string') : []
     };
+  }
+
+  function assetRole(asset) {
+    if (asset?.type === 'tempest.media.audio') return 'audio';
+    if (asset?.type === 'tempest.media.visual') return 'visual';
+    return 'other';
+  }
+
+  function assetUses(uri) {
+    if (!uri) return [];
+    const uses = [];
+    for (const alert of state.soundAlerts?.alerts || []) {
+      if (alert.audioUri === uri) uses.push(`Interaction · ${alert.name} sound`);
+      if (alert.visualUri === uri) uses.push(`Interaction · ${alert.name} visual`);
+    }
+    for (const alert of state.twitchVisualAlerts?.alerts || []) {
+      if (alert.audioUri === uri) uses.push(`Twitch · ${alert.name} sound`);
+      if (alert.visualUri === uri) uses.push(`Twitch · ${alert.name} visual`);
+      for (const variant of alert.alertVariants || []) {
+        if (variant.audioUri === uri) uses.push(`Variant · ${variant.name} sound`);
+        if (variant.visualUri === uri) uses.push(`Variant · ${variant.name} visual`);
+      }
+    }
+    return uses;
+  }
+
+  function assetTargetOptions() {
+    const interactions = (state.soundAlerts?.alerts || []).map((alert) => `<option value="interaction|${escapeHtml(alert.id)}">Interaction · ${escapeHtml(alert.name)}</option>`);
+    const twitch = (state.twitchVisualAlerts?.alerts || []).flatMap((alert) => [
+      `<option value="twitch|${escapeHtml(alert.id)}">Twitch · ${escapeHtml(alert.name)}</option>`,
+      ...(alert.alertVariants || []).map((variant) => `<option value="twitch-variant|${escapeHtml(alert.id)}|${escapeHtml(variant.id)}">Variant · ${escapeHtml(variant.name)}</option>`)
+    ]);
+    return '<option value="">Choose an alert</option>' + [...interactions, ...twitch].join('');
+  }
+
+  function formatAssetBytes(value) {
+    const bytes = Math.max(0, Number(value || 0));
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
+  }
+
+  function renderAssetLibrary() {
+    const assets = state.assets || [];
+    const query = ($('#assetLibrarySearch')?.value || '').trim().toLowerCase();
+    const filter = $('#assetLibraryFilter')?.value || 'all';
+    const enriched = assets.map((asset) => ({ asset, role: assetRole(asset), uses: assetUses(asset.uri) }));
+    const targetSelect = $('#assetLibraryTarget');
+    const selectedTarget = targetSelect?.value || '';
+    if (targetSelect) {
+      targetSelect.innerHTML = assetTargetOptions();
+      if ([...targetSelect.options].some((option) => option.value === selectedTarget)) targetSelect.value = selectedTarget;
+    }
+    const filtered = enriched.filter(({ asset, role, uses }) => {
+      if (filter === 'audio' && role !== 'audio') return false;
+      if (filter === 'visual' && role !== 'visual') return false;
+      if (filter === 'used' && !uses.length) return false;
+      if (filter === 'unused' && uses.length) return false;
+      return !query || [asset.name, asset.type, ...(asset.tags || [])].join(' ').toLowerCase().includes(query);
+    });
+    $('#assetLibraryCount').textContent = assets.length;
+    $('#assetLibraryAudioCount').textContent = enriched.filter((entry) => entry.role === 'audio').length;
+    $('#assetLibraryVisualCount').textContent = enriched.filter((entry) => entry.role === 'visual').length;
+    $('#assetLibraryUsedCount').textContent = enriched.filter((entry) => entry.uses.length).length;
+    const grid = $('#assetLibraryGrid');
+    grid.classList.toggle('empty-state', !filtered.length);
+    grid.innerHTML = filtered.length ? filtered.map(({ asset, role, uses }) => {
+      const size = Number(asset.metadata?.size || 0);
+      const managed = asset.metadata?.managed === true;
+      const checksum = String(asset.checksum || '').replace(/^sha256:/, '').slice(0, 12);
+      return `<article class="asset-library-card ${uses.length ? 'used' : ''}">
+        <div class="asset-library-icon ${escapeHtml(role)}">${role === 'audio' ? '♪' : role === 'visual' ? '▣' : '◇'}</div>
+        <div class="asset-library-copy"><span>${escapeHtml(role.toUpperCase())} · ${managed ? 'STUDIO MANAGED' : 'INDEXED'}</span><h3>${escapeHtml(asset.name)}</h3><p>${escapeHtml((asset.tags || []).join(' · ') || asset.type)}</p><small>${formatAssetBytes(size)}${checksum ? ` · SHA-256 ${escapeHtml(checksum)}…` : ''}</small><em>${uses.length ? escapeHtml(uses.slice(0, 2).join(' · ')) : 'Not assigned to an alert'}</em></div>
+        <div class="asset-library-actions"><button data-asset-assign="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>Assign to Selected Alert</button><button class="danger-outline" data-asset-remove="${escapeHtml(asset.id)}" ${uses.length ? 'disabled title="Remove this media from every alert before deleting it"' : ''}>Remove</button></div>
+      </article>`;
+    }).join('') : (assets.length ? 'No media matches this search or filter.' : 'No media has been imported yet.');
+  }
+
+  async function importMediaAsset() {
+    try {
+      const imported = await window.tempestStudio.selectAsset();
+      if (!imported) return;
+      const result = await api('/v1/assets', { method: 'POST', body: imported.manifest });
+      state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)].sort((left, right) => left.name.localeCompare(right.name));
+      renderAssetLibrary();
+      toast(`${result.asset.name} ${imported.reused ? 'was already in' : 'was copied into'} the Media Library.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function assignLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    const target = $('#assetLibraryTarget').value;
+    if (!asset || !target) return toast('Choose an alert before assigning this media.', true);
+    const [kind, alertId, variantId] = target.split('|');
+    const field = assetRole(asset) === 'audio' ? 'audioUri' : 'visualUri';
+    let updated;
+    if (kind === 'interaction') updated = await updateSoundAlert(alertId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    else if (kind === 'twitch') updated = await updateTwitchVisualAlert(alertId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    else if (kind === 'twitch-variant') updated = await updateTwitchVariant(alertId, variantId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    if (updated) renderAssetLibrary();
+  }
+
+  async function removeLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    const uses = assetUses(asset.uri);
+    if (uses.length) return toast('Remove this media from every alert before deleting it.', true);
+    if (!confirm(`Remove ${asset.name} from the Media Library?${asset.metadata?.managed === true ? " Studio's managed copy will be deleted; your original file will stay untouched." : ''}`)) return;
+    try {
+      await api(`/v1/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      state.assets = state.assets.filter((entry) => entry.id !== id);
+      if (asset.metadata?.managed === true) await window.tempestStudio.removeManagedAsset(asset.uri);
+      renderAssetLibrary();
+      toast(`${asset.name} removed from the Media Library.`);
+    } catch (error) { toast(error.message, true); }
   }
 
   function soundAlertOptions(values, selected) {
@@ -2838,6 +2958,7 @@
     renderEvents();
     renderAlertHistory();
     renderSoundAlerts();
+    renderAssetLibrary();
     renderDiceOverlay({ settings: true });
     renderVisualAlerts();
     renderChatOverlay({ settings: true });
@@ -2867,6 +2988,7 @@
       if (changed('chatbot')) renderSoundAlerts();
       renderVisualAlertStatus();
     }
+    else if (activeSection === 'assetsSection' && changed('assets', 'soundAlerts', 'twitchVisualAlerts')) renderAssetLibrary();
     else if (activeSection === 'diceSection' && changed('diceOverlay')) renderDiceOverlay();
     else if (activeSection === 'visualalertsSection' && changed('visualAlerts', 'twitchExperiences')) {
       renderVisualAlertStatus();
@@ -2902,6 +3024,11 @@
     } else if (activeSection === 'soundalertsSection') {
       add('visualAlerts', () => api('/v1/visual-alerts'));
       add('chatbot', () => api('/v1/chatbot'));
+    }
+    else if (activeSection === 'assetsSection') {
+      add('assets', () => api('/v1/assets'));
+      add('soundAlerts', () => api('/v1/sound-alerts'));
+      add('twitchVisualAlerts', () => api('/v1/visual-alerts/twitch'));
     }
     else if (activeSection === 'diceSection') add('diceOverlay', () => api('/v1/dice-overlay'));
     else if (activeSection === 'visualalertsSection') {
@@ -2974,6 +3101,9 @@
         runtimeDataSignatures.set(key, signature);
       }
       if (refreshed.events) state.events = refreshed.events.events || [];
+      if (refreshed.assets) state.assets = refreshed.assets.assets || [];
+      if (refreshed.soundAlerts) state.soundAlerts = refreshed.soundAlerts;
+      if (refreshed.twitchVisualAlerts) state.twitchVisualAlerts = refreshed.twitchVisualAlerts;
       for (const key of ['safety', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
@@ -2992,6 +3122,7 @@
       const tasks = new Map([
         ['runtimeSummary', () => api('/v1/runtime-summary')],
         ['applications', () => api('/v1/applications')],
+        ['assets', () => api('/v1/assets')],
         ['workflows', () => api('/v1/workflows')],
         ['events', () => api('/v1/events?limit=150')],
         ['twitch', () => api('/v1/integrations/twitch')],
@@ -3034,6 +3165,7 @@
         runs: summary.runs || [],
         safety: summary.safety,
         ...(refreshed.applications ? { applications: refreshed.applications.applications || [] } : {}),
+        ...(refreshed.assets ? { assets: refreshed.assets.assets || [] } : {}),
         ...(refreshed.workflows ? { workflows: refreshed.workflows.workflows || [] } : {}),
         ...(refreshed.events ? { events: refreshed.events.events || [] } : {})
       });
@@ -3081,6 +3213,7 @@
       if (index >= 0) state.soundAlerts.alerts[index] = result.alert;
       renderSoundAlerts();
       renderVisualAlerts();
+      renderAssetLibrary();
       toast(message || `${result.alert.name} updated.`);
       return result.alert;
     } catch (error) { toast(error.message, true); return null; }
@@ -3218,10 +3351,18 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function registerManagedSelection(selection) {
+    if (!selection?.manifest) return selection;
+    const result = await api('/v1/assets', { method: 'POST', body: selection.manifest });
+    state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)].sort((left, right) => left.name.localeCompare(right.name));
+    return selection;
+  }
+
   async function assignSoundAlertAudio(id) {
     try {
       const selection = await window.tempestStudio.selectSoundAlertAudio();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateSoundAlert(id, { audioUri: selection.uri }, `${selection.name} assigned to the Interaction Alert sound.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -3230,6 +3371,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateSoundAlert(id, { visualUri: selection.uri }, `${selection.name} assigned to the Interaction Alert visual.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -3240,6 +3382,7 @@
       const index = state.twitchVisualAlerts.alerts.findIndex((entry) => entry.id === id);
       if (index >= 0) state.twitchVisualAlerts.alerts[index] = result.alert;
       renderVisualAlerts();
+      renderAssetLibrary();
       toast(message || `${result.alert.name} updated.`);
       return result.alert;
     } catch (error) { toast(error.message, true); return null; }
@@ -3459,6 +3602,7 @@
     try {
       const selection = kind === 'audio' ? await window.tempestStudio.selectSoundAlertAudio() : await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVariant(alertId, variantId, { [kind === 'audio' ? 'audioUri' : 'visualUri']: selection.uri }, `${selection.name} assigned to the variant ${kind === 'audio' ? 'sound' : 'visual'}.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -3486,6 +3630,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVisualAlert(id, { visualUri: selection.uri }, `${selection.name} assigned to the Twitch Alert.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -3494,6 +3639,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertAudio();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVisualAlert(id, { audioUri: selection.uri }, `${selection.name} assigned to the Twitch Alert sound.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -4966,6 +5112,8 @@
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
     if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
     if (button.dataset.viewerGroupDelete) return deleteViewerGroup(button.dataset.viewerGroupDelete);
+    if (button.dataset.assetAssign) return assignLibraryAsset(button.dataset.assetAssign);
+    if (button.dataset.assetRemove) return removeLibraryAsset(button.dataset.assetRemove);
     if (button.dataset.clearAlertHistory) return clearAlertHistory();
     if (button.dataset.designCodeTab) return switchAlertCodeTab(button.dataset.designCodeTab);
     if (button.dataset.onboardingStep !== undefined) {
@@ -5159,6 +5307,9 @@
       });
     }
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
+    $('#importMediaAsset').addEventListener('click', importMediaAsset);
+    $('#assetLibrarySearch').addEventListener('input', renderAssetLibrary);
+    $('#assetLibraryFilter').addEventListener('change', renderAssetLibrary);
     $('#viewerGroupForm').addEventListener('submit', saveViewerGroup);
     $('#cancelViewerGroupEdit').addEventListener('click', resetViewerGroupForm);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);

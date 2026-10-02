@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   removeLocalExtensionCertificate: () => ipcRenderer.invoke('studio:remove-local-extension-certificate'),
   openLocalExtensionPanel: () => ipcRenderer.invoke('studio:open-local-extension-panel'),
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
+  selectAsset: () => ipcRenderer.invoke('studio:select-asset'),
+  removeManagedAsset: (uri: string) => ipcRenderer.invoke('studio:remove-managed-asset', uri),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
   selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
   selectTwitchExperienceMedia: () => ipcRenderer.invoke('studio:select-twitch-experience-media'),

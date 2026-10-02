@@ -22,6 +22,10 @@ Tempest Streaming Studio is local-first. Its authenticated control service, Brow
 - Public Twitch live/offline state, stream title, category, start time, current viewer count, and last-check time may be published in the Tempest Streaming Extension catalog. The card reuses the Chatbot's existing authorization and caches and cannot change Twitch stream information.
 - Studio has no crash-reporting or analytics service and does not automatically upload diagnostics.
 
+## Managed media library
+
+Importing alert media through Studio copies the selected file into the local Media Library and records its file name, size, format, and SHA-256 content hash in the local registry. The hash is calculated as a stream rather than loading the complete file into memory. Library files and metadata are never uploaded to Tempest Signal or the Twitch Extension. Removing an unused item deletes only Studio's managed copy; Studio does not alter or delete the original selected file. Managed items are included in an exported Studio backup, subject to its media-size limits.
+
 ## Public Twitch Extension service
 
 Pairing the public Twitch Extension is optional. During pairing, Studio sends the broadcaster's current Twitch OAuth access token to the Tempest Extension Backend Service over HTTPS. The service sends that token to Twitch's validation endpoint to verify the broadcaster account and approved application, then discards it without storing it.

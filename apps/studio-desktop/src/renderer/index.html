@@ -25,6 +25,7 @@
           <p class="nav-group">CREATE</p>
           <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
           <button class="nav-button" data-section="soundalerts">Viewer Interactions</button>
+          <button class="nav-button" data-section="assets">Media Library</button>
           <button class="nav-button" data-section="chatoverlay">Chat Overlay</button>
           <button class="nav-button" data-section="discordvoice">Discord Guests</button>
           <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
@@ -181,6 +182,23 @@
               </div>
             </div>
           </article>
+        </section>
+
+        <section id="assetsSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-MANAGED MEDIA</p><h2>Media Library</h2><p>Import alert sounds and visuals once, keep a verified local copy inside Studio, and reuse them across Viewer Interactions.</p></div><button id="importMediaAsset" class="primary-button">Import Media</button></div>
+          <div class="metric-grid asset-library-metrics">
+            <article><span>MEDIA FILES</span><strong id="assetLibraryCount">0</strong><small>Indexed in this Studio</small></article>
+            <article><span>AUDIO</span><strong id="assetLibraryAudioCount">0</strong><small>Reusable alert sounds</small></article>
+            <article><span>VISUALS</span><strong id="assetLibraryVisualCount">0</strong><small>Images, GIFs, and videos</small></article>
+            <article><span>IN USE</span><strong id="assetLibraryUsedCount">0</strong><small>Assigned to at least one alert</small></article>
+          </div>
+          <div class="sound-alert-note"><strong>Managed storage:</strong> Imported media is copied into Studio data and deduplicated by SHA-256 content hash. Removing an unused managed item deletes only Studio's copy; the original file you imported is never changed.</div>
+          <div class="asset-library-toolbar">
+            <label>Search<input id="assetLibrarySearch" type="search" placeholder="Name, type, or tag" /></label>
+            <label>Show<select id="assetLibraryFilter"><option value="all">All media</option><option value="audio">Audio</option><option value="visual">Visuals</option><option value="used">In use</option><option value="unused">Unused</option></select></label>
+            <label>Assign to<select id="assetLibraryTarget"><option value="">Choose an alert</option></select></label>
+          </div>
+          <div id="assetLibraryGrid" class="asset-library-grid empty-state">No media has been imported yet.</div>
         </section>
 
         <section id="diceSection" class="page">

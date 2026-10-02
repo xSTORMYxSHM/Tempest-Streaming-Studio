@@ -8,6 +8,9 @@
 - Updated the default Panel, Video Component, configuration branding, local test workflow, and current documentation around the primary extension.
 - Added reusable streamer-named viewer groups for per-interaction access. Studio verifies Twitch logins locally, caches their numeric identities, keeps group names and rosters out of viewer responses, and flattens only eligible IDs into the existing hosted enforcement boundary.
 - Removed the stale Bits-ready label from Viewer Interactions now that the no-Bits Tempest Streaming Extension is the primary surface.
+- Added a Studio-managed Media Library for reusable alert audio, images, GIFs, and videos. Imports are copied into local Studio data, streamed through SHA-256 verification, content-addressed, deduplicated, searchable, and assignable to Interaction Alerts, Twitch Alerts, and alert variants.
+- Made new alert file assignments register their managed media automatically, prevent deletion while an alert still uses an item, and delete only Studio's copy after explicit removal. The original imported file is never changed.
+- Included managed Media Library items in portable Studio backups even when they are not assigned to an alert, while continuing to exclude externally registered asset paths.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 

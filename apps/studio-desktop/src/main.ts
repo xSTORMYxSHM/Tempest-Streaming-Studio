@@ -43,8 +43,8 @@ import {
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
 import { boundedFetch } from './bounded-fetch';
-import { sha256File } from './file-checksum';
 import { readResponseBuffer, readResponseJson } from './bounded-response';
+import { importManagedMediaAsset, removeManagedMediaAsset } from './media-library';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
@@ -1216,25 +1216,19 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:select-asset', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
-      title: 'Add Asset to Tempest Library',
+      title: 'Import Media into Studio',
       properties: ['openFile'],
-      filters: [{ name: 'All assets', extensions: ['*'] }]
+      filters: [
+        { name: 'Alert audio and visuals', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = result.filePaths[0];
-    const details = await stat(filePath);
-    if (!details.isFile()) throw new Error('The selected asset is not a file.');
-    const baseName = path.basename(filePath, path.extname(filePath));
-    const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'asset';
-    return {
-      path: filePath,
-      uri: pathToFileURL(filePath).href,
-      name: baseName,
-      suggestedId: `com.tempestmainframe.asset.${slug}`,
-      checksum: `sha256:${await sha256File(filePath)}`,
-      size: details.size,
-      extension: path.extname(filePath).toLowerCase()
-    };
+    return importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+  });
+
+  handleDesktop('studio:remove-managed-asset', async (_event, uri: unknown) => {
+    return { removed: await removeManagedMediaAsset(String(uri || ''), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media')) };
   });
 
   handleDesktop('studio:select-sound-alert-audio', async () => {
@@ -1247,11 +1241,8 @@ function registerDesktopHandlers(): void {
       ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = path.normalize(result.filePaths[0]);
-    const details = await stat(filePath);
-    if (!details.isFile()) throw new Error('The selected Sound Alert audio is not a file.');
-    if (details.size > 100 * 1024 * 1024) throw new Error('Sound Alert audio must be 100 MB or smaller.');
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+    const imported = await importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   handleDesktop('studio:select-sound-alert-visual', async () => {
@@ -1264,10 +1255,8 @@ function registerDesktopHandlers(): void {
       ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = path.normalize(result.filePaths[0]);
-    const details = await stat(filePath);
-    if (!details.isFile()) throw new Error('The selected Sound Alert visual is not a file.');
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+    const imported = await importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   ipcMain.handle('studio:select-twitch-experience-media', async () => {

@@ -41,7 +41,7 @@ const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'
 const maximumAssetBytes = 96 * 1024 * 1024;
 const maximumTotalBytes = 500 * 1024 * 1024;
 const assetPrefix = 'tempest-backup-asset:';
-const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Kick client secret and OAuth tokens', 'Discord OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'registered asset file paths', 'application launch paths', 'playback history'];
+const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Kick client secret and OAuth tokens', 'Discord OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'external registered asset file paths', 'application launch paths', 'playback history'];
 const copy = <T>(value: T): T => structuredClone(value);
 
 async function readJsonIfAvailable(filePath: string): Promise<unknown | undefined> {
@@ -61,7 +61,14 @@ function sanitizeRegistry(value: unknown): unknown {
     delete application.launch;
     return application;
   }) : [];
-  registry.assets = [];
+  registry.assets = Array.isArray(registry.assets) ? registry.assets.filter((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const asset = entry as Record<string, unknown>;
+    const metadata = asset.metadata;
+    return (asset.type === 'tempest.media.audio' || asset.type === 'tempest.media.visual')
+      && metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      && (metadata as Record<string, unknown>).managed === true;
+  }) : [];
   return registry;
 }
 
@@ -90,6 +97,14 @@ export async function buildTempestStudioBackup(input: { userDataDirectory: strin
     }
     return `${assetPrefix}${sha256}`;
   };
+  const registryDocument = documents.registry;
+  if (registryDocument && typeof registryDocument === 'object' && !Array.isArray(registryDocument)) {
+    const registeredAssets = Array.isArray((registryDocument as Record<string, unknown>).assets) ? (registryDocument as Record<string, unknown>).assets as Array<Record<string, unknown>> : [];
+    for (const asset of registeredAssets) if (typeof asset.uri === 'string') {
+      asset.uri = await packUri(asset.uri);
+      if (typeof asset.preview === 'string') asset.preview = asset.uri;
+    }
+  }
   for (const documentKey of ['interactionAlerts', 'twitchAlerts']) {
     const document = documents[documentKey];
     if (!document || typeof document !== 'object' || Array.isArray(document)) continue;
@@ -163,7 +178,7 @@ export async function restoreTempestStudioBackup(value: unknown, userDataDirecto
       const id = node.slice(assetPrefix.length);
       if (!assetIds.has(id)) throw new Error('Studio backup references missing media.');
       const asset = validatedAssets.find((entry) => entry.asset.id === id)!.asset;
-      return pathToFileURL(path.join(userDataDirectory, 'bridge', 'visual-alerts', 'restored', `${id}${asset.extension}`)).href;
+      return pathToFileURL(path.join(userDataDirectory, 'bridge', 'asset-library', 'media', `${id}${asset.extension}`)).href;
     }
     if (Array.isArray(node)) return node.map(replaceReferences);
     if (node && typeof node === 'object') return Object.fromEntries(Object.entries(node as Record<string, unknown>).map(([key, entry]) => [key, replaceReferences(entry)]));
@@ -178,7 +193,7 @@ export async function restoreTempestStudioBackup(value: unknown, userDataDirecto
     const sourcePath = path.join(userDataDirectory, ...segments);
     await copyFile(sourcePath, path.join(snapshotDirectory, `${key}.json`)).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
   }
-  const mediaDirectory = path.join(userDataDirectory, 'bridge', 'visual-alerts', 'restored');
+  const mediaDirectory = path.join(userDataDirectory, 'bridge', 'asset-library', 'media');
   await mkdir(mediaDirectory, { recursive: true });
   for (const { asset, bytes } of validatedAssets) await writeFile(path.join(mediaDirectory, `${asset.id}${asset.extension}`), bytes, { mode: 0o600 });
   for (const [key, document] of Object.entries(restoredDocuments)) {

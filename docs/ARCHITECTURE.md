@@ -47,7 +47,7 @@ Every accepted Twitch event carries the upstream event/message/redemption ID. St
 
 ## Persistence
 
-The Bridge stores a registry document and authentication token under its data directory. Assets are indexed in place by URI and checksum; registering or removing an asset never copies or deletes the source file. A future managed-library feature may explicitly copy selected files into a content-addressed store.
+The Bridge stores a registry document and authentication token under its data directory. Its generic asset API indexes manifests by URI and checksum without mutating the referenced source. Studio's Media Library adds an explicit managed layer: selected alert media is copied into a content-addressed local store, registered with `metadata.managed: true`, and removed from that store only through Studio after confirming no configured alert still references it. The original imported file remains untouched.
 
 ## Service lifecycle
 
