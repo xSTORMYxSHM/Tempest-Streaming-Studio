@@ -54,3 +54,5 @@ For the public multi-channel release, provision:
 The Twitch Extension files remain hosted by Twitch. The Extension calls the EBS through its allowlisted HTTPS origin, while each local Studio pairs with broadcaster OAuth, stores its issued credential with operating-system encryption, and opens an outbound WSS connection to the same origin. PostgreSQL stores channel installations, relay-token hashes, and viewer-safe signal catalogs; OAuth tokens and local media never enter the database.
 
 Before a hosted update, run `pnpm run hosted:prepare`. It rebuilds and tests both hosted surfaces, validates the production service origin and upload boundary, and writes the Twitch-ready ZIP and SHA-256 manifest under the ignored `release/` directory. Railway deployment and Twitch Developer Console publication remain explicit, separate operations.
+
+GitHub Actions repeats the hosted build on Linux and constructs the root Dockerfile as an uncredentialed CI image. A failed image build or Extension boundary check blocks the repository check without contacting Railway or publishing to Twitch.

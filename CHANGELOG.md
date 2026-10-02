@@ -16,6 +16,7 @@
 - Added lazy Media Library previews, editable display names and tags, streamer-defined collections, and favorites. Visual files load only when previewed, only one audio preview plays at a time, and organization metadata reuses the same verified file.
 - Reduced the Railway EBS image to a non-root, production-only runtime with an in-container `/health` check, while retaining Railway's injected `PORT` and HTTPS termination boundary.
 - Added one-command hosted release preparation that rebuilds and tests the EBS and primary no-Bits Extension, validates the official Signal origin and secret-free upload surface, packages a Twitch-ready ZIP, and records its SHA-256 manifest.
+- Added a separate Linux CI gate that validates the hosted boundary and builds the exact production Railway EBS image without production secrets, preventing desktop-only checks from masking a broken hosted deployment.
 
 ## 1.5.1 — Free Extension utilities and production hardening
 
