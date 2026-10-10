@@ -1,13 +1,13 @@
 # Tempest Streaming Studio 1.7.0 release audit
 
 Date: October 10, 2026  
-Status: Railway release deployed; desktop updater publication remains gated
+Status: public desktop release and Railway deployment published; post-release validation remains
 
 ## Current result
 
 The merged 1.7.0 release source at `74be080` passes the complete frozen workspace build/test gate and Railway's production deployment. Both Twitch companion packages pass production-asset verification, and the signed Windows candidate built from release-content commit `972e7af` passes signature, fuse, and isolated-profile smoke verification. A prior development runtime rehearsal also confirmed protocol 1.0 communication with installed Tempest Broadcast 1.5.0 and the migrated Unified Stage scene.
 
-Desktop updater publication remains blocked on live Twitch surface tests, Studio relay reconnection, clean-upgrade validation, and the final on-air soak. Passing automated tests and the Railway deployment do not waive those gates.
+The signed desktop updater was published as GitHub's latest stable release on October 10, 2026 after the operator requested the public rollout. Live Twitch surface tests, Studio relay reconnection, clean-upgrade validation, and the final on-air soak remain required post-release validation gates.
 
 ## Source and automated verification
 
@@ -79,9 +79,9 @@ The 1.7 EBS now has a permanent regression test built from the exact Studio 1.5 
 
 Studio 1.5 therefore remains supported after the Railway update. Its UI can select Mainframe or Streaming using the old mutually exclusive edition selector, so it can test either submitted Extension but cannot enable both simultaneously. Studio 1.7 is required for both companion toggles to be active together.
 
-## Open release gates
+## Open post-release gates
 
 1. Reconnect the signed Studio build to Railway and complete the queued-action/reconnect rehearsal.
 2. Upload and test both Twitch packages in Mainframe-only, Streaming-only, and both-active configurations after Twitch review permits the hosted-file update.
 3. Complete clean 1.6.0 upgrade, backup/restore, accessibility/scaling, reconnect, audio-routing, and 30-minute soak gates.
-4. Record the final live rehearsal logs and approvals before publishing the updater.
+4. Record the final live rehearsal logs, updater installation result, and approvals before closing the 1.7.0 rollout.

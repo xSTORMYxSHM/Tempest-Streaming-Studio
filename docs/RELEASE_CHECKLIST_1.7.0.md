@@ -1,6 +1,6 @@
 # Tempest Streaming Studio 1.7.0 coordinated release checklist
 
-Studio 1.7.0 remains a release candidate until every required manual gate passes against the exact packaged build. Tempest Broadcast 1.5.0 is the compatibility target for this release; its separate product version does not need to match Studio.
+Studio 1.7.0 is published on the stable updater channel. Unchecked items are required post-release validation against the exact packaged build. Tempest Broadcast 1.5.0 is the compatibility target for this release; its separate product version does not need to match Studio.
 
 ## Scope and ownership
 
@@ -79,6 +79,8 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 
 - [x] Timestamp-sign every required Windows executable and native payload with the expected Tempest publisher certificate.
 - [x] Verify `latest.yml`, blockmap, installer, portable ZIP, checksums, release manifest, release notes, privacy notice, installation guide, and third-party notices.
-- [ ] Publish Railway first, then Twitch hosted assets, then the Studio updater only after the coordinated rehearsal passes.
+- [x] Publish Railway production before the Studio updater.
+- [ ] Publish the Twitch hosted assets after Twitch review permits their hosted-file updates.
+- [x] Publish GitHub stable release `v1.7.0` with the signed updater assets after the operator requested the public rollout.
 - [ ] Confirm the updater downloads, verifies, installs, restarts, retains settings, and displays 1.7.0.
 - [ ] Keep the prior Studio installer, prior Railway deployment, and Broadcast scene backups available through the first stable live stream.
