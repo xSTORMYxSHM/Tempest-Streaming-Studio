@@ -1,20 +1,20 @@
 # Tempest Streaming Studio 1.7.0 release audit
 
-Date: October 4, 2026  
+Date: October 10, 2026  
 Status: release candidate preparation; not yet approved for public release
 
 ## Current result
 
-The 1.7.0 working source passes the complete frozen workspace build/test gate, both Twitch companion packages pass production-asset verification, the built EBS CLI passes a local Railway-style startup and health check, and the already deployed Signal service is online. A prior development runtime rehearsal also confirmed protocol 1.0 communication with installed Tempest Broadcast 1.5.0 and the migrated Unified Stage scene.
+The exact 1.7.0 source commit `972e7af` passes the complete frozen workspace build/test gate, both Twitch companion packages pass production-asset verification, and a freshly rebuilt signed Windows candidate passes signature, fuse, and isolated-profile smoke verification. A prior development runtime rehearsal also confirmed protocol 1.0 communication with installed Tempest Broadcast 1.5.0 and the migrated Unified Stage scene.
 
-The signed Windows candidate and isolated-profile smoke test now pass. Publication remains blocked on a final clean commit/rebuild, Railway deployment of that source, live Twitch surface tests, clean-upgrade validation, and the final on-air soak. Passing automated tests does not waive those gates.
+Publication remains blocked on Railway deployment of this source, live Twitch surface tests, clean-upgrade validation, and the final on-air soak. Passing automated tests does not waive those gates.
 
 ## Source and automated verification
 
-- Base commit at audit start: `cf6d99517f864c313f2db2edfc1ed2e43ca4d30b`
-- Candidate state: working tree contains the 1.7.0 development changes and must receive a final commit before artifact approval.
+- Candidate commit: `972e7af` (`Package Mainframe as a panel-only extension`), including merge commit `dc6e349`.
+- Candidate state: clean working tree at artifact build time.
 - `pnpm install --frozen-lockfile`: passed.
-- `pnpm check`: passed (135 tests, 0 failures after the compatibility and per-feature Extension placement regressions were added).
+- `pnpm check`: passed (166 tests, 0 failures).
 - Package versions: Studio/services/contracts `1.7.0`; Mainframe `0.2.0`; Streaming `0.1.0`.
 - Extension package verification: passed.
 - Local built EBS CLI startup using `PORT=4808`: passed; `/health` returned online.
@@ -27,8 +27,8 @@ The signed Windows candidate and isolated-profile smoke test now pass. Publicati
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` | 85,863 | `05eb721f05531ccb047c0fa97069b0dc576fb3fdd1ffbe5431f5bfda36c33979` |
-| `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` | 11,421 | `0be49c9b96e1bedae0795568cdf384e54bd393b73e6b4c34104219cadd0174a7` |
+| `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` | 94,025 | `501004a797b820577264d0d42a63784c98e483ccb371570922765693423bcc9c` |
+| `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` | 11,776 | `6851b9f7e69a4f5a563d6a9a05938f484eefec1f384b6348178399ff0243d0fb` |
 
 The generated machine-readable record is `release-assets/extension-package-manifest.json`. Rebuild and re-audit both ZIPs after any Extension source change; the hashes above identify only this candidate.
 
@@ -47,10 +47,10 @@ The exact signed unpacked 1.7.0 payload was then launched against the same insta
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `Tempest-Streaming-Studio-Setup-1.7.0-x64.exe` | 134,962,424 | `92689e318d57719991fd621f4edcce0845df2913f5d75dd04d45329c9398c0dc` |
-| `Tempest-Streaming-Studio-Setup-1.7.0-x64.exe.blockmap` | 142,208 | `1856b083ccc608aa1e24473fba6b8226d5d518d71a6f675346627c31405a5c6c` |
-| `latest.yml` | 385 | `84c010e9c0550617f80c79e734335538b13db92f4c42dde7fb2ab6fe45a12715` |
-| `Tempest-Streaming-Studio-1.7.0-x64.zip` | 168,925,651 | `ea7e3439940c64963956916d93f232f8364e4cafb887d2027797d84e38da63dc` |
+| `Tempest-Streaming-Studio-Setup-1.7.0-x64.exe` | 135,004,560 | `7199cacf354a2d4d386f677b1c92f2547db186c86a7f2be2108738850fd2973c` |
+| `Tempest-Streaming-Studio-Setup-1.7.0-x64.exe.blockmap` | 141,844 | `e3b114cbd661b5e178d70a548aadcc60e3bbd2992885d047ede1e12094d2ca99` |
+| `latest.yml` | 385 | `17615da18c7ae910a6657aa0cbb3f1a53584a86854fee63dec333f91db16ed4c` |
+| `Tempest-Streaming-Studio-1.7.0-x64.zip` | 168,992,550 | `0556b5370aa86a4082c3c1ef5b77274594ad6442bd197b560afca6fd948135d3` |
 
 The canonical checksum and signature records are in `release/SHA256SUMS.txt` and `release/release-manifest.json`.
 
@@ -79,8 +79,7 @@ Studio 1.5 therefore remains supported after the Railway update. Its UI can sele
 
 ## Open release gates
 
-1. Commit the final candidate and rebuild every artifact from that exact commit.
-2. Inspect Railway variables privately, deploy the candidate, and verify health, migration, reconnect, and rollback.
-3. Upload and test both Twitch packages in Mainframe-only, Streaming-only, and both-active configurations.
-4. Complete clean 1.6.0 upgrade, backup/restore, accessibility/scaling, reconnect, audio-routing, and 30-minute soak gates.
-5. Record final post-commit hashes, logs, and approvals before publishing the updater.
+1. Inspect Railway variables privately, deploy the candidate, and verify health, migration, reconnect, and rollback.
+2. Upload and test both Twitch packages in Mainframe-only, Streaming-only, and both-active configurations.
+3. Complete clean 1.6.0 upgrade, backup/restore, accessibility/scaling, reconnect, audio-routing, and 30-minute soak gates.
+4. Record final deployment logs and approvals before publishing the updater.

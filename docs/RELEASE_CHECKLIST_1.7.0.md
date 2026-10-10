@@ -14,14 +14,14 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 ## Automated gates
 
 - [x] `pnpm install --frozen-lockfile`
-- [x] `pnpm check` (135 tests, 0 failures after adding Studio 1.5/EBS compatibility and per-feature Extension placement gates)
+- [x] `pnpm check` (166 tests, 0 failures, including Studio 1.5/EBS compatibility, companion placement, and hosted catalog validation)
 - [x] Mainframe `0.2.0` and Streaming `0.1.0` production ZIPs build successfully.
 - [x] Extension package verifier confirms required assets, production Signal URL, mock mode disabled, no localhost URL, no private key material, no source maps, and no mock catalog.
 - [x] Built EBS CLI starts from `services/twitch-ebs/dist/cli.js` using Railway's `PORT` contract and reports healthy.
 - [x] Public `https://signal.tempestmainframe.com/health` reports online before deployment.
 - [x] Build and verify the signed Studio installer and portable ZIP candidate.
 - [x] Run the packaged executable with a new isolated profile; it exited 0 and wrote data version 1.7.0.
-- [x] Record candidate artifact hashes, signatures, and test count in the release audit; the final clean commit must still replace the recorded base commit before publication.
+- [x] Record exact source commit `972e7af`, candidate artifact hashes, signatures, and test count in the release audit.
 
 ## Railway and database gates
 
@@ -76,8 +76,8 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 
 ## Publication gates
 
-- [ ] Timestamp-sign every required Windows executable and native payload with the expected Tempest publisher certificate.
-- [ ] Verify `latest.yml`, blockmap, installer, portable ZIP, checksums, release manifest, release notes, privacy notice, installation guide, and third-party notices.
+- [x] Timestamp-sign every required Windows executable and native payload with the expected Tempest publisher certificate.
+- [x] Verify `latest.yml`, blockmap, installer, portable ZIP, checksums, release manifest, release notes, privacy notice, installation guide, and third-party notices.
 - [ ] Publish Railway first, then Twitch hosted assets, then the Studio updater only after the coordinated rehearsal passes.
 - [ ] Confirm the updater downloads, verifies, installs, restarts, retains settings, and displays 1.7.0.
 - [ ] Keep the prior Studio installer, prior Railway deployment, and Broadcast scene backups available through the first stable live stream.
