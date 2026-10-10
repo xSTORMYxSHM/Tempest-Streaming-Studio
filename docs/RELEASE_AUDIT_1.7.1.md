@@ -1,6 +1,6 @@
 # Tempest Streaming Studio 1.7.1 release audit
 
-Date: October 10, 2026  
+Date: October 10, 2026
 Status: signed candidate verified; stable updater publication pending
 
 ## Current result
