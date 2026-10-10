@@ -340,6 +340,12 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /openInteractionDesignEditor/);
   assert.match(renderer, /warudoEnabled/);
   assert.match(html, /id="newInteractionWarudoEnabled"/);
+  assert.match(renderer, /data-alert-tempest2d-enabled/);
+  assert.match(renderer, /data-twitch-tempest2d-enabled/);
+  assert.match(renderer, /tempest2dActionFromInput/);
+  assert.match(html, /id="newInteractionTempest2DEnabled"/);
+  assert.match(html, /id="newTwitchTempest2DEnabled"/);
+  assert.match(renderer, /advancedInterfaceMode'\)\.addEventListener\('change', saveInterfaceMode\)/);
   assert.match(renderer, /INTERACTION ALERT DESIGNER/);
   assert.match(html, /Place and resize the alert/);
   assert.match(renderer, /defaultTwitchDesign/);

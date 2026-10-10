@@ -786,6 +786,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         reactionId: alert.id,
         name: alert.name,
         eventType: 'twitch-alert',
+        tempest2dEnabled: Boolean(alert.tempest2dEnabled),
+        tempest2dAction: alert.tempest2dAction,
         durationMs: alert.durationMs,
         circuit: 'alerts',
         accent: alert.accent,

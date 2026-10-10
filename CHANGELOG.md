@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.1 — Transparent Unified Stage and Tempest2D alerts
+
+Released 2026-10-10.
+
+- Fixed Chromium iframe composition that made the Unified Stage opaque when transparent alert, chat, poll, Discord, or interactive modules selected a dark color scheme.
+- Added opt-in Tempest2D expression routing to Interaction Alerts and Twitch Alerts, including create, edit, import, persistence, preview, bounded leases, and automatic release.
+- Made the Streamer Mode / Advanced Mode checkbox save immediately while retaining the explicit Save Interface control.
+- Preserved protocol `1.0`, Tempest Broadcast 1.5.0 compatibility, existing alert routes, and the independently versioned Twitch companion Extensions.
+
 ## 1.7.0 — Unified interaction stage and companion Extensions
 
 Released 2026-10-10.

@@ -698,6 +698,8 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   const configuredTwitchVisual = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}`, {
     method: 'POST', headers, body: JSON.stringify({
       durationMs: 3000,
+      tempest2dEnabled: true,
+      tempest2dAction: 'expression:Excited',
       volume: 0.35,
       audioUri: pathToFileURL(audioPath).href,
       visualUri: pathToFileURL(visualPath).href,
@@ -744,6 +746,8 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.equal(configuredTwitchVisual.status, 200);
   const configuredTwitchAlert = (await configuredTwitchVisual.json()).alert;
   assert.equal(configuredTwitchAlert.accent, '#9146FF');
+  assert.equal(configuredTwitchAlert.tempest2dEnabled, true);
+  assert.equal(configuredTwitchAlert.tempest2dAction, 'expression:Excited');
   assert.equal(configuredTwitchAlert.volume, 0.35);
   assert.equal(configuredTwitchAlert.audioUri, pathToFileURL(audioPath).href);
   assert.equal(configuredTwitchAlert.visualUri, pathToFileURL(visualPath).href);
@@ -812,6 +816,21 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
     topic: 'broadcast.status',
     payload: { ready: true, sourceInventory: { currentScene: 'Starting Soon', scenes: ['Starting Soon', 'Gameplay'] } }
   })));
+  const tempest2dSocket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
+  context.after(() => tempest2dSocket.close());
+  await new Promise((resolve, reject) => {
+    tempest2dSocket.once('open', resolve);
+    tempest2dSocket.once('error', reject);
+  });
+  tempest2dSocket.send(JSON.stringify(createBridgeMessage({
+    kind: 'hello',
+    source: 'com.tempestmainframe.tempest2d',
+    payload: {
+      applicationId: 'com.tempestmainframe.tempest2d',
+      version: '1.0.0',
+      capabilities: ['avatar.expression.apply']
+    }
+  })));
   await new Promise((resolve) => setTimeout(resolve, 20));
   const reactionCommandPromise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Twitch preview did not send a Broadcast reaction command.')), 1000);
@@ -822,11 +841,21 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
       resolve(message);
     });
   });
+  const tempest2dCommandPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Twitch preview did not send a Tempest 2D expression command.')), 1000);
+    tempest2dSocket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== 'avatar.expression.apply') return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
   const twitchPreview = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent('twitch.cheer')}/preview`, { method: 'POST', headers, body: '{}' });
   assert.equal(twitchPreview.status, 202);
   const twitchPreviewBody = await twitchPreview.json();
   const twitchActiveAlert = twitchPreviewBody.activeAlert;
   const reactionCommand = await reactionCommandPromise;
+  const tempest2dCommand = await tempest2dCommandPromise;
   assert.equal(twitchActiveAlert.name, '100 Bits');
   assert.equal(twitchActiveAlert.audioUrl, '/visual-alerts/audio/twitch.cheer');
   assert.equal(twitchActiveAlert.mediaUrl, '/visual-alerts/media/twitch.cheer');
@@ -839,8 +868,9 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.equal(twitchActiveAlert.variables.amount, '100');
   assert.equal(twitchActiveAlert.variables.viewer, 'Studio Operator');
   assert.equal(twitchPreviewBody.reactionRun.workflowId, 'com.tempestmainframe.workflow.twitch-alert-reaction');
-  assert.equal(twitchPreviewBody.reactionRun.actions.length, 1);
-  assert.equal(twitchPreviewBody.reactionRun.actions[0].releaseCapability, 'broadcast.reaction.clear');
+  assert.equal(twitchPreviewBody.reactionRun.actions.length, 2);
+  assert.equal(twitchPreviewBody.reactionRun.actions.find((action) => action.capability === 'avatar.expression.apply').state, 'scheduled');
+  assert.equal(twitchPreviewBody.reactionRun.actions.find((action) => action.capability === 'broadcast.reaction.trigger').releaseCapability, 'broadcast.reaction.clear');
   assert.equal(reactionCommand.payload.arguments.alertId, 'twitch.cheer');
   assert.equal(reactionCommand.payload.arguments.eventType, 'twitch-alert');
   assert.equal(reactionCommand.payload.arguments.circuit, 'alerts');
@@ -848,6 +878,9 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.equal(reactionCommand.payload.arguments.accent, '#9146FF');
   assert.equal(reactionCommand.payload.arguments.preview, true);
   assert.equal(reactionCommand.payload.lease.durationMs, 3000);
+  assert.equal(tempest2dCommand.payload.arguments.tempest2dAction, 'expression:Excited');
+  assert.equal(tempest2dCommand.payload.arguments.alertId, 'twitch.cheer');
+  assert.equal(tempest2dCommand.payload.lease.durationMs, 3000);
   const ignoredPositionClear = await fetch(`${runtime.baseUrl}/v1/visual-alerts/position-preview/clear`, { method: 'POST', headers, body: JSON.stringify({ kind: 'twitch' }) });
   assert.equal(ignoredPositionClear.status, 200);
   assert.equal((await ignoredPositionClear.json()).twitch.activeAlert.runId, twitchActiveAlert.runId, 'closing positioning mode must not clear a real alert that replaced it');
@@ -1071,12 +1104,14 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
   assert.equal(duplicateInteraction.status, 400);
 
   const twitchCreated = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, {
-    method: 'POST', headers, body: JSON.stringify({ id: 'twitch.stream-online', topic: 'channel.stream.online', name: 'Stream Online', durationMs: 8000, volume: 0.6, audioUri: pathToFileURL(packedAudioPath).href, visualUri: pathToFileURL(packedVisualPath).href, accent: '#ff8800' })
+    method: 'POST', headers, body: JSON.stringify({ id: 'twitch.stream-online', topic: 'channel.stream.online', name: 'Stream Online', tempest2dEnabled: true, tempest2dAction: 'expression:Happy', durationMs: 8000, volume: 0.6, audioUri: pathToFileURL(packedAudioPath).href, visualUri: pathToFileURL(packedVisualPath).href, accent: '#ff8800' })
   });
   assert.equal(twitchCreated.status, 201);
   const twitchAlert = (await twitchCreated.json()).alert;
   assert.equal(twitchAlert.custom, true);
   assert.equal(twitchAlert.topic, 'channel.stream.online');
+  assert.equal(twitchAlert.tempest2dEnabled, true);
+  assert.equal(twitchAlert.tempest2dAction, 'expression:Happy');
   assert.equal(twitchAlert.audioUri, pathToFileURL(packedAudioPath).href);
   assert.equal(twitchAlert.visualUri, pathToFileURL(packedVisualPath).href);
 
@@ -1093,7 +1128,7 @@ test('creates, persists, protects, and removes custom Interaction and Twitch Ale
     assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.vtubeStudioEnabled && alert.vtubeStudioHotkey === 'hotkey-dance' && alert.design.customPositionX === 27.5));
     assert.ok(interactions.alerts.some((alert) => alert.id === interactionAlert.id && alert.custom && alert.warudoEnabled && alert.tempest2dEnabled && alert.tempest2dAction === 'expression:Happy' && alert.design.customPositionX === 27.5));
     const twitchAlerts = await fetch(`${runtime.baseUrl}/v1/visual-alerts/twitch`, { headers }).then((response) => response.json());
-    assert.ok(twitchAlerts.alerts.some((alert) => alert.id === twitchAlert.id && alert.custom));
+    assert.ok(twitchAlerts.alerts.some((alert) => alert.id === twitchAlert.id && alert.custom && alert.tempest2dEnabled && alert.tempest2dAction === 'expression:Happy'));
 
     const protectedBundled = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, { method: 'DELETE', headers });
     assert.equal(protectedBundled.status, 400);

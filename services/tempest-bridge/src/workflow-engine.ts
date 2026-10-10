@@ -169,6 +169,16 @@ export const twitchAlertReactionWorkflow: TempestWorkflowDefinition = {
   maximumConcurrent: 8,
   actions: [
     {
+      id: 'tempest2d-expression',
+      name: 'Tempest 2D event expression',
+      target: 'com.tempestmainframe.tempest2d',
+      capability: 'avatar.expression.apply',
+      arguments: { source: 'twitch-alerts' },
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'tempest2dEnabled', equals: true, ifMissing: false },
+      lease: { durationMs: 60000, durationInput: 'durationMs', fadeOutMs: 500 }
+    },
+    {
       id: 'broadcast-reaction',
       name: 'Broadcast Twitch Alert reaction',
       target: 'com.tempestmainframe.tempest-broadcast',

@@ -409,6 +409,25 @@
     return `${minutes}m ${seconds % 60}s`;
   }
 
+  function tempest2dActionInputValue(value) {
+    const action = String(value || '').trim();
+    return action.toLowerCase().startsWith('expression:') ? action.slice(action.indexOf(':') + 1).trim() : action;
+  }
+
+  function tempest2dActionFromInput(value) {
+    const action = String(value || '').trim();
+    if (!action || action.includes(':')) return action;
+    return `expression:${action}`;
+  }
+
+  function interactionAvatarRouteLabel(alert) {
+    const routes = [];
+    if (alert.warudoEnabled) routes.push('WARUDO');
+    if (alert.vtubeStudioEnabled) routes.push('VTUBE STUDIO');
+    if (alert.tempest2dEnabled) routes.push('TEMPEST 2D');
+    return routes.length ? `${routes.join(' + ')} + OVERLAY` : 'OVERLAY';
+  }
+
   function remainingLabel(timestamp) {
     if (!timestamp) return 'Completing';
     return durationLabel(new Date(timestamp).getTime() - Date.now());
@@ -2174,7 +2193,7 @@
     const visualOptions = inventory.visual.map((name) => `<option value="${escapeHtml(name)}"></option>`).join('');
     grid.innerHTML = `<datalist id="broadcastAudioSourceOptions">${audioOptions}</datalist><datalist id="visualAlertBroadcastSourceOptions">${visualOptions}</datalist>` + alerts.map((alert) => `<article class="sound-alert-card interaction-alert-card ${alert.enabled ? '' : 'disabled'}" style="--alert-accent:${escapeHtml(alert.accent || '#54f2eb')}">
       <div class="sound-alert-head"><div><span class="copyable-value">${escapeHtml(alert.id)}${copyButton(alert.id, 'interaction alert ID')}</span><h3>${escapeHtml(alert.name)}</h3></div><div class="card-head-actions"><b>${alert.enabled ? (alert.custom ? 'CUSTOM' : 'READY') : 'OFF'}</b>${alert.custom ? `<button class="card-delete-button" data-delete-interaction-alert="${escapeHtml(alert.id)}" title="Delete custom Interaction Alert" aria-label="Delete ${escapeHtml(alert.name)}">×</button>` : ''}</div></div>
-      <div class="sound-alert-cue"><span>${alert.warudoEnabled || alert.vtubeStudioEnabled ? `${alert.warudoEnabled ? 'WARUDO' : ''}${alert.warudoEnabled && alert.vtubeStudioEnabled ? ' + ' : ''}${alert.vtubeStudioEnabled ? 'VTUBE STUDIO' : ''} + OVERLAY` : 'OVERLAY'}</span><span>MAX ${durationLabel(alert.durationMs)}</span></div>
+      <div class="sound-alert-cue"><span>${escapeHtml(interactionAvatarRouteLabel(alert))}</span><span>MAX ${durationLabel(alert.durationMs)}</span></div>
       <div class="alert-media-summary">
         <div class="alert-media-slot"><span>SOUND</span><strong>${escapeHtml(soundAlertAudioName(alert.audioUri))}</strong></div>
         <div class="alert-media-slot"><span>VISUAL</span><strong>${escapeHtml(soundAlertVisualName(alert.visualUri))}</strong></div>
@@ -2195,6 +2214,12 @@
         <span>VTUBE STUDIO HOTKEY</span>
         <label>Loaded-model hotkey<select data-alert-vtube-studio-hotkey="${escapeHtml(alert.id)}">${vtubeStudioHotkeyOptions(alert.vtubeStudioHotkey || '')}</select></label>
         <small>Hotkey duration and auto-deactivation are controlled in VTube Studio.</small>
+      </div>
+      <label class="interaction-integration-toggle compact"><input data-alert-tempest2d-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.tempest2dEnabled ? 'checked' : ''} /><span><strong>Use Tempest 2D</strong><small>Activate an expression when this interaction runs.</small></span></label>
+      <div class="interaction-integration-options card-options" data-alert-tempest2d-options="${escapeHtml(alert.id)}" ${alert.tempest2dEnabled ? '' : 'hidden'}>
+        <span>TEMPEST 2D EXPRESSION</span>
+        <label>Expression name<input data-alert-tempest2d-action="${escapeHtml(alert.id)}" maxlength="128" placeholder="Happy" value="${escapeHtml(tempest2dActionInputValue(alert.tempest2dAction))}" /></label>
+        <small>Use the exact imported expression name. It resets at maximum runtime. Advanced controls may use <code>motion:</code> or <code>parameter:</code>.</small>
       </div>
       <details class="interaction-routing-details"><summary>Request + Broadcast routing</summary><div class="alert-settings-groups">
         <div class="alert-settings-group"><span>REQUEST</span><div class="sound-alert-settings">
@@ -2372,6 +2397,12 @@
         <label title="Hard stop for sound, visuals, TTS, reactions, and queue playback">Maximum runtime <span><input data-twitch-visual-duration="${escapeHtml(alert.id)}" type="number" min="1" max="60" value="${Math.round(alert.durationMs / 1000)}" /> sec</span></label>
         <label>Volume <span><input data-twitch-alert-volume="${escapeHtml(alert.id)}" type="number" min="0" max="100" value="${Math.round((alert.volume ?? 0.8) * 100)}" /> %</span></label>
         <label>Alert accent <input data-twitch-visual-accent="${escapeHtml(alert.id)}" type="color" value="${escapeHtml(alert.accent || '#54f2eb')}" /></label>
+      </div>
+      <label class="interaction-integration-toggle compact"><input data-twitch-tempest2d-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.tempest2dEnabled ? 'checked' : ''} /><span><strong>Use Tempest 2D</strong><small>Activate an expression for this Twitch event.</small></span></label>
+      <div class="interaction-integration-options card-options" data-twitch-tempest2d-options="${escapeHtml(alert.id)}" ${alert.tempest2dEnabled ? '' : 'hidden'}>
+        <span>TEMPEST 2D EXPRESSION</span>
+        <label>Expression name<input data-twitch-tempest2d-action="${escapeHtml(alert.id)}" maxlength="128" placeholder="Surprised" value="${escapeHtml(tempest2dActionInputValue(alert.tempest2dAction))}" /></label>
+        <small>Use the exact imported expression name. It resets at maximum runtime. Advanced controls may use <code>motion:</code> or <code>parameter:</code>.</small>
       </div>
       <div class="twitch-variant-summary"><span>VARIANTS</span><strong>${(alert.alertVariants || []).filter((variant) => variant.enabled).length} active · ${(alert.alertVariants || []).length} total</strong><small>Amount, tier, tenure, raid size, or reward rules</small></div>
       <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-twitch-alert-pack="${escapeHtml(alert.id)}">Export Pack</button>${variantConditionChoices(alert.topic).length ? `<button data-twitch-alert-variants="${escapeHtml(alert.id)}">Manage Variants${(alert.alertVariants || []).length ? ` (${(alert.alertVariants || []).length})` : ''}</button>` : '<button disabled title="This event has no amount, tier, tenure, raid-size, or reward field">Variants unavailable</button>'}<button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-giphy-alert-target="twitch|${escapeHtml(alert.id)}">GIPHY Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Base Alert</button></div>
@@ -4830,7 +4861,7 @@
       if (existing) {
         if (!confirm(`${existing.name} already handles ${alert.topic}${subscriptionVariant ? ` (${subscriptionVariant})` : ''}. Replace its design, media, timing, and variants with ${imported.name}?`)) return;
         await registerManagedManifests(imported.assets);
-        await updateTwitchVisualAlert(existing.id, { enabled: alert.enabled !== false, durationMs: alert.durationMs, audioUri: alert.audioUri || null, volume: alert.volume, visualUri: alert.visualUri || null, accent: alert.accent, design: alert.design, alertVariants: alert.alertVariants || [] }, `${imported.name} imported into ${existing.name}.`);
+        await updateTwitchVisualAlert(existing.id, { enabled: alert.enabled !== false, tempest2dEnabled: alert.tempest2dEnabled === true, tempest2dAction: alert.tempest2dAction || '', durationMs: alert.durationMs, audioUri: alert.audioUri || null, volume: alert.volume, visualUri: alert.visualUri || null, accent: alert.accent, design: alert.design, alertVariants: alert.alertVariants || [] }, `${imported.name} imported into ${existing.name}.`);
       } else {
         await registerManagedManifests(imported.assets);
         const id = uniqueImportedAlertId('twitch', alert.id || imported.name, state.twitchVisualAlerts.alerts);
@@ -4889,6 +4920,8 @@
         warudoEnabled: $('#newInteractionWarudoEnabled').checked,
         vtubeStudioEnabled: $('#newInteractionVTubeStudioEnabled').checked,
         vtubeStudioHotkey: $('#newInteractionVTubeStudioHotkey').value,
+        tempest2dEnabled: $('#newInteractionTempest2DEnabled').checked,
+        tempest2dAction: tempest2dActionFromInput($('#newInteractionTempest2DAction').value),
         durationMs: Math.round(Number($('#newInteractionAlertDuration').value) * 1000),
         visualDurationMs: Math.round(Number($('#newInteractionVisualDuration').value) * 1000),
         volume: Number($('#newInteractionVolume').value) / 100,
@@ -4955,6 +4988,7 @@
   function openTwitchAlertDialog() {
     $('#twitchAlertForm').reset();
     $('#newTwitchAlertKey').dataset.auto = 'true';
+    $('#newTwitchTempest2DOptions').hidden = true;
     const topicSelect = $('#newTwitchAlertTopic');
     for (const option of topicSelect.options) {
       const matches = state.twitchVisualAlerts.alerts.filter((alert) => alert.topic === option.value);
@@ -4991,6 +5025,8 @@
         name: $('#newTwitchAlertName').value.trim(),
         topic,
         ...(topic === 'viewer.subscription.started' ? { variant: $('#newTwitchAlertVariant').value } : {}),
+        tempest2dEnabled: $('#newTwitchTempest2DEnabled').checked,
+        tempest2dAction: tempest2dActionFromInput($('#newTwitchTempest2DAction').value),
         durationMs: Math.round(Number($('#newTwitchAlertDuration').value) * 1000),
         volume: Number($('#newTwitchAlertVolume').value) / 100,
         accent: $('#newTwitchAlertAccent').value
@@ -5213,7 +5249,9 @@
     const durationSeconds = Number(document.querySelector(`[data-twitch-visual-duration="${selectorId}"]`).value);
     const volumePercent = Number(document.querySelector(`[data-twitch-alert-volume="${selectorId}"]`).value);
     const accent = document.querySelector(`[data-twitch-visual-accent="${selectorId}"]`).value;
-    await updateTwitchVisualAlert(id, { durationMs: Math.round(durationSeconds * 1000), volume: volumePercent / 100, accent }, 'Twitch Alert sound, visual, timing, and styling saved.');
+    const tempest2dEnabled = document.querySelector(`[data-twitch-tempest2d-enabled="${selectorId}"]`).checked;
+    const tempest2dAction = tempest2dActionFromInput(document.querySelector(`[data-twitch-tempest2d-action="${selectorId}"]`).value);
+    await updateTwitchVisualAlert(id, { durationMs: Math.round(durationSeconds * 1000), volume: volumePercent / 100, accent, tempest2dEnabled, tempest2dAction }, 'Twitch Alert sound, visual, timing, styling, and Tempest 2D expression saved.');
   }
 
   function defaultTwitchDesign() {
@@ -6558,6 +6596,8 @@
     const warudoEnabled = document.querySelector(`[data-alert-warudo-enabled="${selectorId}"]`).checked;
     const vtubeStudioEnabled = document.querySelector(`[data-alert-vtube-studio-enabled="${selectorId}"]`).checked;
     const vtubeStudioHotkey = document.querySelector(`[data-alert-vtube-studio-hotkey="${selectorId}"]`).value;
+    const tempest2dEnabled = document.querySelector(`[data-alert-tempest2d-enabled="${selectorId}"]`).checked;
+    const tempest2dAction = tempest2dActionFromInput(document.querySelector(`[data-alert-tempest2d-action="${selectorId}"]`).value);
     const durationSeconds = Number(document.querySelector(`[data-alert-duration="${selectorId}"]`).value);
     const viewerSeconds = Number(document.querySelector(`[data-alert-viewer-cooldown="${selectorId}"]`).value);
     const globalSeconds = Number(document.querySelector(`[data-alert-global-cooldown="${selectorId}"]`).value);
@@ -6582,6 +6622,8 @@
       warudoEnabled,
       vtubeStudioEnabled,
       vtubeStudioHotkey,
+      tempest2dEnabled,
+      tempest2dAction,
       durationMs: Math.round(durationSeconds * 1000),
       viewerCooldownMs: Math.round(viewerSeconds * 1000),
       globalCooldownMs: Math.round(globalSeconds * 1000),
@@ -7013,12 +7055,14 @@
     $('#newInteractionAlertKey').addEventListener('input', () => { $('#newInteractionAlertKey').dataset.auto = 'false'; updateInteractionCuePreview(); });
     $('#newInteractionWarudoEnabled').addEventListener('change', () => { $('#newInteractionWarudoOptions').hidden = !$('#newInteractionWarudoEnabled').checked; });
     $('#newInteractionVTubeStudioEnabled').addEventListener('change', () => { $('#newInteractionVTubeStudioOptions').hidden = !$('#newInteractionVTubeStudioEnabled').checked; });
+    $('#newInteractionTempest2DEnabled').addEventListener('change', () => { $('#newInteractionTempest2DOptions').hidden = !$('#newInteractionTempest2DEnabled').checked; });
     $('#newTwitchAlertName').addEventListener('input', () => {
       const key = $('#newTwitchAlertKey');
       if (key.dataset.auto === 'true') key.value = alertKey($('#newTwitchAlertName').value);
     });
     $('#newTwitchAlertKey').addEventListener('input', () => { $('#newTwitchAlertKey').dataset.auto = 'false'; });
     $('#newTwitchAlertTopic').addEventListener('change', updateNewTwitchVariantState);
+    $('#newTwitchTempest2DEnabled').addEventListener('change', () => { $('#newTwitchTempest2DOptions').hidden = !$('#newTwitchTempest2DEnabled').checked; });
     $('#giphySearchQuery').addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -7092,6 +7136,7 @@
     $('#panelDesignPreset').addEventListener('change', applyPanelPreset);
     $('#resetPanelDesign').addEventListener('click', () => populatePanelDesign(defaultPanelDesign()));
     $('#openDesignedPanel').addEventListener('click', openDesignedPanel);
+    $('#advancedInterfaceMode').addEventListener('change', saveInterfaceMode);
     $('#saveInterfaceMode').addEventListener('click', saveInterfaceMode);
     $('#openStudioDataDirectory').addEventListener('click', () => window.tempestStudio.openDataDirectory().catch((error) => toast(error.message, true)));
     $('#checkForStudioUpdates').addEventListener('click', checkForStudioUpdates);
@@ -7151,6 +7196,18 @@
       if (vtubeStudioInput) {
         const options = document.querySelector(`[data-alert-vtube-studio-options="${CSS.escape(vtubeStudioInput.dataset.alertVtubeStudioEnabled)}"]`);
         if (options) options.hidden = !vtubeStudioInput.checked;
+        return;
+      }
+      const tempest2dInput = event.target.closest('[data-alert-tempest2d-enabled]');
+      if (tempest2dInput) {
+        const options = document.querySelector(`[data-alert-tempest2d-options="${CSS.escape(tempest2dInput.dataset.alertTempest2dEnabled)}"]`);
+        if (options) options.hidden = !tempest2dInput.checked;
+        return;
+      }
+      const twitchTempest2dInput = event.target.closest('[data-twitch-tempest2d-enabled]');
+      if (twitchTempest2dInput) {
+        const options = document.querySelector(`[data-twitch-tempest2d-options="${CSS.escape(twitchTempest2dInput.dataset.twitchTempest2dEnabled)}"]`);
+        if (options) options.hidden = !twitchTempest2dInput.checked;
       }
     });
     document.body.addEventListener('click', handleAction);

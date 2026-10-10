@@ -1313,6 +1313,11 @@
         <div id="newInteractionVTubeStudioOptions" class="interaction-integration-options" hidden>
           <label>VTube Studio hotkey<select id="newInteractionVTubeStudioHotkey"><option value="">Connect VTube Studio in Connections first</option></select></label>
         </div>
+        <label class="interaction-integration-toggle"><input id="newInteractionTempest2DEnabled" type="checkbox" /><span><strong>Use Tempest 2D</strong><small>Activate one expression when this interaction runs.</small></span></label>
+        <div id="newInteractionTempest2DOptions" class="interaction-integration-options" hidden>
+          <label>Expression name<input id="newInteractionTempest2DAction" maxlength="128" placeholder="Happy" /></label>
+          <small>Use the exact expression name from the imported model. It resets at maximum runtime.</small>
+        </div>
         <div class="form-row alert-create-fields"><label>Visual length (seconds)<input id="newInteractionVisualDuration" type="number" min="1" max="60" value="6" required /></label><label>Volume (%)<input id="newInteractionVolume" type="number" min="0" max="100" value="80" required /></label></div>
         <div class="form-row alert-create-fields" data-advanced><label>Viewer cooldown (seconds)<input id="newInteractionViewerCooldown" type="number" min="0" max="86400" value="60" required /></label><label>Global cooldown (seconds)<input id="newInteractionGlobalCooldown" type="number" min="0" max="86400" value="10" required /></label></div>
         <label data-advanced>Accent color<input id="newInteractionAccent" type="color" value="#54f2eb" /></label>
@@ -1327,6 +1332,11 @@
         <label data-advanced>Internal identifier<div class="prefixed-input alert-id-input twitch-id-input"><span>twitch.</span><input id="newTwitchAlertKey" required maxlength="48" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="stream-online" /></div></label>
         <div class="form-row alert-create-fields"><label>Twitch event<select id="newTwitchAlertTopic" required><option value="channel.stream.online">Stream online</option><option value="channel.stream.offline">Stream offline</option><option value="channel.poll.updated">Poll updated</option><option value="channel.prediction.updated">Prediction updated</option><option value="channel.hype-train.updated">Hype Train updated</option><option value="channel.moderation.action">Moderation action</option><option value="viewer.followed">Follower</option><option value="viewer.subscription.started">Subscription</option><option value="viewer.cheer.received">Cheer / Bits</option><option value="viewer.raid.received">Raid</option><option value="viewer.reward.redeemed">Channel-point reward</option></select></label><label>Subscription type<select id="newTwitchAlertVariant" disabled><option value="standard">Standard</option><option value="gift">Gift</option></select></label></div>
         <div class="form-row alert-create-fields"><label>Maximum runtime (seconds)<input id="newTwitchAlertDuration" type="number" min="1" max="60" value="6" required /><small>Hard-stops sound, visuals, TTS, reactions, and queue playback.</small></label><label>Volume (%)<input id="newTwitchAlertVolume" type="number" min="0" max="100" value="80" required /></label></div>
+        <label class="interaction-integration-toggle"><input id="newTwitchTempest2DEnabled" type="checkbox" /><span><strong>Use Tempest 2D</strong><small>Activate one expression for this Twitch event.</small></span></label>
+        <div id="newTwitchTempest2DOptions" class="interaction-integration-options" hidden>
+          <label>Expression name<input id="newTwitchTempest2DAction" maxlength="128" placeholder="Surprised" /></label>
+          <small>Use the exact expression name from the imported model. It resets at maximum runtime.</small>
+        </div>
         <label data-advanced>Accent color<input id="newTwitchAlertAccent" type="color" value="#54f2eb" /></label>
         <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Create Twitch Alert</button></div>
       </form>

@@ -301,6 +301,12 @@ function applyVariant(alert: TempestTwitchVisualAlertDefinition, variant: Tempes
   };
 }
 
+function validateTempest2DAction(value: unknown): string {
+  const action = value === undefined || value === null ? '' : String(value).trim();
+  if (action.length > 128 || /[\r\n\0]/.test(action)) throw new Error('Tempest 2D action must contain at most 128 printable characters.');
+  return action;
+}
+
 function validate(input: TempestTwitchVisualAlertDefinition): TempestTwitchVisualAlertDefinition {
   if (input.schemaVersion !== 1) throw new Error('Twitch Alert schemaVersion must be 1.');
   if (typeof input.id !== 'string' || !idPattern.test(input.id)) throw new Error('Twitch Alert id must be a namespaced identifier.');
@@ -312,8 +318,11 @@ function validate(input: TempestTwitchVisualAlertDefinition): TempestTwitchVisua
   const volume = Number(input.volume);
   if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('volume must be between 0 and 1.');
   if (typeof input.enabled !== 'boolean') throw new Error('enabled must be boolean.');
+  const tempest2dEnabled = input.tempest2dEnabled === undefined ? false : input.tempest2dEnabled;
+  if (typeof tempest2dEnabled !== 'boolean') throw new Error('tempest2dEnabled must be boolean.');
+  const tempest2dAction = validateTempest2DAction(input.tempest2dAction);
   if (!/^#[0-9a-f]{6}$/i.test(input.accent)) throw new Error('accent must be a six-digit hex color.');
-  return { ...input, name: input.name.trim(), durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design), alertVariants: validateAlertVariants(input.alertVariants) };
+  return { ...input, name: input.name.trim(), tempest2dEnabled, tempest2dAction, durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design), alertVariants: validateAlertVariants(input.alertVariants) };
 }
 
 function eventSignature(alert: Pick<TempestTwitchVisualAlertDefinition, 'topic' | 'variant'>): string {
@@ -375,11 +384,13 @@ export class TempestTwitchVisualAlertCatalog {
     if (index < 0) throw new Error(`Twitch Visual Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Twitch Visual Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design', 'alertVariants']);
+    const allowed = new Set(['enabled', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design', 'alertVariants']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Twitch Visual Alert catalog.`);
     const updated = validate({
       ...this.alerts[index],
       ...(source.enabled === undefined ? {} : { enabled: source.enabled as boolean }),
+      ...(source.tempest2dEnabled === undefined ? {} : { tempest2dEnabled: source.tempest2dEnabled as boolean }),
+      ...(source.tempest2dAction === undefined ? {} : { tempest2dAction: validateTempest2DAction(source.tempest2dAction) }),
       ...(source.durationMs === undefined ? {} : { durationMs: Number(source.durationMs) }),
       ...(Object.hasOwn(source, 'audioUri') ? { audioUri: validateAudioUri(source.audioUri) } : {}),
       ...(source.volume === undefined ? {} : { volume: Number(source.volume) }),
@@ -409,6 +420,8 @@ export class TempestTwitchVisualAlertCatalog {
       ...(variant ? { variant } : {}),
       name: source.name as string,
       enabled: source.enabled === undefined ? true : Boolean(source.enabled),
+      tempest2dEnabled: source.tempest2dEnabled === undefined ? false : source.tempest2dEnabled as boolean,
+      tempest2dAction: validateTempest2DAction(source.tempest2dAction),
       durationMs: source.durationMs === undefined ? 6000 : Number(source.durationMs),
       audioUri: validateAudioUri(source.audioUri),
       volume: source.volume === undefined ? 0.8 : Number(source.volume),
