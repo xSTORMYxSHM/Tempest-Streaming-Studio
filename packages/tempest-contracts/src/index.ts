@@ -1,7 +1,12 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '1.6.0';
+export const TEMPEST_STUDIO_VERSION = '1.7.0';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
+
+export * from './interactive-stage';
+export * from './interactive-world';
+export * from './interaction-composer';
+export * from './stage-actor';
 
 export const applicationStates = ['development', 'installed', 'disabled'] as const;
 export const healthModes = ['none', 'process', 'http'] as const;

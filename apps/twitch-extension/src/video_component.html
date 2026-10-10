@@ -11,23 +11,24 @@
   <body class="viewer-body">
     <main class="mainframe-shell">
       <header class="mainframe-header">
-        <div class="brand"><img src="assets/storm-horizon-sh.png" alt="" /><div><span>STORM HORIZON MEDIA</span><strong>TEMPEST STREAMING</strong></div></div>
-        <div class="system-state"><i id="stateLight"></i><span id="stateLabel">CONNECTING</span></div>
+        <div class="brand"><img id="panelLogo" src="assets/storm-horizon-sh.png" alt="" /><div><span>STORM HORIZON MEDIA</span><strong id="panelBrandName">TEMPEST STREAMING STUDIO</strong></div></div>
+        <div id="panelStatus" class="system-state"><i id="stateLight"></i><span id="stateLabel">CONNECTING</span></div>
       </header>
 
       <section class="signal-intro">
-        <div><p>VIEWER CONTROL NODE</p><h1>Signal deck</h1></div>
+        <div><p id="panelEyebrow">VIEWER CONTROL NODE</p><h1 id="panelTitle">Signal deck</h1></div>
         <span id="alertCount">14 ONLINE</span>
       </section>
 
-      <div class="signal-tools">
+      <div id="panelSearch" class="signal-tools">
         <label class="search-box"><span aria-hidden="true">⌕</span><input id="alertSearch" type="search" placeholder="Search signals" autocomplete="off" maxlength="60" /></label>
       </div>
 
-      <nav class="signal-filters" aria-label="Signal categories">
+      <nav id="panelFilters" class="signal-filters" aria-label="Signal categories">
         <button type="button" data-signal-filter="all" aria-pressed="true">ALL</button>
         <button type="button" data-signal-filter="events" aria-pressed="false">EVENTS</button>
         <button type="button" data-signal-filter="performances" aria-pressed="false">PERFORMANCES</button>
+        <button type="button" data-signal-filter="closet" aria-pressed="false">MY CLOSET</button>
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
@@ -82,6 +83,12 @@
         <div id="performanceRegion" class="catalog-section performance-section">
           <div class="section-heading"><span>PERFORMANCES</span><i>AVATAR CUES</i></div>
           <div id="alertGrid" class="alert-grid"></div>
+        </div>
+        <div id="closetRegion" class="catalog-section closet-section" hidden>
+          <div class="section-heading"><span>MY AVATAR CLOSET</span><i>CHANNEL POINT UNLOCKS</i></div>
+          <div id="closetIdentity" class="closet-identity" hidden><strong>Link your Twitch identity</strong><small>Your private unlock list is available only after Twitch shares your viewer identity.</small><button id="shareIdentityButton" type="button">SHARE IDENTITY</button></div>
+          <div id="closetGrid" class="closet-grid"></div>
+          <p id="closetEmpty" class="empty-state" hidden>No saved avatar cosmetics are available yet.</p>
         </div>
         <p id="emptyState" class="empty-state" hidden>No signals match that search.</p>
       </section>

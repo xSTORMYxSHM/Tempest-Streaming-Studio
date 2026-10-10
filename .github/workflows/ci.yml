@@ -58,12 +58,13 @@ jobs:
           cache: pnpm
 
       - name: Install hosted dependencies
-        run: pnpm install --frozen-lockfile --filter @tempest/twitch-ebs... --filter @tempest/twitch-extension
+        run: pnpm install --frozen-lockfile --filter @tempest/twitch-ebs... --filter @tempest/twitch-extension --filter @tempest/twitch-streaming-extension
 
       - name: Build hosted services and Extension
         run: |
           pnpm --filter @tempest/twitch-ebs... build
           pnpm extension:build
+          pnpm extension:streaming:build
 
       - name: Verify hosted release boundary
         run: pnpm run hosted:verify

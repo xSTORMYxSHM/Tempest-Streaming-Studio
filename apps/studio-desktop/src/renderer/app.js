@@ -4,6 +4,9 @@
   const sections = {
     overview: { title: 'Studio Home', kicker: 'START HERE' },
     events: { title: 'Activity & Diagnostics', kicker: 'ADVANCED TOOLS' },
+    alerts: { title: 'Unified Alerts', kicker: 'ONE ALERT ENGINE' },
+    world: { title: 'Interactive World', kicker: 'CROWD · PET · BATTLES · GAZE' },
+    interactivestage: { title: 'Interactive Stage', kicker: 'ON-SCREEN WORLD' },
     soundalerts: { title: 'Viewer Interactions', kicker: 'ALERTS VIEWERS CAN TRIGGER' },
     dice: { title: '3D Dice', kicker: 'STREAM DICE TABLE' },
     visualalerts: { title: 'Twitch Alerts', kicker: 'TWITCH CHANNEL EVENTS' },
@@ -13,7 +16,7 @@
     kick: { title: 'Kick', kicker: 'KICK PLATFORM' },
     extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
     streamtogether: { title: 'Stream Together', kicker: 'TWITCH COLLABORATION CALL' },
-    chatbot: { title: 'Live Desk', kicker: 'ON-AIR COLLABORATION' },
+    chatbot: { title: 'Chatbot', kicker: 'CHAT + AUDIENCE TOOLS' },
     dualformat: { title: 'Twitch Dual Format', kicker: 'MOBILE-FIRST OUTPUT' },
     simulcast: { title: 'Go Live', kicker: 'PRODUCTION OUTPUT CONTROL' },
     api: { title: 'Avatar Apps', kicker: 'OPTIONAL CONNECTIONS' },
@@ -21,6 +24,57 @@
     assets: { title: 'Asset Control', kicker: 'ASSET LIBRARY' },
     settings: { title: 'Settings', kicker: 'STUDIO SETTINGS' }
   };
+  const workspaceGroups = {
+    home: [
+      { section: 'overview', label: 'Overview' }
+    ],
+    live: [
+      { section: 'chatbot', label: 'Chatbot' },
+      { section: 'streamtogether', label: 'Guests' },
+      { section: 'simulcast', label: 'Go Live' },
+      { section: 'dice', label: '3D Dice' },
+      { section: 'alerts', label: 'Action Queue' }
+    ],
+    interact: [
+      { section: 'world', label: 'World' },
+      { section: 'interactivestage', label: 'Stage' },
+      { section: 'soundalerts', label: 'Viewer Actions' },
+      { section: 'dice', label: 'Games' },
+      { section: 'chatbot', label: 'Polls' }
+    ],
+    overlays: [
+      { section: 'alerts', label: 'Unified Alerts' },
+      { section: 'visualalerts', label: 'Twitch Events' },
+      { section: 'chatoverlay', label: 'Chat' },
+      { section: 'discordvoice', label: 'Guests' },
+      { section: 'assets', label: 'Media Library' }
+    ],
+    extensions: [
+      { section: 'twitch', label: 'Companions' },
+      { section: 'extensiondesigner', label: 'Panel Design' },
+      { section: 'dualformat', label: 'Dual Format' }
+    ],
+    connect: [
+      { section: 'twitch', label: 'Twitch' },
+      { section: 'kick', label: 'Kick' },
+      { section: 'streamtogether', label: 'Stream Together' },
+      { section: 'api', label: 'Avatar Apps' }
+    ],
+    settings: [
+      { section: 'settings', label: 'Settings' },
+      { section: 'events', label: 'Diagnostics', advanced: true }
+    ]
+  };
+  const sectionWorkspace = {
+    overview: 'home',
+    chatbot: 'live', streamtogether: 'live', simulcast: 'live', dice: 'live',
+    world: 'interact', interactivestage: 'interact', soundalerts: 'interact',
+    alerts: 'overlays', visualalerts: 'overlays', chatoverlay: 'overlays', discordvoice: 'overlays', assets: 'overlays',
+    twitch: 'extensions', extensiondesigner: 'extensions', dualformat: 'extensions',
+    kick: 'connect', api: 'connect',
+    settings: 'settings', events: 'settings'
+  };
+  let activeWorkspaceGroup = 'home';
   const targetNames = {
     'com.tempestmainframe.warudo': 'Warudo',
     'com.tempestmainframe.vtube-studio': 'VTube Studio',
@@ -52,6 +106,11 @@
     emoteWall: null,
     twitchExperiences: null,
     discordVoice: null,
+    unifiedStage: null,
+    interactiveStage: null,
+    interactiveWorld: null,
+    stageActors: { packs: [], diagnostics: [] },
+    extensionFeatures: { schemaVersion: 1, features: [] },
     discordRpc: null,
     twitch: null,
     kick: null,
@@ -86,6 +145,7 @@
   let alertDesignHistoryLocked = false;
   let discordCanvasDrag = null;
   let discordSettingsDirty = false;
+  let twitchExperienceSettingsDirty = false;
   const discordProfileDrafts = new Map();
   let alertCanvasPositionPreviewActive = false;
   let alertCanvasPositionPreviewTimer = null;
@@ -93,6 +153,14 @@
   let alertDesignBasePlacement = null;
   let alertDesignScenePlacements = [];
   let alertDesignSceneScope = '';
+  let interactiveStageTab = 'overview';
+  let chatbotWorkspaceTab = 'chat';
+  let interactiveStageOrientation = 'horizontal';
+  let interactiveStageSelectedId = '';
+  let interactiveStageDrag = null;
+  const stageActorDraftStrips = new Map();
+  let stageActorDraftTexture = null;
+  let stageActorDraftAtlas = null;
   let editingViewerGroupId = '';
   const assetPreviewIds = new Set();
   let assetPreviewAudio = null;
@@ -297,14 +365,32 @@
     } catch (error) { toast(error.message, true); }
   }
 
-  function showSection(name) {
+  function renderWorkspaceTabs(group, activeSection) {
+    const tabs = $('#workspaceTabs');
+    if (!tabs) return;
+    tabs.replaceChildren();
+    const advancedMode = readOnboardingPreferences().advancedMode === true;
+    for (const item of workspaceGroups[group] || workspaceGroups.home) {
+      if (item.advanced && !advancedMode) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.section = item.section;
+      button.dataset.navGroup = group;
+      button.textContent = item.label;
+      button.classList.toggle('active', item.section === activeSection);
+      button.setAttribute('aria-current', item.section === activeSection ? 'page' : 'false');
+      tabs.append(button);
+    }
+  }
+
+  function showSection(name, requestedGroup) {
     if (name === 'events' && readOnboardingPreferences().advancedMode !== true) name = 'overview';
     const definition = sections[name] || sections.overview;
+    if (!sections[name]) name = 'overview';
+    activeWorkspaceGroup = workspaceGroups[requestedGroup] ? requestedGroup : (sectionWorkspace[name] || activeWorkspaceGroup || 'home');
     document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `${name}Section`));
-    document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.section === name));
-    const activeNavigation = document.querySelector(`.nav-button[data-section="${name}"]`);
-    const setupNavigation = activeNavigation?.closest('.nav-setup-drawer');
-    if (setupNavigation) setupNavigation.open = true;
+    document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.navGroup === activeWorkspaceGroup));
+    renderWorkspaceTabs(activeWorkspaceGroup, name);
     $('#sectionTitle').textContent = definition.title;
     $('#sectionKicker').textContent = definition.kicker;
     document.querySelector('main').scrollTo({ top: 0, left: 0 });
@@ -345,6 +431,1045 @@
     $('#safetyMetric').classList.toggle('danger-text', !armed);
     $('#safetyMetricNote').textContent = armed ? 'Viewers can trigger enabled alerts' : 'Viewer-triggered alerts are paused';
     document.querySelectorAll('[data-sound-alert-trigger]').forEach((button) => { button.disabled = !armed; });
+  }
+
+  function renderInteractiveStage() {
+    renderUnifiedStage();
+    const stage = state.interactiveStage;
+    if (!stage) return;
+    const clients = Number(stage.connectedClients || 0);
+    $('#interactiveStageBadge').textContent = clients ? 'ON CANVAS' : 'READY';
+    $('#interactiveStageBadge').classList.toggle('offline', false);
+    $('#interactiveStageObjectCount').textContent = String(stage.activeCount || 0);
+    $('#interactiveStageClientCount').textContent = String(clients);
+    $('#interactiveStageRevision').textContent = String(stage.revision || 0);
+    $('#interactiveStageSchema').textContent = String(stage.schemaVersion || 1);
+    $('#interactiveStageHorizontalUrl').textContent = stage.horizontalUrl || 'Unavailable';
+    $('#interactiveStageVerticalUrl').textContent = stage.verticalUrl || 'Unavailable';
+    const horizontalCopy = $('#interactiveStageHorizontalUrl').nextElementSibling;
+    const verticalCopy = $('#interactiveStageVerticalUrl').nextElementSibling;
+    horizontalCopy.dataset.copyText = stage.horizontalUrl || '';
+    verticalCopy.dataset.copyText = stage.verticalUrl || '';
+    horizontalCopy.innerHTML = copyIcon;
+    verticalCopy.innerHTML = copyIcon;
+    const objects = Array.isArray(stage.objects) ? stage.objects : [];
+    if (interactiveStageSelectedId && !objects.some((object) => object.id === interactiveStageSelectedId)) interactiveStageSelectedId = '';
+    $('#interactiveStageSafetyState').textContent = state.safety?.armed ? 'ARMED' : 'PAUSED';
+    $('#interactiveStageSafetyState').classList.toggle('danger-text', !state.safety?.armed);
+    $('#interactiveStageSafetyCount').textContent = String(objects.length);
+
+    const canvas = $('#interactiveStageLayoutCanvas');
+    canvas.classList.toggle('horizontal', interactiveStageOrientation === 'horizontal');
+    canvas.classList.toggle('vertical', interactiveStageOrientation === 'vertical');
+    canvas.querySelectorAll('.stage-layout-object,.stage-protected-zone,.stage-world-floor,.stage-world-platform,.stage-world-interactable').forEach((node) => node.remove());
+    const worldMap = stage.worldMap || { enabled: true, wanderEnabled: true, jumpEnabled: true, floorY: 0.92, speed: 0.045, gravity: 1.2, jumpStrength: 0.58, platforms: [], interactables: [] };
+    const platforms = Array.isArray(worldMap.platforms) ? worldMap.platforms : [];
+    const interactables = Array.isArray(worldMap.interactables) ? worldMap.interactables : [];
+    if (worldMap.enabled !== false) {
+      const floor = document.createElement('div');
+      floor.className = 'stage-world-floor';
+      floor.style.top = `${Number(worldMap.floorY || 0.92) * 100}%`;
+      floor.textContent = 'AVATAR FLOOR';
+      canvas.append(floor);
+      for (const platform of platforms.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
+        const platformNode = document.createElement('div');
+        platformNode.className = 'stage-world-platform';
+        platformNode.dataset.collision = platform.collision === 'solid' ? 'solid' : 'one-way';
+        platformNode.style.left = `${Number(platform.x || 0) * 100}%`;
+        platformNode.style.top = `${Number(platform.y || 0) * 100}%`;
+        platformNode.style.width = `${Number(platform.width || 0.2) * 100}%`;
+        platformNode.style.height = `${Math.max(0.005, Number(platform.height || 0.025)) * 100}%`;
+        platformNode.style.setProperty('--stage-platform-color', String(platform.color || '#54f2eb'));
+        platformNode.textContent = platform.name || 'Platform';
+        canvas.append(platformNode);
+      }
+      for (const item of interactables.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
+        const itemNode = document.createElement('div');
+        itemNode.className = 'stage-world-interactable';
+        itemNode.dataset.kind = item.kind || 'toy';
+        itemNode.style.left = `${Number(item.x || 0) * 100}%`;
+        itemNode.style.top = `${Number(item.y || 0) * 100}%`;
+        itemNode.style.width = `${Math.max(0.015, Number(item.width || 0.05)) * 100}%`;
+        itemNode.style.height = `${Math.max(0.015, Number(item.height || 0.08)) * 100}%`;
+        itemNode.style.setProperty('--stage-item-color', String(item.color || '#ffbd59'));
+        itemNode.textContent = String(item.glyph || 'USE').slice(0, 8);
+        itemNode.title = `${item.name || item.id} · ${item.kind || 'toy'}`;
+        canvas.append(itemNode);
+      }
+    }
+    const zones = Array.isArray(stage.protectedZones) ? stage.protectedZones : [];
+    for (const zone of zones.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
+      const zoneNode = document.createElement('div');
+      zoneNode.className = 'stage-protected-zone';
+      zoneNode.style.left = `${Number(zone.x || 0) * 100}%`; zoneNode.style.top = `${Number(zone.y || 0) * 100}%`; zoneNode.style.width = `${Number(zone.width || 0) * 100}%`; zoneNode.style.height = `${Number(zone.height || 0) * 100}%`; zoneNode.textContent = zone.name || 'Protected';
+      canvas.append(zoneNode);
+    }
+    for (const object of objects) {
+      const placement = interactiveStageOrientation === 'vertical' ? object.scenePlacements?.vertical || object.placement : object.placement;
+      const node = document.createElement('button');
+      node.type = 'button';
+      node.className = 'stage-layout-object';
+      node.classList.toggle('selected', object.id === interactiveStageSelectedId);
+      node.dataset.stageSelect = object.id;
+      node.style.left = `${Number(placement?.x || 0) * 100}%`;
+      node.style.top = `${Number(placement?.y || 0) * 100}%`;
+      node.style.zIndex = String(Number(placement?.layer || 0) + 101);
+      node.style.setProperty('--stage-object-scale', String(Number(placement?.scale || 1)));
+      node.style.setProperty('--stage-object-accent', String(object.properties?.accent || '#54f2eb'));
+      const glyph = document.createElement('span');
+      glyph.textContent = String(object.properties?.glyph || 'STAGE').slice(0, 24);
+      const label = document.createElement('strong');
+      label.textContent = String(object.properties?.label || object.properties?.text || object.id).slice(0, 120);
+      node.append(glyph, label);
+      canvas.append(node);
+    }
+
+    const selected = objects.find((object) => object.id === interactiveStageSelectedId);
+    const selectionForm = $('#interactiveStageSelectionForm');
+    const selectionInputs = [...selectionForm.querySelectorAll('input,button')];
+    selectionInputs.forEach((input) => { input.disabled = !selected; });
+    $('#interactiveStageSelectedName').textContent = selected ? String(selected.properties?.label || selected.id) : 'None';
+    $('#interactiveStageSelectedId').textContent = selected ? `${selected.kind} · ${selected.id}` : 'Select an object on the canvas.';
+    if (selected && !selectionForm.contains(document.activeElement) && !interactiveStageDrag) {
+      const placement = interactiveStageOrientation === 'vertical' ? selected.scenePlacements?.vertical || selected.placement : selected.placement;
+      $('#interactiveStageSelectedLabel').value = String(selected.properties?.label || selected.properties?.text || selected.id);
+      $('#interactiveStageSelectedGlyph').value = String(selected.properties?.glyph || 'STAGE');
+      $('#interactiveStageSelectedState').value = String(selected.state || 'idle');
+      $('#interactiveStageSelectedAccent').value = /^#[0-9a-f]{6}$/i.test(String(selected.properties?.accent || '')) ? selected.properties.accent : '#54f2eb';
+      $('#interactiveStageSelectedX').value = Number(placement?.x || 0).toFixed(2);
+      $('#interactiveStageSelectedY').value = Number(placement?.y || 0).toFixed(2);
+      $('#interactiveStageSelectedScale').value = String(Number(placement?.scale || 1));
+      $('#interactiveStageSelectedLayer').value = String(Number(placement?.layer || 0));
+    }
+
+    const list = $('#interactiveStageObjectList');
+    list.classList.toggle('empty-state', !objects.length);
+    list.innerHTML = objects.length ? objects.map((object) => `<div class="stage-object-row"><div><strong>${escapeHtml(object.properties?.label || object.properties?.text || object.id)}</strong><small>${escapeHtml(object.kind)} · ${escapeHtml(object.state)} · ${Math.round(Number(object.placement?.x || 0) * 100)}%, ${Math.round(Number(object.placement?.y || 0) * 100)}%</small><code>${escapeHtml(object.id)}</code></div><div><button type="button" class="secondary-button" data-stage-edit="${escapeHtml(object.id)}">Edit Layout</button><button type="button" class="secondary-button danger-outline" data-stage-dismiss="${escapeHtml(object.id)}">Dismiss</button></div></div>`).join('') : 'No Stage objects are active.';
+    $('#interactiveStageCollision').checked = stage.collisionAvoidance !== false;
+    const worldForm = $('#interactiveStageWorldForm');
+    if (worldForm && !worldForm.contains(document.activeElement)) {
+      $('#interactiveStageWorldEnabled').checked = worldMap.enabled !== false;
+      $('#interactiveStageWanderEnabled').checked = worldMap.wanderEnabled !== false;
+      $('#interactiveStageJumpEnabled').checked = worldMap.jumpEnabled !== false;
+      $('#interactiveStageFloorY').value = String(Number(worldMap.floorY || 0.92));
+      $('#interactiveStageWorldSpeed').value = String(Number(worldMap.speed || 0.045));
+      $('#interactiveStageWorldGravity').value = String(Number(worldMap.gravity || 1.2));
+      $('#interactiveStageJumpStrength').value = String(Number(worldMap.jumpStrength || 0.58));
+    }
+    const platformList = $('#interactiveStagePlatformList');
+    platformList.classList.toggle('empty-state', !platforms.length);
+    platformList.innerHTML = platforms.length ? platforms.map((platform) => `<div class="stage-platform-row"><div><strong>${escapeHtml(platform.name || platform.id)}</strong><small>${Math.round(Number(platform.x) * 100)}%, ${Math.round(Number(platform.y) * 100)}% · ${Math.round(Number(platform.width) * 100)}×${Math.round(Number(platform.height) * 100)}% · ${escapeHtml(platform.collision || 'one-way')} · ${escapeHtml((platform.orientations || []).join(' + '))}</small></div><i style="--stage-platform-color:${escapeHtml(platform.color || '#54f2eb')}"></i></div>`).join('') : 'No platforms configured. Avatars will use the canvas floor.';
+    const interactableList = $('#interactiveStageInteractableList');
+    interactableList.classList.toggle('empty-state', !interactables.length);
+    interactableList.innerHTML = interactables.length ? interactables.map((item) => `<div class="stage-platform-row"><div><strong>${escapeHtml(item.name || item.id)}</strong><small>${escapeHtml(item.kind || 'toy')}${item.linkId ? ` · link ${escapeHtml(item.linkId)}` : ''} · ${Math.round(Number(item.x) * 100)}%, ${Math.round(Number(item.y) * 100)}% · ${escapeHtml((item.orientations || []).join(' + '))}</small></div><i style="--stage-platform-color:${escapeHtml(item.color || '#ffbd59')}"></i></div>`).join('') : 'No gameplay objects configured.';
+    const zoneList = $('#interactiveStageZoneList');
+    zoneList.classList.toggle('empty-state', !zones.length);
+    zoneList.innerHTML = zones.length ? zones.map((zone) => `<div><div><strong>${escapeHtml(zone.name)}</strong><small>${Math.round(zone.x * 100)}%, ${Math.round(zone.y * 100)}% · ${Math.round(zone.width * 100)}×${Math.round(zone.height * 100)}% · ${escapeHtml((zone.orientations || []).join(' + '))}</small></div></div>`).join('') : 'No protected zones configured.';
+  }
+
+  function renderUnifiedStage() {
+    const unified = state.unifiedStage;
+    if (!unified) return;
+    const settings = unified.settings || { enabled: false, modules: {} };
+    const clients = Number(unified.connectedClients || 0);
+    $('#unifiedStageBadge').textContent = settings.enabled === false ? 'OFF' : clients ? 'ON CANVAS' : 'READY';
+    $('#unifiedStageBadge').classList.toggle('offline', settings.enabled === false);
+    $('#unifiedStageEnabled').checked = settings.enabled !== false;
+    document.querySelectorAll('[data-unified-module]').forEach((input) => {
+      input.checked = settings.modules?.[input.dataset.unifiedModule] === true;
+      input.disabled = settings.enabled === false;
+    });
+    $('#unifiedStageUrl').textContent = unified.url || 'Unavailable';
+    $('#unifiedStageAudioUrl').textContent = unified.interactionAudioUrl || 'Unavailable';
+    for (const element of [$('#unifiedStageUrl'), $('#unifiedStageAudioUrl')]) {
+      const button = element.nextElementSibling;
+      button.dataset.copyText = element.textContent === 'Unavailable' ? '' : element.textContent;
+      button.innerHTML = copyIcon;
+    }
+    const count = Number(unified.activeModuleCount || 0);
+    $('#unifiedStageLifecycleStatus').innerHTML = settings.enabled === false
+      ? '<strong>Unified Stage is fully off:</strong> no feature frames are mounted. The lightweight settings connection remains only so the existing Browser Source can be turned back on without reloading Broadcast.'
+      : `<strong>${count} module${count === 1 ? '' : 's'} loaded:</strong> unchecked modules have no renderer, event feed, media decoder, animation loop, or WebGL context. Disable the old individual sources in Broadcast after adding this URL.`;
+  }
+
+  async function saveUnifiedStageSettings() {
+    const button = $('#saveUnifiedStageSettings');
+    button.disabled = true;
+    try {
+      const modules = {};
+      document.querySelectorAll('[data-unified-module]').forEach((input) => { modules[input.dataset.unifiedModule] = input.checked; });
+      state.unifiedStage = await api('/v1/unified-stage/settings', { method: 'POST', body: { enabled: $('#unifiedStageEnabled').checked, modules } });
+      renderUnifiedStage();
+      toast('Unified Stage saved. Disabled modules were unloaded immediately.');
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; }
+  }
+
+  async function syncUnifiedModule(moduleId, enabled) {
+    if (!state.unifiedStage?.settings) return;
+    state.unifiedStage = await api('/v1/unified-stage/settings', { method: 'POST', body: { modules: { [moduleId]: Boolean(enabled) } } });
+  }
+
+  function unifiedVisualUrl(moduleId, fallback) {
+    return state.unifiedStage?.settings?.enabled !== false && state.unifiedStage?.settings?.modules?.[moduleId] === true
+      ? state.unifiedStage?.url || fallback
+      : fallback;
+  }
+
+  function stageActorInputId(stateName, suffix) {
+    return `stageActor${stateName.charAt(0).toUpperCase()}${stateName.slice(1)}${suffix}`;
+  }
+
+  function renderStageActors() {
+    const catalog = state.stageActors || { packs: [], diagnostics: [] };
+    const packs = Array.isArray(catalog.packs) ? catalog.packs : [];
+    $('#stageActorPackBadge').textContent = `${packs.length} PACK${packs.length === 1 ? '' : 'S'}`;
+    $('#stageActorPackBadge').classList.toggle('online', packs.length > 0);
+    const library = $('#stageActorPackLibrary');
+    library.classList.toggle('empty-state', !packs.length);
+    library.innerHTML = packs.length ? packs.map((pack) => {
+      const states = Object.keys(pack.animations || {});
+      const idle = pack.animations?.idle || {};
+      const previewFrameWidth = Math.max(1, Number(idle.frameWidth || 1) / Math.max(1, Number(idle.frameHeight || 1)) * 54);
+      const previewStyle = `background-image:url(&quot;${escapeHtml(pack.previewUrl || '')}&quot;);background-size:${pack.thumbnail ? 'cover' : `${Math.max(1, Number(idle.frames || 1)) * previewFrameWidth}px 54px`}`;
+      const primaryColors = pack.appearance?.colorSlots?.primary?.options?.length || 0;
+      const secondaryColors = pack.appearance?.colorSlots?.secondary?.options?.length || 0;
+      const appearanceSummary = primaryColors && secondaryColors ? `<small>${primaryColors} ${escapeHtml(pack.appearance.colorSlots.primary.label)} colors · ${secondaryColors} ${escapeHtml(pack.appearance.colorSlots.secondary.label)} colors · ${primaryColors * secondaryColors} combinations</small>` : '';
+      const templateSummary = pack.rig?.template ? `<small>2D TEMPLATE · ${escapeHtml(pack.rig.template.id)} · ${Number(pack.rig.layers?.length || 0)} bounded parts</small>` : '';
+      const atlasSummary = pack.atlas ? `<small>ROW ATLAS · ${Number(pack.atlas.columns)}×${Number(pack.atlas.rows)} CELLS · ${Number(pack.atlas.frameWidth)}×${Number(pack.atlas.frameHeight)} PX</small>` : '';
+      return `<div class="stage-actor-pack-card"><i class="stage-actor-pack-preview" style="${previewStyle}" aria-hidden="true"></i><div><strong>${escapeHtml(pack.name)}</strong><span>${escapeHtml(pack.creator || 'Local creator')} · v${escapeHtml(pack.version || '1.0.0')}</span>${atlasSummary}${templateSummary}<small>${escapeHtml(states.join(' · ') || 'idle')}</small>${appearanceSummary}<small>${escapeHtml(pack.license || 'License not specified')} · ${Math.round(Number(pack.defaultScale || 1) * 100)}% Stage scale</small></div><div class="stage-actor-card-actions"><button type="button" class="secondary-button" data-stage-actor-edit="${escapeHtml(pack.id)}">Edit</button><button type="button" class="secondary-button" data-stage-actor-export="${escapeHtml(pack.id)}">Export</button><button type="button" class="secondary-button danger-outline" data-stage-actor-remove="${escapeHtml(pack.id)}">Remove</button></div></div>`;
+    }).join('') : 'No native avatar packs yet.';
+    const selector = $('#worldViewerActorPack');
+    const current = selector.value;
+    const defaultActorLabel = packs[0] ? `Default · ${packs[0].name}` : 'Generated placeholder';
+    selector.innerHTML = `<option value="">${escapeHtml(defaultActorLabel)}</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)}</option>`).join('')}`;
+    selector.value = packs.some((pack) => pack.id === current) ? current : '';
+  }
+
+  async function chooseStageActorStrip(stateName) {
+    try {
+      const selection = await window.tempestStudio.selectStageActorStrip();
+      if (!selection) return;
+      stageActorDraftStrips.set(stateName, selection);
+      const label = $(`#${stageActorInputId(stateName, 'Strip')}`);
+      label.textContent = `${selection.fileName} · ${selection.width}×${selection.height}`;
+      const frameWidth = Number($('#stageActorFrameWidth').value);
+      const frameHeight = Number($('#stageActorFrameHeight').value);
+      if (frameWidth > 0 && selection.height === frameHeight && selection.width % frameWidth === 0) {
+        $(`#${stageActorInputId(stateName, 'Frames')}`).value = String(selection.width / frameWidth);
+      }
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function updateStageActorBuildMode() {
+    const mode = $('#stageActorBuildMode').value;
+    const templateMode = mode === 'template';
+    const atlasMode = mode === 'atlas';
+    $('#stageActorTemplateSelector').hidden = !templateMode;
+    $('#stageActorTemplateFields').hidden = !templateMode;
+    $('#stageActorAtlasFields').hidden = !atlasMode;
+    $('#stageActorFrameSizeField').hidden = templateMode;
+    $('#stageActorStripFields').hidden = mode !== 'strips';
+    $('#stageActorBuildHelp').textContent = templateMode
+      ? 'Paint only inside the named 512×512 cells. Pixels outside each cell are never rendered.'
+      : atlasMode
+        ? 'Use one transparent PNG grid. Each row is one animation and every frame stays inside its cell.'
+        : 'Legacy mode: each strip must be exactly frame width × frame count, with one row of equal-size frames.';
+  }
+
+  async function chooseStageActorAtlas() {
+    try {
+      const selection = await window.tempestStudio.selectStageActorStrip();
+      if (!selection) return;
+      const frameWidth = Number($('#stageActorFrameWidth').value);
+      const frameHeight = Number($('#stageActorFrameHeight').value);
+      if (!frameWidth || !frameHeight || selection.width % frameWidth || selection.height % frameHeight) return toast(`The atlas must divide exactly into ${frameWidth}×${frameHeight} cells; this PNG is ${selection.width}×${selection.height}.`, true);
+      const columns = selection.width / frameWidth;
+      const rows = selection.height / frameHeight;
+      if (columns < 1 || columns > 120 || rows < 1 || rows > 32) return toast(`The atlas must contain 1–120 columns and 1–32 rows; this PNG has ${columns}×${rows}.`, true);
+      stageActorDraftAtlas = { ...selection, columns, rows };
+      const atlasFields = ['Idle', 'Walk', 'Sit', 'Stand', 'Jump', 'Attack', 'Custom2'];
+      atlasFields.forEach((field, row) => {
+        const rowInput = $(`#stageActorAtlas${field}Row`);
+        const framesInput = $(`#stageActorAtlas${field}Frames`);
+        const fieldRow = rowInput.closest('.stage-actor-strip-row');
+        fieldRow.hidden = row >= rows;
+        rowInput.max = String(rows - 1);
+        if (row < rows) rowInput.value = String(row);
+        framesInput.max = String(columns);
+        framesInput.value = String(Math.max(1, Math.min(columns, Number(framesInput.value) || 1)));
+      });
+      $('#stageActorAtlasTexture').textContent = `${selection.fileName} · ${selection.width}×${selection.height} · ${columns}×${rows} cells`;
+      $('#stageActorBuildHelp').textContent = `${columns} columns × ${rows} rows detected. Adjust frame counts if this atlas does not include metadata.`;
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function chooseStageActorTexture() {
+    try {
+      const selection = await window.tempestStudio.selectStageActorTexture();
+      if (!selection) return;
+      if (selection.width !== 2048 || selection.height !== 2560) return toast(`The Humanoid Wisp v1 texture must be exactly 2048×2560; this PNG is ${selection.width}×${selection.height}.`, true);
+      stageActorDraftTexture = selection;
+      $('#stageActorTemplateTexture').textContent = `${selection.fileName} · ${selection.width}×${selection.height}`;
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function createStageActorPack(event) {
+    event.preventDefault();
+    const mode = $('#stageActorBuildMode').value;
+    const templateMode = mode === 'template';
+    const atlasMode = mode === 'atlas';
+    if (templateMode && !stageActorDraftTexture) return toast('Choose the required Humanoid Wisp template texture first.', true);
+    if (atlasMode && !stageActorDraftAtlas) return toast('Choose the required avatar atlas first.', true);
+    if (mode === 'strips' && !stageActorDraftStrips.has('idle')) return toast('Choose the required idle animation strip first.', true);
+    const states = ['idle', 'walk', 'jump', 'attack', 'celebrate'];
+    const atlasStates = [
+      { stateName: 'idle', field: 'Idle' }, { stateName: 'walk', field: 'Walk' }, { stateName: 'sit', field: 'Sit' },
+      { stateName: 'stand', field: 'Stand' }, { stateName: 'jump', field: 'Jump' }, { stateName: 'attack', field: 'Attack' },
+      { stateName: 'custom2', field: 'Custom2' }
+    ];
+    const animations = atlasMode ? atlasStates.filter(({ field }) => Number($(`#stageActorAtlas${field}Row`).value) < Number(stageActorDraftAtlas.rows)).map(({ stateName, field }) => ({
+      state: stateName,
+      row: Number($(`#stageActorAtlas${field}Row`).value),
+      frames: Number($(`#stageActorAtlas${field}Frames`).value),
+      fps: Number($(`#stageActorAtlas${field}Fps`).value),
+      loop: ['idle', 'walk', 'sit', 'stand'].includes(stateName),
+      returnsToIdle: !['idle', 'walk', 'sit', 'stand'].includes(stateName)
+    })) : templateMode ? [] : states.filter((stateName) => stageActorDraftStrips.has(stateName)).map((stateName) => ({
+        state: stateName,
+        handle: stageActorDraftStrips.get(stateName).handle,
+        frames: Number($(`#${stageActorInputId(stateName, 'Frames')}`).value),
+        fps: Number($(`#${stageActorInputId(stateName, 'Fps')}`).value),
+        loop: ['idle', 'walk'].includes(stateName),
+        returnsToIdle: !['idle', 'walk'].includes(stateName)
+      }));
+    try {
+      const result = await window.tempestStudio.createStageActorPack({
+        name: $('#stageActorName').value.trim(), creator: $('#stageActorCreator').value.trim(), license: $('#stageActorLicense').value.trim(),
+        version: '1.0.0', frameWidth: Number($('#stageActorFrameWidth').value), frameHeight: Number($('#stageActorFrameHeight').value),
+        defaultScale: Number($('#stageActorScale').value), animations,
+        ...(atlasMode ? { atlasHandle: stageActorDraftAtlas.handle } : {}),
+        ...(templateMode ? { templateId: $('#stageActorTemplateId').value, templateTextureHandle: stageActorDraftTexture.handle } : {})
+      });
+      state.stageActors = result.catalog;
+      stageActorDraftStrips.clear();
+      stageActorDraftTexture = null;
+      stageActorDraftAtlas = null;
+      $('#stageActorTemplateTexture').textContent = 'Required · no file chosen';
+      $('#stageActorAtlasTexture').textContent = 'Required · no file chosen';
+      for (const stateName of states) $(`#${stageActorInputId(stateName, 'Strip')}`).textContent = stateName === 'idle' ? 'Required · no file chosen' : 'Optional';
+      $('#stageActorName').value = '';
+      await refreshInteractiveWorld();
+      toast(`${result.manifest.name} is ready for the Interactive Stage.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function exportStageActorPack(packId) {
+    try {
+      const result = await window.tempestStudio.exportStageActorPack({ packId });
+      if (result) toast(`${result.name} exported with ${result.assetCount} animation asset${result.assetCount === 1 ? '' : 's'}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function openStageActorEditor(packId) {
+    const pack = state.stageActors?.packs?.find((entry) => entry.id === packId);
+    if (!pack) return;
+    $('#stageActorEditId').value = pack.id;
+    $('#stageActorEditName').value = pack.name || '';
+    $('#stageActorEditVersion').value = pack.version || '1.0.0';
+    $('#stageActorEditCreator').value = pack.creator || '';
+    $('#stageActorEditScale').value = String(pack.defaultScale || 1);
+    $('#stageActorEditLicense').value = pack.license || '';
+    $('#stageActorEditDescription').value = pack.description || '';
+    $('#stageActorEditDialog').showModal();
+  }
+
+  async function saveStageActorEdit(event) {
+    event.preventDefault();
+    try {
+      const result = await window.tempestStudio.updateStageActorPack({ packId: $('#stageActorEditId').value, name: $('#stageActorEditName').value.trim(), version: $('#stageActorEditVersion').value.trim(), creator: $('#stageActorEditCreator').value.trim(), defaultScale: Number($('#stageActorEditScale').value), license: $('#stageActorEditLicense').value.trim(), description: $('#stageActorEditDescription').value.trim() });
+      state.stageActors = result.catalog;
+      $('#stageActorEditDialog').close();
+      await refreshInteractiveWorld();
+      toast(`${result.manifest.name} updated.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function importStageActorPack() {
+    try {
+      const result = await window.tempestStudio.importStageActorPack();
+      if (!result) return;
+      state.stageActors = result.catalog;
+      await refreshInteractiveWorld();
+      toast(`${result.manifest.name} imported as a new managed pack.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function importStreamingAvatarsLibrary() {
+    try {
+      const result = await window.tempestStudio.importStreamingAvatarsLibrary();
+      if (!result) return;
+      state.stageActors = result.catalog;
+      await refreshInteractiveWorld();
+      const skipped = Number(result.skipped?.length || 0);
+      toast(`${result.imported} avatar${result.imported === 1 ? '' : 's'} imported from ${result.discovered} metadata record${result.discovered === 1 ? '' : 's'}${skipped ? `; ${skipped} skipped` : ''}.`, skipped > 0);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function removeStageActorPack(packId) {
+    const pack = state.stageActors?.packs?.find((entry) => entry.id === packId);
+    try {
+      const result = await window.tempestStudio.removeStageActorPack({ packId, name: pack?.name || packId });
+      if (!result) return;
+      state.stageActors = result;
+      await refreshInteractiveWorld();
+      toast(`${pack?.name || 'Stage Actor pack'} removed${result.affectedViewers ? `; ${result.affectedViewers} viewer${result.affectedViewers === 1 ? '' : 's'} returned to placeholders` : ''}.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function renderInteractiveWorld() {
+    const world = state.interactiveWorld;
+    if (!world) return;
+    renderStageActors();
+    const viewers = Array.isArray(world.viewers) ? world.viewers : [];
+    const pet = world.pet || {};
+    const battle = world.battle;
+    const gaze = world.gaze || {};
+    const safety = world.safety || {};
+    const presence = world.presence || {};
+    $('#worldStateBadge').textContent = safety.interactionsEnabled ? 'WORLD READY' : 'PAUSED';
+    $('#worldStateBadge').classList.toggle('offline', !safety.interactionsEnabled);
+    $('#worldCrowdMetric').textContent = String(viewers.length);
+    $('#worldCrowdBadge').textContent = `${viewers.length} / ${safety.maximumCrowd || 0}`;
+    $('#worldPetMetric').textContent = pet.enabled ? 'LIVE' : 'OFF';
+    $('#worldPetMetricNote').textContent = pet.enabled ? `${pet.name} · ${pet.state}` : 'Not on Stage';
+    $('#worldPetBadge').textContent = pet.enabled ? String(pet.state || 'LIVE').toUpperCase() : 'OFF STAGE';
+    $('#worldPetBadge').classList.toggle('online', Boolean(pet.enabled));
+    $('#worldPetMood').textContent = String(Math.round(Number(pet.mood || 0)));
+    $('#worldPetEnergy').textContent = String(Math.round(Number(pet.energy || 0)));
+    $('#worldPetHunger').textContent = String(Math.round(Number(pet.hunger || 0)));
+    $('#worldPetLevel').textContent = String(pet.level || 1);
+    if (!$('#worldPetForm').contains(document.activeElement)) {
+      $('#worldPetName').value = pet.name || 'Nimbus';
+      $('#worldPetAccessory').value = pet.accessory || '';
+      $('#worldPetEnabled').checked = Boolean(pet.enabled);
+    }
+    const battleState = battle?.state || 'idle';
+    $('#worldBattleMetric').textContent = battleState.toUpperCase();
+    $('#worldBattleMetricNote').textContent = battle ? `${battle.mode === 'boss' ? 'Boss battle' : 'Viewer duel'} · ${battle.winner ? `Winner ${battle.winner}` : `Round ${battle.round || 1}`}` : 'No active session';
+    $('#worldBattleBadge').textContent = battleState.toUpperCase();
+    $('#worldBattleBadge').classList.toggle('online', battleState === 'active');
+    $('#worldGazeMetric').textContent = gaze.connected ? 'LIVE' : gaze.enabled ? 'READY' : 'OFF';
+    $('#worldGazeMetricNote').textContent = gaze.enabled ? `${gaze.adapter || 'Local adapter'} · ${gaze.effect || 'cursor'}` : 'Local adapter disabled';
+    $('#worldGazeBadge').textContent = gaze.connected ? 'TRACKING' : gaze.enabled ? 'WAITING' : 'DISABLED';
+    $('#worldGazeBadge').classList.toggle('online', Boolean(gaze.connected));
+    if ($('#worldTobiiStatus')) $('#worldTobiiStatus').innerHTML = `<strong>Tobii:</strong> ${escapeHtml(state.tobiiAdapter?.message || 'Adapter status is available after this workspace refresh.')}`;
+    if (!$('#worldGazeForm').contains(document.activeElement)) {
+      $('#worldGazeEnabled').checked = Boolean(gaze.enabled);
+      $('#worldGazeAdapter').value = gaze.adapter || 'generic-local';
+      $('#worldGazeEffect').value = gaze.effect || 'cursor';
+      $('#worldGazeOffsetX').value = String(gaze.calibration?.offsetX || 0);
+      $('#worldGazeOffsetY').value = String(gaze.calibration?.offsetY || 0);
+      $('#worldGazeScaleX').value = String(gaze.calibration?.scaleX || 1);
+      $('#worldGazeScaleY').value = String(gaze.calibration?.scaleY || 1);
+    }
+    $('#worldSafetyBadge').textContent = safety.interactionsEnabled ? 'ACTIVE' : 'PAUSED';
+    $('#worldSafetyBadge').classList.toggle('offline', !safety.interactionsEnabled);
+    if (!$('#worldSafetyForm').contains(document.activeElement)) {
+      $('#worldMaximumCrowd').value = String(safety.maximumCrowd || 30);
+      $('#worldMaximumObjects').value = String(safety.maximumStageObjects || 60);
+      $('#worldMaximumEffects').value = String(safety.maximumConcurrentEffects || 8);
+      $('#worldAttackCooldown').value = String((Number(safety.minimumAttackCooldownMs || 1500) / 1000).toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
+      $('#worldVolumeCeiling').value = String(Math.round(Number(safety.volumeCeiling ?? 0.8) * 100));
+      $('#worldInteractionsEnabled').checked = safety.interactionsEnabled !== false;
+      $('#worldAllowJumpscares').checked = safety.allowJumpscares !== false;
+      $('#worldReducedMotion').checked = safety.reducedMotion === true;
+      $('#worldReducedFlashing').checked = safety.reducedFlashing !== false;
+    }
+    if (!$('#worldPresenceForm').contains(document.activeElement)) {
+      $('#worldPresenceEnabled').checked = presence.enabled !== false;
+      $('#worldAvatarSize').value = String(Math.round(Number(presence.avatarScale || 1) * 100));
+      $('#worldAvatarSizeValue').textContent = `${$('#worldAvatarSize').value}%`;
+      $('#worldPresenceMessages').value = String(presence.minimumMessages || 1);
+      $('#worldPresenceInactive').value = String(Math.round(Number(presence.inactiveAfterMs || 1200000) / 60000));
+      $('#worldPresenceRemove').value = String(Math.round(Number(presence.removeFromStageAfterMs || 2700000) / 60000));
+    }
+
+    const avatarRedeems = Array.isArray(world.avatarChannelPointRedeems) ? world.avatarChannelPointRedeems : [];
+    const avatarRewardSession = world.avatarRewardSession || {};
+    $('#worldAvatarRedeemBadge').textContent = `${avatarRedeems.length} REDEEM${avatarRedeems.length === 1 ? '' : 'S'}`;
+    const avatarRedeemList = $('#worldAvatarRedeemList');
+    avatarRedeemList.classList.toggle('empty-state', !avatarRedeems.length);
+    const effectNames = { 'primary-color': 'Primary color', 'secondary-color': 'Secondary color', accessory: 'Accessory', title: 'Avatar title', emote: 'Emote', celebrate: 'Celebrate' };
+    avatarRedeemList.innerHTML = avatarRedeems.length ? avatarRedeems.map((redeem) => `<div><div><strong>${escapeHtml(redeem.name)}</strong><small>${escapeHtml(redeem.rewardId ? `Reward ID: ${redeem.rewardId}` : `Exact title: ${redeem.rewardTitle || ''}`)} · ${escapeHtml(effectNames[redeem.effect] || redeem.effect)}${redeem.value ? ` · ${escapeHtml(redeem.value)}` : ''} · ${redeem.persistence === 'profile' ? 'saved unlock' : 'this stream'}</small></div><div class="world-row-actions"><button type="button" class="secondary-button" data-world-avatar-redeem-test="${escapeHtml(redeem.id)}">Test</button><button type="button" class="secondary-button danger-outline" data-world-avatar-redeem-remove="${escapeHtml(redeem.id)}">Remove</button></div></div>`).join('') : 'No avatar Channel Point redeems configured.';
+    const activeRewardViewers = Number(avatarRewardSession.activeViewerCount || 0);
+    const rewardHistoryCount = Array.isArray(avatarRewardSession.redemptions) ? avatarRewardSession.redemptions.length : 0;
+    $('#worldAvatarRedeemSessionNote').textContent = activeRewardViewers ? `${activeRewardViewers} viewer${activeRewardViewers === 1 ? '' : 's'} wearing temporary rewards · ${rewardHistoryCount} redeemed this session` : 'No temporary avatar rewards are active.';
+
+    const viewerList = $('#worldViewerList');
+    viewerList.classList.toggle('empty-state', !viewers.length);
+    const actorPacks = Array.isArray(state.stageActors?.packs) ? state.stageActors.packs : [];
+    viewerList.innerHTML = viewers.length ? viewers.map((viewer) => `<div class="world-viewer-row ${viewer.onStage === false ? 'inactive' : ''}"><i class="world-viewer-avatar" style="--viewer-accent:${escapeHtml(viewer.accent || '#54f2eb')}">${escapeHtml(String(viewer.displayName || '?').slice(0, 1).toUpperCase())}</i><div><strong>${escapeHtml(viewer.displayName)}${viewer.cosmetics?.title ? ` · ${escapeHtml(viewer.cosmetics.title)}` : ''}</strong><small>${escapeHtml(viewer.key)} · ${escapeHtml(viewer.presence || 'active')} · ${escapeHtml(viewer.avatarState || 'idle')} · ${escapeHtml(actorPacks.find((pack) => pack.id === viewer.actorPackId)?.name || 'placeholder')}</small></div><div class="world-row-actions"><select data-world-viewer-actor="${escapeHtml(viewer.key)}" aria-label="Actor pack for ${escapeHtml(viewer.displayName)}"><option value="">Placeholder</option>${actorPacks.map((pack) => `<option value="${escapeHtml(pack.id)}" ${pack.id === viewer.actorPackId ? 'selected' : ''}>${escapeHtml(pack.name)}</option>`).join('')}</select><button data-world-viewer-cosmetics="${escapeHtml(viewer.key)}" class="secondary-button">Look</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="left" class="secondary-button" title="Move left">←</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="right" class="secondary-button" title="Move right">→</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="jump" class="secondary-button">Jump</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="interact" class="secondary-button">Use</button><button data-world-viewer-state="${escapeHtml(viewer.key)}" data-world-state="celebrate" class="secondary-button">Cheer</button><button data-world-viewer-remove="${escapeHtml(viewer.key)}" class="secondary-button danger-outline">×</button></div></div>`).join('') : 'No viewer avatars are active.';
+
+    const participants = battle ? [...(battle.participants || []), ...(battle.boss ? [battle.boss] : [])] : [];
+    const battleDisplay = $('#worldBattleDisplay');
+    battleDisplay.classList.toggle('empty-state', !participants.length);
+    battleDisplay.innerHTML = participants.length ? participants.map((participant) => `<div class="world-battle-row"><div><strong>${escapeHtml(participant.displayName)}${participant.defeated ? ' · DEFEATED' : ''}</strong><small>${escapeHtml(participant.team || '')} · ${Math.round(Number(participant.health || 0))} HP · ${Math.round(Number(participant.shield || 0))} shield</small></div><span class="world-health"><i style="width:${Math.max(0, Math.min(100, Number(participant.health || 0) / Math.max(1, Number(participant.maximumHealth || 1)) * 100))}%"></i></span></div>`).join('') : 'Add crowd avatars, then start a duel or boss encounter.';
+    document.querySelectorAll('[data-world-battle-action]').forEach((button) => { button.disabled = battleState !== 'active'; });
+    $('#worldEndBattle').disabled = !battle || !['active', 'waiting'].includes(battleState);
+    renderInteractionComposer();
+  }
+
+  async function refreshInteractiveWorld() {
+    [state.interactiveWorld, state.interactiveStage, state.stageActors, state.interactionComposer, state.tobiiAdapter] = await Promise.all([api('/v1/interactive-world'), api('/v1/interactive-stage'), api('/v1/stage-actors'), api('/v1/interaction-composer'), api('/v1/interactive-world/gaze/adapter')]);
+    renderInteractiveWorld();
+    renderInteractiveStage();
+  }
+
+  async function addWorldViewer(event) {
+    event.preventDefault();
+    const displayName = $('#worldViewerName').value.trim();
+    if (!displayName) return;
+    try {
+      state.interactiveWorld = await api('/v1/interactive-world/viewers', { method: 'POST', body: { platform: $('#worldViewerPlatform').value, userId: `${$('#worldViewerPlatform').value}-${displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || crypto.randomUUID()}`, displayName, accent: $('#worldViewerAccent').value, actorPackId: $('#worldViewerActorPack').value || undefined } });
+      $('#worldViewerName').value = '';
+      await refreshInteractiveWorld();
+      toast(`${displayName} joined the Stage crowd.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function spawnWorldDemoCrowd() {
+    const samples = [['Nova', '#54F2EB'], ['Rook', '#FF667A'], ['Pixel', '#B99CFF'], ['Echo', '#FFB45C']];
+    try {
+      for (const [displayName, accent] of samples) await api('/v1/interactive-world/viewers', { method: 'POST', body: { platform: 'studio', userId: `demo-${displayName.toLowerCase()}`, displayName, accent } });
+      await refreshInteractiveWorld();
+      toast('Demo crowd added to Interactive Stage.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearWorldCrowd() {
+    try { await api('/v1/interactive-world/viewers/clear', { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast('Stage crowd cleared.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function saveWorldAvatarRedeem(event) {
+    event.preventDefault();
+    const matchType = $('#worldAvatarRedeemMatchType').value;
+    const match = $('#worldAvatarRedeemMatch').value.trim();
+    const effect = $('#worldAvatarRedeemEffect').value;
+    const value = $('#worldAvatarRedeemValue').value.trim();
+    const redeems = [...(state.interactiveWorld?.avatarChannelPointRedeems || []), {
+      id: `avatar-redeem-${crypto.randomUUID()}`,
+      name: $('#worldAvatarRedeemName').value.trim(),
+      ...(matchType === 'id' ? { rewardId: match } : { rewardTitle: match }),
+      effect,
+      ...(value ? { value } : {}),
+      persistence: $('#worldAvatarRedeemPersistence').value,
+      enabled: true
+    }];
+    try {
+      state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems', { method: 'POST', body: { redeems } });
+      $('#worldAvatarRedeemForm').reset();
+      $('#worldAvatarRedeemMatchType').value = 'title';
+      $('#worldAvatarRedeemEffect').value = 'primary-color';
+      $('#worldAvatarRedeemPersistence').value = 'session';
+      $('#worldAvatarRedeemValue').placeholder = '#B99CFF';
+      renderInteractiveWorld();
+      toast('Avatar Channel Point redeem added.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function removeWorldAvatarRedeem(redeemId) {
+    const redeems = (state.interactiveWorld?.avatarChannelPointRedeems || []).filter((entry) => entry.id !== redeemId);
+    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems', { method: 'POST', body: { redeems } }); renderInteractiveWorld(); toast('Avatar redeem removed.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function testWorldAvatarRedeem(redeemId) {
+    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems/test', { method: 'POST', body: { redeemId, viewerName: 'Redeem Tester' } }); await refreshInteractiveWorld(); toast('Avatar redeem sent to the Browser Source.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function resetWorldAvatarRewardSession() {
+    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems/reset-session', { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast('Temporary avatar rewards reset for the next stream session.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  function updateWorldAvatarRedeemValueHint() {
+    const effect = $('#worldAvatarRedeemEffect').value;
+    const hints = { 'primary-color': '#54F2EB', 'secondary-color': '#B99CFF', accessory: 'Storm crown', title: 'Wisp Champion', emote: 'No value needed', celebrate: 'No value needed' };
+    $('#worldAvatarRedeemValue').placeholder = hints[effect] || 'Effect value';
+    $('#worldAvatarRedeemValue').disabled = effect === 'emote' || effect === 'celebrate';
+    $('#worldAvatarRedeemPersistence').disabled = effect === 'emote' || effect === 'celebrate';
+    if ($('#worldAvatarRedeemPersistence').disabled) $('#worldAvatarRedeemPersistence').value = 'session';
+    if ($('#worldAvatarRedeemValue').disabled) $('#worldAvatarRedeemValue').value = '';
+  }
+
+  async function setWorldViewerState(key, avatarState) {
+    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/state`, { method: 'POST', body: { state: avatarState } }); await refreshInteractiveWorld(); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function controlWorldViewer(key, action) {
+    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/control`, { method: 'POST', body: { action } }); await refreshInteractiveWorld(); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function setWorldViewerActor(key, actorPackId) {
+    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/actor`, { method: 'POST', body: { actorPackId } }); await refreshInteractiveWorld(); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  function updateWorldViewerColorPreview() {
+    const primary = $('#worldViewerPrimaryColor').value || '#54F2EB';
+    const secondary = $('#worldViewerSecondaryColor').value || '#B99CFF';
+    $('#worldViewerPrimarySwatch').style.setProperty('--swatch', primary);
+    $('#worldViewerSecondarySwatch').style.setProperty('--swatch', secondary);
+    $('#worldViewerColorCombination').textContent = `${$('#worldViewerPrimaryColor').selectedOptions[0]?.textContent || primary} + ${$('#worldViewerSecondaryColor').selectedOptions[0]?.textContent || secondary}`;
+  }
+
+  function populateWorldViewerColorSelect(select, slot, currentColor, fallbackName) {
+    const options = Array.isArray(slot?.options) && slot.options.length ? slot.options : [{ id: 'current', name: fallbackName, color: currentColor }];
+    select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.color)}">${escapeHtml(option.name)}</option>`).join('');
+    const match = options.find((option) => String(option.color).toUpperCase() === String(currentColor).toUpperCase()) || options.find((option) => option.id === slot?.defaultOptionId) || options[0];
+    select.value = match.color;
+  }
+
+  function editWorldViewerCosmetics(key) {
+    const viewer = state.interactiveWorld?.viewers?.find((entry) => entry.key === key);
+    if (!viewer) return;
+    const pack = state.stageActors?.packs?.find((entry) => entry.id === viewer.actorPackId);
+    const primary = viewer.cosmetics?.primaryColor || viewer.accent || '#54F2EB';
+    const secondary = viewer.cosmetics?.secondaryColor || '#B99CFF';
+    $('#worldViewerLookKey').value = key;
+    $('#worldViewerLookTitle').textContent = `Customize ${viewer.displayName}`;
+    $('#worldViewerPrimaryLabel').textContent = pack?.appearance?.colorSlots?.primary?.label || 'Primary color';
+    $('#worldViewerSecondaryLabel').textContent = pack?.appearance?.colorSlots?.secondary?.label || 'Secondary color';
+    populateWorldViewerColorSelect($('#worldViewerPrimaryColor'), pack?.appearance?.colorSlots?.primary, primary, 'Current primary');
+    populateWorldViewerColorSelect($('#worldViewerSecondaryColor'), pack?.appearance?.colorSlots?.secondary, secondary, 'Current secondary');
+    $('#worldViewerLookTitleInput').value = viewer.cosmetics?.title || viewer.title || '';
+    $('#worldViewerLookAccessories').value = (viewer.cosmetics?.accessories || []).join(', ');
+    $('#worldViewerLookGlyphs').value = (viewer.cosmetics?.layers || []).map((layer) => layer.glyph).join(', ');
+    $('#worldViewerLookHelp').textContent = pack?.appearance ? `${pack.name} includes ${pack.appearance.colorSlots.primary.options.length} ${pack.appearance.colorSlots.primary.label.toLowerCase()} colors and ${pack.appearance.colorSlots.secondary.options.length} ${pack.appearance.colorSlots.secondary.label.toLowerCase()} colors.` : 'This pack does not publish a fixed color palette yet.';
+    updateWorldViewerColorPreview();
+    $('#worldViewerLookDialog').showModal();
+  }
+
+  async function saveWorldViewerCosmetics(event) {
+    event.preventDefault();
+    const key = $('#worldViewerLookKey').value;
+    const viewer = state.interactiveWorld?.viewers?.find((entry) => entry.key === key);
+    if (!viewer) return;
+    const primaryColor = $('#worldViewerPrimaryColor').value;
+    const secondaryColor = $('#worldViewerSecondaryColor').value;
+    const accessories = $('#worldViewerLookAccessories').value.split(',').map((entry) => entry.trim()).filter(Boolean).slice(0, 4);
+    const layers = $('#worldViewerLookGlyphs').value.split(',').map((glyph, index) => ({ id: `layer-${index + 1}`, glyph: glyph.trim(), color: index % 2 ? primaryColor : secondaryColor, position: ['head', 'front', 'behind'][index % 3] })).filter((layer) => layer.glyph).slice(0, 6);
+    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/cosmetics`, { method: 'POST', body: { title: $('#worldViewerLookTitleInput').value, accessories, layers, primaryColor, secondaryColor } }); $('#worldViewerLookDialog').close(); await refreshInteractiveWorld(); toast(`${viewer.displayName}'s look updated.`); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function saveWorldPresence(event) {
+    event.preventDefault();
+    try { await api('/v1/interactive-world/presence/settings', { method: 'POST', body: { enabled: $('#worldPresenceEnabled').checked, avatarScale: Number($('#worldAvatarSize').value) / 100, minimumMessages: Number($('#worldPresenceMessages').value), inactiveAfterMs: Number($('#worldPresenceInactive').value) * 60000, removeFromStageAfterMs: Number($('#worldPresenceRemove').value) * 60000 } }); await refreshInteractiveWorld(); toast('Viewer avatar size and presence saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function controlTobiiAdapter(action) {
+    try { state.tobiiAdapter = await api(`/v1/interactive-world/gaze/adapter/${action}`, { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast(action === 'connect' ? 'Tobii adapter connection requested.' : 'Tobii adapter disconnected.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  function renderInteractionComposer() {
+    const recipes = state.interactionComposer?.recipes || [];
+    if (!$('#interactionComposerBadge')) return;
+    $('#interactionComposerBadge').textContent = `${recipes.length} RECIPE${recipes.length === 1 ? '' : 'S'}`;
+    const list = $('#interactionComposerList');
+    list.classList.toggle('empty-state', !recipes.length);
+    list.innerHTML = recipes.length ? recipes.map((recipe) => `<div><div><strong>${escapeHtml(recipe.name)}</strong><small>${escapeHtml(recipe.trigger.type)} · ${escapeHtml(recipe.trigger.value)} · ${recipe.actions.length} action${recipe.actions.length === 1 ? '' : 's'}</small></div><div class="world-row-actions"><button class="secondary-button" data-interaction-recipe-run="${escapeHtml(recipe.id)}">Rehearse</button><button class="secondary-button danger-outline" data-interaction-recipe-remove="${escapeHtml(recipe.id)}">Remove</button></div></div>`).join('') : 'No interaction recipes yet.';
+  }
+
+  async function saveInteractionRecipe(event) {
+    event.preventDefault();
+    const type = $('#interactionRecipeActionType').value;
+    const value = $('#interactionRecipeActionValue').value.trim();
+    const settingKey = { alert: 'alertId', 'stage-message': 'message', 'viewer-state': 'state', 'pet-action': 'action', 'battle-start': 'mode' }[type];
+    const settings = settingKey ? { [settingKey]: value || ({ 'stage-message': 'Viewer interaction', 'viewer-state': 'emote', 'pet-action': 'play', 'battle-start': 'duel' }[type] || '') } : { intensity: 0.8 };
+    try { state.interactionComposer = await api('/v1/interaction-composer/recipes', { method: 'POST', body: { id: $('#interactionRecipeId').value.trim().toLowerCase(), name: $('#interactionRecipeName').value.trim(), enabled: true, trigger: { type: $('#interactionRecipeTriggerType').value, value: $('#interactionRecipeTriggerValue').value.trim() }, cooldownMs: Number($('#interactionRecipeCooldown').value) * 1000, actions: [{ id: 'action-1', type, delayMs: 0, settings }] } }); renderInteractionComposer(); toast('Interaction recipe saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function runInteractionRecipe(id) { try { await api(`/v1/interaction-composer/recipes/${encodeURIComponent(id)}/run`, { method: 'POST', body: { viewerName: 'Studio Rehearsal' } }); toast('Interaction recipe rehearsed.'); } catch (error) { toast(error.message, true); } }
+  async function removeInteractionRecipe(id) { try { state.interactionComposer = await api(`/v1/interaction-composer/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' }); renderInteractionComposer(); toast('Interaction recipe removed.'); } catch (error) { toast(error.message, true); } }
+
+  async function removeWorldViewer(key) {
+    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}`, { method: 'DELETE' }); await refreshInteractiveWorld(); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function saveWorldPet(event) {
+    event.preventDefault();
+    try { state.interactiveWorld = await api('/v1/interactive-world/pet/settings', { method: 'POST', body: { enabled: $('#worldPetEnabled').checked, name: $('#worldPetName').value.trim(), accessory: $('#worldPetAccessory').value.trim() } }); await refreshInteractiveWorld(); toast('Community pet saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function runWorldPetAction(action) {
+    try { state.interactiveWorld = await api('/v1/interactive-world/pet/actions', { method: 'POST', body: { action, actor: 'Studio Operator' } }); await refreshInteractiveWorld(); toast(`Pet action: ${action}.`); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function startWorldBattle() {
+    try { state.interactiveWorld = await api('/v1/interactive-world/battle/start', { method: 'POST', body: { mode: $('#worldBattleMode').value, bossName: $('#worldBossName').value.trim(), inviteOnly: $('#worldBattleInviteOnly').checked } }); await refreshInteractiveWorld(); toast($('#worldBattleInviteOnly').checked ? 'Game invitations opened. Viewers can join with !accept.' : 'Game started on Interactive Stage.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function runWorldBattleAction(action) {
+    const battle = state.interactiveWorld?.battle;
+    if (!battle) return;
+    const attacker = battle.participants?.find((entry) => !entry.defeated);
+    const target = battle.mode === 'boss' ? battle.boss : battle.participants?.find((entry) => entry.viewerKey !== attacker?.viewerKey && !entry.defeated);
+    try { state.interactiveWorld = await api('/v1/interactive-world/battle/action', { method: 'POST', body: { action, attackerKey: attacker?.viewerKey, targetKey: action === 'attack' ? target?.viewerKey : attacker?.viewerKey, bypassCooldown: true } }); await refreshInteractiveWorld(); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function endWorldBattle() {
+    try { await api('/v1/interactive-world/battle/end', { method: 'POST', body: { reason: 'studio-operator' } }); await refreshInteractiveWorld(); toast('Battle ended and Stage objects cleaned up.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function saveWorldGaze(event) {
+    event.preventDefault();
+    try { state.interactiveWorld = await api('/v1/interactive-world/gaze/settings', { method: 'POST', body: { enabled: $('#worldGazeEnabled').checked, adapter: $('#worldGazeAdapter').value, effect: $('#worldGazeEffect').value, calibration: { offsetX: Number($('#worldGazeOffsetX').value), offsetY: Number($('#worldGazeOffsetY').value), scaleX: Number($('#worldGazeScaleX').value), scaleY: Number($('#worldGazeScaleY').value) } } }); await refreshInteractiveWorld(); toast('Local eye-tracking setup saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function simulateWorldGaze() {
+    try {
+      if (!state.interactiveWorld?.gaze?.enabled) await api('/v1/interactive-world/gaze/settings', { method: 'POST', body: { enabled: true, adapter: 'simulator', effect: $('#worldGazeEffect').value } });
+      state.interactiveWorld = await api('/v1/interactive-world/gaze/sample', { method: 'POST', body: { x: Number($('#worldGazeX').value), y: Number($('#worldGazeY').value), confidence: 1 } });
+      await refreshInteractiveWorld();
+      toast('Test gaze point sent to Stage.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveWorldSafety(event) {
+    event.preventDefault();
+    try {
+      state.interactiveWorld = await api('/v1/interactive-world/safety', { method: 'POST', body: { interactionsEnabled: $('#worldInteractionsEnabled').checked, maximumCrowd: Number($('#worldMaximumCrowd').value), maximumStageObjects: Number($('#worldMaximumObjects').value), maximumConcurrentEffects: Number($('#worldMaximumEffects').value), minimumAttackCooldownMs: Number($('#worldAttackCooldown').value) * 1000, allowJumpscares: $('#worldAllowJumpscares').checked, reducedMotion: $('#worldReducedMotion').checked, reducedFlashing: $('#worldReducedFlashing').checked, volumeCeiling: Number($('#worldVolumeCeiling').value) / 100 } });
+      await refreshInteractiveWorld();
+      toast('Interactive World safety policy saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function switchInteractiveStageTab(tab) {
+    if (!['overview', 'layout', 'objects', 'safety'].includes(tab)) return;
+    interactiveStageTab = tab;
+    document.querySelectorAll('[data-stage-tab]').forEach((button) => {
+      const active = button.dataset.stageTab === tab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('[data-stage-panel]').forEach((panel) => { panel.hidden = panel.dataset.stagePanel !== tab; });
+    if (tab === 'layout') renderInteractiveStage();
+  }
+
+  function switchChatbotTab(tab) {
+    if (!['chat', 'polls', 'commands', 'automation', 'moderation', 'setup'].includes(tab)) return;
+    chatbotWorkspaceTab = tab;
+    document.querySelectorAll('[data-chatbot-tab]').forEach((button) => {
+      const active = button.dataset.chatbotTab === tab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('[data-chatbot-panel]').forEach((panel) => { panel.hidden = panel.dataset.chatbotPanel !== tab; });
+  }
+
+  async function refreshInteractiveStage() {
+    state.interactiveStage = await api('/v1/interactive-stage');
+    renderInteractiveStage();
+  }
+
+  function selectInteractiveStageObject(id, openLayout = false) {
+    interactiveStageSelectedId = String(id || '');
+    if (openLayout) switchInteractiveStageTab('layout');
+    renderInteractiveStage();
+  }
+
+  function stagePlacementFromSelection() {
+    return {
+      x: Number($('#interactiveStageSelectedX').value),
+      y: Number($('#interactiveStageSelectedY').value),
+      scale: Number($('#interactiveStageSelectedScale').value),
+      anchor: 'center',
+      layer: Number($('#interactiveStageSelectedLayer').value)
+    };
+  }
+
+  async function createInteractiveStageObject(event) {
+    event.preventDefault();
+    const lifetimeSeconds = Number($('#interactiveStageCreateLifetime').value);
+    const body = {
+      kind: $('#interactiveStageCreateKind').value,
+      state: 'idle',
+      owner: { platform: 'studio', userId: 'operator', displayName: 'Studio Operator' },
+      placement: {
+        x: Number($('#interactiveStageCreateX').value), y: Number($('#interactiveStageCreateY').value),
+        scale: Number($('#interactiveStageCreateScale').value), anchor: 'center', layer: Number($('#interactiveStageCreateLayer').value)
+      },
+      properties: { label: $('#interactiveStageCreateLabel').value.trim(), glyph: $('#interactiveStageCreateGlyph').value.trim() || 'STAGE', accent: $('#interactiveStageCreateAccent').value },
+      ...(lifetimeSeconds > 0 ? { lifetimeMs: lifetimeSeconds * 1000 } : {})
+    };
+    try {
+      const result = await api('/v1/interactive-stage/objects', { method: 'POST', body });
+      state.interactiveStage = result;
+      interactiveStageSelectedId = result.object.id;
+      renderInteractiveStage();
+      toast(`${result.object.properties.label} added to the Interactive Stage.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function updateInteractiveStageObject(id, patch, message) {
+    const result = await api(`/v1/interactive-stage/objects/${encodeURIComponent(id)}`, { method: 'POST', body: patch });
+    await refreshInteractiveStage();
+    if (message) toast(message.replace('{name}', String(result.object.properties?.label || result.object.id)));
+    return result.object;
+  }
+
+  async function saveInteractiveStageSelection(event) {
+    event.preventDefault();
+    const object = state.interactiveStage?.objects?.find((entry) => entry.id === interactiveStageSelectedId);
+    if (!object) return;
+    const placement = stagePlacementFromSelection();
+    const patch = {
+      state: $('#interactiveStageSelectedState').value.trim(),
+      properties: {
+        label: $('#interactiveStageSelectedLabel').value.trim(),
+        glyph: $('#interactiveStageSelectedGlyph').value.trim() || 'STAGE',
+        accent: $('#interactiveStageSelectedAccent').value
+      },
+      ...(interactiveStageOrientation === 'vertical'
+        ? { scenePlacements: { ...(object.scenePlacements || {}), vertical: placement } }
+        : { placement })
+    };
+    try { await updateInteractiveStageObject(object.id, patch, '{name} layout saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function dismissInteractiveStageObject(id) {
+    if (!id) return;
+    try {
+      await api(`/v1/interactive-stage/objects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (interactiveStageSelectedId === id) interactiveStageSelectedId = '';
+      await refreshInteractiveStage();
+      toast('Stage object dismissed.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  function beginInteractiveStageDrag(event) {
+    const objectNode = event.target.closest('.stage-layout-object');
+    if (!objectNode) return;
+    event.preventDefault();
+    interactiveStageSelectedId = objectNode.dataset.stageSelect;
+    const canvas = $('#interactiveStageLayoutCanvas');
+    canvas.querySelectorAll('.stage-layout-object').forEach((node) => node.classList.toggle('selected', node === objectNode));
+    const selected = state.interactiveStage?.objects?.find((object) => object.id === interactiveStageSelectedId);
+    if (!selected) return;
+    const placement = interactiveStageOrientation === 'vertical' ? selected.scenePlacements?.vertical || selected.placement : selected.placement;
+    $('#interactiveStageSelectionForm').querySelectorAll('input,button').forEach((input) => { input.disabled = false; });
+    $('#interactiveStageSelectedName').textContent = String(selected.properties?.label || selected.id);
+    $('#interactiveStageSelectedId').textContent = `${selected.kind} · ${selected.id}`;
+    $('#interactiveStageSelectedLabel').value = String(selected.properties?.label || selected.properties?.text || selected.id);
+    $('#interactiveStageSelectedGlyph').value = String(selected.properties?.glyph || 'STAGE');
+    $('#interactiveStageSelectedState').value = String(selected.state || 'idle');
+    $('#interactiveStageSelectedAccent').value = /^#[0-9a-f]{6}$/i.test(String(selected.properties?.accent || '')) ? selected.properties.accent : '#54f2eb';
+    $('#interactiveStageSelectedX').value = Number(placement?.x || 0).toFixed(3);
+    $('#interactiveStageSelectedY').value = Number(placement?.y || 0).toFixed(3);
+    $('#interactiveStageSelectedScale').value = String(Number(placement?.scale || 1));
+    $('#interactiveStageSelectedLayer').value = String(Number(placement?.layer || 0));
+    const bounds = canvas.getBoundingClientRect();
+    interactiveStageDrag = { id: interactiveStageSelectedId, pointerId: event.pointerId, node: objectNode, bounds };
+    objectNode.setPointerCapture?.(event.pointerId);
+    objectNode.classList.add('dragging');
+  }
+
+  function moveInteractiveStageDrag(event) {
+    if (!interactiveStageDrag || interactiveStageDrag.pointerId !== event.pointerId) return;
+    const x = Math.max(0, Math.min(1, (event.clientX - interactiveStageDrag.bounds.left) / interactiveStageDrag.bounds.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - interactiveStageDrag.bounds.top) / interactiveStageDrag.bounds.height));
+    interactiveStageDrag.node.style.left = `${x * 100}%`;
+    interactiveStageDrag.node.style.top = `${y * 100}%`;
+    $('#interactiveStageSelectedX').value = x.toFixed(3);
+    $('#interactiveStageSelectedY').value = y.toFixed(3);
+  }
+
+  async function endInteractiveStageDrag(event) {
+    if (!interactiveStageDrag || interactiveStageDrag.pointerId !== event.pointerId) return;
+    const drag = interactiveStageDrag;
+    interactiveStageDrag = null;
+    drag.node.classList.remove('dragging');
+    const object = state.interactiveStage?.objects?.find((entry) => entry.id === drag.id);
+    if (!object) return;
+    const placement = stagePlacementFromSelection();
+    try {
+      if (interactiveStageOrientation === 'vertical') await updateInteractiveStageObject(object.id, { scenePlacements: { ...(object.scenePlacements || {}), vertical: placement } });
+      else {
+        await api(`/v1/interactive-stage/objects/${encodeURIComponent(object.id)}/move`, { method: 'POST', body: { placement } });
+        await refreshInteractiveStage();
+      }
+      toast(`${object.properties?.label || object.id} moved.`);
+    } catch (error) { toast(error.message, true); await refreshInteractiveStage().catch(() => {}); }
+  }
+
+  async function previewInteractiveStage() {
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/preview', { method: 'POST', body: {} });
+      renderInteractiveStage();
+      toast('Test object sent to the Interactive Stage for 10 seconds.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearInteractiveStage() {
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/clear', { method: 'POST', body: { reason: 'studio-operator' } });
+      renderInteractiveStage();
+      toast('Interactive Stage cleared.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveInteractiveStageZone(event) {
+    event.preventDefault();
+    const name = $('#interactiveStageZoneName').value.trim() || 'Protected zone';
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `zone-${Date.now()}`;
+    const zones = [...(state.interactiveStage?.protectedZones || []).filter((zone) => zone.id !== id), { id, name, x: Number($('#interactiveStageZoneX').value), y: Number($('#interactiveStageZoneY').value), width: Number($('#interactiveStageZoneWidth').value), height: Number($('#interactiveStageZoneHeight').value), enabled: true, orientations: ['horizontal', 'vertical'] }];
+    try { state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { protectedZones: zones, collisionAvoidance: $('#interactiveStageCollision').checked } }); renderInteractiveStage(); toast('Protected Stage zone saved.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  async function clearInteractiveStageZones() {
+    try { state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { protectedZones: [], collisionAvoidance: $('#interactiveStageCollision').checked } }); renderInteractiveStage(); toast('Protected Stage zones cleared.'); }
+    catch (error) { toast(error.message, true); }
+  }
+
+  function interactiveStageWorldPayload(platforms = state.interactiveStage?.worldMap?.platforms || [], interactables = state.interactiveStage?.worldMap?.interactables || []) {
+    return {
+      enabled: $('#interactiveStageWorldEnabled').checked,
+      wanderEnabled: $('#interactiveStageWanderEnabled').checked,
+      jumpEnabled: $('#interactiveStageJumpEnabled').checked,
+      floorY: Number($('#interactiveStageFloorY').value),
+      speed: Number($('#interactiveStageWorldSpeed').value),
+      gravity: Number($('#interactiveStageWorldGravity').value),
+      jumpStrength: Number($('#interactiveStageJumpStrength').value),
+      platforms,
+      interactables
+    };
+  }
+
+  async function saveInteractiveStageWorld(event) {
+    event.preventDefault();
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload() } });
+      renderInteractiveStage();
+      toast('Avatar floor and movement physics saved.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveInteractiveStagePlatform(event) {
+    event.preventDefault();
+    const name = $('#interactiveStagePlatformName').value.trim() || 'Stage platform';
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `platform-${Date.now()}`;
+    const platform = {
+      id,
+      name,
+      x: Number($('#interactiveStagePlatformX').value),
+      y: Number($('#interactiveStagePlatformY').value),
+      width: Number($('#interactiveStagePlatformWidth').value),
+      height: Number($('#interactiveStagePlatformHeight').value),
+      color: $('#interactiveStagePlatformColor').value,
+      collision: $('#interactiveStagePlatformCollision').value === 'solid' ? 'solid' : 'one-way',
+      enabled: true,
+      orientations: [interactiveStageOrientation]
+    };
+    const existing = state.interactiveStage?.worldMap?.platforms || [];
+    const platforms = [...existing.filter((entry) => entry.id !== id), platform];
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(platforms) } });
+      renderInteractiveStage();
+      toast(`${name} added to the ${interactiveStageOrientation} avatar map.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function loadInteractiveStageStarterMap() {
+    const platforms = [
+      { id: 'starter-lower-left', name: 'Lower left', x: 0.12, y: 0.78, width: 0.24, height: 0.025, color: '#54f2eb', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-center', name: 'Center bridge', x: 0.41, y: 0.68, width: 0.2, height: 0.025, color: '#b99cff', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-upper-right', name: 'Upper right', x: 0.68, y: 0.57, width: 0.22, height: 0.025, color: '#ffbd59', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-center-wall', name: 'Center wall', x: 0.49, y: 0.72, width: 0.025, height: 0.2, color: '#ff667a', collision: 'solid', enabled: true, orientations: ['horizontal', 'vertical'] }
+    ];
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(platforms) } });
+      renderInteractiveStage();
+      toast('Starter platform map loaded for both canvases.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearInteractiveStagePlatforms() {
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload([]) } });
+      renderInteractiveStage();
+      toast('Platforms cleared. Avatars will use the canvas floor.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveInteractiveStageInteractable(event) {
+    event.preventDefault();
+    const name = $('#interactiveStageInteractableName').value.trim() || 'Gameplay object';
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `interactable-${Date.now()}`;
+    const item = {
+      id,
+      name,
+      kind: $('#interactiveStageInteractableKind').value,
+      glyph: $('#interactiveStageInteractableGlyph').value.trim().slice(0, 8) || 'USE',
+      linkId: $('#interactiveStageInteractableLink').value.trim() || undefined,
+      x: Number($('#interactiveStageInteractableX').value),
+      y: Number($('#interactiveStageInteractableY').value),
+      width: Number($('#interactiveStageInteractableWidth').value),
+      height: Number($('#interactiveStageInteractableHeight').value),
+      color: $('#interactiveStageInteractableColor').value,
+      enabled: true,
+      orientations: [interactiveStageOrientation]
+    };
+    const existing = state.interactiveStage?.worldMap?.interactables || [];
+    const interactables = [...existing.filter((entry) => entry.id !== id), item];
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, interactables) } });
+      renderInteractiveStage();
+      toast(`${name} added to the ${interactiveStageOrientation} game map.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function loadInteractiveStageGameplaySet() {
+    const interactables = [
+      { id: 'starter-checkpoint', name: 'Home beacon', kind: 'checkpoint', glyph: 'HOME', x: 0.04, y: 0.82, width: 0.055, height: 0.09, color: '#54f2eb', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-pickup', name: 'Storm shard', kind: 'pickup', glyph: 'STAR', x: 0.27, y: 0.69, width: 0.045, height: 0.07, color: '#ffbd59', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-switch', name: 'Gate switch', kind: 'switch', glyph: 'USE', linkId: 'starter-gate', x: 0.54, y: 0.82, width: 0.05, height: 0.08, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-pressure', name: 'Team plate', kind: 'pressure-plate', glyph: 'TEAM', linkId: 'starter-gate', x: 0.66, y: 0.885, width: 0.11, height: 0.025, color: '#66e08a', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-door', name: 'Storm gate', kind: 'door', glyph: 'GATE', linkId: 'starter-gate', x: 0.75, y: 0.69, width: 0.035, height: 0.22, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-block', name: 'Puzzle block', kind: 'push-block', glyph: 'PUSH', x: 0.42, y: 0.83, width: 0.065, height: 0.08, color: '#44aaff', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-hazard', name: 'Static spikes', kind: 'hazard', glyph: 'HIT', x: 0.8, y: 0.855, width: 0.08, height: 0.055, color: '#ff667a', enabled: true, orientations: ['horizontal', 'vertical'] },
+      { id: 'starter-toy', name: 'Bounce orb', kind: 'toy', glyph: 'BOUNCE', x: 0.91, y: 0.82, width: 0.06, height: 0.09, color: '#44aaff', enabled: true, orientations: ['horizontal', 'vertical'] }
+    ];
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, interactables) } });
+      renderInteractiveStage();
+      toast('Starter gameplay objects loaded for both canvases.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function clearInteractiveStageInteractables() {
+    try {
+      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, []) } });
+      renderInteractiveStage();
+      toast('Gameplay objects cleared.');
+    } catch (error) { toast(error.message, true); }
   }
 
   function renderOverview() {
@@ -470,12 +1595,14 @@
     const chatSourceReady = Boolean(state.chatOverlay?.connectedClients) || flags.chatSource === true;
     const emoteWallSourceReady = Boolean(state.emoteWall?.connectedClients) || flags.emoteWallSource === true;
     const twitchExperienceSourceReady = Boolean(state.twitchExperiences?.connectedClients) || flags.twitchExperienceSource === true;
-    const browserSourcesReady = twitchSourceReady && interactionSourceReady;
+    const pollSourceReady = flags.pollSource === true;
+    const unifiedSourceReady = Boolean(state.unifiedStage?.connectedClients) || flags.unifiedSource === true;
+    const browserSourcesReady = unifiedSourceReady || (twitchSourceReady && interactionSourceReady);
     const canvasReady = Boolean(broadcastCanvasProfile()) || flags.canvasConfigured === true;
     const liveTestReady = Number(state.chatbot?.commandsTriggered || 0) > 0 || flags.alertTested === true;
     const checks = [Boolean(state.health), broadcasterReady && chatbotReady, browserSourcesReady, canvasReady, liveTestReady];
     return {
-      preferences, flags, broadcasterReady, chatbotReady, twitchSourceReady, interactionSourceReady, chatSourceReady, emoteWallSourceReady, twitchExperienceSourceReady,
+      preferences, flags, broadcasterReady, chatbotReady, twitchSourceReady, interactionSourceReady, unifiedSourceReady, chatSourceReady, emoteWallSourceReady, twitchExperienceSourceReady, pollSourceReady,
       browserSourcesReady, canvasReady, liveTestReady, canvasProfile: activeCanvasProfile(), checks, readyCount: checks.filter(Boolean).length
     };
   }
@@ -512,8 +1639,11 @@
     const interactionUrl = state.visualAlerts?.interaction?.url || `${baseUrl}/visual-alerts/interactions`;
     const chatUrl = state.chatOverlay?.url || `${baseUrl}/chat-overlay`;
     const emoteWallUrl = state.emoteWall?.url || `${baseUrl}/emote-wall`;
+    const pollUrl = state.chatbot?.pollOverlay?.url || `${baseUrl}/poll-overlay`;
     const twitchExperienceUrl = state.twitchExperiences?.url || `${baseUrl}/twitch-experiences`;
     const discordVoiceUrl = state.discordVoice?.url || `${baseUrl}/discord-voice`;
+    const unifiedUrl = state.unifiedStage?.url || `${baseUrl}/unified-stage?orientation=horizontal`;
+    const interactionAudioUrl = state.unifiedStage?.interactionAudioUrl || `${baseUrl}/visual-alerts/interactions?visual=0&audio=1`;
     const broadcasterLogin = state.twitch?.oauth?.account?.login;
     const botLogin = state.chatbot?.oauth?.account?.login;
     const canvas = setup.canvasProfile;
@@ -523,13 +1653,13 @@
     $('#onboardingStepList').innerHTML = onboardingSteps.map((step, index) => `<button class="onboarding-step-button ${index === onboardingStep ? 'active' : ''} ${setup.checks[index] ? 'done' : ''}" type="button" data-onboarding-step="${index}"><b>${String(index + 1).padStart(2, '0')}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.short)}</small></span><i></i></button>`).join('');
     let markup = '';
     if (onboardingStep === 0) {
-      markup = `<div class="onboarding-intro"><p class="eyebrow">TEMPEST STREAMING STUDIO</p><h3>One guided path from installation to an on-air test</h3><p>This setup checks the local Bridge, Twitch identities, browser sources, canvas dimensions, and one real command or alert. It never asks for a Twitch client secret and can be reviewed again from Studio Home.</p><div class="onboarding-check-grid">${setupCheckCard(Boolean(state.health), 'Local Studio Bridge', state.health ? `API ${state.health.protocolVersion || '1.0'} is online on this computer.` : 'Studio is waiting for its local control plane.')}${setupCheckCard(setup.broadcasterReady, 'Broadcaster identity', setup.broadcasterReady ? `Authorized as @${broadcasterLogin}.` : 'Connect the channel owner in Twitch Gateway.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot identity', setup.chatbotReady ? `@${botLogin} can listen and reply.` : 'Authorize a separate Twitch user for chat operations.')}${setupCheckCard(setup.browserSourcesReady, 'Alert browser sources', setup.browserSourcesReady ? 'Twitch and Interaction sources are confirmed.' : 'Add the two dedicated alert sources to OBS or Broadcast.')}${setupCheckCard(setup.canvasReady, 'Canvas + audio routing', setup.canvasReady ? `${canvas.baseWidth} × ${canvas.baseHeight} ${canvas.source === 'broadcast' ? 'detected from Broadcast.' : 'profile confirmed.'}` : `Confirm the ${canvas.baseWidth} × ${canvas.baseHeight} source dimensions and VOD routing.`)}${setupCheckCard(setup.liveTestReady, 'Live route test', setup.liveTestReady ? 'At least one real command or alert reached Studio.' : 'Run one safe test before going live.')}</div></div>`;
+      markup = `<div class="onboarding-intro"><p class="eyebrow">TEMPEST STREAMING STUDIO</p><h3>One guided path from installation to an on-air test</h3><p>This setup checks the local Bridge, Twitch identities, browser sources, canvas dimensions, and one real command or alert. It never asks for a Twitch client secret and can be reviewed again from Studio Home.</p><div class="onboarding-check-grid">${setupCheckCard(Boolean(state.health), 'Local Studio Bridge', state.health ? `API ${state.health.protocolVersion || '1.0'} is online on this computer.` : 'Studio is waiting for its local control plane.')}${setupCheckCard(setup.broadcasterReady, 'Broadcaster identity', setup.broadcasterReady ? `Authorized as @${broadcasterLogin}.` : 'Connect the channel owner in Twitch Gateway.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot identity', setup.chatbotReady ? `@${botLogin} can listen and reply.` : 'Authorize a separate Twitch user for chat operations.')}${setupCheckCard(setup.browserSourcesReady, 'Unified Stage source', setup.browserSourcesReady ? 'The Unified Stage or legacy alert pair is confirmed.' : 'Add the Unified Stage Browser Source to OBS or Broadcast.')}${setupCheckCard(setup.canvasReady, 'Canvas + audio routing', setup.canvasReady ? `${canvas.baseWidth} × ${canvas.baseHeight} ${canvas.source === 'broadcast' ? 'detected from Broadcast.' : 'profile confirmed.'}` : `Confirm the ${canvas.baseWidth} × ${canvas.baseHeight} source dimensions and VOD routing.`)}${setupCheckCard(setup.liveTestReady, 'Live route test', setup.liveTestReady ? 'At least one real command or alert reached Studio.' : 'Run one safe test before going live.')}</div></div>`;
     } else if (onboardingStep === 1) {
       markup = `<div class="onboarding-intro"><p>Twitch uses two deliberately separate authorizations: the broadcaster owns channel events, while the bot account reads and replies in chat.</p><div class="onboarding-check-grid">${setupCheckCard(setup.broadcasterReady, 'Broadcaster account', setup.broadcasterReady ? `@${broadcasterLogin} is authorized.` : 'Sign in with the Twitch account that owns your channel. No developer account is needed.')}${setupCheckCard(setup.chatbotReady, 'Secondary bot account', setup.chatbotReady ? `@${botLogin} is connected for EventSub and chat output.` : 'Connect a second Twitch user account in the isolated sign-in window.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="twitch">Open Twitch Gateway</button><button class="secondary-button" type="button" data-onboarding-go="chatbot">Open Chatbot Setup</button></div><div class="onboarding-note"><strong>Why two accounts?</strong> The broadcaster remains the channel owner. The secondary account gives chat automation its own visible identity and keeps those credentials isolated.</div></div>`;
     } else if (onboardingStep === 2) {
-      markup = `<div class="onboarding-intro"><p>Add each local URL as its own transparent Browser Source. Separate Twitch Alerts from Interaction Alerts so copyrighted interaction music can be excluded from the YouTube/VOD audio track.</p><div class="onboarding-source-list">${onboardingSourceCard('Twitch Alerts', twitchUrl, 'Follows, subscriptions, Bits, raids, and channel events.', 'Twitch Alert browser-source URL')}${onboardingSourceCard('Interaction Alerts', interactionUrl, 'Viewer performances and music; keep on a separate OBS audio track.', 'Interaction Alert browser-source URL')}${onboardingSourceCard('Twitch Experiences · optional', twitchExperienceUrl, 'Hype Train takeover, Raid Portal, and persistent goal progress.', 'Twitch Experiences browser-source URL')}${onboardingSourceCard('Chat Overlay · optional', chatUrl, 'Local stream-chat overlay that replaces an external Botrix source.', 'Chat Overlay browser-source URL')}${onboardingSourceCard('Emote Wall · optional', emoteWallUrl, 'Twitch chat emotes bounce independently across the canvas.', 'Emote Wall browser-source URL')}${onboardingSourceCard('Discord Guests · optional', discordVoiceUrl, 'Voice-channel guests switch between local idle and speaking images.', 'Discord Guests browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('twitchSource', setup.twitchSourceReady, 'Twitch Alert source added', 'Add it once to every scene collection that needs Twitch event visuals.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction Alert source added', 'Enable Control audio via OBS so its VOD track can be routed separately.')}${onboardingFlag('twitchExperienceSource', setup.twitchExperienceSourceReady, 'Twitch Experiences added · optional', 'Use the base canvas size so takeovers and portal effects can use the full scene.')}${onboardingFlag('chatSource', setup.chatSourceReady, 'Chat Overlay added · optional', 'Confirm this after replacing an existing chat browser source.')}${onboardingFlag('emoteWallSource', setup.emoteWallSourceReady, 'Emote Wall added · optional', 'Keep it as its own source so the effect can be hidden per scene.')}</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Add Unified Stage as the single transparent visual Browser Source. Add the optional audio-only lane only when interaction music must be excluded from the YouTube/VOD track.</p><div class="onboarding-source-list">${onboardingSourceCard('Unified Stage', unifiedUrl, 'Avatars, alerts, experiences, chat, emotes, dice, guests, and polls selected in Studio.', 'Unified Stage browser-source URL')}${onboardingSourceCard('Interaction Audio · optional', interactionAudioUrl, 'Audio only; route this source away from the VOD track. It renders no graphics.', 'Interaction audio browser-source URL')}</div><div class="onboarding-confirm-list">${onboardingFlag('unifiedSource', setup.unifiedSourceReady, 'Unified Stage source added', 'Disable or remove the old individual Tempest visual sources so they stop using GPU.')}${onboardingFlag('interactionSource', setup.interactionSourceReady, 'Interaction audio lane added · optional', 'Use Control audio via OBS only when separate VOD routing is needed.')}</div><div class="onboarding-note"><strong>Legacy URLs:</strong> Individual overlay URLs remain available for unusual per-scene routing, but they should not stay active beside Unified Stage.</div></div>`;
     } else if (onboardingStep === 3) {
-      markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Twitch Alerts, Interaction Alerts, Chat Overlay, and Emote Wall use ${canvas.baseWidth} × ${canvas.baseHeight} Browser Sources.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · recommended', 'Keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
+      markup = `<div class="onboarding-intro"><p>Studio follows Broadcast’s live canvas automatically. If Broadcast is unavailable, Standard HD is the default; a manual profile can override either value.</p><div class="onboarding-profile-controls"><label>Canvas profile<select id="onboardingCanvasProfileMode"><option value="auto" ${canvas.mode === 'auto' ? 'selected' : ''}>Automatic — follow Broadcast</option><option value="standard" ${canvas.mode === 'standard' ? 'selected' : ''}>Standard HD — 1920 × 1080</option><option value="qhd" ${canvas.mode === 'qhd' ? 'selected' : ''}>QHD — 2560 × 1440</option><option value="ultrawide" ${canvas.mode === 'ultrawide' ? 'selected' : ''}>Ultrawide — 3440 × 1440 / 2580 × 1080</option><option value="custom" ${canvas.mode === 'custom' ? 'selected' : ''}>Custom</option></select></label><span class="status-badge ${canvas.source === 'broadcast' ? 'online' : ''}">${canvas.source === 'broadcast' ? 'LIVE FROM BROADCAST' : canvas.source === 'fallback' ? 'STANDARD FALLBACK' : 'MANUAL PROFILE'}</span></div><div id="onboardingCustomCanvas" class="onboarding-custom-canvas" ${canvas.mode === 'custom' ? '' : 'hidden'}><label>Base width<input data-canvas-field="baseWidth" type="number" min="320" max="16384" value="${canvas.baseWidth}" /></label><label>Base height<input data-canvas-field="baseHeight" type="number" min="320" max="16384" value="${canvas.baseHeight}" /></label><label>Output width<input data-canvas-field="outputWidth" type="number" min="320" max="16384" value="${canvas.outputWidth}" /></label><label>Output height<input data-canvas-field="outputHeight" type="number" min="320" max="16384" value="${canvas.outputHeight}" /></label><label>FPS<input data-canvas-field="fps" type="number" min="1" max="240" value="${Math.round(canvas.fps || 60)}" /></label></div><div class="onboarding-canvas-card"><div><span>BASE CANVAS + BROWSER SOURCES</span><strong>${canvas.baseWidth} × ${canvas.baseHeight}</strong><small>${canvasAspect} placement space used by the alert designer.</small></div><div><span>OUTPUT (SCALED)</span><strong>${canvas.outputWidth} × ${canvas.outputHeight}</strong><small>${canvas.fps ? `${canvas.fps.toFixed(2).replace(/\.00$/, '')} FPS · ` : ''}${escapeHtml(canvas.label)}.</small></div></div><div class="onboarding-confirm-list">${onboardingFlag('canvasConfigured', setup.canvasReady, 'Canvas dimensions confirmed', `Unified Stage uses the ${canvas.baseWidth} × ${canvas.baseHeight} base canvas.`)}${onboardingFlag('vodRouting', setup.flags.vodRouting === true, 'Interaction audio routed off the VOD track · optional', 'Use the separate audio-only lane to keep interaction audio live while excluding it from the recording track uploaded to YouTube.')}</div><div class="onboarding-note"><strong>Browser Source sizing:</strong> use the base canvas dimensions above. Studio updates the Alert Designer automatically when Broadcast changes profiles.</div></div>`;
     } else {
       const allReady = setup.readyCount === onboardingSteps.length;
       markup = `<div class="onboarding-complete"><i>${allReady ? '✓' : `${setup.readyCount}/${onboardingSteps.length}`}</i><h3>${allReady ? 'Studio is ready for an on-air test' : 'Finish the remaining checks when ready'}</h3><p>${allReady ? 'Your broadcaster, bot, sources, canvas, and live route have all been confirmed.' : 'You can finish for now and reopen this guide from Studio Home. The status card will continue showing anything that needs attention.'}</p></div><div class="onboarding-check-grid">${setupCheckCard(setup.liveTestReady, 'Command or alert received', setup.liveTestReady ? `${state.chatbot?.commandsTriggered || 0} live chatbot command${Number(state.chatbot?.commandsTriggered || 0) === 1 ? '' : 's'} processed.` : 'Send !song in Twitch chat or preview an alert.')}${setupCheckCard(Boolean(state.safety?.armed), 'Interaction safety armed', state.safety?.armed ? 'Viewer triggers are allowed.' : 'Arm interactions before testing viewer-triggered actions.')}${setupCheckCard(Boolean(state.visualAlerts?.queue) && !state.visualAlerts?.queue?.active, 'Alert queue standing by', state.visualAlerts?.queue?.active ? `Currently playing ${state.visualAlerts.queue.active.name}.` : 'The shared queue is idle and ready.')}${setupCheckCard(Boolean(state.health), 'Bridge online', state.health ? 'Local services are responding.' : 'Bridge connection needs attention.')}</div><div class="onboarding-actions"><button class="secondary-button" type="button" data-onboarding-go="chatbot">Test a Command</button><button class="secondary-button" type="button" data-onboarding-go="visualalerts">Preview Twitch Alert</button><button class="secondary-button" type="button" data-onboarding-go="soundalerts">Test Interaction Alert</button></div><div class="onboarding-confirm-list">${onboardingFlag('alertTested', setup.liveTestReady, 'I completed a real command or alert test', 'This may be detected automatically when Studio processes a live chatbot command.')}</div>`;
@@ -1105,11 +2235,61 @@
     $('#visualAlertStateBadge').textContent = twitch?.state === 'showing' ? 'ALERT ACTIVE' : 'TWITCH SOURCE READY';
     $('#visualAlertStateBadge').classList.toggle('offline', !twitch);
     $('#visualAlertOverlayStatus').innerHTML = twitch
-      ? `<strong>Twitch Alert source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(twitch.url)}</code>${copyButton(twitch.url, 'Twitch Alert browser-source URL')}</span> · ${twitch.connectedClients ? `${twitch.connectedClients} connected` : 'waiting for Broadcast'} <button class="inline-note-button" data-visual-alert-clear="true" ${outputs.state !== 'showing' ? 'disabled' : ''}>Clear Alerts</button>`
+      ? `<strong>Unified Stage · Twitch Alerts:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('twitchAlerts', twitch.url))}</code>${copyButton(unifiedVisualUrl('twitchAlerts', twitch.url), 'Unified Stage Browser Source URL')}</span> · ${twitch.connectedClients ? `${twitch.connectedClients} connected` : 'waiting for Broadcast'} <button class="inline-note-button" data-visual-alert-clear="true" ${outputs.state !== 'showing' ? 'disabled' : ''}>Clear Alerts</button>`
       : '<strong>Twitch Alert source:</strong> Studio is preparing the local overlay.';
     $('#interactionAlertOverlayStatus').innerHTML = interaction
-      ? `<strong>Interaction Alert source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(interaction.url)}</code>${copyButton(interaction.url, 'Interaction Alert browser-source URL')}</span> · ${interaction.connectedClients ? `${interaction.connectedClients} connected` : 'waiting for Broadcast'} · route this source off the YouTube/VOD track`
+      ? `<strong>Unified Stage · Interaction visuals:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('interactionAlerts', interaction.url))}</code>${copyButton(unifiedVisualUrl('interactionAlerts', interaction.url), 'Unified Stage Browser Source URL')}</span> · ${interaction.connectedClients ? `${interaction.connectedClients} connected` : 'waiting for Broadcast'} · optional VOD audio lane: <span class="copyable-value"><code data-sensitive>${escapeHtml(state.unifiedStage?.interactionAudioUrl || interaction.url)}</code>${copyButton(state.unifiedStage?.interactionAudioUrl || interaction.url, 'Interaction audio-only URL')}</span>`
       : '<strong>Interaction Alert source:</strong> Studio is preparing the local overlay.';
+    renderUnifiedAlerts();
+  }
+
+  function renderUnifiedAlerts() {
+    const interactionAlerts = state.soundAlerts?.alerts || [];
+    const twitchAlerts = state.twitchVisualAlerts?.alerts || [];
+    const allAlerts = [...interactionAlerts, ...twitchAlerts];
+    const outputs = state.visualAlerts;
+    const queue = outputs?.queue;
+    const active = queue?.active;
+    const waiting = queue?.waiting || [];
+    const connectedSources = Number(outputs?.twitch?.connectedClients || 0) + Number(outputs?.interaction?.connectedClients || 0);
+    const enabledCount = allAlerts.filter((alert) => alert.enabled).length;
+    const mediaCount = allAlerts.filter((alert) => alert.audioUri || alert.visualUri).length;
+
+    $('#unifiedAlertTotalCount').textContent = allAlerts.length;
+    $('#unifiedAlertEnabledCount').textContent = enabledCount;
+    $('#unifiedAlertMediaCount').textContent = mediaCount;
+    $('#unifiedAlertQueueCount').textContent = (active ? 1 : 0) + waiting.length;
+    $('#unifiedAlertStateBadge').textContent = active ? 'ALERT PLAYING' : 'ENGINE READY';
+    $('#unifiedAlertStateBadge').classList.toggle('offline', !outputs);
+    $('#unifiedAlertQueueBadge').textContent = active ? 'PLAYING' : 'IDLE';
+    $('#unifiedAlertQueueBadge').classList.toggle('online', Boolean(active));
+    $('#unifiedAlertSourceCount').textContent = `${connectedSources} CONNECTED`;
+    $('#unifiedAlertSourceCount').classList.toggle('online', connectedSources > 0);
+    $('#unifiedTwitchCatalogSummary').textContent = `${twitchAlerts.length} alert type${twitchAlerts.length === 1 ? '' : 's'} · ${twitchAlerts.filter((alert) => alert.enabled).length} enabled`;
+    $('#unifiedInteractionCatalogSummary').textContent = `${interactionAlerts.length} interaction${interactionAlerts.length === 1 ? '' : 's'} · ${interactionAlerts.filter((alert) => alert.enabled).length} enabled`;
+
+    const now = $('#unifiedAlertNow');
+    now.classList.toggle('empty-state', !active);
+    now.innerHTML = active
+      ? `<div class="unified-alert-kind ${escapeHtml(active.kind)}">${active.kind === 'twitch' ? 'TWITCH EVENT' : 'VIEWER INTERACTION'}</div><div><strong>${escapeHtml(active.name)}</strong><small>${escapeHtml(active.diagnostics?.viewerName || active.source)} · ${durationLabel(active.durationMs)}</small></div><i>PLAYING</i>`
+      : 'No alert is playing.';
+
+    const waitingList = $('#unifiedAlertWaiting');
+    waitingList.classList.toggle('empty-state', !waiting.length);
+    waitingList.innerHTML = waiting.length
+      ? waiting.map((item, index) => `<div class="unified-alert-queue-item"><b>${index + 1}</b><div><strong>${escapeHtml(item.name)}</strong><small>${item.kind === 'twitch' ? 'Twitch event' : 'Viewer interaction'} · ${escapeHtml(item.diagnostics?.viewerName || item.source)}</small></div><span>${durationLabel(item.durationMs)}</span></div>`).join('')
+      : 'The queue is empty.';
+    $('#clearUnifiedAlertQueue').disabled = !waiting.length;
+
+    const renderSource = (target, output, title, copyLabel, moduleId, overrideUrl) => {
+      const sourceUrl = overrideUrl || unifiedVisualUrl(moduleId, output?.url);
+      target.classList.toggle('connected', Boolean(output?.connectedClients));
+      target.innerHTML = output
+        ? `<span>${title}</span><strong>${output.connectedClients ? `${output.connectedClients} Unified Stage connection${output.connectedClients === 1 ? '' : 's'}` : 'Waiting for Unified Stage'}</strong><div class="unified-alert-source-url"><code data-sensitive>${escapeHtml(sourceUrl)}</code>${copyButton(sourceUrl, copyLabel)}</div>`
+        : `<span>${title}</span><strong>Preparing source…</strong>`;
+    };
+    renderSource($('#unifiedTwitchAlertSource'), outputs?.twitch, 'TWITCH EVENTS · UNIFIED VISUAL', 'Unified Stage Browser Source URL', 'twitchAlerts');
+    renderSource($('#unifiedInteractionAlertSource'), outputs?.interaction, 'VIEWER INTERACTIONS · OPTIONAL AUDIO LANE', 'Interaction audio-only URL', 'interactionAlerts', state.unifiedStage?.interactionAudioUrl);
   }
 
   function giphyAlertTargets() {
@@ -1209,7 +2389,7 @@
     $('#chatOverlayStateBadge').textContent = overlay ? 'OVERLAY READY' : 'CHECKING';
     $('#chatOverlayStateBadge').classList.toggle('offline', !overlay);
     $('#chatOverlayBrowserStatus').innerHTML = overlay
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Chat Overlay browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
+      ? `<strong>Unified Stage · Chat:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('chatOverlay', overlay.url))}</code>${copyButton(unifiedVisualUrl('chatOverlay', overlay.url), 'Unified Stage Browser Source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local chat overlay.';
     const messages = overlay?.messages || [];
     const monitor = $('#chatOverlayMessages');
@@ -1312,7 +2492,7 @@
     $('#discordVoiceSavedMetric').textContent = `${overlay?.savedGuestCount || 0} saved guest profile${overlay?.savedGuestCount === 1 ? '' : 's'}`;
     $('#discordVoiceClientMetric').textContent = overlay?.connectedClients || 0;
     $('#discordVoiceBrowserStatus').innerHTML = overlay
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(overlay.url)}</code>${copyButton(overlay.url, 'Discord Guests browser-source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
+      ? `<strong>Unified Stage · Discord Guests:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('discordVoice', overlay.url))}</code>${copyButton(unifiedVisualUrl('discordVoice', overlay.url), 'Unified Stage Browser Source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local Discord Guests overlay.';
     const connectionMessage = rpc.lastError || (rpc.state === 'connected'
       ? `Following ${rpc.channelName || 'your selected voice channel'}${rpc.guildName ? ` in ${rpc.guildName}` : ''}.`
@@ -1387,7 +2567,7 @@
     $('#emoteWallPyramidStatus').textContent = configuration.enablePyramids === false ? 'PYRAMIDS OFF' : wall?.pyramid?.building ? `BUILDING ${wall.pyramid.step}/5` : `${wall?.pyramid?.completed || 0} PYRAMIDS`;
     $('#emoteWallPyramidStatus').classList.toggle('installed', configuration.enablePyramids !== false);
     $('#emoteWallBrowserStatus').innerHTML = wall
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(wall.url)}</code>${copyButton(wall.url, 'Emote Wall browser-source URL')}</span> · ${sourceConnected ? `${wall.connectedClients} connected` : 'disconnected — refresh this source in Broadcast if Studio started after Broadcast'}`
+      ? `<strong>Unified Stage · Emote Wall:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('emoteWall', wall.url))}</code>${copyButton(unifiedVisualUrl('emoteWall', wall.url), 'Unified Stage Browser Source URL')}</span> · ${sourceConnected ? `${wall.connectedClients} connected` : 'waiting for Unified Stage in Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local Emote Wall.';
     const providerLabels = { seventv: '7TV', bttv: 'BetterTTV', ffz: 'FrankerFaceZ' };
     $('#emoteProviderCatalogCount').textContent = `${wall?.providerCatalogCount || 0} CATALOGED`;
@@ -1491,7 +2671,7 @@
     $('#twitchExperienceBadge').textContent = !experience ? 'CHECKING' : configuration.enabled === false ? 'DISABLED' : experience.connectedClients ? 'SOURCE CONNECTED' : 'READY';
     $('#twitchExperienceBadge').classList.toggle('offline', !experience || configuration.enabled === false);
     $('#twitchExperienceSourceStatus').innerHTML = experience
-      ? `<strong>Browser Source:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(experience.url)}</code>${copyButton(experience.url, 'Twitch Experiences browser-source URL')}</span> · ${experience.connectedClients ? `${experience.connectedClients} connected` : 'waiting for Broadcast'}`
+      ? `<strong>Unified Stage · Twitch Experiences:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('twitchExperiences', experience.url))}</code>${copyButton(unifiedVisualUrl('twitchExperiences', experience.url), 'Unified Stage Browser Source URL')}</span> · ${experience.connectedClients ? `${experience.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the Twitch Experiences canvas.';
     const needsGoals = missingScopes.includes('channel:read:goals');
     const studioManagedGoal = configuration.goalSource === 'studio';
@@ -1501,7 +2681,8 @@
     $('#twitchExperienceHypeState').textContent = active.hypeTrain ? 'LIVE' : features.hypeTrain ? 'STANDBY' : 'WAITING';
     $('#twitchExperienceRaidState').textContent = active.raidPortal ? 'OPEN' : features.raidPortal ? 'STANDBY' : 'WAITING';
     $('#twitchExperienceGoalState').textContent = active.goalOverlay ? 'TRACKING' : studioManagedGoal ? 'READY' : features.goals ? 'STANDBY' : needsGoals ? 'REAUTHORIZE' : 'WAITING';
-    if (settings && experience) {
+    const useStoredSettings = settings && !twitchExperienceSettingsDirty;
+    if (useStoredSettings && experience) {
       $('#twitchExperienceEnabled').checked = configuration.enabled !== false;
       $('#twitchExperienceHype').checked = configuration.hypeTrainEnabled !== false;
       $('#twitchExperienceRaid').checked = configuration.raidPortalEnabled !== false;
@@ -1872,7 +3053,7 @@
       ? `Stream Together is open for @${status.login || login}`
       : authorized ? `Ready to open for @${login}` : 'Connect the broadcaster Twitch account';
     $('#streamTogetherCallDetail').textContent = status.open
-      ? 'The dedicated call window remains active in Studio with Twitch-only camera and microphone access. Unified Chat continues independently in Live Desk.'
+      ? 'The dedicated call window remains active in Studio with Twitch-only camera and microphone access. Unified Chat continues independently in Chatbot.'
       : authorized
         ? 'Open Twitch Backstage in Studio. The separate call session remembers its Twitch sign-in without exposing those cookies to the Studio control interface.'
         : 'Connect the broadcaster account in Twitch Setup first. Stream Together uses a separate persistent Twitch web session for the call itself.';
@@ -1896,6 +3077,39 @@
       renderStreamTogether();
       toast('Stream Together call window closed.');
     } catch (error) { toast(error.message, true); }
+  }
+
+  function renderTwitchPrediction() {
+    const predictionState = state.twitch?.predictions || { authorized: false, available: false };
+    const prediction = predictionState.current;
+    const open = prediction?.status === 'ACTIVE' || prediction?.status === 'LOCKED';
+    const missingScope = (state.twitch?.oauth?.missingScopes || []).includes('channel:manage:predictions');
+    const badge = $('#twitchPredictionBadge');
+    badge.textContent = prediction ? prediction.status : predictionState.available ? 'READY' : missingScope ? 'RECONNECT TWITCH' : 'SETUP REQUIRED';
+    badge.classList.toggle('offline', !open);
+    $('#twitchPredictionTitleLive').textContent = prediction?.title || 'No active prediction';
+    const outcomes = prediction?.outcomes || [];
+    const totalPoints = outcomes.reduce((total, outcome) => total + Number(outcome.channelPoints || 0), 0);
+    const results = $('#twitchPredictionResults');
+    results.classList.toggle('empty-state', !outcomes.length);
+    results.innerHTML = outcomes.length ? outcomes.map((outcome) => {
+      const percentage = totalPoints ? Math.round((Number(outcome.channelPoints || 0) / totalPoints) * 100) : 0;
+      const winner = prediction.winningOutcomeId === outcome.id;
+      const canResolve = open && predictionState.available;
+      return `<article class="chatbot-poll-result ${winner ? 'winner' : ''}"><div><strong>${escapeHtml(outcome.title)}${winner ? ' · WINNER' : ''}</strong><span>${Number(outcome.channelPoints || 0).toLocaleString()} points · ${Number(outcome.users || 0).toLocaleString()} viewer${Number(outcome.users || 0) === 1 ? '' : 's'}</span></div><i><b style="width:${percentage}%"></b></i>${canResolve ? `<button class="secondary-button" type="button" data-twitch-prediction-winner="${escapeHtml(outcome.id)}">Resolve winner</button>` : ''}</article>`;
+    }).join('') : 'No Twitch Prediction has been loaded.';
+    $('#twitchPredictionStatus').textContent = missingScope
+      ? 'Reconnect the broadcaster in Twitch Setup once to grant Studio the new Prediction permission.'
+      : !predictionState.available ? 'Connect the broadcaster Twitch account to manage Channel Point Predictions.'
+        : prediction?.status === 'ACTIVE' ? `Wagering is open${prediction.predictionWindow ? ` for ${prediction.predictionWindow} seconds` : ''}. Lock it early or resolve the winner when the result is known.`
+          : prediction?.status === 'LOCKED' ? 'Wagering is locked. Select the winning outcome to pay viewers.'
+            : prediction?.status === 'RESOLVED' ? 'Twitch resolved the Prediction and distributed Channel Point winnings.'
+              : prediction?.status === 'CANCELED' ? 'The Prediction was canceled and Twitch refunded all wagers.'
+                : 'Ready to start an official Twitch Channel Point Prediction.';
+    $('#startTwitchPrediction').disabled = !predictionState.available || open;
+    $('#refreshTwitchPrediction').disabled = !predictionState.available;
+    $('#lockTwitchPrediction').disabled = !predictionState.available || prediction?.status !== 'ACTIVE';
+    $('#cancelTwitchPrediction').disabled = !predictionState.available || !open;
   }
 
   function renderChatbot() {
@@ -1972,6 +3186,8 @@
     $('#startChatbotPoll').disabled = pollActive;
     $('#stopChatbotPoll').disabled = !pollActive;
     $('#clearChatbotPoll').disabled = poll.state === 'idle';
+    $('#chatbotPollOverlayUrl').textContent = state.unifiedStage?.url || (state.config?.baseUrl ? `${state.config.baseUrl}/unified-stage?orientation=horizontal` : 'Starting Studio…');
+    renderTwitchPrediction();
     $('#chatbotAccountBadge').textContent = account ? `@${account.login}` : label(chatbot.oauth?.state);
     $('#chatbotAccountBadge').classList.toggle('offline', !authorized);
     $('#chatbotIdentityTitle').textContent = account ? `${botName} · @${account.login}` : `Connect ${botName}`;
@@ -2107,7 +3323,7 @@
     const commands = chatbot.commands || [];
     const list = $('#chatbotCommandList');
     list.classList.toggle('empty-state', !commands.length);
-    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'Stream Together chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.handler === 'dice-roll' ? '3D DICE' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
+    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'Stream Together chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'twitch-clip' ? 'TWITCH CLIP' : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.handler === 'dice-roll' ? '3D DICE' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
 
     const activity = chatbot.activity || [];
     const activityList = $('#chatbotActivity');
@@ -2154,27 +3370,92 @@
   function renderHostedExtension() {
     const hosted = state.hostedExtension || {};
     const paired = Boolean(hosted.paired);
-    const editionName = 'Tempest Streaming Extension';
+    const companions = hosted.companions || (hosted.extensionEdition === 'bits'
+      ? { schemaVersion: 1, mainframe: false, streaming: true }
+      : { schemaVersion: 1, mainframe: true, streaming: false });
+    const companionNames = [companions.mainframe && 'Tempest Mainframe', companions.streaming && 'Tempest Streaming'].filter(Boolean);
+    const companionLabel = companionNames.length === 2 ? 'Both companion Extensions' : companionNames[0] || 'No companion Extension';
     const authorized = state.twitch?.oauth?.state === 'authorized';
     const officialTwitchAuthorization = state.twitch?.clientIdMode === 'official';
     const relayState = String(state.twitch?.connections?.extensionRelay || 'not-configured').replaceAll('-', ' ').toUpperCase();
-    $('#twitchExtensionEditionBadge').textContent = 'NO BITS';
-    $('#twitchExtensionEditionBadge').classList.remove('offline');
-    $('#twitchExtensionEditionMessage').textContent = 'Tempest Streaming Extension is active. Bits product and transaction routes are disabled.';
+    const relaySync = state.twitch?.extensionRelaySync;
+    const relayCompanionsMatch = !relaySync?.companions || (relaySync.companions.mainframe === companions.mainframe && relaySync.companions.streaming === companions.streaming);
+    const relaySynced = paired && relayState === 'CONNECTED' && relaySync?.state === 'synced' && relayCompanionsMatch;
+    const relayPublishing = paired && relayState === 'CONNECTED' && !relaySynced;
+    $('#twitchCompanionMainframe').checked = companions.mainframe;
+    $('#twitchCompanionStreaming').checked = companions.streaming;
+    const companionState = (enabled) => !enabled ? 'DISABLED' : relaySynced ? 'CATALOG SYNCED' : relayPublishing ? 'PUBLISHING…' : paired ? 'PAIRED · WAITING FOR RELAY' : 'ENABLED LOCALLY';
+    $('#twitchCompanionMainframeState').textContent = companionState(companions.mainframe);
+    $('#twitchCompanionStreamingState').textContent = companionState(companions.streaming);
+    const enabledLabel = companions.mainframe && companions.streaming ? 'BOTH' : companions.mainframe ? 'MAINFRAME' : 'STREAMING';
+    $('#twitchExtensionEditionBadge').textContent = relaySynced ? `${enabledLabel} SYNCED` : relayPublishing ? 'PUBLISHING' : `${enabledLabel} ENABLED`;
+    $('#twitchExtensionEditionBadge').classList.toggle('offline', paired && relayState !== 'CONNECTED');
+    $('#twitchExtensionEditionMessage').textContent = relaySynced
+      ? `${companionLabel} ${companionNames.length === 1 ? 'is' : 'are'} confirmed by Tempest Signal with ${relaySync.itemCount} published signal${relaySync.itemCount === 1 ? '' : 's'}. Studio is the shared configuration source.`
+      : relayPublishing ? `Publishing ${companionLabel.toLowerCase()} and the current Studio signal catalog to Tempest Signal…`
+        : `${companionLabel} ${companionNames.length === 1 ? 'is' : 'are'} enabled locally. Pair and connect Tempest Signal to publish this configuration.`;
     $('#hostedExtensionBadge').textContent = paired ? (relayState === 'CONNECTED' ? 'PAIRED + ONLINE' : 'PAIRED') : 'NOT PAIRED';
     $('#hostedExtensionBadge').classList.toggle('offline', !paired || relayState !== 'CONNECTED');
     $('#hostedExtensionCredentialState').textContent = paired ? 'WINDOWS ENCRYPTED' : 'NOT ISSUED';
     $('#hostedExtensionChannelState').textContent = hosted.channel?.login ? `@${hosted.channel.login}` : hosted.channel?.id || '—';
     $('#hostedExtensionRelayState').textContent = relayState;
     $('#pairHostedExtension').disabled = !authorized || hosted.credentialStorage === 'unavailable' || paired || !officialTwitchAuthorization;
-    $('#pairHostedExtension').textContent = 'Connect Tempest Streaming';
+    $('#pairHostedExtension').textContent = 'Connect Companion Extensions';
     $('#switchHostedExtensionToOfficialTwitch').hidden = paired || officialTwitchAuthorization;
     $('#revokeHostedExtension').disabled = !paired;
     $('#hostedExtensionMessage').textContent = paired
-      ? relayState === 'CONNECTED' ? `${editionName} is connected. Studio publishes its enabled signal catalog to Tempest Signal automatically.` : `The installation is paired for ${editionName}. Studio will keep retrying the hosted relay connection.`
+      ? relayState === 'CONNECTED' ? `${companionLabel} ${companionNames.length === 1 ? 'is' : 'are'} active. Studio publishes one shared safety policy and destination-filtered catalog automatically.` : `The channel installation is paired for ${companionLabel.toLowerCase()}. Studio will keep retrying the hosted relay connection.`
       : !officialTwitchAuthorization ? 'The public Extension requires the built-in Tempest Twitch application. Switch sign-in once, reconnect Twitch, then connect your channel.'
         : hosted.lastError || (!authorized ? 'Authorize your broadcaster account above before pairing the public Extension service.'
           : 'Tempest Signal is built in. Pair once and Studio will store the per-installation relay credential with Windows encryption.');
+    renderExtensionFeaturePlacement();
+  }
+
+  function renderExtensionFeaturePlacement() {
+    const features = state.extensionFeatures?.features || [];
+    const list = $('#extensionFeaturePlacementList');
+    if (!list) return;
+    list.classList.toggle('empty-state', !features.length);
+    let previousGroup = '';
+    list.innerHTML = features.length ? features.map((feature) => {
+      const group = feature.group || 'Other';
+      const heading = group === previousGroup ? '' : `<div class="extension-feature-group">${escapeHtml(group)}</div>`;
+      previousGroup = group;
+      const destinations = new Set(feature.destinations || []);
+      return `${heading}<div class="extension-feature-row ${feature.customized ? 'customized' : ''}" data-extension-feature-row="${escapeHtml(feature.id)}"><div><strong>${escapeHtml(feature.name)}</strong><small>${escapeHtml(feature.description || feature.id)}</small></div><label><input type="checkbox" data-extension-feature-destination="mainframe" data-extension-feature-id="${escapeHtml(feature.id)}" ${destinations.has('mainframe') ? 'checked' : ''} /> PANEL</label><label><input type="checkbox" data-extension-feature-destination="streaming" data-extension-feature-id="${escapeHtml(feature.id)}" ${destinations.has('streaming') ? 'checked' : ''} /> OVERLAY</label></div>`;
+    }).join('') : 'No viewer-facing Extension features are available.';
+    const mainframeCount = features.filter((feature) => feature.destinations?.includes('mainframe')).length;
+    const streamingCount = features.filter((feature) => feature.destinations?.includes('streaming')).length;
+    $('#extensionFeaturePlacementStatus').textContent = `${mainframeCount} feature${mainframeCount === 1 ? '' : 's'} in Mainframe · ${streamingCount} feature${streamingCount === 1 ? '' : 's'} in Streaming. Changes publish to Tempest Signal automatically.`;
+  }
+
+  async function saveExtensionFeaturePlacement(input) {
+    const id = input.dataset.extensionFeatureId;
+    const row = input.closest('[data-extension-feature-row]');
+    const destinations = [...row.querySelectorAll('[data-extension-feature-destination]:checked')].map((entry) => entry.dataset.extensionFeatureDestination);
+    row.classList.add('saving');
+    try {
+      const result = await api(`/v1/extension-features/${encodeURIComponent(id)}`, { method: 'POST', body: { destinations } });
+      const index = state.extensionFeatures.features.findIndex((feature) => feature.id === id);
+      if (index >= 0) state.extensionFeatures.features[index] = result.feature;
+      renderExtensionFeaturePlacement();
+      const placement = destinations.length === 2 ? 'both Extensions' : destinations[0] === 'mainframe' ? 'the Mainframe panel' : destinations[0] === 'streaming' ? 'the Streaming overlay' : 'both Extensions';
+      toast(destinations.length ? `${result.feature.name} is now available in ${placement}.` : `${result.feature.name} is hidden from both Extensions.`);
+    } catch (error) {
+      await refresh({ quiet: true });
+      toast(error.message, true);
+    }
+  }
+
+  async function resetExtensionFeaturePlacement() {
+    const button = $('#resetExtensionFeaturePlacement');
+    button.disabled = true;
+    try {
+      state.extensionFeatures = await api('/v1/extension-features/reset', { method: 'POST', body: {} });
+      renderExtensionFeaturePlacement();
+      toast('Extension feature placement restored to Studio defaults.');
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; }
   }
 
   function renderLocalExtension() {
@@ -2508,6 +3789,37 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function startTwitchPrediction(event) {
+    event.preventDefault();
+    try {
+      state.twitch = await api('/v1/integrations/twitch/predictions', { method: 'POST', body: {
+        title: $('#twitchPredictionTitle').value,
+        outcomes: $('#twitchPredictionOutcomes').value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+        predictionWindow: Number($('#twitchPredictionWindow').value)
+      } });
+      renderChatbot();
+      toast('Twitch Prediction started. Viewers can wager Channel Points in Twitch chat.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function refreshTwitchPrediction() {
+    try {
+      state.twitch = await api('/v1/integrations/twitch/predictions/refresh', { method: 'POST', body: {} });
+      renderChatbot();
+      toast('Twitch Prediction status refreshed.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function endTwitchPrediction(status, winningOutcomeId) {
+    const prediction = state.twitch?.predictions?.current;
+    if (!prediction?.id) return toast('No Twitch Prediction is active.', true);
+    try {
+      state.twitch = await api('/v1/integrations/twitch/predictions/end', { method: 'POST', body: { predictionId: prediction.id, status, winningOutcomeId } });
+      renderChatbot();
+      toast(status === 'LOCKED' ? 'Prediction wagers locked.' : status === 'CANCELED' ? 'Prediction canceled; Twitch will refund all wagers.' : 'Prediction resolved; Twitch will distribute the winnings.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   function autoModFormValue() {
     const exemptRoles = [
       $('#chatbotAutoModExemptBroadcaster').checked ? 'broadcaster' : '',
@@ -2706,7 +4018,7 @@
     try {
       state.hostedExtension = await window.tempestStudio.pairHostedExtension({});
       await refresh({ quiet: true });
-      toast(`Tempest Streaming Extension connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
+      toast(`Twitch companion Extensions connected to @${state.hostedExtension.channel?.login || 'your channel'}.`);
     } catch (error) {
       state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
       renderHostedExtension();
@@ -2899,7 +4211,7 @@
       $('#panelDesignStateBadge').textContent = state.hostedExtension?.paired ? 'SYNCED TO TWITCH' : 'SAVED LOCALLY';
       $('#panelDesignStateBadge').classList.remove('offline');
       $('#panelDesignSaveState').textContent = state.hostedExtension?.paired
-        ? 'Saved. The Twitch panel updates automatically within 15 seconds.'
+        ? 'Saved. The Twitch panel updates automatically within 5 seconds.'
         : state.localExtension?.running ? 'Saved. Refresh the real Panel to apply it.' : 'Saved locally. Pair the public Extension to sync it to Twitch.';
       toast(state.hostedExtension?.paired ? 'Twitch Panel design saved and synced.' : 'Twitch Panel design saved locally.');
     } catch (error) { toast(error.message, true); }
@@ -2993,17 +4305,21 @@
     $('#diceLastReason').textContent = roll?.reason || (roll ? `Rolled by ${roll.rollerName}` : 'No roll yet');
     $('#diceLastExpression').textContent = roll?.expression || '—';
     $('#diceHistoryCount').textContent = String(status.history?.length || 0);
+    const unifiedUrl = state.unifiedStage?.url || status.url;
+    const unifiedDiceEnabled = state.unifiedStage?.settings?.enabled !== false && state.unifiedStage?.settings?.modules?.diceOverlay === true;
     const sourceMessage = !clients
-      ? 'Add this local URL to Broadcast as a Browser Source.'
+      ? `Enable Dice in Unified Stage and add the Unified Stage URL to Broadcast.`
       : engineState === 'ready'
-        ? `Browser Source connected and the ${escapeHtml(authority?.theme || status.settings?.diceTheme || 'selected')} dice engine is ready.`
+        ? authority?.renderer
+          ? `Unified Stage connected and the ${escapeHtml(authority?.theme || status.settings?.diceTheme || 'selected')} dice engine is ready.`
+          : 'Unified Stage connected; Dice is sleeping without a WebGL context until a roll starts.'
         : engineState === 'degraded'
-          ? `Browser Source is using a safe fallback: ${escapeHtml(authority?.error || 'the selected theme was unavailable')}`
+          ? `Unified Stage is using a safe fallback: ${escapeHtml(authority?.error || 'the selected theme was unavailable')}`
           : engineState === 'failed'
-            ? `Browser Source engine failed: ${escapeHtml(authority?.error || 'reload the source to retry')}`
-            : 'Browser Source connected; its dice engine is still loading.';
+            ? `Unified Stage Dice failed: ${escapeHtml(authority?.error || 'reload the source to retry')}`
+            : 'Unified Stage connected; the Dice engine is starting for a roll.';
     const duplicateMessage = Number(status.duplicateClients || 0) ? ` ${escapeHtml(status.duplicateClients)} duplicate source${Number(status.duplicateClients) === 1 ? '' : 's'} will mirror results but not own rolls.` : '';
-    $('#diceOverlaySourceStatus').innerHTML = `<strong>3D Dice source:</strong> ${sourceMessage}${duplicateMessage} <code data-sensitive>${escapeHtml(status.url)}</code> ${copyButton(status.url, '3D Dice Browser Source URL')}`;
+    $('#diceOverlaySourceStatus').innerHTML = `<strong>Unified Stage · 3D Dice:</strong> ${sourceMessage}${duplicateMessage} ${unifiedDiceEnabled ? '' : '<strong>Dice is currently off in Unified Stage.</strong> '}<code data-sensitive>${escapeHtml(unifiedUrl)}</code> ${copyButton(unifiedUrl, 'Unified Stage Browser Source URL')}`;
     const audio = status.audio || { state: 'untested' };
     $('#diceAudioStatus').textContent = audio.state === 'ready'
       ? `Verified in the Browser Source via ${audio.method === 'web-audio' ? 'Web Audio fallback' : 'media playback'}.`
@@ -3098,6 +4414,7 @@
         shadowTransparency: Number($('#diceShadowTransparency').value)
       } });
       state.diceOverlay.settings = result.settings;
+      await syncUnifiedModule('diceOverlay', result.settings.enabled !== false);
       renderDiceOverlay({ settings: true });
       toast('3D Dice appearance and physics saved.');
     } catch (error) { toast(error.message, true); }
@@ -3157,6 +4474,8 @@
     renderEmoteWall({ settings: true });
     renderTwitchExperiences({ settings: true });
     renderDiscordVoice({ settings: true });
+    renderInteractiveStage();
+    renderInteractiveWorld();
     renderWarudo();
     renderVTubeStudio();
     renderDualFormat();
@@ -3168,10 +4487,39 @@
     renderUpdateStatus();
   }
 
+  async function saveTwitchExtensionCompanions(event) {
+    const inputs = [...document.querySelectorAll('input[name="twitchExtensionCompanion"]')];
+    const companions = {
+      schemaVersion: 1,
+      mainframe: $('#twitchCompanionMainframe').checked,
+      streaming: $('#twitchCompanionStreaming').checked
+    };
+    if (!companions.mainframe && !companions.streaming) {
+      event.currentTarget.checked = true;
+      return toast('Keep at least one Twitch companion Extension enabled.', true);
+    }
+    inputs.forEach((input) => { input.disabled = true; });
+    $('#twitchExtensionEditionBadge').textContent = 'PUBLISHING';
+    try {
+      state.hostedExtension = await window.tempestStudio.setTwitchExtensionCompanions(companions);
+      state.twitch = await api('/v1/integrations/twitch');
+      renderHostedExtension();
+      renderLocalExtension();
+      const label = companions.mainframe && companions.streaming ? 'Both Twitch companions' : companions.mainframe ? 'Tempest Mainframe' : 'Tempest Streaming';
+      toast(`${label} enabled and publishing.`);
+    } catch (error) {
+      state.hostedExtension = await window.tempestStudio.getHostedExtensionStatus().catch(() => state.hostedExtension);
+      renderHostedExtension();
+      renderLocalExtension();
+      toast(error.message, true);
+    } finally { inputs.forEach((input) => { input.disabled = false; }); }
+  }
+
   function renderRuntimeSection(changedKeys) {
     const activeSection = document.querySelector('.page.active')?.id;
     const changed = (...keys) => !changedKeys || keys.some((key) => changedKeys.has(key));
     if (activeSection === 'overviewSection' && changed('runtimeSummary', 'events')) renderOverview();
+    else if (activeSection === 'alertsSection' && changed('visualAlerts', 'twitchVisualAlerts', 'soundAlerts')) renderUnifiedAlerts();
     else if (activeSection === 'eventsSection') {
       if (!changed('events', 'alertHistory', 'alertDiagnostics')) return;
       renderEvents();
@@ -3189,6 +4537,8 @@
       renderChatOverlay();
       renderEmoteWall();
     } else if (activeSection === 'discordvoiceSection' && changed('discordVoice', 'discordRpc')) renderDiscordVoice();
+    else if (activeSection === 'worldSection' && changed('interactiveWorld')) renderInteractiveWorld();
+    else if (activeSection === 'interactivestageSection' && changed('unifiedStage', 'interactiveStage', 'stageActors', 'interactionComposer')) renderInteractiveStage();
     else if (activeSection === 'twitchSection' && changed('localExtension', 'hostedExtension')) {
       renderLocalExtension();
       renderHostedExtension();
@@ -3209,6 +4559,11 @@
     ]);
     const add = (key, loader) => { if (!tasks.has(key)) tasks.set(key, loader); };
     if (activeSection === 'overviewSection') add('events', () => api('/v1/events?limit=150'));
+    else if (activeSection === 'alertsSection') {
+      add('soundAlerts', () => api('/v1/sound-alerts'));
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('twitchVisualAlerts', () => api('/v1/visual-alerts/twitch'));
+    }
     else if (activeSection === 'eventsSection') {
       add('events', () => api('/v1/events?limit=150'));
       add('alertHistory', () => api('/v1/alert-history?limit=200'));
@@ -3233,7 +4588,16 @@
     } else if (activeSection === 'discordvoiceSection') {
       add('discordVoice', () => api('/v1/discord-voice'));
       add('discordRpc', () => window.tempestStudio.getDiscordVoiceStatus());
+    } else if (activeSection === 'worldSection') {
+      add('interactiveWorld', () => api('/v1/interactive-world'));
+    } else if (activeSection === 'interactivestageSection') {
+      add('unifiedStage', () => api('/v1/unified-stage'));
+      add('interactiveStage', () => api('/v1/interactive-stage'));
+      add('stageActors', () => api('/v1/stage-actors'));
+      add('interactionComposer', () => api('/v1/interaction-composer'));
     } else if (activeSection === 'twitchSection') {
+      add('twitch', () => api('/v1/integrations/twitch'));
+      add('extensionFeatures', () => api('/v1/extension-features'));
       add('localExtension', () => window.tempestStudio.getLocalExtensionStatus());
       add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
     } else if (activeSection === 'kickSection') {
@@ -3296,7 +4660,7 @@
       if (refreshed.assets) state.assets = refreshed.assets.assets || [];
       if (refreshed.soundAlerts) state.soundAlerts = refreshed.soundAlerts;
       if (refreshed.twitchVisualAlerts) state.twitchVisualAlerts = refreshed.twitchVisualAlerts;
-      for (const key of ['safety', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
+      for (const key of ['safety', 'twitch', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
       renderBridgeStatus(true);
@@ -3328,6 +4692,12 @@
         ['emoteWall', () => api('/v1/emote-wall')],
         ['twitchExperiences', () => api('/v1/twitch-experiences')],
         ['discordVoice', () => api('/v1/discord-voice')],
+        ['unifiedStage', () => api('/v1/unified-stage')],
+        ['interactiveStage', () => api('/v1/interactive-stage')],
+        ['interactiveWorld', () => api('/v1/interactive-world')],
+        ['stageActors', () => api('/v1/stage-actors')],
+        ['interactionComposer', () => api('/v1/interaction-composer')],
+        ['extensionFeatures', () => api('/v1/extension-features')],
         ['discordRpc', () => window.tempestStudio.getDiscordVoiceStatus()],
         ['warudo', () => window.tempestStudio.getWarudoStatus()],
         ['vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus()],
@@ -3361,7 +4731,7 @@
         ...(refreshed.workflows ? { workflows: refreshed.workflows.workflows || [] } : {}),
         ...(refreshed.events ? { events: refreshed.events.events || [] } : {})
       });
-      for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
+      for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
       for (const [key, value] of Object.entries(refreshed)) runtimeDataSignatures.set(key, JSON.stringify(value));
@@ -4825,6 +6195,7 @@
         hideBots: $('#discordVoiceHideBots').checked,
         transitionMs: state.discordVoice?.settings?.transitionMs ?? 140
       } });
+      await syncUnifiedModule('discordVoice', $('#discordVoiceEnabled').checked);
       discordSettingsDirty = false;
       state.discordVoice = await api('/v1/discord-voice');
       renderDiscordVoice({ settings: true });
@@ -5041,6 +6412,7 @@
         enableFfz: $('#emoteWallFfz').checked,
         providerOrder: $('#emoteWallProviderOrder').value
       } });
+      await syncUnifiedModule('emoteWall', $('#emoteWallEnabled').checked);
       state.emoteWall = await api('/v1/emote-wall');
       renderEmoteWall({ settings: true });
       toast('Emote Wall settings saved.');
@@ -5102,7 +6474,9 @@
         raidPortalDesign: twitchExperienceDesignFromForm('raid-portal'),
         goalOverlayDesign: twitchExperienceDesignFromForm('goal-overlay')
       } });
+      twitchExperienceSettingsDirty = false;
       state.twitchExperiences = await api('/v1/twitch-experiences');
+      await syncUnifiedModule('twitchExperiences', state.twitchExperiences?.settings?.enabled !== false);
       for (const kind of Object.keys(twitchExperienceDraftMedia)) delete twitchExperienceDraftMedia[kind];
       renderTwitchExperiences({ settings: true });
       toast('Twitch Experience designs and media saved.');
@@ -5131,6 +6505,7 @@
       const selected = await window.tempestStudio.selectTwitchExperienceMedia();
       if (!selected) return;
       twitchExperienceDraftMedia[kind] = selected.uri;
+      twitchExperienceSettingsDirty = true;
       $(`#twitchExperience${meta.prefix}MediaName`).textContent = selected.name;
       toast(`${selected.name} assigned. Save Experiences to apply it.`);
     } catch (error) { toast(error.message, true); }
@@ -5140,6 +6515,7 @@
     const meta = twitchExperienceDesigners[kind];
     if (!meta) return;
     twitchExperienceDraftMedia[kind] = '';
+    twitchExperienceSettingsDirty = true;
     $(`#twitchExperience${meta.prefix}MediaName`).textContent = 'None';
     toast('Experience media cleared. Save Experiences to apply it.');
   }
@@ -5303,6 +6679,43 @@
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.copyText) return copyToClipboard(button.dataset.copyText, button);
+    if (button.dataset.worldDemoCrowd) return spawnWorldDemoCrowd();
+    if (button.dataset.worldClearCrowd) return clearWorldCrowd();
+    if (button.dataset.worldViewerState) return setWorldViewerState(button.dataset.worldViewerState, button.dataset.worldState);
+    if (button.dataset.worldViewerControl) return controlWorldViewer(button.dataset.worldViewerControl, button.dataset.worldControl);
+    if (button.dataset.worldViewerCosmetics) return editWorldViewerCosmetics(button.dataset.worldViewerCosmetics);
+    if (button.dataset.worldViewerRemove) return removeWorldViewer(button.dataset.worldViewerRemove);
+    if (button.dataset.worldAvatarRedeemTest) return testWorldAvatarRedeem(button.dataset.worldAvatarRedeemTest);
+    if (button.dataset.worldAvatarRedeemRemove) return removeWorldAvatarRedeem(button.dataset.worldAvatarRedeemRemove);
+    if (button.dataset.worldAvatarRedeemReset) return resetWorldAvatarRewardSession();
+    if (button.dataset.stageActorStrip) return chooseStageActorStrip(button.dataset.stageActorStrip);
+    if (button.dataset.stageActorAtlas) return chooseStageActorAtlas();
+    if (button.dataset.stageActorTexture) return chooseStageActorTexture();
+    if (button.dataset.stageActorExport) return exportStageActorPack(button.dataset.stageActorExport);
+    if (button.dataset.stageActorEdit) return openStageActorEditor(button.dataset.stageActorEdit);
+    if (button.dataset.stageActorLibrary) return importStreamingAvatarsLibrary();
+    if (button.dataset.stageActorImport) return importStageActorPack();
+    if (button.dataset.stageActorRemove) return removeStageActorPack(button.dataset.stageActorRemove);
+    if (button.dataset.worldPetAction) return runWorldPetAction(button.dataset.worldPetAction);
+    if (button.dataset.worldBattleAction) return runWorldBattleAction(button.dataset.worldBattleAction);
+    if (button.dataset.stageTab) return switchInteractiveStageTab(button.dataset.stageTab);
+    if (button.dataset.stageGo) return switchInteractiveStageTab(button.dataset.stageGo);
+    if (button.dataset.chatbotTab) return switchChatbotTab(button.dataset.chatbotTab);
+    if (button.dataset.twitchPredictionWinner) return endTwitchPrediction('RESOLVED', button.dataset.twitchPredictionWinner);
+    if (button.dataset.stageEdit) return selectInteractiveStageObject(button.dataset.stageEdit, true);
+    if (button.dataset.stageSelect) return selectInteractiveStageObject(button.dataset.stageSelect);
+    if (button.dataset.stageDismissSelected) return dismissInteractiveStageObject(interactiveStageSelectedId);
+    if (button.dataset.stageDismiss) return dismissInteractiveStageObject(button.dataset.stageDismiss);
+    if (button.dataset.stagePreview) return previewInteractiveStage();
+    if (button.dataset.stageClear) return clearInteractiveStage();
+    if (button.dataset.stageZoneClear) return clearInteractiveStageZones();
+    if (button.dataset.stageStarterMap) return loadInteractiveStageStarterMap();
+    if (button.dataset.stagePlatformClear) return clearInteractiveStagePlatforms();
+    if (button.dataset.stageStarterGameplay) return loadInteractiveStageGameplaySet();
+    if (button.dataset.stageInteractableClear) return clearInteractiveStageInteractables();
+    if (button.dataset.interactionRecipeRun) return runInteractionRecipe(button.dataset.interactionRecipeRun);
+    if (button.dataset.interactionRecipeRemove) return removeInteractionRecipe(button.dataset.interactionRecipeRemove);
+    if (button.dataset.tobiiAdapter) return controlTobiiAdapter(button.dataset.tobiiAdapter);
     if (button.dataset.exportStudioBackup) return exportStudioBackup();
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
     if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
@@ -5320,7 +6733,7 @@
     if (button.dataset.onboardingGo) {
       $('#onboardingDialog').close();
       showSection(button.dataset.onboardingGo);
-      if (button.dataset.onboardingGo === 'chatbot') $('#liveDeskSetupDrawer').open = true;
+      if (button.dataset.onboardingGo === 'chatbot') switchChatbotTab('setup');
       return;
     }
     if (button.dataset.deleteInteractionAlert) return deleteInteractionAlert(button.dataset.deleteInteractionAlert);
@@ -5328,7 +6741,7 @@
     if (button.dataset.importAlertPack) return importAlertPack(button.dataset.importAlertPack);
     if (button.dataset.exportInteractionAlertPack) return exportAlertPack('interaction', button.dataset.exportInteractionAlertPack);
     if (button.dataset.exportTwitchAlertPack) return exportAlertPack('twitch', button.dataset.exportTwitchAlertPack);
-    if (button.dataset.section) return showSection(button.dataset.section);
+    if (button.dataset.section) return showSection(button.dataset.section, button.dataset.navGroup);
     if (button.dataset.go) return showSection(button.dataset.go);
     if (button.dataset.dicePreset) {
       $('#diceExpression').value = button.dataset.dicePreset;
@@ -5419,6 +6832,43 @@
     $('#privacyModeButton').addEventListener('click', togglePrivacyMode);
     $('#savePrivacySettings').addEventListener('click', savePrivacyControls);
     $('#refreshButton').addEventListener('click', () => refresh());
+    $('#worldViewerForm').addEventListener('submit', addWorldViewer);
+    $('#worldAvatarRedeemForm').addEventListener('submit', saveWorldAvatarRedeem);
+    $('#worldAvatarRedeemEffect').addEventListener('change', updateWorldAvatarRedeemValueHint);
+    $('#worldViewerLookForm').addEventListener('submit', saveWorldViewerCosmetics);
+    $('#worldViewerPrimaryColor').addEventListener('change', updateWorldViewerColorPreview);
+    $('#worldViewerSecondaryColor').addEventListener('change', updateWorldViewerColorPreview);
+    $('#stageActorPackForm').addEventListener('submit', createStageActorPack);
+    $('#stageActorBuildMode').addEventListener('change', updateStageActorBuildMode);
+    updateStageActorBuildMode();
+    $('#stageActorEditForm').addEventListener('submit', saveStageActorEdit);
+    $('#worldPresenceForm').addEventListener('submit', saveWorldPresence);
+    $('#worldAvatarSize').addEventListener('input', () => { $('#worldAvatarSizeValue').textContent = `${$('#worldAvatarSize').value}%`; });
+    $('#interactionComposerForm').addEventListener('submit', saveInteractionRecipe);
+    $('#worldPetForm').addEventListener('submit', saveWorldPet);
+    $('#worldStartBattle').addEventListener('click', startWorldBattle);
+    $('#worldEndBattle').addEventListener('click', endWorldBattle);
+    $('#worldGazeForm').addEventListener('submit', saveWorldGaze);
+    $('#worldSimulateGaze').addEventListener('click', simulateWorldGaze);
+    $('#worldSafetyForm').addEventListener('submit', saveWorldSafety);
+    $('#interactiveStageCreateForm').addEventListener('submit', createInteractiveStageObject);
+    $('#interactiveStageSelectionForm').addEventListener('submit', saveInteractiveStageSelection);
+    $('#interactiveStageZoneForm').addEventListener('submit', saveInteractiveStageZone);
+    $('#interactiveStageWorldForm').addEventListener('submit', saveInteractiveStageWorld);
+    $('#interactiveStagePlatformForm').addEventListener('submit', saveInteractiveStagePlatform);
+    $('#interactiveStageInteractableForm').addEventListener('submit', saveInteractiveStageInteractable);
+    $('#saveUnifiedStageSettings').addEventListener('click', saveUnifiedStageSettings);
+    $('#unifiedStageEnabled').addEventListener('change', (event) => {
+      document.querySelectorAll('[data-unified-module]').forEach((input) => { input.disabled = !event.currentTarget.checked; });
+    });
+    $('#interactiveStageOrientation').addEventListener('change', (event) => {
+      interactiveStageOrientation = event.target.value === 'vertical' ? 'vertical' : 'horizontal';
+      renderInteractiveStage();
+    });
+    $('#interactiveStageLayoutCanvas').addEventListener('pointerdown', beginInteractiveStageDrag);
+    $('#interactiveStageLayoutCanvas').addEventListener('pointermove', moveInteractiveStageDrag);
+    $('#interactiveStageLayoutCanvas').addEventListener('pointerup', (event) => { void endInteractiveStageDrag(event); });
+    $('#interactiveStageLayoutCanvas').addEventListener('pointercancel', (event) => { void endInteractiveStageDrag(event); });
     $('#diceRollForm').addEventListener('submit', rollDiceOnStream);
     $('#saveDiceOverlaySettings').addEventListener('click', saveDiceOverlaySettings);
     $('#clearDiceOverlay').addEventListener('click', clearDiceOverlay);
@@ -5430,6 +6880,7 @@
       const colors = { stormglass: '#2e91ad', brass: '#a7792b', obsidian: '#3d315f' };
       $('#diceThemeColor').value = colors[$('#diceColor').value] || '#2e91ad';
     });
+    document.querySelectorAll('.twitch-experience-panel input,.twitch-experience-panel select,.twitch-experience-panel textarea').forEach((input) => input.addEventListener('input', () => { twitchExperienceSettingsDirty = true; }));
     $('#openOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#reviewOnboardingWizard').addEventListener('click', () => openOnboarding({ firstIncomplete: true }));
     $('#closeOnboardingWizard').addEventListener('click', () => $('#onboardingDialog').close());
@@ -5599,6 +7050,11 @@
     $('#chatbotPollForm').addEventListener('submit', startChatbotPoll);
     $('#stopChatbotPoll').addEventListener('click', stopChatbotPoll);
     $('#clearChatbotPoll').addEventListener('click', clearChatbotPoll);
+    $('#copyChatbotPollOverlayUrl').addEventListener('click', (event) => copyToClipboard($('#chatbotPollOverlayUrl').textContent, event.currentTarget));
+    $('#twitchPredictionForm').addEventListener('submit', startTwitchPrediction);
+    $('#refreshTwitchPrediction').addEventListener('click', refreshTwitchPrediction);
+    $('#lockTwitchPrediction').addEventListener('click', () => endTwitchPrediction('LOCKED'));
+    $('#cancelTwitchPrediction').addEventListener('click', () => endTwitchPrediction('CANCELED'));
     $('#chatbotAutoModForm').addEventListener('submit', saveChatbotAutoMod);
     $('#testChatbotAutoMod').addEventListener('click', testChatbotAutoMod);
     $('#chatbotAutoModAction').addEventListener('change', () => { $('#chatbotAutoModTimeoutControl').hidden = $('#chatbotAutoModAction').value !== 'timeout'; });
@@ -5621,6 +7077,8 @@
     $('#sharedChatPlatform').addEventListener('change', renderChatbot);
     $('#clearSharedChatMessages').addEventListener('click', clearSharedChatMessages);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
+    document.querySelectorAll('input[name="twitchExtensionCompanion"]').forEach((input) => input.addEventListener('change', saveTwitchExtensionCompanions));
+    $('#resetExtensionFeaturePlacement').addEventListener('click', resetExtensionFeaturePlacement);
     $('#pairHostedExtension').addEventListener('click', pairHostedExtension);
     $('#switchHostedExtensionToOfficialTwitch').addEventListener('click', switchHostedExtensionToOfficialTwitch);
     $('#revokeHostedExtension').addEventListener('click', revokeHostedExtension);
@@ -5648,6 +7106,16 @@
     $('#openTwitchAuthorization').addEventListener('click', () => state.twitchDeviceAuthorization && window.tempestStudio.openExternal(state.twitchDeviceAuthorization.verificationUri).catch((error) => toast(error.message, true)));
     document.querySelectorAll('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
     document.body.addEventListener('change', (event) => {
+      const extensionFeatureInput = event.target.closest('[data-extension-feature-destination]');
+      if (extensionFeatureInput) {
+        void saveExtensionFeaturePlacement(extensionFeatureInput);
+        return;
+      }
+      const worldViewerActor = event.target.closest('[data-world-viewer-actor]');
+      if (worldViewerActor) {
+        void setWorldViewerActor(worldViewerActor.dataset.worldViewerActor, worldViewerActor.value);
+        return;
+      }
       const canvasMode = event.target.closest('#onboardingCanvasProfileMode');
       if (canvasMode) {
         writeOnboardingPreferences({ canvasProfileMode: canvasMode.value, flags: { canvasConfigured: canvasMode.value === 'auto' ? Boolean(broadcastCanvasProfile()) : true } });
@@ -5691,6 +7159,8 @@
   async function initialize() {
     bindEvents();
     renderInterfaceMode();
+    switchChatbotTab(chatbotWorkspaceTab);
+    showSection('overview', 'home');
     restoreSimulcastChecklist();
     restoreSimulcastOperations();
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);

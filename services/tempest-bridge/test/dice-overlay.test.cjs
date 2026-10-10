@@ -103,6 +103,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   assert.match(browserClient, /if \(obsBrowserRuntime\) \{\s*start\(\);\s*return;/);
   assert.doesNotMatch(browserClient, /new MessageChannel\(\)/);
   assert.match(browserClient, /scheduleRendererStartup\(data\.settings \|\| \{\}\)/);
+  assert.match(browserClient, /if \(!boxPromise\) \{/);
+  assert.match(browserClient, /await reportClient\('ready'\)/);
   assert.doesNotMatch(browserClient, /Math\.random/);
   assert.equal(overlay.status('local').requests.pageLoads, 1);
   assert.equal(overlay.status('local').requests.clientLoads, 1);

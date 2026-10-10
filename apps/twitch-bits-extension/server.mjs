@@ -9,7 +9,7 @@ const rootDirectory = path.join(appDirectory, 'dist');
 const pfxPath = process.env.TEMPEST_EXTENSION_PFX || path.resolve(appDirectory, '..', '..', '.tempest-extension', 'localhost.pfx');
 const passphrase = process.env.TEMPEST_EXTENSION_PFX_PASSWORD || 'tempest-local-dev';
 const httpPreview = process.env.TEMPEST_EXTENSION_HTTP_PREVIEW === '1';
-const port = Number(process.env.TEMPEST_BITS_EXTENSION_PORT) || (httpPreview ? 8082 : 8083);
+const port = Number(process.env.TEMPEST_STREAMING_EXTENSION_PORT || process.env.TEMPEST_BITS_EXTENSION_PORT) || (httpPreview ? 8082 : 8083);
 const mimeTypes = new Map([['.css', 'text/css; charset=utf-8'], ['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'], ['.json', 'application/json; charset=utf-8'], ['.svg', 'image/svg+xml']]);
 
 const requestHandler = async (request, response) => {
@@ -44,7 +44,7 @@ else {
 }
 server.listen(port, '127.0.0.1', () => {
   const base = `${httpPreview ? 'http' : 'https'}://localhost:${port}`;
-  console.log(`Tempest Bits Extension preview: ${base}/video_overlay.html`);
+  console.log(`Tempest Streaming Extension preview: ${base}/video_component.html`);
   console.log(`Component: ${base}/video_component.html`);
   console.log(`Panel: ${base}/panel.html`);
   console.log(`Mobile: ${base}/mobile.html`);

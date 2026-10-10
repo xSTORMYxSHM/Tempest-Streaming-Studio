@@ -8,9 +8,6 @@ const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 test('ships the exact Twitch local-test entry paths', async () => {
   const viewer = await readFile(path.join(appDirectory, 'dist', 'video_component.html'), 'utf8');
-  const fullscreen = await readFile(path.join(appDirectory, 'dist', 'video_overlay.html'), 'utf8');
-  const fullscreenCompatibility = await readFile(path.join(appDirectory, 'dist', 'video_fullscreen.html'), 'utf8');
-  const mobile = await readFile(path.join(appDirectory, 'dist', 'mobile.html'), 'utf8');
   const panel = await readFile(path.join(appDirectory, 'dist', 'panel.html'), 'utf8');
   const configuration = await readFile(path.join(appDirectory, 'dist', 'config.html'), 'utf8');
   assert.match(viewer, /twitch-ext\.min\.js/);
@@ -24,9 +21,9 @@ test('ships the exact Twitch local-test entry paths', async () => {
   assert.match(configuration, /SAVE PANEL APPEARANCE/);
   assert.match(configuration, /id="configPanelShowCurrentStream"/);
   assert.match(configuration, /id="configPanelShowPerformances"/);
-  assert.equal(fullscreen, viewer);
-  assert.equal(fullscreenCompatibility, viewer);
-  assert.equal(mobile, viewer);
+  for (const forbiddenSurface of ['video_overlay.html', 'video_fullscreen.html', 'mobile.html']) {
+    await assert.rejects(readFile(path.join(appDirectory, 'dist', forbiddenSurface), 'utf8'), /ENOENT/);
+  }
   assert.doesNotMatch(viewer + panel + configuration, /http-equiv="Content-Security-Policy"/i);
   assert.doesNotMatch(viewer + panel + configuration, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });
@@ -90,6 +87,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewer, /id="streamMeta"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
+  assert.match(panel, /data-signal-filter="closet"/);
+  assert.match(panel, /id="closetGrid"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(viewerScript, /kind === 'interaction'/);
   assert.match(viewerScript, /kind === 'sound-alert'/);
@@ -110,6 +109,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /design\.showDice/);
   assert.match(viewerScript, /design\.showPerformances/);
   assert.match(viewerScript, /identity_required/);
+  assert.match(viewerScript, /\/v1\/extension\/avatar\/equip/);
+  assert.match(viewerScript, /LOCKED · CHANNEL POINT REWARD/);
   assert.match(viewerScript, /\/v1\/extension\/poll\/vote/);
   assert.match(viewerScript, /tempest-extension-poll-vote/);
   assert.match(viewerScript, /state\.poll\.state === 'active' && incomingPoll\.state === 'active'/);

@@ -5,7 +5,8 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
-const { OFFICIAL_HOSTED_EBS_URL, activeTwitchExtensionEdition, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials, validateTwitchExtensionEdition } = require('../dist/hosted-extension.js');
+const hostedExtension = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, activeTwitchExtensionEdition, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials, validateTwitchExtensionEdition } = hostedExtension;
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -53,7 +54,12 @@ test('validates a public hosted EBS and derives a credential-free WSS relay URL'
   assert.equal(hostedExtensionRelayOptions(credentials).url, 'wss://tempest.example.com/v1/studio');
   assert.equal(hostedExtensionRelayOptions(credentials).channelId, '123456');
   assert.equal(hostedExtensionRelayOptions(credentials).extensionEdition, 'free');
-  assert.equal(hostedExtensionRelayOptions(credentials, 'bits').extensionEdition, 'free');
+  assert.deepEqual(hostedExtensionRelayOptions(credentials).companions, { schemaVersion: 1, mainframe: true, streaming: true });
+  assert.equal(hostedExtensionRelayOptions(credentials, 'bits').extensionEdition, 'bits');
+  assert.deepEqual(hostedExtensionRelayOptions(credentials, 'bits').companions, { schemaVersion: 1, mainframe: false, streaming: true });
+  assert.deepEqual(hostedExtension.validateTwitchExtensionCompanions({ mainframe: true, streaming: true }), { schemaVersion: 1, mainframe: true, streaming: true });
+  assert.deepEqual(hostedExtension.validateTwitchExtensionCompanions('free'), { schemaVersion: 1, mainframe: true, streaming: false });
+  assert.throws(() => hostedExtension.validateTwitchExtensionCompanions({ mainframe: false, streaming: false }), /at least one/i);
   assert.equal(validateTwitchExtensionEdition(undefined), 'free');
   assert.equal(validateTwitchExtensionEdition('bits'), 'bits');
   assert.equal(activeTwitchExtensionEdition('bits'), 'free');

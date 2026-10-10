@@ -44,6 +44,34 @@ test('selects the highest-priority matching Twitch alert variant and keeps the b
   assert.equal(fallback.name, 'Cheer / Bits');
 });
 
+test('routes each viewer feature to Mainframe, Streaming, both, or neither', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-extension-placement-api-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+
+  const initial = await fetch(`${runtime.baseUrl}/v1/extension-features`, { headers }).then((response) => response.json());
+  const dice = initial.features.find((feature) => feature.id === 'tempest.dice.roll');
+  assert.deepEqual(dice.destinations, ['streaming']);
+  assert.equal(dice.customized, false);
+
+  const moved = await fetch(`${runtime.baseUrl}/v1/extension-features/${encodeURIComponent(dice.id)}`, {
+    method: 'POST', headers, body: JSON.stringify({ destinations: ['mainframe'] })
+  });
+  assert.equal(moved.status, 200);
+  assert.deepEqual((await moved.json()).feature.destinations, ['mainframe']);
+
+  const hidden = await fetch(`${runtime.baseUrl}/v1/extension-features/${encodeURIComponent('tempest.pet.play')}`, {
+    method: 'POST', headers, body: JSON.stringify({ destinations: [] })
+  });
+  assert.equal(hidden.status, 200);
+  assert.deepEqual((await hidden.json()).feature.destinations, []);
+
+  const restored = await fetch(`${runtime.baseUrl}/v1/extension-features/reset`, { method: 'POST', headers, body: '{}' }).then((response) => response.json());
+  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.dice.roll').destinations, ['streaming']);
+  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.pet.play').destinations, ['mainframe', 'streaming']);
+});
+
 test('persists applications and assets behind authenticated routes', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-bridge-test-'));
   const runtime = await startTempestBridge({
@@ -482,6 +510,7 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.match(overlayMarkup, /Tempest Studio Visual Alerts/);
   assert.match(overlayMarkup, /new URL\("\/visual-alerts\/interactions\/events",location\.href\)/);
   assert.match(overlayMarkup, /eventsAddress\.searchParams\.set\('orientation',orientation\)/);
+  assert.match(overlayMarkup, /eventsAddress\.searchParams\.set\('audio',audioEnabled\?'1':'0'\)/);
   assert.match(overlayMarkup, /new EventSource\(eventsAddress\)/);
   assert.match(overlayMarkup, /\/visual-alerts\/audio-status/);
   assert.match(overlayMarkup, /reportAudio\(data,'started','direct'\)/);
@@ -509,7 +538,7 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.match(overlayMarkup, /new Blob\(body\.chunks/);
   assert.match(overlayMarkup, /playWebAudio\(joinAudioBody\(payload\.body\)/);
   assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
-  assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(orientation==='vertical'/);
+  assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(!audioEnabled\|\|orientation==='vertical'/);
   assert.match(overlayMarkup, /id="customStyle"/);
   assert.match(overlayMarkup, /id="placement"/);
   assert.match(overlayMarkup, /speechSynthesis/);
@@ -529,6 +558,24 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.equal(overlayStatus.vertical.audio, 'muted');
   assert.equal(overlayStatus.interaction.state, 'showing');
   assert.equal(overlayStatus.twitch.state, 'ready');
+
+  const unifiedPage = await fetch(`${runtime.baseUrl}/unified-stage`);
+  assert.equal(unifiedPage.status, 200);
+  const unifiedMarkup = await unifiedPage.text();
+  assert.match(unifiedMarkup, /Tempest Unified Stage/);
+  assert.match(unifiedPage.headers.get('content-security-policy'), /frame-src 'self' http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\* about:/);
+  assert.match(unifiedMarkup, /frame\.src='about:blank';frame\.remove\(\)/);
+  assert.match(unifiedMarkup, /interactionAlerts:\{path:'\/visual-alerts\/interactions',query:\{orientation,audio:'0'\}/);
+  assert.match(unifiedMarkup, /diceOverlay:\{path:'\/dice-overlay',layer:60,host:'alternate'\}/);
+  assert.match(unifiedMarkup, /alternateHost=location\.hostname==='localhost'\?'127\.0\.0\.1':'localhost'/);
+  const unifiedStatus = await fetch(`${runtime.baseUrl}/v1/unified-stage`, { headers }).then((response) => response.json());
+  assert.equal(unifiedStatus.settings.enabled, true);
+  assert.equal(unifiedStatus.settings.modules.diceOverlay, true);
+  assert.equal(unifiedStatus.interactionAudioUrl, `${runtime.baseUrl}/visual-alerts/interactions?visual=0&audio=1`);
+  const updatedUnified = await fetch(`${runtime.baseUrl}/v1/unified-stage/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, modules: { diceOverlay: false, emoteWall: false } }) }).then((response) => response.json());
+  assert.equal(updatedUnified.settings.modules.diceOverlay, false);
+  assert.equal(updatedUnified.settings.modules.emoteWall, false);
+  assert.equal(updatedUnified.settings.modules.discordVoice, true);
   assert.equal(overlayStatus.interaction.activeAlert.name, 'Hype Pulse');
   assert.equal(overlayStatus.interaction.activeAlert.viewerName, 'A viewer');
   assert.equal(overlayStatus.interaction.activeAlert.durationMs, 1000);
@@ -842,6 +889,30 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.equal(chatStatus.messageCount, 1);
   assert.equal(chatStatus.settings.accent, '#22CCFF');
   assert.equal((await fetch(`${runtime.baseUrl}/v1/chat-overlay/clear`, { method: 'POST', headers, body: '{}' })).status, 200);
+
+  const pollOverlayPage = await fetch(`${runtime.baseUrl}/poll-overlay`);
+  assert.equal(pollOverlayPage.status, 200);
+  const pollOverlayMarkup = await pollOverlayPage.text();
+  assert.match(pollOverlayMarkup, /Tempest Studio Poll Overlay/);
+  assert.match(pollOverlayMarkup, /poll-overlay\/status/);
+  assert.doesNotMatch(pollOverlayMarkup, /innerHTML/);
+  const pollOverlayScript = pollOverlayMarkup.match(/<script>\(\(\)=>\{([\s\S]+)\}\)\(\);<\/script>/)?.[1];
+  assert.ok(pollOverlayScript);
+  assert.doesNotThrow(() => new Function(pollOverlayScript));
+  const idlePollOverlay = await fetch(`${runtime.baseUrl}/poll-overlay/status`).then((response) => response.json());
+  assert.equal(idlePollOverlay.poll.state, 'idle');
+  const startedPoll = await fetch(`${runtime.baseUrl}/v1/chatbot/poll/start`, { method: 'POST', headers, body: JSON.stringify({ question: 'Choose the next scene', options: ['Moon base', 'Storm deck', 'Deep space'] }) });
+  assert.equal(startedPoll.status, 200);
+  const activePollOverlay = await fetch(`${runtime.baseUrl}/poll-overlay/status`).then((response) => response.json());
+  assert.equal(activePollOverlay.poll.state, 'active');
+  assert.equal(activePollOverlay.poll.question, 'Choose the next scene');
+  assert.deepEqual(activePollOverlay.poll.options.map((option) => option.label), ['Moon base', 'Storm deck', 'Deep space']);
+  const chatbotWithOverlay = await fetch(`${runtime.baseUrl}/v1/chatbot`, { headers }).then((response) => response.json());
+  assert.equal(chatbotWithOverlay.pollOverlay.url, `${runtime.baseUrl}/poll-overlay`);
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/chatbot/poll/stop`, { method: 'POST', headers, body: '{}' })).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/poll-overlay/status`).then((response) => response.json())).poll.state, 'closed');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/chatbot/poll`, { method: 'DELETE', headers })).status, 200);
+  assert.equal((await fetch(`${runtime.baseUrl}/poll-overlay/status`).then((response) => response.json())).poll.state, 'idle');
 
   const emoteWallPage = await fetch(`${runtime.baseUrl}/emote-wall`);
   assert.equal(emoteWallPage.status, 200);

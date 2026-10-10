@@ -34,8 +34,13 @@ const safeDocuments = new Map([
   ['diceOverlay', ['bridge', 'dice-overlay.json']],
   ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
   ['discordVoiceOverlay', ['bridge', 'discord-voice-overlay.json']],
+  ['interactiveWorld', ['bridge', 'interactive-world.json']],
+  ['interactiveStage', ['bridge', 'interactive-stage.json']],
+  ['interactionRecipes', ['bridge', 'interaction-recipes.json']],
+  ['extensionFeaturePlacements', ['bridge', 'extension-feature-placements.json']],
   ['panelDesign', ['twitch-panel-design.json']],
-  ['twitchExtensionEdition', ['twitch-extension-edition.json']]
+  ['twitchExtensionEdition', ['twitch-extension-edition.json']],
+  ['twitchExtensionCompanions', ['twitch-extension-companions.json']]
 ]);
 const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.mp4', '.webm']);
 const maximumAssetBytes = 96 * 1024 * 1024;

@@ -28,9 +28,36 @@ test('starts with public-safe commands and no personal response providers', asyn
   assert.equal(status.providers.weather, undefined);
   assert.equal(status.providers.nowPlaying, undefined);
   assert.ok(status.commands.some((command) => command.name === 'studio' && command.aliases.includes('tempest')));
+  assert.ok(status.commands.some((command) => command.name === 'clip' && command.handler === 'twitch-clip' && command.allowSharedChat === false));
   assert.ok(status.commands.some((command) => command.name === 'roll' && command.aliases.includes('dice') && command.handler === 'dice-roll'));
   assert.equal(status.commands.some((command) => command.handler === 'local-weather' || command.handler === 'seattle-weather' || command.handler === 'radio-now-playing'), false);
   assert.equal(await chatbot.radioStatus(), null);
+});
+
+test('creates a titled Twitch clip through the default home-channel command', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-clip-'));
+  const clipRequests = [];
+  const sentMessages = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    createTwitchClip: async (input) => { clipRequests.push(input); return { id: 'GreatClip', url: 'https://clips.twitch.tv/GreatClip', editUrl: 'https://clips.twitch.tv/GreatClip/edit' }; },
+    fetchImplementation: async (url, options) => { sentMessages.push({ url: String(url), body: JSON.parse(options.body) }); return new Response(null, { status: 204 }); }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  chatbot.channel = { clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' };
+  const result = await chatbot.processChatEvent({
+    schemaVersion: 1, id: 'clip-command-1', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch',
+    channel: { id: 'channel-1', login: 'tempest' }, viewer: { id: 'viewer-1', login: 'nova', displayName: 'Nova', roles: [] },
+    payload: { messageId: 'message-clip-1', text: '!clip That boss fight' }
+  });
+  assert.equal(result.accepted, true);
+  assert.deepEqual(clipRequests, [{ title: 'That boss fight', duration: 30 }]);
+  assert.equal(result.response, 'Clip created by Nova: https://clips.twitch.tv/GreatClip');
+  assert.equal(sentMessages[0].body.message, result.response);
+  assert.doesNotMatch(sentMessages[0].body.message, /\/edit/);
 });
 
 test('times out an unresponsive upstream request instead of stalling chatbot work', async () => {

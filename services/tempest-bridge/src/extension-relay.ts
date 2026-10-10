@@ -1,12 +1,21 @@
+import { createHash } from 'node:crypto';
 import { TempestNormalizedTwitchEvent, validateNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket } from 'ws';
 
 export type ExtensionRelayState = 'not-configured' | 'disconnected' | 'connecting' | 'connected' | 'error';
+export type TwitchExtensionCompanion = 'mainframe' | 'streaming';
+export interface TwitchExtensionCompanionSettings {
+  schemaVersion: 1;
+  mainframe: boolean;
+  streaming: boolean;
+}
 
 export interface ExtensionRelayOptions {
   url: string;
   token: string;
   channelId: string;
+  companions?: TwitchExtensionCompanionSettings;
+  /** @deprecated Compatibility hint for pre-1.5.1 EBS deployments. */
   extensionEdition?: 'free' | 'bits';
   allowUnauthorizedLocalTls?: boolean;
 }
@@ -21,6 +30,16 @@ export interface ExtensionRelayStatus {
   lastConnectedAt?: string;
   lastInteractionAt?: string;
   lastError?: string;
+  catalogSync?: {
+    state: 'pending' | 'synced';
+    companions: TwitchExtensionCompanionSettings;
+    /** @deprecated Compatibility hint for pre-1.5.1 EBS deployments. */
+    edition: 'free' | 'bits';
+    revision: string;
+    itemCount: number;
+    sentAt: string;
+    acknowledgedAt?: string;
+  };
 }
 
 export interface ExtensionRelayPoll {
@@ -88,8 +107,16 @@ export function extensionCatalogKind(edition: ExtensionRelayOptions['extensionEd
   return edition === 'bits' ? 'interaction' : 'sound-alert';
 }
 
+export function extensionCompanions(options: Pick<ExtensionRelayOptions, 'companions' | 'extensionEdition'>): TwitchExtensionCompanionSettings {
+  if (options.companions) return { schemaVersion: 1, mainframe: options.companions.mainframe === true, streaming: options.companions.streaming === true };
+  return options.extensionEdition === 'bits'
+    ? { schemaVersion: 1, mainframe: false, streaming: true }
+    : { schemaVersion: 1, mainframe: true, streaming: false };
+}
+
 export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   handler(event: TempestNormalizedTwitchEvent): Promise<ExtensionRelayResult>;
+  queryHandler?(query: { kind: string; viewerId: string }): Promise<ExtensionRelayResult>;
   kickEventHandler?(event: { event: unknown; eventId?: string; occurredAt?: string }): Promise<ExtensionRelayResult>;
   catalog?(): Array<{
     id: string;
@@ -109,6 +136,7 @@ export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
     accent: string;
     glyph: string;
     kind: 'sound-alert' | 'interaction';
+    destinations?: TwitchExtensionCompanion[];
   }>;
   poll?(): ExtensionRelayPoll | undefined;
   counters?(): ExtensionRelayCounter[];
@@ -154,6 +182,7 @@ export class TempestExtensionRelayClient {
   private dynamicCatalogRefreshRequested = false;
   private lastDynamicCatalogRefreshAt = 0;
   private lastCatalogPayload = '';
+  private lastCatalogRevision = '';
   private reconnectAttempt = 0;
   private lastCatalogSentAt = 0;
   private stopped = true;
@@ -169,6 +198,7 @@ export class TempestExtensionRelayClient {
     if (options.token.trim().length < 32) throw new Error('Extension relay token must contain at least 32 characters.');
     if (!/^\d{1,30}$/.test(options.channelId)) throw new Error('Extension relay channelId must be a numeric Twitch channel ID.');
     if (options.extensionEdition !== undefined && !['free', 'bits'].includes(options.extensionEdition)) throw new Error('Extension relay edition must be free or bits.');
+    if (options.companions && !options.companions.mainframe && !options.companions.streaming) throw new Error('At least one Twitch companion Extension must be enabled.');
     this.logger = options.logger || console;
   }
 
@@ -195,6 +225,10 @@ export class TempestExtensionRelayClient {
     if (!this.stopped) return;
     this.stopped = false;
     this.connect();
+  }
+
+  refreshCatalog(): void {
+    if (this.socket) this.sendCatalog(this.socket, true);
   }
 
   async close(): Promise<void> {
@@ -285,18 +319,33 @@ export class TempestExtensionRelayClient {
   private sendCatalog(socket: WebSocket, force = false): void {
     if (!this.options.catalog || socket.readyState !== WebSocket.OPEN) return;
     try {
-      const poll = this.options.extensionEdition === 'bits' ? undefined : this.options.poll?.();
-      const counters = this.options.extensionEdition === 'bits' ? [] : this.options.counters?.() || [];
-      const commands = this.options.extensionEdition === 'bits' ? [] : this.options.commands?.() || [];
-      const goal = this.options.extensionEdition === 'bits' ? undefined : this.options.goal?.();
-      const nowPlaying = this.options.extensionEdition === 'bits' ? undefined : this.nowPlaying;
-      const schedule = this.options.extensionEdition === 'bits' ? undefined : this.schedule;
-      const stream = this.options.extensionEdition === 'bits' ? undefined : this.stream;
-      const catalog = { schemaVersion: 1, extensionEdition: this.options.extensionEdition || 'free', items: this.options.catalog(), ...(poll ? { poll } : {}), ...(counters.length ? { counters } : {}), ...(commands.length ? { commands } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
-      const payload = JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', catalog });
-      if (!force && payload === this.lastCatalogPayload) return;
-      this.lastCatalogPayload = payload;
-      socket.send(payload);
+      const companions = extensionCompanions(this.options);
+      const extensionEdition = this.options.extensionEdition || (companions.streaming && !companions.mainframe ? 'bits' : 'free');
+      const poll = this.options.poll?.();
+      const counters = this.options.counters?.() || [];
+      const commands = this.options.commands?.() || [];
+      const goal = this.options.goal?.();
+      const catalog = {
+        schemaVersion: 1,
+        companions,
+        extensionEdition,
+        items: this.options.catalog(),
+        ...(poll ? { poll } : {}),
+        ...(counters.length ? { counters } : {}),
+        ...(commands.length ? { commands } : {}),
+        ...(goal ? { goal } : {}),
+        ...(this.nowPlaying ? { nowPlaying: this.nowPlaying } : {}),
+        ...(this.schedule ? { schedule: this.schedule } : {}),
+        ...(this.stream ? { stream: this.stream } : {})
+      };
+      const catalogPayload = JSON.stringify(catalog);
+      if (!force && catalogPayload === this.lastCatalogPayload && this.currentStatus.catalogSync?.state === 'synced') return;
+      const revision = createHash('sha256').update(catalogPayload).digest('hex').slice(0, 24);
+      this.lastCatalogPayload = catalogPayload;
+      this.lastCatalogRevision = revision;
+      const sentAt = new Date().toISOString();
+      this.update({ ...this.currentStatus, lastError: undefined, catalogSync: { state: 'pending', companions, edition: catalog.extensionEdition, revision, itemCount: catalog.items.length, sentAt } });
+      socket.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.sync', revision, catalog }));
       this.lastCatalogSentAt = Date.now();
     } catch (error) {
       this.logger.warn(error);
@@ -350,10 +399,37 @@ export class TempestExtensionRelayClient {
   private async handleMessage(socket: WebSocket, raw: string): Promise<void> {
     let requestId = '';
     try {
-      const message = JSON.parse(raw) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; event?: unknown };
-      if (message.type === 'welcome' || message.type === 'heartbeat' || message.type === 'catalog.ack') return;
-      if (message.protocolVersion !== 1 || !['interaction', 'kick.event'].includes(String(message.type)) || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
+      const message = JSON.parse(raw) as { protocolVersion?: unknown; type?: unknown; requestId?: unknown; event?: unknown; revision?: unknown; companions?: unknown; extensionEdition?: unknown; itemCount?: unknown };
+      if (message.type === 'welcome' || message.type === 'heartbeat') return;
+      if (message.protocolVersion === 1 && message.type === 'catalog.ack') {
+        if (typeof message.revision !== 'string' || message.revision !== this.lastCatalogRevision || !this.currentStatus.catalogSync) return;
+        const edition = message.extensionEdition === 'bits' ? 'bits' : 'free';
+        const hasCompanionAcknowledgement = Boolean(message.companions && typeof message.companions === 'object');
+        const acknowledgedCompanions = hasCompanionAcknowledgement
+          ? extensionCompanions({ companions: message.companions as TwitchExtensionCompanionSettings })
+          : extensionCompanions({ extensionEdition: edition });
+        const itemCount = Number(message.itemCount);
+        const expected = this.currentStatus.catalogSync.companions;
+        const companionMismatch = hasCompanionAcknowledgement
+          ? acknowledgedCompanions.mainframe !== expected.mainframe || acknowledgedCompanions.streaming !== expected.streaming
+          : edition !== this.currentStatus.catalogSync.edition;
+        if (companionMismatch || !Number.isInteger(itemCount) || itemCount !== this.currentStatus.catalogSync.itemCount) throw new Error('EBS acknowledged a different Extension catalog than Studio published.');
+        this.update({ ...this.currentStatus, lastError: undefined, catalogSync: { ...this.currentStatus.catalogSync, state: 'synced', acknowledgedAt: new Date().toISOString() } });
+        return;
+      }
+      if (message.protocolVersion !== 1 || !['interaction', 'kick.event', 'viewer.query'].includes(String(message.type)) || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
       requestId = message.requestId;
+      if (message.type === 'viewer.query') {
+        if (!this.options.queryHandler || !message.event || typeof message.event !== 'object' || Array.isArray(message.event)) throw new Error('EBS sent an invalid viewer query.');
+        const query = message.event as { kind?: unknown; viewerId?: unknown };
+        const kind = String(query.kind || '').trim();
+        const viewerId = String(query.viewerId || '').trim();
+        if (!/^[a-z][a-z0-9.-]{2,63}$/.test(kind) || !/^\d{1,30}$/.test(viewerId)) throw new Error('EBS viewer query fields are invalid.');
+        const result = await this.options.queryHandler({ kind, viewerId });
+        if (!Number.isInteger(result.status) || result.status < 100 || result.status > 599) throw new Error('Studio viewer query handler returned an invalid HTTP status.');
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId, status: result.status, body: result.body }));
+        return;
+      }
       if (message.type === 'kick.event') {
         if (!this.options.kickEventHandler || !message.event || typeof message.event !== 'object' || Array.isArray(message.event)) throw new Error('EBS sent an invalid Kick relay event.');
         const envelope = message.event as { event?: unknown; eventId?: unknown; occurredAt?: unknown };

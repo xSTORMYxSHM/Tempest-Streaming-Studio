@@ -14,9 +14,10 @@ export const defaultTwitchScopes = [
   'channel:read:hype_train',
   'channel:read:goals',
   'channel:read:polls',
-  'channel:read:predictions',
+  'channel:manage:predictions',
   'channel:read:redemptions',
   'channel:read:subscriptions',
+  'clips:edit',
   'moderator:read:followers',
   'user:read:chat'
 ] as const;
@@ -63,6 +64,26 @@ interface PendingDeviceAuthorization {
   nextPollAt: number;
 }
 
+export interface TwitchPredictionOutcome {
+  id: string;
+  title: string;
+  users: number;
+  channelPoints: number;
+  color?: string;
+}
+
+export interface TwitchPrediction {
+  id: string;
+  title: string;
+  status: 'ACTIVE' | 'LOCKED' | 'RESOLVED' | 'CANCELED';
+  predictionWindow: number;
+  outcomes: TwitchPredictionOutcome[];
+  winningOutcomeId?: string;
+  createdAt?: string;
+  endedAt?: string;
+  lockedAt?: string;
+}
+
 export interface TwitchIntegrationStatus {
   owner: 'tempest-mainframe-studio';
   configured: boolean;
@@ -81,8 +102,22 @@ export interface TwitchIntegrationStatus {
     chat: 'disconnected' | 'connecting' | 'connected' | 'error';
     extensionRelay: 'not-configured' | 'disconnected' | 'connecting' | 'connected' | 'error';
   };
+  extensionRelaySync?: {
+    state: 'pending' | 'synced';
+    companions: { schemaVersion: 1; mainframe: boolean; streaming: boolean };
+    edition: 'free' | 'bits';
+    revision: string;
+    itemCount: number;
+    sentAt: string;
+    acknowledgedAt?: string;
+  };
   normalizedTopics: readonly string[];
-  eventSubFeatures: { raidPortal: boolean; hypeTrain: boolean; goals: boolean };
+  eventSubFeatures: { raidPortal: boolean; hypeTrain: boolean; goals: boolean; channelPointRedemptions: boolean; predictions: boolean };
+  predictions: {
+    authorized: boolean;
+    available: boolean;
+    current?: TwitchPrediction;
+  };
   rewardMappings: Record<string, string>;
   lastEventAt?: string;
   acceptedEvents: number;
@@ -119,6 +154,35 @@ function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
+export function normalizeTwitchPrediction(value: unknown): TwitchPrediction | undefined {
+  const source = object(value);
+  if (!source || !source.id || !source.title) return undefined;
+  const status = String(source.status || '').toUpperCase();
+  if (!['ACTIVE', 'LOCKED', 'RESOLVED', 'CANCELED'].includes(status)) return undefined;
+  const outcomes = Array.isArray(source.outcomes) ? source.outcomes.flatMap((entry) => {
+    const outcome = object(entry);
+    if (!outcome?.id || !outcome.title) return [];
+    return [{
+      id: String(outcome.id),
+      title: String(outcome.title),
+      users: Math.max(0, Number(outcome.users) || 0),
+      channelPoints: Math.max(0, Number(outcome.channel_points ?? outcome.channelPoints) || 0),
+      color: outcome.color ? String(outcome.color) : undefined
+    }];
+  }) : [];
+  return {
+    id: String(source.id),
+    title: String(source.title),
+    status: status as TwitchPrediction['status'],
+    predictionWindow: Math.max(0, Number(source.prediction_window ?? source.predictionWindow) || 0),
+    outcomes,
+    winningOutcomeId: source.winning_outcome_id || source.winningOutcomeId ? String(source.winning_outcome_id || source.winningOutcomeId) : undefined,
+    createdAt: source.created_at || source.createdAt ? String(source.created_at || source.createdAt) : undefined,
+    endedAt: source.ended_at || source.endedAt ? String(source.ended_at || source.endedAt) : undefined,
+    lockedAt: source.locked_at || source.lockedAt ? String(source.locked_at || source.lockedAt) : undefined
+  };
+}
+
 export function normalizeTwitchEventSubNotification(subscriptionType: string, event: Record<string, unknown>, messageId: string, occurredAt: string): TempestNormalizedTwitchEvent | undefined {
   const channel = {
     id: String(event.broadcaster_user_id || event.to_broadcaster_user_id || ''),
@@ -130,6 +194,17 @@ export function normalizeTwitchEventSubNotification(subscriptionType: string, ev
       schemaVersion: 1, id: messageId, topic: 'viewer.raid.received', occurredAt, source: 'twitch', channel,
       viewer: { id: String(event.from_broadcaster_user_id || ''), login: String(event.from_broadcaster_user_login || ''), displayName: String(event.from_broadcaster_user_name || '') },
       payload: { fromBroadcasterId: String(event.from_broadcaster_user_id || ''), fromBroadcasterName: String(event.from_broadcaster_user_name || 'A raider'), viewers: Math.max(0, Number(event.viewers) || 0) }
+    };
+  }
+  if (subscriptionType === 'channel.channel_points_custom_reward_redemption.add') {
+    const reward = object(event.reward) || {};
+    return {
+      schemaVersion: 1, id: messageId, topic: 'viewer.reward.redeemed', occurredAt, source: 'twitch', channel,
+      viewer: { id: String(event.user_id || ''), login: String(event.user_login || ''), displayName: String(event.user_name || '') },
+      payload: {
+        redemptionId: String(event.id || messageId), rewardId: String(reward.id || ''), rewardTitle: String(reward.title || 'Channel Point Reward').slice(0, 300),
+        rewardCost: Math.max(0, Number(reward.cost) || 0), input: String(event.user_input || '').slice(0, 500)
+      }
     };
   }
   if (subscriptionType.startsWith('channel.hype_train.')) {
@@ -184,6 +259,7 @@ export class TwitchIntegrationGateway {
   private lastEventAt?: string;
   private extensionRelayState: TwitchIntegrationStatus['connections']['extensionRelay'] = 'not-configured';
   private extensionRelayError?: string;
+  private extensionRelaySync?: TwitchIntegrationStatus['extensionRelaySync'];
   private eventSubState: TwitchIntegrationStatus['connections']['eventSub'] = 'disconnected';
   private chatState: TwitchIntegrationStatus['connections']['chat'] = 'disconnected';
   private eventSubSocket: WebSocket | null = null;
@@ -192,6 +268,7 @@ export class TwitchIntegrationGateway {
   private eventSubStopping = false;
   private inheritedEventSubSockets = new Set<WebSocket>();
   private activeEventSubTypes = new Set<string>();
+  private currentPrediction?: TwitchPrediction;
   private readonly credentialStore?: TwitchCredentialStore;
   private readonly request: typeof fetch;
 
@@ -254,20 +331,35 @@ export class TwitchIntegrationGateway {
       eventSubFeatures: {
         raidPortal: this.activeEventSubTypes.has('channel.raid'),
         hypeTrain: this.activeEventSubTypes.has('channel.hype_train.progress'),
-        goals: this.activeEventSubTypes.has('channel.goal.progress')
+        goals: this.activeEventSubTypes.has('channel.goal.progress'),
+        channelPointRedemptions: this.activeEventSubTypes.has('channel.channel_points_custom_reward_redemption.add'),
+        predictions: this.activeEventSubTypes.has('channel.prediction.begin')
+      },
+      predictions: {
+        authorized: this.tokens?.scopes.includes('channel:manage:predictions') === true,
+        available: this.oauthState === 'authorized' && this.tokens?.scopes.includes('channel:manage:predictions') === true,
+        current: this.currentPrediction ? { ...this.currentPrediction, outcomes: this.currentPrediction.outcomes.map((outcome) => ({ ...outcome })) } : undefined
       },
       rewardMappings: { ...this.configuration.rewardMappings },
       lastEventAt: this.lastEventAt,
       acceptedEvents: this.acceptedEvents,
       duplicateEvents: this.duplicateEvents,
       lastError: this.lastError,
-      extensionRelayError: this.extensionRelayError
+      extensionRelayError: this.extensionRelayError,
+      extensionRelaySync: this.extensionRelaySync ? { ...this.extensionRelaySync } : undefined
     };
   }
 
   setExtensionRelayState(state: TwitchIntegrationStatus['connections']['extensionRelay'], error?: string): void {
     this.extensionRelayState = state;
     this.extensionRelayError = error;
+    if (state === 'not-configured') this.extensionRelaySync = undefined;
+  }
+
+  setExtensionRelayStatus(status: { state: TwitchIntegrationStatus['connections']['extensionRelay']; lastError?: string; catalogSync?: TwitchIntegrationStatus['extensionRelaySync'] }): void {
+    this.extensionRelayState = status.state;
+    this.extensionRelayError = status.lastError;
+    this.extensionRelaySync = status.catalogSync ? { ...status.catalogSync } : undefined;
   }
 
   setChatConnectionState(_eventSub: TwitchIntegrationStatus['connections']['eventSub'], chat: TwitchIntegrationStatus['connections']['chat']): void {
@@ -397,6 +489,89 @@ export class TwitchIntegrationGateway {
     return this.status();
   }
 
+  async refreshPrediction(): Promise<TwitchIntegrationStatus> {
+    const authorization = this.predictionAuthorization();
+    const response = await this.request(`https://api.twitch.tv/helix/predictions?broadcaster_id=${encodeURIComponent(authorization.userId)}&first=20`, {
+      headers: this.helixHeaders(authorization.accessToken)
+    });
+    const result = await response.json().catch(() => ({})) as { data?: unknown[]; message?: string };
+    if (!response.ok) throw new Error(this.describePredictionError(response.status, result.message));
+    const predictions = Array.isArray(result.data) ? result.data.map(normalizeTwitchPrediction).filter((prediction): prediction is TwitchPrediction => Boolean(prediction)) : [];
+    this.currentPrediction = predictions.find((prediction) => prediction.status === 'ACTIVE' || prediction.status === 'LOCKED') || predictions[0];
+    return this.status();
+  }
+
+  async createPrediction(input: unknown): Promise<TwitchIntegrationStatus> {
+    const authorization = this.predictionAuthorization();
+    const source = object(input);
+    if (!source) throw new Error('Prediction setup must be an object.');
+    const title = String(source.title || '').trim();
+    if (!title || title.length > 45) throw new Error('Prediction title must contain 1 to 45 characters.');
+    const outcomes = Array.isArray(source.outcomes) ? source.outcomes.map((outcome) => String(outcome || '').trim()).filter(Boolean) : [];
+    if (outcomes.length < 2 || outcomes.length > 10) throw new Error('Predictions need 2 to 10 outcomes.');
+    if (outcomes.some((outcome) => outcome.length > 25)) throw new Error('Each prediction outcome must contain 1 to 25 characters.');
+    if (new Set(outcomes.map((outcome) => outcome.toLocaleLowerCase())).size !== outcomes.length) throw new Error('Prediction outcomes must be unique.');
+    const predictionWindow = Number(source.predictionWindow);
+    if (!Number.isInteger(predictionWindow) || predictionWindow < 30 || predictionWindow > 1800) throw new Error('Prediction wagering time must be between 30 and 1,800 seconds.');
+    const response = await this.request('https://api.twitch.tv/helix/predictions', {
+      method: 'POST',
+      headers: this.helixHeaders(authorization.accessToken, true),
+      body: JSON.stringify({ broadcaster_id: authorization.userId, title, outcomes: outcomes.map((outcome) => ({ title: outcome })), prediction_window: predictionWindow })
+    });
+    const result = await response.json().catch(() => ({})) as { data?: unknown[]; message?: string };
+    if (!response.ok) throw new Error(this.describePredictionError(response.status, result.message));
+    const prediction = normalizeTwitchPrediction(result.data?.[0]);
+    if (!prediction) throw new Error('Twitch created the prediction but returned an invalid response. Refresh Predictions to recover its state.');
+    this.currentPrediction = prediction;
+    return this.status();
+  }
+
+  async endPrediction(input: unknown): Promise<TwitchIntegrationStatus> {
+    const authorization = this.predictionAuthorization();
+    const source = object(input);
+    const predictionId = String(source?.predictionId || this.currentPrediction?.id || '').trim();
+    const status = String(source?.status || '').toUpperCase();
+    if (!predictionId) throw new Error('No active Twitch Prediction is available.');
+    if (!['LOCKED', 'RESOLVED', 'CANCELED'].includes(status)) throw new Error('Prediction status must be LOCKED, RESOLVED, or CANCELED.');
+    const winningOutcomeId = String(source?.winningOutcomeId || '').trim();
+    if (status === 'RESOLVED' && !winningOutcomeId) throw new Error('Choose the winning outcome before resolving a prediction.');
+    if (status === 'RESOLVED' && this.currentPrediction && !this.currentPrediction.outcomes.some((outcome) => outcome.id === winningOutcomeId)) throw new Error('The selected winner is not an outcome in the current prediction.');
+    const body: Record<string, string> = { broadcaster_id: authorization.userId, id: predictionId, status };
+    if (status === 'RESOLVED') body.winning_outcome_id = winningOutcomeId;
+    const response = await this.request('https://api.twitch.tv/helix/predictions', {
+      method: 'PATCH', headers: this.helixHeaders(authorization.accessToken, true), body: JSON.stringify(body)
+    });
+    const result = await response.json().catch(() => ({})) as { data?: unknown[]; message?: string };
+    if (!response.ok) throw new Error(this.describePredictionError(response.status, result.message));
+    const prediction = normalizeTwitchPrediction(result.data?.[0]);
+    if (prediction) this.currentPrediction = prediction;
+    return this.status();
+  }
+
+  async createClip(input: unknown): Promise<{ id: string; url: string; editUrl: string; title?: string; duration: number }> {
+    if (this.oauthState !== 'authorized' || !this.identity || !this.tokens) throw new Error('Connect the broadcaster Twitch account before creating clips.');
+    if (!this.tokens.scopes.includes('clips:edit')) throw new Error('Reconnect Twitch to grant Studio permission to create clips.');
+    const source = object(input) || {};
+    const title = String(source.title || '').trim();
+    if (title.length > 100) throw new Error('Clip titles must be 100 characters or fewer.');
+    const duration = source.duration === undefined ? 30 : Number(source.duration);
+    if (!Number.isFinite(duration) || duration < 5 || duration > 60) throw new Error('Clip duration must be between 5 and 60 seconds.');
+    const query = new URLSearchParams({ broadcaster_id: this.identity.userId, duration: String(Math.round(duration * 10) / 10) });
+    if (title) query.set('title', title);
+    const response = await this.request(`https://api.twitch.tv/helix/clips?${query}`, {
+      method: 'POST', headers: this.helixHeaders(this.tokens.accessToken)
+    });
+    const result = await response.json().catch(() => ({})) as { data?: Array<{ id?: string; edit_url?: string }>; message?: string };
+    if (response.status !== 202 || !result.data?.[0]?.id || !result.data[0].edit_url) {
+      if (response.status === 404) throw new Error('The Twitch channel must be live before viewers can create a clip.');
+      if (response.status === 403) throw new Error('Twitch clips are disabled or restricted for this channel.');
+      if (response.status === 401) throw new Error('Reconnect Twitch to restore clip creation permission.');
+      throw new Error(result.message || `Twitch clip creation failed with ${response.status}.`);
+    }
+    const id = result.data[0].id;
+    return { id, url: `https://clips.twitch.tv/${encodeURIComponent(id)}`, editUrl: result.data[0].edit_url, ...(title ? { title } : {}), duration };
+  }
+
   ingest(input: unknown): { event: TempestNormalizedTwitchEvent; duplicate: boolean } {
     const validation = validateNormalizedTwitchEvent(input);
     if (!validation.ok || !validation.value) throw new Error(validation.errors.join(' '));
@@ -481,6 +656,11 @@ export class TwitchIntegrationGateway {
       return;
     }
     if (type !== 'notification' || !message.metadata?.subscription_type || !message.payload?.event) return;
+    if (message.metadata.subscription_type.startsWith('channel.prediction.')) {
+      const prediction = normalizeTwitchPrediction(message.payload.event);
+      if (prediction) this.currentPrediction = prediction;
+      return;
+    }
     const normalized = normalizeTwitchEventSubNotification(
       message.metadata.subscription_type,
       message.payload.event,
@@ -495,8 +675,10 @@ export class TwitchIntegrationGateway {
     this.activeEventSubTypes.clear();
     const definitions: Array<{ type: string; version: string; scope?: string; condition: Record<string, string> }> = [
       { type: 'channel.raid', version: '1', condition: { to_broadcaster_user_id: this.identity.userId } },
+      { type: 'channel.channel_points_custom_reward_redemption.add', version: '1', scope: 'channel:read:redemptions', condition: { broadcaster_user_id: this.identity.userId } },
       ...['begin', 'progress', 'end'].map((phase) => ({ type: `channel.hype_train.${phase}`, version: '2', scope: 'channel:read:hype_train', condition: { broadcaster_user_id: this.identity!.userId } })),
-      ...['begin', 'progress', 'end'].map((phase) => ({ type: `channel.goal.${phase}`, version: '1', scope: 'channel:read:goals', condition: { broadcaster_user_id: this.identity!.userId } }))
+      ...['begin', 'progress', 'end'].map((phase) => ({ type: `channel.goal.${phase}`, version: '1', scope: 'channel:read:goals', condition: { broadcaster_user_id: this.identity!.userId } })),
+      ...['begin', 'progress', 'lock', 'end'].map((phase) => ({ type: `channel.prediction.${phase}`, version: '1', scope: 'channel:manage:predictions', condition: { broadcaster_user_id: this.identity!.userId } }))
     ];
     const failures: string[] = [];
     for (const definition of definitions) {
@@ -557,10 +739,31 @@ export class TwitchIntegrationGateway {
     await this.credentialStore?.save(this.tokens);
   }
 
+  private predictionAuthorization(): { userId: string; accessToken: string } {
+    if (this.oauthState !== 'authorized' || !this.identity || !this.tokens) throw new Error('Connect the broadcaster Twitch account before managing Predictions.');
+    if (!this.tokens.scopes.includes('channel:manage:predictions')) throw new Error('Reconnect Twitch to grant Studio permission to manage Predictions.');
+    return { userId: this.identity.userId, accessToken: this.tokens.accessToken };
+  }
+
+  private helixHeaders(accessToken: string, json = false): Record<string, string> {
+    return {
+      'Client-Id': this.configuration.clientId,
+      Authorization: `Bearer ${accessToken}`,
+      ...(json ? { 'Content-Type': 'application/json' } : {})
+    };
+  }
+
+  private describePredictionError(status: number, message?: string): string {
+    if (status === 403) return 'Twitch Predictions require an eligible Affiliate or Partner channel and the channel:manage:predictions permission.';
+    if (status === 401) return 'Twitch authorization expired or is missing Prediction permission. Reconnect Twitch in Studio.';
+    return String(message || `Twitch Prediction request failed with ${status}.`);
+  }
+
   private async clearAuthorization(clearError: boolean): Promise<void> {
     this.stopEventSub();
     this.tokens = null;
     this.identity = null;
+    this.currentPrediction = undefined;
     this.pendingDevice = null;
     await this.credentialStore?.clear();
     if (clearError) this.lastError = undefined;

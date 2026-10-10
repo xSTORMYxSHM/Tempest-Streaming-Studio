@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.0 — Unified interaction stage and companion Extensions
+
+Released 2026-10-10.
+
+- Added one Unified Stage Browser Source for alerts, polls, avatars, pets, games, emotes, Discord guests, Twitch experiences, interaction visuals, and Dice Box rendering. Disabled modules no longer open their renderer or event connection; Dice Box creates its WebGL renderer only for an active roll.
+- Added the first Streamworld foundation: persistent viewer profiles, code-free Stage Actor packs, a canonical row-atlas format, Storm Wisp, floor and platform physics, movement controls, Channel Point avatar unlocks, and streamer-controlled crowd sizing.
+- Reorganized Studio around Live Desk, Alerts, Interactive Stage, Chatbot, platform connections, and operator settings while retaining Streamer Mode and advanced controls.
+- Unified Twitch event and viewer-interaction alert orchestration behind one ordered queue, shared safety policy, destination-aware catalogs, and separate live/VOD and live-only audio lanes.
+- Split the Twitch viewer experience into two free companion listings: Tempest Mainframe `0.2.0` for the panel hub and Tempest Streaming `0.1.0` for the video overlay. Both use the same channel installation while retaining separate Twitch Client IDs, secrets, packages, and review tracks.
+- Added per-feature Extension placement controls. Streamers can publish each viewer action to the Mainframe panel, Streaming overlay, both, or neither; Dice now defaults to a free Streaming-overlay d20 action.
+- Kept protocol `1.0` compatibility with Tempest Broadcast 1.5.0 and added a migration tool that consolidates compatible Broadcast Browser Sources into the Unified Stage without changing Broadcast-owned scenes, encoding, recording, or output services.
+- Added production package verification for both Twitch Extensions and retained backwards-compatible reading of legacy Extension edition and Stage Actor data.
+
 ## 1.6.0 — Extension platform and managed media
 
 Released 2026-10-02.

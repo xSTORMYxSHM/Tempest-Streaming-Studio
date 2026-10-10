@@ -8,7 +8,9 @@ The Extension shared secret and relay token never enter the Extension ZIP. The l
 
 Create or collect these values before deployment:
 
-- `TWITCH_EXTENSION_SECRETS` — comma-separated active base64 secrets from the Extension's **Secret Keys** settings. A comma-separated list permits safe secret rotation.
+- `TWITCH_EXTENSION_SECRETS` — comma-separated active base64 secrets from Tempest Mainframe's **Secret Keys** settings. A comma-separated list permits safe secret rotation.
+- `TEMPEST_STREAMING_EXTENSION_SECRETS` — comma-separated active base64 secrets from the separate Tempest Streaming companion.
+- `TEMPEST_STREAMING_EXTENSION_CLIENT_ID` — the public Client ID for the Tempest Streaming companion listing.
 - `DATABASE_URL` — PostgreSQL connection URL used for channel installations, hashed relay credentials, and public-safe signal catalogs.
 - `TEMPEST_EBS_TWITCH_CLIENT_IDS` — comma-separated public Twitch application client IDs accepted when Studio proves broadcaster ownership during pairing.
 - `TEMPEST_EBS_ALLOWED_ORIGINS` — optional exact origins in addition to Twitch's `https://<extension-id>.ext-twitch.tv` origins. Add `https://localhost:8080` only when testing the production path locally.
@@ -23,6 +25,8 @@ Configure these secret/environment values on the host:
 
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
+TEMPEST_STREAMING_EXTENSION_CLIENT_ID=<streaming Extension client ID>
+TEMPEST_STREAMING_EXTENSION_SECRETS=<base64 Streaming Extension secret>
 DATABASE_URL=<PostgreSQL connection URL>
 TEMPEST_EBS_TWITCH_CLIENT_IDS=n04l25zbygbsnq6nj7gupboyeji820
 ```
@@ -37,11 +41,15 @@ In the service's **Variables** tab, add:
 
 ```text
 TWITCH_EXTENSION_SECRETS=<base64 Extension secret>
+TEMPEST_STREAMING_EXTENSION_CLIENT_ID=<streaming Extension client ID>
+TEMPEST_STREAMING_EXTENSION_SECRETS=<base64 Streaming Extension secret>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 TEMPEST_EBS_TWITCH_CLIENT_IDS=n04l25zbygbsnq6nj7gupboyeji820
 ```
 
 Do not add `PORT`, TLS certificate, or TLS password variables on Railway. Railway supplies the port and terminates public HTTPS. Twitch Extension origins matching `https://<extension-id>.ext-twitch.tv` are accepted automatically, so `TEMPEST_EBS_ALLOWED_ORIGINS` is not needed for the hosted Extension.
+
+For an existing pre-1.7.0 Tempest Streaming deployment, copy the existing Streaming listing's Client ID and secret into `TEMPEST_STREAMING_EXTENSION_CLIENT_ID` and `TEMPEST_STREAMING_EXTENSION_SECRETS` before deploying this build. The old names `TEMPEST_BITS_EXTENSION_CLIENT_ID`, `TEMPEST_BITS_EXTENSION_SECRETS`, and `TEMPEST_BITS_PRODUCT_ACTIONS` belong only to the deprecated paid-action compatibility path. Remove those legacy variables after rollback compatibility is no longer required; do not expose or paste their values into source files, logs, or Twitch-hosted assets.
 
 In **Settings**:
 
@@ -63,6 +71,8 @@ The public endpoints are:
 | `GET` / `DELETE` | `/v1/installations/current` | Inspect or revoke the authenticated Studio installation |
 | `GET` | `/v1/extension/status` | JWT-authenticated Studio connection state |
 | `GET` | `/v1/extension/catalog` | Channel-scoped, viewer-safe signal catalog published by Studio |
+| `GET` | `/v1/extension/streaming/catalog` | Destination-filtered free actions for the Tempest Streaming companion |
+| `POST` | `/v1/extension/streaming/interactions/{action}/trigger` | Trigger a free Streaming action with optional normalized placement |
 | `POST` | `/v1/extension/alerts/{alertId}/trigger` | Trigger a Studio catalog Sound Alert |
 | `POST` | `/v1/extension/interactions/{action}/trigger` | Trigger a generic action published in that installation's viewer-safe catalog |
 | WebSocket | `/v1/studio` | Authenticated outbound Studio relay |
@@ -79,20 +89,26 @@ Studio's Twitch page reports **EXTENSION RELAY: CONNECTED** when the EBS accepts
 
 Catalog synchronization uses an authenticated, 2 MiB-bounded WebSocket envelope. This accommodates the maximum validated interaction catalog and its per-viewer access lists while the service continues to cap the catalog at 200 items and each allow/block list at 100 numeric Twitch IDs. Viewer catalog responses never include those identity lists.
 
-## Build and upload the Extension
+## Build and upload the companion Extensions
 
-Build the viewer ZIP against the public EBS origin:
+Build and verify both Twitch-hosted ZIPs against the official production EBS origin:
 
 ```powershell
-pnpm run hosted:prepare
+pnpm extensions:package
 ```
 
-Upload `release/Tempest-Streaming-Extension-0.1.0-hosted.zip` on Twitch's **Files** tab and move the version to Hosted Test. The generated manifest records the upload bundle's SHA-256 digest. The built `runtime-config.json` contains only the official public EBS origin and locks mock mode off.
+This produces and verifies:
+
+- `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` for the panel-only Tempest Mainframe listing.
+- `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` for the Tempest Streaming Video Overlay listing. The legacy folder name is retained only for source-path compatibility.
+- `release-assets/extension-package-manifest.json` with sizes and SHA-256 hashes for both packages.
+
+Upload each ZIP to its matching Twitch listing's **Files** tab and move that version to Hosted Test. Each built `runtime-config.json` contains only the public EBS origin and locks mock mode off. Neither package contains an Extension secret or paid Bits flow.
 
 ## Runtime path
 
-1. Twitch supplies a refreshed viewer JWT to the Video Component.
-2. The component sends the JWT, selected alert ID, and a UUID request ID to the EBS.
+1. Twitch supplies a refreshed viewer JWT to the Mainframe panel or Streaming Video Overlay.
+2. The active companion sends its JWT, selected free action, destination-specific route, and a UUID request ID to the EBS.
 3. The EBS verifies the JWT and channel, resolves the active PostgreSQL installation, checks anonymity policy, replay state, the channel-published catalog, and request rates, then sends a canonical event to that Studio.
 4. Studio validates and deduplicates the event again, resolves the Sound Alert catalog, applies safety/concurrency/cooldowns, and creates a workflow run.
 5. Warudo receives `avatar.performance.apply`; Tempest Broadcast receives `broadcast.reaction.trigger`. Both receive lease-based release commands when the performance ends.

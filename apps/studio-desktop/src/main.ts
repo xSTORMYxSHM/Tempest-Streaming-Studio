@@ -1,10 +1,11 @@
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
 import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, net, protocol, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, net, protocol, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
 import { extensionRelayOptionsFromEnvironment, startTempestBridge, TempestBridgeRuntime, TwitchCredentialStore, TwitchTokenSet, KickCredentialStore, KickCredentialSet, validateTwitchAlertDesign } from '@tempest/bridge';
 import { TEMPEST_STUDIO_VERSION, TempestApplicationManifest, TempestSoundAlertPlaybackCommand, validateApplicationManifest } from '@tempest/contracts';
 import {
@@ -24,21 +25,23 @@ import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign 
 import { buildTempestAlertPack, importTempestAlertPack, inspectTempestAlertPack } from './alert-packs';
 import { buildTempestDiscordProfilePack, importTempestDiscordProfilePack } from './discord-profile-packs';
 import { importDiceBoxTheme } from './dice-theme-import';
+import { buildPortableStageActorPack, buildStageActorAtlasPack, buildStageActorPack, buildStageActorTemplatePack, importPortableStageActorPack, importStreamingAvatarsLibrary, inspectStageActorStrip, installBundledStageActorPacks, updateStageActorPack } from './stage-actor-packs';
 import { buildTempestStudioBackup, restoreTempestStudioBackup } from './studio-backups';
 import { runStudioDataMigrations, StudioDataMigrationStatus } from './data-migrations';
 import {
   HostedExtensionCredentials,
   HostedExtensionStatus,
   OFFICIAL_HOSTED_EBS_URL,
-  TwitchExtensionEdition,
-  activeTwitchExtensionEdition,
+  TwitchExtensionCompanionSettings,
+  defaultTwitchExtensionCompanions,
   describeHostedExtensionPairingFailure,
   hostedExtensionRelayOptions,
+  legacyEditionForCompanions,
   syncHostedExtensionPanelDesign,
   isOfficialHostedEbsUrl,
   validateHostedEbsUrl,
   validateHostedExtensionCredentials,
-  validateTwitchExtensionEdition
+  validateTwitchExtensionCompanions
 } from './hosted-extension';
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
@@ -80,6 +83,31 @@ let streamTogetherWindow: BrowserWindow | null = null;
 let streamTogetherLogin: string | null = null;
 let dataMigrationStatus: StudioDataMigrationStatus | null = null;
 const twitchAuthorizationWindows = new Set<BrowserWindow>();
+const stageActorStripSelections = new Map<string, { path: string; fileName: string; width: number; height: number; size: number }>();
+
+async function loadDevelopmentBridgeToken(userDataDirectory: string): Promise<string | undefined> {
+  if (app.isPackaged) return undefined;
+  const bridgeDirectory = path.join(userDataDirectory, 'bridge');
+  const localTokenPath = path.join(bridgeDirectory, 'bridge-token');
+  const configuredPath = String(process.env.TEMPEST_BRIDGE_TOKEN_FILE || '').trim();
+  const stableTokenPath = configuredPath || path.join(app.getPath('appData'), '@tempest', 'studio-desktop', 'bridge', 'bridge-token');
+  if (path.resolve(stableTokenPath) === path.resolve(localTokenPath)) return undefined;
+  try {
+    const token = (await readFile(stableTokenPath, 'utf8')).trim();
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      console.warn(`Development Bridge compatibility token is invalid: ${stableTokenPath}`);
+      return undefined;
+    }
+    await mkdir(bridgeDirectory, { recursive: true });
+    await writeFile(localTokenPath, `${token}\n`, { encoding: 'utf8', mode: 0o600 });
+    return token;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`Development Bridge compatibility token could not be loaded: ${(error as Error).message}`);
+    }
+    return undefined;
+  }
+}
 
 type StudioUpdateState = 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'error';
 
@@ -408,32 +436,35 @@ function twitchExtensionEditionPath(): string {
   return path.join(app.getPath('userData'), 'twitch-extension-edition.json');
 }
 
-async function loadTwitchExtensionEdition(): Promise<TwitchExtensionEdition> {
+function twitchExtensionCompanionsPath(): string {
+  return path.join(app.getPath('userData'), 'twitch-extension-companions.json');
+}
+
+async function loadTwitchExtensionCompanions(): Promise<TwitchExtensionCompanionSettings> {
   try {
-    const saved = JSON.parse(await readFile(twitchExtensionEditionPath(), 'utf8')) as { edition?: unknown };
-    const savedEdition = validateTwitchExtensionEdition(saved.edition);
-    const activeEdition = activeTwitchExtensionEdition(savedEdition);
-    if (savedEdition !== activeEdition) await persistTwitchExtensionEdition(activeEdition);
-    return activeEdition;
+    const saved = JSON.parse(await readFile(twitchExtensionCompanionsPath(), 'utf8')) as unknown;
+    return validateTwitchExtensionCompanions(saved);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'free';
-    throw new Error(`Could not read the Twitch Extension edition: ${(error as Error).message}`);
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read the Twitch companion settings: ${(error as Error).message}`);
+  }
+  try {
+    const legacy = JSON.parse(await readFile(twitchExtensionEditionPath(), 'utf8')) as { edition?: unknown };
+    return validateTwitchExtensionCompanions(legacy.edition);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return defaultTwitchExtensionCompanions();
+    throw new Error(`Could not migrate the legacy Twitch Extension edition: ${(error as Error).message}`);
   }
 }
 
-async function persistTwitchExtensionEdition(edition: TwitchExtensionEdition): Promise<void> {
-  await mkdir(path.dirname(twitchExtensionEditionPath()), { recursive: true });
-  await writeFile(twitchExtensionEditionPath(), `${JSON.stringify({ schemaVersion: 1, edition }, null, 2)}\n`, { mode: 0o600 });
-}
-
-async function saveTwitchExtensionEdition(value: unknown): Promise<TwitchExtensionEdition> {
-  const edition = activeTwitchExtensionEdition(value);
-  await persistTwitchExtensionEdition(edition);
+async function saveTwitchExtensionCompanions(value: unknown): Promise<TwitchExtensionCompanionSettings> {
+  const companions = validateTwitchExtensionCompanions(value);
+  await mkdir(path.dirname(twitchExtensionCompanionsPath()), { recursive: true });
+  await writeFile(twitchExtensionCompanionsPath(), `${JSON.stringify(companions, null, 2)}\n`, { mode: 0o600 });
   if (bridge && !localExtension) {
     const credentials = await loadHostedExtensionCredentials();
-    await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, edition) : undefined);
+    await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, companions) : undefined);
   }
-  return edition;
+  return companions;
 }
 
 async function loadHostedExtensionCredentials(): Promise<HostedExtensionCredentials | null> {
@@ -454,13 +485,14 @@ async function saveHostedExtensionCredentials(credentials: HostedExtensionCreden
 }
 
 async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
-  const [credentials, extensionEdition] = await Promise.all([
+  const [credentials, companions] = await Promise.all([
     loadHostedExtensionCredentials().catch(() => null),
-    loadTwitchExtensionEdition().catch(() => 'free' as const)
+    loadTwitchExtensionCompanions().catch(() => defaultTwitchExtensionCompanions())
   ]);
   return {
     paired: Boolean(credentials),
-    extensionEdition,
+    companions,
+    extensionEdition: legacyEditionForCompanions(companions),
     defaultEbsBaseUrl: OFFICIAL_HOSTED_EBS_URL,
     ...(credentials ? {
       ebsBaseUrl: credentials.ebsBaseUrl,
@@ -475,8 +507,8 @@ async function getHostedExtensionStatus(): Promise<HostedExtensionStatus> {
 
 async function restoreHostedExtensionRelay(): Promise<void> {
   if (!bridge || localExtension) return;
-  const [credentials, extensionEdition] = await Promise.all([loadHostedExtensionCredentials(), loadTwitchExtensionEdition()]);
-  await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, extensionEdition) : undefined);
+  const [credentials, companions] = await Promise.all([loadHostedExtensionCredentials(), loadTwitchExtensionCompanions()]);
+  await bridge.configureExtensionRelay(credentials ? hostedExtensionRelayOptions(credentials, companions) : undefined);
 }
 
 function giphyCredentialPath(): string {
@@ -599,6 +631,15 @@ async function stopLocalExtension(): Promise<void> {
   await restoreHostedExtensionRelay().catch((error) => { hostedExtensionLastError = (error as Error).message; });
 }
 
+function applyAdaptiveStudioZoom(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  const { width, height } = window.getContentBounds();
+  const widthScale = width / 2400;
+  const heightScale = height / 1150;
+  const zoomFactor = Math.min(1.22, Math.max(1, Math.min(widthScale, heightScale)));
+  window.webContents.setZoomFactor(Number(zoomFactor.toFixed(2)));
+}
+
 async function runExtensionCertificateScript(argumentsList: string[], action: string): Promise<void> {
   const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), ...argumentsList], {
     cwd: supportRoot,
@@ -650,8 +691,20 @@ function createWindow(): BrowserWindow {
   window.webContents.on('will-redirect', guardNavigation);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   void window.loadURL(desktopRendererUrl);
-  window.once('ready-to-show', () => window.show());
-  window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
+  let zoomTimer: ReturnType<typeof setTimeout> | null = null;
+  window.webContents.on('did-finish-load', () => applyAdaptiveStudioZoom(window));
+  window.on('resize', () => {
+    if (zoomTimer) clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(() => applyAdaptiveStudioZoom(window), 80);
+  });
+  window.once('ready-to-show', () => {
+    applyAdaptiveStudioZoom(window);
+    window.show();
+  });
+  window.on('closed', () => {
+    if (zoomTimer) clearTimeout(zoomTimer);
+    if (mainWindow === window) mainWindow = null;
+  });
   return window;
 }
 
@@ -1003,8 +1056,13 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:get-local-extension-status', () => getLocalExtensionStatus());
   handleDesktop('studio:get-hosted-extension-status', () => getHostedExtensionStatus());
+  handleDesktop('studio:set-twitch-extension-companions', async (_event, value: unknown) => {
+    await saveTwitchExtensionCompanions(value);
+    return getHostedExtensionStatus();
+  });
+  // Keep the old IPC route during the 1.5.1 rollout so older renderer bundles can migrate safely.
   handleDesktop('studio:set-twitch-extension-edition', async (_event, value: unknown) => {
-    await saveTwitchExtensionEdition(value);
+    await saveTwitchExtensionCompanions(value);
     return getHostedExtensionStatus();
   });
   handleDesktop('studio:pair-hosted-extension', async (_event, input: { ebsBaseUrl?: unknown }) => {
@@ -1057,7 +1115,7 @@ function registerDesktopHandlers(): void {
       await stopLocalExtension();
       await saveHostedExtensionCredentials(credentials);
       await syncHostedExtensionPanelDesign(credentials, await loadTwitchPanelDesign());
-      await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials, await loadTwitchExtensionEdition()));
+      await bridge.configureExtensionRelay(hostedExtensionRelayOptions(credentials, await loadTwitchExtensionCompanions()));
       return getHostedExtensionStatus();
     } catch (error) {
       hostedExtensionLastError = (error as Error).message;
@@ -1443,6 +1501,197 @@ function registerDesktopHandlers(): void {
     return importDiceBoxTheme(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'dice-themes'));
   });
 
+  handleDesktop('studio:select-stage-actor-strip', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Choose Stage Actor Animation Strip',
+      properties: ['openFile'],
+      filters: [{ name: 'PNG animation strip', extensions: ['png'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const sourcePath = path.normalize(result.filePaths[0]);
+    const inspection = await inspectStageActorStrip(sourcePath);
+    const handle = randomBytes(18).toString('hex');
+    stageActorStripSelections.set(handle, { path: sourcePath, ...inspection });
+    return { handle, ...inspection };
+  });
+
+  handleDesktop('studio:select-stage-actor-texture', async () => {
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Choose Stage Actor Template Texture',
+      properties: ['openFile'],
+      filters: [{ name: 'Transparent PNG template texture', extensions: ['png'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const sourcePath = path.normalize(result.filePaths[0]);
+    const inspection = await inspectStageActorStrip(sourcePath);
+    const handle = randomBytes(18).toString('hex');
+    stageActorStripSelections.set(handle, { path: sourcePath, ...inspection });
+    return { handle, ...inspection };
+  });
+
+  handleDesktop('studio:create-stage-actor-pack', async (_event, input: {
+    name?: unknown; creator?: unknown; license?: unknown; description?: unknown; version?: unknown;
+    frameWidth?: unknown; frameHeight?: unknown; defaultScale?: unknown;
+    atlasHandle?: unknown;
+    templateId?: unknown; templateTextureHandle?: unknown;
+    animations?: Array<{ state?: unknown; handle?: unknown; row?: unknown; startFrame?: unknown; frames?: unknown; fps?: unknown; loop?: unknown; returnsToIdle?: unknown }>;
+  }) => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const templateId = String(input?.templateId || '');
+    const templateTextureHandle = String(input?.templateTextureHandle || '');
+    const atlasHandle = String(input?.atlasHandle || '');
+    const requestedAnimations = Array.isArray(input?.animations) ? input.animations : [];
+    const usedHandles: string[] = [];
+    const animations = atlasHandle || templateId ? [] : requestedAnimations.map((animation) => {
+      const handle = String(animation?.handle || '');
+      const selection = stageActorStripSelections.get(handle);
+      if (!selection) throw new Error(`Choose the ${String(animation?.state || 'animation')} PNG strip again.`);
+      usedHandles.push(handle);
+      return {
+        state: String(animation?.state || ''), sourcePath: selection.path,
+        frames: Number(animation?.frames), fps: Number(animation?.fps),
+        loop: animation?.loop === true, returnsToIdle: animation?.returnsToIdle === true
+      };
+    });
+    let built;
+    if (atlasHandle) {
+      const atlasSelection = stageActorStripSelections.get(atlasHandle);
+      if (!atlasSelection) throw new Error('Choose the avatar atlas again.');
+      usedHandles.push(atlasHandle);
+      built = await buildStageActorAtlasPack({
+        name: String(input?.name || ''), creator: String(input?.creator || ''), license: String(input?.license || ''),
+        description: String(input?.description || ''), version: String(input?.version || '1.0.0'),
+        sourcePath: atlasSelection.path, frameWidth: Number(input?.frameWidth || 128), frameHeight: Number(input?.frameHeight || 128), defaultScale: Number(input?.defaultScale ?? 1),
+        animations: requestedAnimations.map((animation) => ({ state: String(animation?.state || ''), row: Number(animation?.row), startFrame: Number(animation?.startFrame || 0), frames: Number(animation?.frames), fps: Number(animation?.fps), loop: animation?.loop === true, returnsToIdle: animation?.returnsToIdle === true }))
+      }, app.getPath('userData'));
+    } else if (templateId) {
+      const textureSelection = stageActorStripSelections.get(templateTextureHandle);
+      if (!textureSelection) throw new Error('Choose the template texture again.');
+      usedHandles.push(templateTextureHandle);
+      const bundledStageActorsDirectory = app.isPackaged ? path.join(process.resourcesPath, 'stage-actors') : path.join(__dirname, '..', 'assets', 'stage-actors');
+      built = await buildStageActorTemplatePack({
+        name: String(input?.name || ''), creator: String(input?.creator || ''), license: String(input?.license || ''),
+        description: String(input?.description || ''), version: String(input?.version || '1.0.0'), defaultScale: Number(input?.defaultScale ?? 1),
+        templateId, texturePath: textureSelection.path, templateDirectory: path.join(bundledStageActorsDirectory, 'storm-wisp')
+      }, app.getPath('userData'));
+    } else {
+      built = await buildStageActorPack({
+        name: String(input?.name || ''), creator: String(input?.creator || ''), license: String(input?.license || ''),
+        description: String(input?.description || ''), version: String(input?.version || '1.0.0'),
+        frameWidth: Number(input?.frameWidth), frameHeight: Number(input?.frameHeight), defaultScale: Number(input?.defaultScale ?? 1),
+        animations
+      }, app.getPath('userData'));
+    }
+    if (!templateId) {
+      const idle = built.manifest.animations.idle;
+      const sourceImage = nativeImage.createFromPath(path.join(built.directory, idle.asset));
+      if (!sourceImage.isEmpty()) {
+        const thumbnail = sourceImage.crop({ x: (idle.startFrame || 0) * idle.frameWidth, y: (idle.row || 0) * idle.frameHeight, width: idle.frameWidth, height: idle.frameHeight }).resize({ width: 256, height: 256, quality: 'best' });
+        await writeFile(path.join(built.directory, 'thumbnail.png'), thumbnail.toPNG(), { mode: 0o600 });
+        built.manifest = await updateStageActorPack({ packId: built.manifest.id, thumbnail: 'thumbnail.png' }, app.getPath('userData'));
+      }
+    }
+    const response = await fetch(`${bridge.baseUrl}/v1/stage-actors/reload`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}'
+    });
+    const catalog = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(catalog.error || 'The Stage Actor catalog could not be refreshed.');
+    for (const handle of usedHandles) stageActorStripSelections.delete(handle);
+    return { manifest: built.manifest, catalog };
+  });
+
+  handleDesktop('studio:update-stage-actor-pack', async (_event, input: { packId?: unknown; name?: unknown; creator?: unknown; license?: unknown; description?: unknown; version?: unknown; defaultScale?: unknown }) => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const manifest = await updateStageActorPack({ packId: String(input?.packId || ''), name: input?.name, creator: input?.creator, license: input?.license, description: input?.description, version: input?.version, defaultScale: input?.defaultScale }, app.getPath('userData'));
+    const response = await fetch(`${bridge.baseUrl}/v1/stage-actors/reload`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
+    const catalog = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(catalog.error || 'The Stage Actor catalog could not be refreshed.');
+    return { manifest, catalog };
+  });
+
+  handleDesktop('studio:export-stage-actor-pack', async (_event, input: { packId?: unknown }) => {
+    const document = await buildPortableStageActorPack({ packId: String(input?.packId || ''), createdWithVersion: TEMPEST_STUDIO_VERSION }, app.getPath('userData'));
+    const result = await dialog.showSaveDialog(mainWindow || undefined as never, {
+      title: 'Export Stage Actor Pack',
+      defaultPath: `${document.manifest.id}.tempest-avatar-pack`,
+      filters: [{ name: 'Tempest Avatar Pack', extensions: ['tempest-avatar-pack'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, `${JSON.stringify(document)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { path: result.filePath, name: document.manifest.name, assetCount: document.assets.length };
+  });
+
+  handleDesktop('studio:import-stage-actor-pack', async () => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Import Stage Actor Pack', properties: ['openFile'],
+      filters: [{ name: 'Tempest Avatar Pack', extensions: ['tempest-avatar-pack'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = path.normalize(result.filePaths[0]);
+    const details = await stat(filePath);
+    if (!details.isFile() || details.size > 340 * 1024 * 1024) throw new Error('Tempest Avatar Packs must be smaller than 340 MB.');
+    const imported = await importPortableStageActorPack(JSON.parse(await readFile(filePath, 'utf8')) as unknown, app.getPath('userData'));
+    const response = await fetch(`${bridge.baseUrl}/v1/stage-actors/reload`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}'
+    });
+    const catalog = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(catalog.error || 'The Stage Actor catalog could not be refreshed.');
+    return { manifest: imported.manifest, catalog };
+  });
+
+  handleDesktop('studio:import-streaming-avatars-library', async () => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const selection = await dialog.showOpenDialog(mainWindow || undefined as never, {
+      title: 'Choose Streaming Avatars Library',
+      properties: ['openDirectory']
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    const sourceDirectory = path.normalize(selection.filePaths[0]);
+    const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'info', title: 'Import Avatar Library?',
+      message: 'Create managed Tempest packs from this Streaming Avatars library?',
+      detail: 'Tempest will read the PNGs and streamavatars_json.txt metadata, then copy compatible avatars into Studio. The original library will not be changed.',
+      buttons: ['Cancel', 'Import Library'], defaultId: 1, cancelId: 0, noLink: true
+    });
+    if (decision.response !== 1) return null;
+    const imported = await importStreamingAvatarsLibrary(sourceDirectory, app.getPath('userData'));
+    for (const entry of imported.imported) {
+      const idle = entry.manifest.animations.idle;
+      const sourceImage = nativeImage.createFromPath(path.join(entry.directory, idle.asset));
+      if (sourceImage.isEmpty()) continue;
+      const thumbnail = sourceImage.crop({ x: (idle.startFrame || 0) * idle.frameWidth, y: (idle.row || 0) * idle.frameHeight, width: idle.frameWidth, height: idle.frameHeight }).resize({ width: 256, height: 256, quality: 'best' });
+      await writeFile(path.join(entry.directory, 'thumbnail.png'), thumbnail.toPNG(), { mode: 0o600 });
+      entry.manifest = await updateStageActorPack({ packId: entry.manifest.id, thumbnail: 'thumbnail.png' }, app.getPath('userData'));
+    }
+    const response = await fetch(`${bridge.baseUrl}/v1/stage-actors/reload`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}'
+    });
+    const catalog = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(catalog.error || 'The Stage Actor catalog could not be refreshed.');
+    return { discovered: imported.discovered, imported: imported.imported.length, skipped: imported.skipped, catalog };
+  });
+
+  handleDesktop('studio:remove-stage-actor-pack', async (_event, input: { packId?: unknown; name?: unknown }) => {
+    if (!bridge) throw new Error('Tempest Bridge is not running.');
+    const packId = String(input?.packId || '');
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(packId)) throw new Error('The Stage Actor pack ID is invalid.');
+    const name = String(input?.name || packId).trim().slice(0, 80) || packId;
+    const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'warning', title: 'Remove Stage Actor Pack?',
+      message: `Remove ${name} from this Studio?`,
+      detail: 'Its managed animation files will be deleted. Viewers using it will safely return to generated placeholders. Export the pack first if you want a recoverable copy.',
+      buttons: ['Keep Pack', 'Remove Pack'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    if (decision.response !== 1) return null;
+    const response = await fetch(`${bridge.baseUrl}/v1/stage-actors/${encodeURIComponent(packId)}`, {
+      method: 'DELETE', headers: { 'X-Tempest-Token': bridge.token }
+    });
+    const catalog = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(catalog.error || 'The Stage Actor pack could not be removed.');
+    return catalog;
+  });
+
   handleDesktop('studio:export-backup', async (_event, rendererSettings: unknown) => {
     const document = await buildTempestStudioBackup({ userDataDirectory: app.getPath('userData'), productVersion: TEMPEST_STUDIO_VERSION, rendererSettings });
     const date = new Date().toISOString().slice(0, 10);
@@ -1590,15 +1839,19 @@ app.whenReady().then(async () => {
   privacySettings = await loadPrivacySettings();
   dataMigrationStatus = await runStudioDataMigrations({ userDataDirectory, productVersion: TEMPEST_STUDIO_VERSION });
   const bridgeDataDirectory = path.join(userDataDirectory, 'bridge');
+  const bundledStageActorsDirectory = app.isPackaged ? path.join(process.resourcesPath, 'stage-actors') : path.join(__dirname, '..', 'assets', 'stage-actors');
+  await installBundledStageActorPacks(bundledStageActorsDirectory, bridgeDataDirectory, '10').catch((error) => console.warn('Bundled Stage Actors could not be installed:', error));
   broadcasterCredentialStore = createTwitchCredentialStore(bridgeDataDirectory);
   kickCredentialStore = createKickCredentialStore(bridgeDataDirectory);
   bridge = await startTempestBridge({
     host: '127.0.0.1',
     port: bridgePort,
     dataDirectory: bridgeDataDirectory,
+    token: await loadDevelopmentBridgeToken(userDataDirectory),
     twitchCredentialStore: broadcasterCredentialStore,
     chatbotCredentialStore: createTwitchCredentialStore(bridgeDataDirectory, 'chatbot-credentials.bin'),
     kickCredentialStore,
+    tobiiAdapterPath: process.env.TEMPEST_TOBII_ADAPTER_PATH,
     extensionRelay: extensionRelayOptionsFromEnvironment(),
     soundAlertPlayback(command: TempestSoundAlertPlaybackCommand) {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('studio:sound-alert-playback', command);
