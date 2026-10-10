@@ -51,8 +51,12 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   stopLocalExtension: () => ipcRenderer.invoke('studio:stop-local-extension'),
   forgetLocalExtensionSecret: () => ipcRenderer.invoke('studio:forget-local-extension-secret'),
   prepareLocalExtensionCertificate: () => ipcRenderer.invoke('studio:prepare-local-extension-certificate'),
+  removeLocalExtensionCertificate: () => ipcRenderer.invoke('studio:remove-local-extension-certificate'),
   openLocalExtensionPanel: () => ipcRenderer.invoke('studio:open-local-extension-panel'),
   bridgeRequest: (request: { path: string; method?: string; body?: unknown }) => ipcRenderer.invoke('studio:bridge-request', request),
+  selectAsset: () => ipcRenderer.invoke('studio:select-asset'),
+  removeManagedAsset: (uri: string) => ipcRenderer.invoke('studio:remove-managed-asset', uri),
+  adoptAssignedAssets: (uris: string[]) => ipcRenderer.invoke('studio:adopt-assigned-assets', uris),
   selectSoundAlertAudio: () => ipcRenderer.invoke('studio:select-sound-alert-audio'),
   selectSoundAlertVisual: () => ipcRenderer.invoke('studio:select-sound-alert-visual'),
   selectTwitchExperienceMedia: () => ipcRenderer.invoke('studio:select-twitch-experience-media'),
@@ -88,7 +92,7 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   getGiphyStatus: () => ipcRenderer.invoke('studio:get-giphy-status'),
   saveGiphyApiKey: (apiKey: string) => ipcRenderer.invoke('studio:save-giphy-api-key', apiKey),
   searchGiphy: (query: string) => ipcRenderer.invoke('studio:search-giphy', query),
-  importGiphyVisual: (input: { id: string; mediaUrl: string }) => ipcRenderer.invoke('studio:import-giphy-visual', input),
+  importGiphyVisual: (input: { id: string; title?: string; mediaUrl: string }) => ipcRenderer.invoke('studio:import-giphy-visual', input),
   onSoundAlertPlayback: (listener: (command: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => listener(command);
     ipcRenderer.on('studio:sound-alert-playback', handler);

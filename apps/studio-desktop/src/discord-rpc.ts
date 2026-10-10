@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import net, { Socket } from 'node:net';
+import { boundedFetch } from './bounded-fetch';
+import { readResponseJson } from './bounded-response';
+
+const tokenExchangeFetch = boundedFetch(fetch, 10_000);
 
 export const OFFICIAL_DISCORD_CLIENT_ID = '1546349623701151854';
 export const OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL = 'https://signal.tempestmainframe.com/v1/discord/oauth/exchange';
@@ -118,6 +122,8 @@ export class TempestDiscordRpcClient {
   private guildName = '';
   private participantCount = 0;
   private speakingUsers = new Set<string>();
+  private channelRefreshPromise: Promise<void> | null = null;
+  private channelRefreshPending = false;
   private lastError = '';
   private phase: DiscordRpcStatus['state'] = 'disconnected';
   private readonly clientId: string;
@@ -185,7 +191,7 @@ export class TempestDiscordRpcClient {
       }
       await this.subscribe('VOICE_CHANNEL_SELECT', {});
       this.phase = 'connected';
-      await this.refreshSelectedChannel();
+      await this.refreshSelectedChannelCoalesced();
       return this.status();
     } catch (error) {
       const describedError = describeDiscordRpcFailure(error);
@@ -233,8 +239,8 @@ export class TempestDiscordRpcClient {
   private async exchangeTokens(body: Record<string, string>, previousRefreshToken?: string): Promise<DiscordRpcTokenSet> {
     const url = new URL(this.tokenExchangeUrl);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('The Discord token exchange service must use public HTTPS.');
-    const exchange = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const result = await exchange.json().catch(() => ({})) as { accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown };
+    const exchange = await tokenExchangeFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await readResponseJson<{ accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown }>(exchange, 1024 * 1024).catch(() => ({} as { accessToken?: unknown; access_token?: unknown; refreshToken?: unknown; refresh_token?: unknown; expiresAt?: unknown; expires_at?: unknown; expiresIn?: unknown; expires_in?: unknown; error?: unknown }));
     if (!exchange.ok) throw new Error(string(result.error) || `Discord authorization exchange failed with ${exchange.status}.`);
     const accessToken = string(result.accessToken) || string(result.access_token);
     if (!accessToken) throw new Error('The Discord authorization service returned no access token.');
@@ -315,13 +321,20 @@ export class TempestDiscordRpcClient {
 
   private waitForEvent(evt: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`Discord ${evt} event timed out.`)), 8_000);
-      const poll = setInterval(() => {
+      if (!this.eventWaiters.has(evt)) this.eventWaiters.set(evt, []);
+      let poll: NodeJS.Timeout;
+      const timeout = setTimeout(() => {
+        clearInterval(poll);
+        this.eventWaiters.delete(evt);
+        reject(new Error(`Discord ${evt} event timed out.`));
+      }, 8_000);
+      poll = setInterval(() => {
         const listener = this.eventWaiters.get(evt);
         if (listener?.length) {
           const value = listener.shift();
           clearInterval(poll);
           clearTimeout(timeout);
+          this.eventWaiters.delete(evt);
           resolve(value);
         }
       }, 10);
@@ -334,12 +347,10 @@ export class TempestDiscordRpcClient {
 
   private async handleDispatch(evt: string, data: unknown): Promise<void> {
     if (evt === 'READY' || this.eventWaiters.has(evt)) {
-      const waiters = this.eventWaiters.get(evt) || [];
-      waiters.push(data);
-      this.eventWaiters.set(evt, waiters);
+      this.eventWaiters.set(evt, [data]);
     }
-    if (evt === 'VOICE_CHANNEL_SELECT') await this.refreshSelectedChannel();
-    else if (['VOICE_STATE_CREATE', 'VOICE_STATE_UPDATE', 'VOICE_STATE_DELETE'].includes(evt)) await this.refreshSelectedChannel();
+    if (evt === 'VOICE_CHANNEL_SELECT') await this.refreshSelectedChannelCoalesced();
+    else if (['VOICE_STATE_CREATE', 'VOICE_STATE_UPDATE', 'VOICE_STATE_DELETE'].includes(evt)) await this.refreshSelectedChannelCoalesced();
     else if (evt === 'SPEAKING_START' || evt === 'SPEAKING_STOP') {
       const userId = string((data as { user_id?: unknown } | undefined)?.user_id);
       if (userId) {
@@ -347,6 +358,22 @@ export class TempestDiscordRpcClient {
         await this.options.publishSpeaking(userId, evt === 'SPEAKING_START');
       }
     }
+  }
+
+  private async refreshSelectedChannelCoalesced(): Promise<void> {
+    if (this.channelRefreshPromise) {
+      this.channelRefreshPending = true;
+      return this.channelRefreshPromise;
+    }
+    const pending = (async () => {
+      do {
+        this.channelRefreshPending = false;
+        await this.refreshSelectedChannel();
+      } while (this.channelRefreshPending && this.socket);
+    })();
+    this.channelRefreshPromise = pending;
+    try { await pending; }
+    finally { if (this.channelRefreshPromise === pending) this.channelRefreshPromise = null; }
   }
 
   private async refreshSelectedChannel(): Promise<void> {
@@ -410,5 +437,8 @@ export class TempestDiscordRpcClient {
     if (socket) { socket.removeAllListeners(); socket.destroy(); }
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Discord connection closed.')); }
     this.pending.clear();
+    this.eventWaiters.clear();
+    this.speakingUsers.clear();
+    this.channelRefreshPending = false;
   }
 }

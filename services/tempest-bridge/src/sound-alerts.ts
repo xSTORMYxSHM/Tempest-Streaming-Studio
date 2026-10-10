@@ -27,7 +27,7 @@ const broadcastEffects = ['pulse', 'glow', 'glitch', 'spectrum', 'surge'] as con
 const broadcastCircuits = ['all', 'core', 'frame', 'chat', 'plates', 'alerts'] as const;
 const interactionCategories = ['sticker', 'gif', 'jumpscare', 'screen-effect', 'sound', 'counter', 'community', 'other'] as const;
 const placementModes = ['fixed', 'viewer'] as const;
-const accessModes = ['everyone', 'staff', 'assigned-creators', 'specific-viewers'] as const;
+const accessModes = ['everyone', 'staff', 'assigned-creators', 'viewer-group', 'specific-viewers'] as const;
 
 const catalogSeed: Array<Pick<TempestSoundAlertDefinition, 'id' | 'name' | 'cue' | 'durationMs' | 'legacyReceiver' | 'accent'>> = [
   { id: 'sound-alert.hype-pulse', name: 'Hype Pulse', cue: 'sound-alert.hype-pulse', durationMs: 8000, accent: '#54f2eb' },
@@ -110,6 +110,13 @@ function validateViewerIds(value: unknown, field: string): string[] {
   return ids;
 }
 
+function validateViewerGroupId(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const id = String(value).trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || id.length > 48) throw new Error('viewerGroupId must be a lowercase viewer-group ID of 48 characters or fewer.');
+  return id;
+}
+
 function validateCounterCommandId(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const id = String(value).trim();
@@ -169,6 +176,7 @@ export class TempestSoundAlertCatalog {
   private lastAlertTrigger = new Map<string, number>();
   private lastViewerTrigger = new Map<string, number>();
   private eventIds = new Map<string, number>();
+  private lastRuntimeStatePrunedAt = 0;
   private readonly documentPath: string;
 
   constructor(private readonly dataDirectory: string) {
@@ -217,7 +225,7 @@ export class TempestSoundAlertCatalog {
     if (index < 0) throw new Error(`Sound Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Sound Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'interactionCategory', 'placementMode', 'accessMode', 'allowedViewerIds', 'blockedViewerIds', 'hideWhenLocked', 'counterCommandId', 'counterDelta', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
+    const allowed = new Set(['enabled', 'warudoEnabled', 'vtubeStudioEnabled', 'vtubeStudioHotkey', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'viewerCooldownMs', 'globalCooldownMs', 'interactionCategory', 'placementMode', 'accessMode', 'viewerGroupId', 'allowedViewerIds', 'blockedViewerIds', 'hideWhenLocked', 'counterCommandId', 'counterDelta', 'volume', 'audioUri', 'visualUri', 'visualDurationMs', 'broadcastAudioSource', 'broadcastVisualSource', 'broadcastEffect', 'broadcastCircuit', 'broadcastEffectStrength', 'accent', 'design']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Sound Alert catalog.`);
     const current = this.alerts[index];
     const updated = this.validate({
@@ -234,6 +242,7 @@ export class TempestSoundAlertCatalog {
       ...(source.interactionCategory === undefined ? {} : { interactionCategory: source.interactionCategory }),
       ...(source.placementMode === undefined ? {} : { placementMode: source.placementMode }),
       ...(source.accessMode === undefined ? {} : { accessMode: source.accessMode }),
+      ...(Object.hasOwn(source, 'viewerGroupId') ? { viewerGroupId: source.viewerGroupId } : {}),
       ...(source.allowedViewerIds === undefined ? {} : { allowedViewerIds: source.allowedViewerIds }),
       ...(source.blockedViewerIds === undefined ? {} : { blockedViewerIds: source.blockedViewerIds }),
       ...(source.hideWhenLocked === undefined ? {} : { hideWhenLocked: source.hideWhenLocked }),
@@ -284,6 +293,7 @@ export class TempestSoundAlertCatalog {
       interactionCategory: source.interactionCategory === undefined ? 'other' : source.interactionCategory,
       placementMode: source.placementMode === undefined ? 'fixed' : source.placementMode,
       accessMode: source.accessMode === undefined ? 'everyone' : source.accessMode,
+      viewerGroupId: source.viewerGroupId,
       allowedViewerIds: source.allowedViewerIds,
       blockedViewerIds: source.blockedViewerIds,
       hideWhenLocked: source.hideWhenLocked === undefined ? false : source.hideWhenLocked,
@@ -323,7 +333,7 @@ export class TempestSoundAlertCatalog {
     if (!alert.enabled && !request.bypassCooldown) throw new Error(`${alert.name} is disabled.`);
     const eventId = request.eventId?.trim() || globalThis.crypto.randomUUID();
     const now = Date.now();
-    this.expireReplayIds(now);
+    this.pruneRuntimeState(now);
     if (this.eventIds.has(eventId)) throw new Error(`Sound Alert event ${eventId} was already handled.`);
     if (!request.bypassCooldown) {
       const globalRemaining = (this.lastAlertTrigger.get(alert.id) || 0) + alert.globalCooldownMs - now;
@@ -398,6 +408,9 @@ export class TempestSoundAlertCatalog {
     if (input.free !== true) throw new Error('Studio Sound Alerts must remain free.');
     const volume = Number(input.volume);
     if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('Sound Alert volume must be between 0 and 1.');
+    const accessMode = validateChoice(input.accessMode ?? 'everyone', 'accessMode', accessModes) || 'everyone';
+    const viewerGroupId = validateViewerGroupId(input.viewerGroupId);
+    if (accessMode === 'viewer-group' && !viewerGroupId) throw new Error('Choose a reusable viewer group for this interaction.');
     return {
       ...input,
       schemaVersion: 1,
@@ -416,7 +429,8 @@ export class TempestSoundAlertCatalog {
       globalCooldownMs: boundedInteger(input.globalCooldownMs, 'globalCooldownMs', 0, 24 * 60 * 60 * 1000),
       interactionCategory: validateChoice(input.interactionCategory ?? 'other', 'interactionCategory', interactionCategories) || 'other',
       placementMode: validateChoice(input.placementMode ?? 'fixed', 'placementMode', placementModes) || 'fixed',
-      accessMode: validateChoice(input.accessMode ?? 'everyone', 'accessMode', accessModes) || 'everyone',
+      accessMode,
+      viewerGroupId,
       allowedViewerIds: validateViewerIds(input.allowedViewerIds, 'allowedViewerIds'),
       blockedViewerIds: validateViewerIds(input.blockedViewerIds, 'blockedViewerIds'),
       hideWhenLocked: input.hideWhenLocked === true,
@@ -436,8 +450,14 @@ export class TempestSoundAlertCatalog {
     } as TempestSoundAlertDefinition;
   }
 
-  private expireReplayIds(now: number): void {
+  private pruneRuntimeState(now: number): void {
+    const maximumEntries = 50_000;
+    if (now - this.lastRuntimeStatePrunedAt < 60_000 && this.eventIds.size <= maximumEntries && this.lastViewerTrigger.size <= maximumEntries) return;
     for (const [id, timestamp] of this.eventIds) if (now - timestamp > replayWindowMs) this.eventIds.delete(id);
+    for (const [key, timestamp] of this.lastViewerTrigger) if (now - timestamp > 86_400_000) this.lastViewerTrigger.delete(key);
+    while (this.eventIds.size > maximumEntries) this.eventIds.delete(this.eventIds.keys().next().value as string);
+    while (this.lastViewerTrigger.size > maximumEntries) this.lastViewerTrigger.delete(this.lastViewerTrigger.keys().next().value as string);
+    this.lastRuntimeStatePrunedAt = now;
   }
 
   private async persist(): Promise<void> {

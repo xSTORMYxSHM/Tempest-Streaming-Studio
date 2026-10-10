@@ -36,3 +36,37 @@ jobs:
       - name: Build and test workspace
         shell: pwsh
         run: pnpm check
+
+  hosted-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install hosted dependencies
+        run: pnpm install --frozen-lockfile --filter @tempest/twitch-ebs... --filter @tempest/twitch-extension
+
+      - name: Build hosted services and Extension
+        run: |
+          pnpm --filter @tempest/twitch-ebs... build
+          pnpm extension:build
+
+      - name: Verify hosted release boundary
+        run: pnpm run hosted:verify
+
+      - name: Build Railway EBS image
+        run: docker build --tag tempest-twitch-ebs:ci .

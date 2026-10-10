@@ -6,6 +6,7 @@ import { URL } from 'node:url';
 import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchBitsTransactionReceipt, verifyTwitchExtensionJwt } from './jwt';
+import { boundedFetch, readBoundedJsonResponse } from './bounded-fetch';
 import {
   BitsDeliveryRecord,
   BitsReservationRecord,
@@ -13,7 +14,14 @@ import {
   PublicExtensionCatalog,
   PublicExtensionCompanions,
   PublicExtensionCatalogItem,
+  PublicExtensionCounter,
+  PublicExtensionCommand,
+  PublicExtensionGoal,
+  PublicExtensionNowPlaying,
+  PublicExtensionSchedule,
+  PublicExtensionStream,
   PublicExtensionPanelDesign,
+  PublicExtensionPoll,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
@@ -29,10 +37,23 @@ export type {
   PublicExtensionCatalog,
   PublicExtensionCompanions,
   PublicExtensionCatalogItem,
+  PublicExtensionCommand,
+  PublicExtensionGoal,
+  PublicExtensionNowPlaying,
+  PublicExtensionSchedule,
+  PublicExtensionStream,
   PublicExtensionPanelDesign,
+  PublicExtensionPoll,
   TwitchEbsInstallation,
   TwitchEbsInstallationStore
 } from './installation-store';
+
+// A fully populated 200-item catalog can legitimately exceed 64 KiB when
+// access-controlled interactions carry bounded Twitch ID lists. The relay is
+// authenticated and validatePublicCatalog still caps every nested collection.
+export const maximumStudioWebSocketPayloadBytes = 2 * 1024 * 1024;
+const primaryExtensionName = 'Tempest Streaming Extension';
+const externalFetch = boundedFetch();
 
 export interface TwitchOAuthIdentity {
   clientId: string;
@@ -117,12 +138,37 @@ class HttpError extends Error {
   }
 }
 
-class SlidingWindowLimiter {
+export class SlidingWindowLimiter {
   private readonly entries = new Map<string, number[]>();
+  private lastPrunedAt = 0;
+
+  constructor(private readonly maxEntries = 50_000, private readonly pruneIntervalMs = 60_000) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error('Rate limiter capacity must be a positive integer.');
+    if (!Number.isInteger(pruneIntervalMs) || pruneIntervalMs < 1) throw new Error('Rate limiter prune interval must be a positive integer.');
+  }
+
+  get entryCount(): number {
+    return this.entries.size;
+  }
+
+  private prune(now: number, reserveForNewKey: boolean): void {
+    const cutoff = now - 60_000;
+    for (const [key, timestamps] of this.entries) {
+      const active = timestamps.filter((timestamp) => timestamp > cutoff);
+      if (active.length) this.entries.set(key, active);
+      else this.entries.delete(key);
+    }
+    const targetSize = Math.max(0, this.maxEntries - (reserveForNewKey ? 1 : 0));
+    while (this.entries.size > targetSize) this.entries.delete(this.entries.keys().next().value as string);
+    this.lastPrunedAt = now;
+  }
 
   consume(key: string, limit: number, now = Date.now()): number {
+    const isNewKey = !this.entries.has(key);
+    if (now - this.lastPrunedAt >= this.pruneIntervalMs || (isNewKey && this.entries.size >= this.maxEntries)) this.prune(now, isNewKey);
     const cutoff = now - 60_000;
     const timestamps = (this.entries.get(key) || []).filter((timestamp) => timestamp > cutoff);
+    this.entries.delete(key);
     if (timestamps.length >= limit) {
       this.entries.set(key, timestamps);
       return Math.max(1, timestamps[0] + 60_000 - now);
@@ -134,6 +180,7 @@ class SlidingWindowLimiter {
 }
 
 const maximumBodyBytes = 16 * 1024;
+const maximumProviderResponseBytes = 1024 * 1024;
 const requestIdPattern = /^[A-Za-z0-9_-]{16,128}$/;
 const actionPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const soundAlertPattern = /^sound-alert\.[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -172,8 +219,8 @@ function kickOAuthToken(request: IncomingMessage): string {
 
 async function validateKickOAuthToken(accessToken: string): Promise<KickOAuthIdentity> {
   if (!accessToken || accessToken.length > 4096 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Kick OAuth token is required.');
-  const response = await fetch('https://api.kick.com/public/v1/users', { headers: { Authorization: `Bearer ${accessToken}` } });
-  const body = await response.json().catch(() => ({})) as { data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown };
+  const response = await externalFetch('https://api.kick.com/public/v1/users', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const body = await readBoundedJsonResponse<{ data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown }>(response, maximumProviderResponseBytes).catch(() => ({} as { data?: Array<{ user_id?: number | string; name?: string }>; message?: unknown; error?: unknown }));
   const user = body.data?.[0];
   if (!response.ok || !user?.user_id || !user.name) throw new HttpError(401, String(body.message || body.error || 'Kick OAuth validation failed.'));
   return { userId: String(user.user_id), username: user.name };
@@ -191,8 +238,8 @@ function verifyKickWebhook(messageId: string, timestamp: string, rawBody: Buffer
 
 async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAuthIdentity> {
   if (!accessToken || accessToken.length > 2048 || /[\r\n\0]/.test(accessToken)) throw new HttpError(401, 'A valid Twitch OAuth token is required.');
-  const response = await fetch('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${accessToken}` } });
-  const body = await response.json().catch(() => ({})) as { client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown };
+  const response = await externalFetch('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${accessToken}` } });
+  const body = await readBoundedJsonResponse<{ client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown }>(response, maximumProviderResponseBytes).catch(() => ({} as { client_id?: unknown; user_id?: unknown; login?: unknown; scopes?: unknown; expires_in?: unknown; message?: unknown }));
   if (!response.ok || typeof body.client_id !== 'string' || typeof body.user_id !== 'string' || typeof body.login !== 'string') {
     throw new HttpError(401, typeof body.message === 'string' ? body.message : 'Twitch OAuth validation failed.');
   }
@@ -208,7 +255,7 @@ async function validateTwitchOAuthToken(accessToken: string): Promise<TwitchOAut
 
 function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Catalog sync must be an object.');
-  const source = value as { companions?: unknown; extensionEdition?: unknown; items?: unknown };
+  const source = value as { companions?: unknown; extensionEdition?: unknown; items?: unknown; poll?: unknown; counters?: unknown; commands?: unknown; goal?: unknown; nowPlaying?: unknown; schedule?: unknown; stream?: unknown };
   if (source.extensionEdition !== undefined && !['free', 'bits'].includes(String(source.extensionEdition))) throw new Error('Catalog sync has an invalid Extension edition.');
   const extensionEdition = source.extensionEdition === 'bits' ? 'bits' : 'free';
   let companions: PublicExtensionCompanions;
@@ -256,7 +303,137 @@ function validatePublicCatalog(value: unknown): PublicExtensionCatalog {
     seen.add(id);
     return { id, name, kind, destinations, durationMs, ...(cooldownMs === undefined ? {} : { cooldownMs }), ...(viewerCooldownMs === undefined ? {} : { viewerCooldownMs }), ...(globalCooldownMs === undefined ? {} : { globalCooldownMs }), category, placementMode, access, accent, glyph };
   });
-  return { schemaVersion: 1, companions, extensionEdition, updatedAt: new Date().toISOString(), items };
+  let poll: PublicExtensionPoll | undefined;
+  if (source.poll !== undefined) {
+    if (!source.poll || typeof source.poll !== 'object' || Array.isArray(source.poll)) throw new Error('Catalog poll is invalid.');
+    const candidate = source.poll as Record<string, unknown>;
+    const id = String(candidate.id || '').trim();
+    const state = candidate.state === 'active' ? 'active' : candidate.state === 'closed' ? 'closed' : '';
+    const question = String(candidate.question || '').trim();
+    const startedAt = String(candidate.startedAt || '');
+    const endedAt = candidate.endedAt === undefined ? undefined : String(candidate.endedAt);
+    const lastVoteAt = candidate.lastVoteAt === undefined ? undefined : String(candidate.lastVoteAt);
+    if (!/^[A-Za-z0-9-]{16,80}$/.test(id) || !state || !question || question.length > 160 || /[\r\n\0]/.test(question)) throw new Error('Catalog poll identity is invalid.');
+    if (!Number.isFinite(Date.parse(startedAt)) || (endedAt && !Number.isFinite(Date.parse(endedAt))) || (lastVoteAt && !Number.isFinite(Date.parse(lastVoteAt)))) throw new Error('Catalog poll timestamps are invalid.');
+    if (!Array.isArray(candidate.options) || candidate.options.length < 2 || candidate.options.length > 10) throw new Error('Catalog poll must contain 2 to 10 options.');
+    const options = candidate.options.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog poll option ${index + 1} is invalid.`);
+      const option = entry as Record<string, unknown>;
+      const number = Number(option.number);
+      const label = String(option.label || '').trim();
+      const votes = Number(option.votes);
+      if (number !== index + 1 || !label || label.length > 80 || /[\r\n\0]/.test(label) || !Number.isSafeInteger(votes) || votes < 0 || votes > 1_000_000_000) throw new Error(`Catalog poll option ${index + 1} is invalid.`);
+      return { number, label, votes, percentage: 0 };
+    });
+    if (new Set(options.map((option) => option.label.toLocaleLowerCase())).size !== options.length) throw new Error('Catalog poll option names must be unique.');
+    const totalVotes = options.reduce((total, option) => total + option.votes, 0);
+    poll = {
+      id, state, question,
+      options: options.map((option) => ({ ...option, percentage: totalVotes ? Math.round((option.votes / totalVotes) * 1000) / 10 : 0 })),
+      totalVotes, startedAt,
+      ...(endedAt ? { endedAt } : {}),
+      ...(lastVoteAt ? { lastVoteAt } : {})
+    };
+  }
+  let counters: PublicExtensionCounter[] | undefined;
+  if (source.counters !== undefined) {
+    if (!Array.isArray(source.counters) || source.counters.length > 12) throw new Error('Catalog counters must be a list of at most 12 entries.');
+    const counterIds = new Set<string>();
+    counters = source.counters.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog counter ${index + 1} is invalid.`);
+      const counter = entry as Record<string, unknown>;
+      const id = String(counter.id || '').trim();
+      const command = String(counter.command || '').trim().toLowerCase();
+      const trigger = counter.trigger === undefined ? undefined : String(counter.trigger).trim();
+      const label = String(counter.label || '').trim();
+      const counterValue = Number(counter.value);
+      if (!/^[A-Za-z0-9._-]{1,80}$/.test(id) || counterIds.has(id)) throw new Error(`Catalog counter ${index + 1} has an invalid or duplicate ID.`);
+      if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(command) || !label || label.length > 80 || /[\r\n\0]/.test(label)) throw new Error(`Catalog counter ${index + 1} has invalid display data.`);
+      if (trigger !== undefined && (trigger.length < 2 || trigger.length > 34 || /[\s\r\n\0]/.test(trigger))) throw new Error(`Catalog counter ${index + 1} has an invalid trigger.`);
+      if (!Number.isSafeInteger(counterValue) || Math.abs(counterValue) > 1_000_000_000) throw new Error(`Catalog counter ${index + 1} has an invalid value.`);
+      counterIds.add(id);
+      return { id, command, ...(trigger ? { trigger } : {}), label, value: counterValue };
+    });
+  }
+  let commands: PublicExtensionCommand[] | undefined;
+  if (source.commands !== undefined) {
+    if (!Array.isArray(source.commands) || source.commands.length > 40) throw new Error('Catalog commands must be a list of at most 40 entries.');
+    const triggers = new Set<string>();
+    commands = source.commands.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Catalog command ${index + 1} is invalid.`);
+      const command = entry as Record<string, unknown>;
+      const trigger = String(command.trigger || '').trim();
+      const permission = ['everyone', 'subscriber', 'moderator', 'broadcaster'].includes(String(command.permission)) ? command.permission as PublicExtensionCommand['permission'] : '';
+      const aliases = [...new Set((Array.isArray(command.aliases) ? command.aliases : []).map((alias) => String(alias || '').trim()).filter(Boolean))];
+      const validTrigger = (candidate: string): boolean => candidate.length >= 2 && candidate.length <= 34 && !/[\s\r\n\0]/.test(candidate);
+      if (!validTrigger(trigger) || triggers.has(trigger.toLocaleLowerCase()) || !permission) throw new Error(`Catalog command ${index + 1} has invalid display data.`);
+      if (aliases.length > 5 || aliases.some((alias) => !validTrigger(alias))) throw new Error(`Catalog command ${index + 1} has invalid aliases.`);
+      triggers.add(trigger.toLocaleLowerCase());
+      return { trigger, aliases, permission, allowSharedChat: command.allowSharedChat === true };
+    });
+  }
+  let goal: PublicExtensionGoal | undefined;
+  if (source.goal !== undefined) {
+    if (!source.goal || typeof source.goal !== 'object' || Array.isArray(source.goal)) throw new Error('Catalog goal is invalid.');
+    const candidate = source.goal as Record<string, unknown>;
+    const goalSource = candidate.source === 'twitch' ? 'twitch' : candidate.source === 'studio' ? 'studio' : '';
+    const kind = ['subscriptions', 'followers', 'bits', 'donations', 'custom'].includes(String(candidate.kind)) ? candidate.kind as PublicExtensionGoal['kind'] : '';
+    const title = String(candidate.title || '').trim();
+    const currentAmount = Number(candidate.currentAmount);
+    const targetAmount = Number(candidate.targetAmount);
+    const unit = String(candidate.unit || '').trim();
+    const accent = String(candidate.accent || '').toUpperCase();
+    if (!goalSource || !kind || !title || title.length > 100 || /[\r\n\0]/.test(title)) throw new Error('Catalog goal identity is invalid.');
+    if (!Number.isFinite(currentAmount) || currentAmount < 0 || currentAmount > 1_000_000_000 || !Number.isFinite(targetAmount) || targetAmount <= 0 || targetAmount > 1_000_000_000) throw new Error('Catalog goal progress is invalid.');
+    if (unit.length > 24 || /[\r\n\0]/.test(unit) || !/^#[0-9A-F]{6}$/.test(accent)) throw new Error('Catalog goal display data is invalid.');
+    goal = { source: goalSource, kind, title, currentAmount, targetAmount, percentage: Math.round(Math.min(100, currentAmount / targetAmount * 100) * 10) / 10, unit, accent };
+  }
+  let nowPlaying: PublicExtensionNowPlaying | undefined;
+  if (source.nowPlaying !== undefined) {
+    if (!source.nowPlaying || typeof source.nowPlaying !== 'object' || Array.isArray(source.nowPlaying)) throw new Error('Catalog Now Playing state is invalid.');
+    const candidate = source.nowPlaying as Record<string, unknown>;
+    const stationName = String(candidate.stationName || '').trim();
+    const state = ['online', 'offline', 'unavailable'].includes(String(candidate.state)) ? candidate.state as PublicExtensionNowPlaying['state'] : '';
+    const cleanOptional = (key: 'artist' | 'title' | 'text' | 'album', maximum: number): string | undefined => {
+      if (candidate[key] === undefined || candidate[key] === null || candidate[key] === '') return undefined;
+      const result = String(candidate[key]).trim();
+      if (!result || result.length > maximum || /[\r\n\0]/.test(result)) throw new Error(`Catalog Now Playing ${key} is invalid.`);
+      return result;
+    };
+    const publicPlayerUrl = String(candidate.publicPlayerUrl || '').trim();
+    const checkedAt = String(candidate.checkedAt || '');
+    let parsedPlayerUrl: URL;
+    try { parsedPlayerUrl = new URL(publicPlayerUrl); } catch { throw new Error('Catalog Now Playing listen URL is invalid.'); }
+    if (!stationName || stationName.length > 80 || /[\r\n\0]/.test(stationName) || !state) throw new Error('Catalog Now Playing identity is invalid.');
+    if (parsedPlayerUrl.protocol !== 'https:' || parsedPlayerUrl.username || parsedPlayerUrl.password || publicPlayerUrl.length > 2048 || !Number.isFinite(Date.parse(checkedAt))) throw new Error('Catalog Now Playing source is invalid.');
+    nowPlaying = { stationName, state, artist: cleanOptional('artist', 120), title: cleanOptional('title', 160), text: cleanOptional('text', 240), album: cleanOptional('album', 160), publicPlayerUrl: parsedPlayerUrl.href, checkedAt };
+  }
+  let schedule: PublicExtensionSchedule | undefined;
+  if (source.schedule !== undefined) {
+    if (!source.schedule || typeof source.schedule !== 'object' || Array.isArray(source.schedule)) throw new Error('Catalog schedule is invalid.');
+    const candidate = source.schedule as Record<string, unknown>;
+    const title = candidate.title === undefined || candidate.title === null || candidate.title === '' ? undefined : String(candidate.title).trim();
+    const startTime = String(candidate.startTime || '');
+    if ((title !== undefined && (!title || title.length > 160 || /[\r\n\0]/.test(title))) || !Number.isFinite(Date.parse(startTime))) throw new Error('Catalog schedule is invalid.');
+    schedule = { ...(title ? { title } : {}), startTime: new Date(startTime).toISOString() };
+  }
+  let stream: PublicExtensionStream | undefined;
+  if (source.stream !== undefined) {
+    if (!source.stream || typeof source.stream !== 'object' || Array.isArray(source.stream)) throw new Error('Catalog stream information is invalid.');
+    const candidate = source.stream as Record<string, unknown>;
+    const live = candidate.live;
+    const title = String(candidate.title || '').trim();
+    const category = candidate.category === undefined || candidate.category === null || candidate.category === '' ? undefined : String(candidate.category).trim();
+    const startedAt = candidate.startedAt === undefined || candidate.startedAt === null || candidate.startedAt === '' ? undefined : String(candidate.startedAt);
+    const viewerCount = candidate.viewerCount === undefined || candidate.viewerCount === null ? undefined : Number(candidate.viewerCount);
+    const checkedAt = String(candidate.checkedAt || '');
+    if (typeof live !== 'boolean' || !title || title.length > 160 || /[\r\n\0]/.test(title)) throw new Error('Catalog stream identity is invalid.');
+    if (category !== undefined && (!category || category.length > 100 || /[\r\n\0]/.test(category))) throw new Error('Catalog stream category is invalid.');
+    if ((startedAt !== undefined && !Number.isFinite(Date.parse(startedAt))) || (live && !startedAt) || !Number.isFinite(Date.parse(checkedAt))) throw new Error('Catalog stream timestamps are invalid.');
+    if (viewerCount !== undefined && (!Number.isSafeInteger(viewerCount) || viewerCount < 0 || viewerCount > 1_000_000_000)) throw new Error('Catalog stream viewer count is invalid.');
+    stream = { live, title, ...(category ? { category } : {}), ...(startedAt ? { startedAt: new Date(startedAt).toISOString() } : {}), ...(viewerCount === undefined ? {} : { viewerCount }), checkedAt: new Date(checkedAt).toISOString() };
+  }
+  return { schemaVersion: 1, companions, extensionEdition, updatedAt: new Date().toISOString(), items, ...(poll ? { poll } : {}), ...(counters?.length ? { counters } : {}), ...(commands?.length ? { commands } : {}), ...(goal ? { goal } : {}), ...(nowPlaying ? { nowPlaying } : {}), ...(schedule ? { schedule } : {}), ...(stream ? { stream } : {}) };
 }
 
 const defaultPublicPanelDesign: PublicExtensionPanelDesign = {
@@ -279,7 +456,17 @@ const defaultPublicPanelDesign: PublicExtensionPanelDesign = {
   showSearch: true,
   showFilters: true,
   showPattern: true,
-  uppercaseLabels: true
+  uppercaseLabels: true,
+  showCurrentStream: true,
+  showNowPlaying: true,
+  showSchedule: true,
+  showGoal: true,
+  showPoll: true,
+  showCounters: true,
+  showCommands: true,
+  showDice: true,
+  showFeatured: true,
+  showPerformances: true
 };
 
 function validatePublicPanelDesign(value: unknown): PublicExtensionPanelDesign {
@@ -311,7 +498,17 @@ function validatePublicPanelDesign(value: unknown): PublicExtensionPanelDesign {
     showSearch: source.showSearch !== false,
     showFilters: source.showFilters !== false,
     showPattern: source.showPattern !== false,
-    uppercaseLabels: source.uppercaseLabels !== false
+    uppercaseLabels: source.uppercaseLabels !== false,
+    showCurrentStream: source.showCurrentStream !== false,
+    showNowPlaying: source.showNowPlaying !== false,
+    showSchedule: source.showSchedule !== false,
+    showGoal: source.showGoal !== false,
+    showPoll: source.showPoll !== false,
+    showCounters: source.showCounters !== false,
+    showCommands: source.showCommands !== false,
+    showDice: source.showDice !== false,
+    showFeatured: source.showFeatured !== false,
+    showPerformances: source.showPerformances !== false
   };
 }
 
@@ -344,9 +541,13 @@ async function readRawJson(request: IncomingMessage): Promise<{ raw: Buffer; val
     chunks.push(bytes);
   }
   const raw = Buffer.concat(chunks);
-  const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'Request body must be a JSON object.');
-  return { raw, value };
+  try {
+    const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return { raw, value };
+  } catch {
+    throw new HttpError(400, 'Request body must be a JSON object.');
+  }
 }
 
 function validOrigin(origin: string, configured: Set<string>): boolean {
@@ -366,8 +567,24 @@ function sendJson(response: ServerResponse, status: number, body: unknown, origi
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
   response.setHeader('Vary', 'Origin');
-  if (origin) response.setHeader('Access-Control-Allow-Origin', origin);
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Expose-Headers', 'ETag');
+  }
   response.end(JSON.stringify(body));
+}
+
+function sendNotModified(response: ServerResponse, origin?: string): void {
+  response.statusCode = 304;
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('Vary', 'Origin');
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Expose-Headers', 'ETag');
+  }
+  response.end();
 }
 
 function normalizedEvent(claims: TwitchExtensionClaims, requestId: string, action: string, extra: Record<string, unknown> = {}, viewerId?: string): TempestNormalizedTwitchEvent {
@@ -432,12 +649,26 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const pending = new Map<string, PendingRelay>();
   const results = new Map<string, CachedResult>();
   const bitsDeliveriesInFlight = new Set<string>();
-  const webSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  const maximumPendingRelays = 10_000;
+  const maximumCachedResults = 5_000;
+  const resultReplayWindowMs = 10 * 60_000;
+  let lastResultsPrunedAt = 0;
+  const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumStudioWebSocketPayloadBytes });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
 
   const expireResults = (now = Date.now()): void => {
-    for (const [key, value] of results) if (now - value.storedAt > 10 * 60_000) results.delete(key);
-    while (results.size > 5_000) results.delete(results.keys().next().value as string);
+    if (now - lastResultsPrunedAt < 60_000 && results.size <= maximumCachedResults) return;
+    for (const [key, value] of results) if (now - value.storedAt > resultReplayWindowMs) results.delete(key);
+    while (results.size > maximumCachedResults) results.delete(results.keys().next().value as string);
+    lastResultsPrunedAt = now;
+  };
+
+  const cachedResult = (key: string, now = Date.now()): CachedResult | undefined => {
+    const cached = results.get(key);
+    if (!cached) return undefined;
+    if (now - cached.storedAt <= resultReplayWindowMs) return cached;
+    results.delete(key);
+    return undefined;
   };
 
   const rejectChannelPending = (channelId: string, message: string): void => {
@@ -492,15 +723,24 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     items: catalog.items.filter((item) => itemTargetsCompanion(catalog, item, companion))
   });
 
-  const bitsEligibility = async (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): Promise<{ allowed: boolean; reason?: string; retryAfterMs: number }> => {
+  const accessEligibility = (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims): { allowed: boolean; reason?: string; code?: string } => {
     const viewerId = String(claims.user_id || '');
     const access = item.access;
-    if (access?.blockedViewerIds.includes(viewerId)) return { allowed: false, reason: 'Unavailable for this viewer', retryAfterMs: 0 };
+    if (viewerId && access?.blockedViewerIds.includes(viewerId)) return { allowed: false, reason: 'Unavailable for this viewer', code: 'interaction_locked' };
     const staff = claims.role === 'broadcaster' || claims.role === 'moderator';
-    if (!staff && access?.mode === 'staff') return { allowed: false, reason: 'Broadcaster and moderators only', retryAfterMs: 0 };
-    if (!staff && (access?.mode === 'assigned-creators' || access?.mode === 'specific-viewers') && !access.allowedViewerIds.includes(viewerId)) {
-      return { allowed: false, reason: access.mode === 'assigned-creators' ? 'Assigned creator group only' : 'Locked to selected viewers', retryAfterMs: 0 };
+    if (staff) return { allowed: true };
+    if (access?.mode === 'staff') return { allowed: false, reason: 'Broadcaster and moderators only', code: 'interaction_locked' };
+    if (access?.mode === 'assigned-creators' || access?.mode === 'specific-viewers') {
+      if (!viewerId) return { allowed: false, reason: 'Share your Twitch identity to use this interaction', code: 'identity_required' };
+      if (!access.allowedViewerIds.includes(viewerId)) return { allowed: false, reason: access.mode === 'assigned-creators' ? 'Assigned creator group only' : 'Locked to selected viewers', code: 'interaction_locked' };
     }
+    return { allowed: true };
+  };
+
+  const bitsEligibility = async (item: PublicExtensionCatalogItem, claims: TwitchExtensionClaims, now = Date.now()): Promise<{ allowed: boolean; reason?: string; retryAfterMs: number }> => {
+    const accessDecision = accessEligibility(item, claims);
+    if (!accessDecision.allowed) return { ...accessDecision, retryAfterMs: 0 };
+    const viewerId = String(claims.user_id || '');
     const state = await installationStore.getBitsEligibilityState(claims.channel_id, item.id, viewerId);
     const remaining = (timestamp: string | undefined, duration: number): number => timestamp ? Math.max(0, new Date(timestamp).getTime() + duration - now) : 0;
     const globalRemaining = remaining(state.lastGlobalAcceptedAt, item.globalCooldownMs ?? item.cooldownMs ?? 0);
@@ -588,10 +828,12 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   const dispatchInteraction = async (claims: TwitchExtensionClaims, requestId: string, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent, viewerId = claims.user_id || claims.opaque_user_id): Promise<RelayResult> => {
     if (!requestIdPattern.test(requestId)) throw new HttpError(400, 'requestId must contain 16 to 128 URL-safe characters.');
     const resultKey = `${claims.channel_id}:${requestId}`;
-    expireResults();
-    const cached = results.get(resultKey);
+    const now = Date.now();
+    expireResults(now);
+    const cached = cachedResult(resultKey, now);
     if (cached) return { status: cached.status, body: cached.body };
     if (pending.has(resultKey)) throw new HttpError(409, 'This interaction request is already being processed.');
+    if (pending.size >= maximumPendingRelays) throw new HttpError(503, 'The Studio relay is temporarily at capacity. Please try again shortly.');
     const viewerRetry = limiter.consume(`viewer:${claims.channel_id}:${viewerId}`, viewerLimit);
     const channelRetry = limiter.consume(`channel:${claims.channel_id}`, channelLimit);
     const retryAfterMs = Math.max(viewerRetry, channelRetry);
@@ -601,10 +843,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     return result;
   };
 
-  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
+  const processInteraction = async (request: IncomingMessage, claims: TwitchExtensionClaims, eventFactory: (requestId: string, body: Record<string, unknown>) => TempestNormalizedTwitchEvent): Promise<RelayResult> => {
     const body = await readJson(request);
     const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
-    return dispatchInteraction(claims, requestId, eventFactory);
+    return dispatchInteraction(claims, requestId, (id) => eventFactory(id, body));
   };
 
   const requestHandler = async (request: IncomingMessage, response: ServerResponse) => {
@@ -617,8 +859,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         response.statusCode = 204;
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, Authorization');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Extension-JWT, X-Request-ID, X-Kick-OAuth, Authorization');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, If-None-Match, X-Extension-JWT, X-Request-ID, X-Kick-OAuth, Authorization');
+        response.setHeader('Access-Control-Expose-Headers', 'ETag');
         response.setHeader('Access-Control-Max-Age', '600');
         response.setHeader('Vary', 'Origin');
         return response.end();
@@ -640,8 +882,8 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         if (!credential || credential.length > 2048 || /[\r\n\0]/.test(credential)) throw new HttpError(400, `Discord ${grantType === 'authorization_code' ? 'authorization code' : 'refresh token'} is invalid.`);
         const form = new URLSearchParams({ client_id: options.discordOAuth.clientId, client_secret: options.discordOAuth.clientSecret, grant_type: grantType, [grantType === 'authorization_code' ? 'code' : 'refresh_token']: credential });
         if (grantType === 'authorization_code' && options.discordOAuth.redirectUri) form.set('redirect_uri', options.discordOAuth.redirectUri);
-        const discordResponse = await (options.discordOAuth.exchange || ((payload) => fetch('https://discord.com/api/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: payload })))(form);
-        const tokens = await discordResponse.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown };
+        const discordResponse = await (options.discordOAuth.exchange || ((payload) => externalFetch('https://discord.com/api/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: payload })))(form);
+        const tokens = await readBoundedJsonResponse<{ access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown }>(discordResponse, maximumProviderResponseBytes).catch(() => ({} as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown; token_type?: unknown; error_description?: unknown; message?: unknown }));
         if (!discordResponse.ok || typeof tokens.access_token !== 'string') throw new HttpError(502, typeof tokens.error_description === 'string' ? tokens.error_description : typeof tokens.message === 'string' ? tokens.message : 'Discord authorization exchange failed.');
         return sendJson(response, 200, { accessToken: tokens.access_token, ...(typeof tokens.refresh_token === 'string' ? { refreshToken: tokens.refresh_token } : {}), ...(Number.isFinite(Number(tokens.expires_in)) ? { expiresIn: Number(tokens.expires_in) } : {}), ...(typeof tokens.scope === 'string' ? { scope: tokens.scope } : {}), ...(typeof tokens.token_type === 'string' ? { tokenType: tokens.token_type } : {}) }, origin);
       }
@@ -725,7 +967,19 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/catalog') {
         const { claims, installation } = await authenticateViewer(request);
-        return sendJson(response, 200, { ...catalogForCompanion(installation.catalog, 'mainframe'), studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+        const catalog = catalogForCompanion(installation.catalog, 'mainframe');
+        const studioConnected = studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN;
+        const items = catalog.items.flatMap((item) => {
+          const eligibility = accessEligibility(item, claims);
+          if (!eligibility.allowed && item.access?.hideWhenLocked) return [];
+          const { access: _privateAccess, ...publicItem } = item;
+          return [{ ...publicItem, eligibility }];
+        });
+        const viewerAccessKey = `${claims.user_id || claims.opaque_user_id}:${claims.role}`;
+        const etag = `"${createHash('sha256').update(`${installation.id}:mainframe:${catalog.updatedAt}:${studioConnected ? 1 : 0}:${viewerAccessKey}`).digest('base64url')}"`;
+        response.setHeader('ETag', etag);
+        if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
+        return sendJson(response, 200, { ...catalog, items, studioConnected }, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/avatar') {
         const { claims } = await authenticateViewer(request);
@@ -751,7 +1005,19 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/streaming/catalog') {
         const { claims, installation } = await authenticateStreamingViewer(request);
-        return sendJson(response, 200, { ...catalogForCompanion(installation.catalog, 'streaming'), studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+        const catalog = catalogForCompanion(installation.catalog, 'streaming');
+        const studioConnected = studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN;
+        const items = catalog.items.flatMap((item) => {
+          const eligibility = accessEligibility(item, claims);
+          if (!eligibility.allowed && item.access?.hideWhenLocked) return [];
+          const { access: _privateAccess, ...publicItem } = item;
+          return [{ ...publicItem, eligibility }];
+        });
+        const viewerAccessKey = `${claims.user_id || claims.opaque_user_id}:${claims.role}`;
+        const etag = `"${createHash('sha256').update(`${installation.id}:streaming:${catalog.updatedAt}:${studioConnected ? 1 : 0}:${viewerAccessKey}`).digest('base64url')}"`;
+        response.setHeader('ETag', etag);
+        if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
+        return sendJson(response, 200, { ...catalog, items, studioConnected }, origin);
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/extension/bits/catalog') {
         const { claims, installation } = await authenticateBitsViewer(request);
@@ -761,12 +1027,21 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
           if (!interaction) continue;
           const eligibility = await bitsEligibility(interaction, claims);
           if (!eligibility.allowed && interaction.access?.hideWhenLocked && eligibility.retryAfterMs === 0) continue;
-          products.push({ sku, bits: mapping.bits, interaction, eligibility });
+          const { access: _privateAccess, ...publicInteraction } = interaction;
+          products.push({ sku, bits: mapping.bits, interaction: publicInteraction, eligibility });
         }
-        return sendJson(response, 200, { schemaVersion: 1, products, panelDesign: installation.catalog.panelDesign, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN }, origin);
+        const body = { schemaVersion: 1, products, panelDesign: installation.catalog.panelDesign, studioConnected: studioSockets.get(claims.channel_id)?.readyState === WebSocket.OPEN };
+        const etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
+        response.setHeader('ETag', etag);
+        if (String(request.headers['if-none-match'] || '') === etag) return sendNotModified(response, origin);
+        return sendJson(response, 200, body, origin);
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/reservations') {
         const { claims, installation } = await authenticateBitsViewer(request);
+        const viewerRetry = limiter.consume(`bits-reservation:viewer:${claims.channel_id}:${claims.user_id}`, viewerLimit);
+        const channelRetry = limiter.consume(`bits-reservation:channel:${claims.channel_id}`, channelLimit);
+        const retryAfterMs = Math.max(viewerRetry, channelRetry);
+        if (retryAfterMs) throw new HttpError(429, 'Too many Bits reservation requests. Please wait and try again.', { retryAfterMs });
         if (studioSockets.get(claims.channel_id)?.readyState !== WebSocket.OPEN) throw new HttpError(503, 'Tempest Streaming Studio must be online before a Bits interaction can start.');
         const body = await readJson(request);
         const sku = String(body.sku || '').trim();
@@ -788,6 +1063,10 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/bits/transactions') {
         const { claims, installation } = await authenticateBitsViewer(request);
+        const viewerRetry = limiter.consume(`bits-transaction:viewer:${claims.channel_id}:${claims.user_id}`, viewerLimit);
+        const channelRetry = limiter.consume(`bits-transaction:channel:${claims.channel_id}`, channelLimit);
+        const retryAfterMs = Math.max(viewerRetry, channelRetry);
+        if (retryAfterMs) throw new HttpError(429, 'Too many Bits transaction requests. Please wait and try again.', { retryAfterMs });
         const body = await readJson(request);
         const transactionReceipt = String(body.transactionReceipt || '').trim();
         const reservationToken = String(body.reservationToken || '').trim();
@@ -844,12 +1123,29 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         const result = bitsDeliveryResult(completed);
         return sendJson(response, result.status, result.body, origin);
       }
+      if (request.method === 'POST' && requestUrl.pathname === '/v1/extension/poll/vote') {
+        const { claims, installation } = await authenticateViewer(request);
+        if (!claims.user_id || claims.opaque_user_id.startsWith('A')) throw new HttpError(403, 'Share your Twitch identity to vote in this poll.', { code: 'identity_required' });
+        const body = await readJson(request);
+        const requestId = String(body.requestId || request.headers['x-request-id'] || '').trim();
+        const pollId = String(body.pollId || '').trim();
+        const optionNumber = Number(body.optionNumber);
+        const poll = installation.catalog.poll;
+        if (!poll || poll.state !== 'active') throw new HttpError(409, 'This poll is no longer accepting votes.', { code: 'poll_inactive' });
+        if (poll.id !== pollId) throw new HttpError(409, 'The active poll changed before this vote arrived.', { code: 'stale_poll' });
+        if (!poll.options.some((option) => option.number === optionNumber)) throw new HttpError(400, 'Choose one of the available poll options.', { code: 'invalid_option' });
+        const result = await dispatchInteraction(claims, requestId, (id) => normalizedEvent(claims, id, 'tempest.poll.vote', { pollId, optionNumber }, claims.user_id), claims.user_id);
+        return sendJson(response, result.status, result.body, origin);
+      }
       const alertMatch = requestUrl.pathname.match(/^\/v1\/extension\/alerts\/([^/]+)\/trigger$/);
       if (request.method === 'POST' && alertMatch) {
         const { claims, installation } = await authenticateViewer(request);
         const alertId = decodeURIComponent(alertMatch[1]);
         if (!soundAlertPattern.test(alertId)) throw new HttpError(404, 'Sound Alert was not recognized.');
-        if (!installation.catalog.items.some((item) => itemTargetsCompanion(installation.catalog, item, 'mainframe') && item.kind === 'sound-alert' && item.id === alertId) && !allowedChannelIds.has(claims.channel_id)) throw new HttpError(404, 'Sound Alert is not published by this Studio installation.');
+        const alert = installation.catalog.items.find((item) => itemTargetsCompanion(installation.catalog, item, 'mainframe') && item.kind === 'sound-alert' && item.id === alertId);
+        if (!alert && !allowedChannelIds.has(claims.channel_id)) throw new HttpError(404, 'Sound Alert is not published by this Studio installation.');
+        const alertEligibility = alert && accessEligibility(alert, claims);
+        if (alertEligibility && !alertEligibility.allowed) throw new HttpError(403, alertEligibility.reason || 'This interaction is unavailable.', { code: alertEligibility.code || 'interaction_locked' });
         const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, alertId, { alertId }));
         return sendJson(response, result.status, result.body, origin);
       }
@@ -857,9 +1153,24 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       if (request.method === 'POST' && interactionMatch) {
         const { claims, installation } = await authenticateViewer(request);
         const action = decodeURIComponent(interactionMatch[1]);
-        const catalogAllowed = installation.catalog.items.some((item) => itemTargetsCompanion(installation.catalog, item, 'mainframe') && item.kind === 'interaction' && item.id === action);
-        if (!catalogAllowed && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
-        const result = await processInteraction(request, claims, (requestId) => normalizedEvent(claims, requestId, action));
+        const interaction = installation.catalog.items.find((item) => itemTargetsCompanion(installation.catalog, item, 'mainframe') && item.kind === 'interaction' && item.id === action);
+        if (!interaction && !allowedActions.has(action)) throw new HttpError(403, 'This interaction is not published by this Studio installation.');
+        const interactionEligibility = interaction && accessEligibility(interaction, claims);
+        if (interactionEligibility && !interactionEligibility.allowed) throw new HttpError(403, interactionEligibility.reason || 'This interaction is unavailable.', { code: interactionEligibility.code || 'interaction_locked' });
+        const result = await processInteraction(request, claims, (requestId, body) => {
+          if (action === 'tempest.dice.custom') {
+            const maximum = Number(body.maximum);
+            if (!Number.isInteger(maximum) || maximum < 2 || maximum > 100) throw new HttpError(400, 'Choose a custom dice maximum from 2 through 100.', { code: 'dice_maximum_invalid' });
+            return normalizedEvent(claims, requestId, action, { maximum });
+          }
+          if (interaction?.placementMode !== 'viewer') return normalizedEvent(claims, requestId, action);
+          const source = body.placement && typeof body.placement === 'object' && !Array.isArray(body.placement) ? body.placement as Record<string, unknown> : undefined;
+          const placement = source ? { x: Number(source.x), y: Number(source.y) } : undefined;
+          if (!placement || !Number.isFinite(placement.x) || placement.x < 0 || placement.x > 1 || !Number.isFinite(placement.y) || placement.y < 0 || placement.y > 1) {
+            throw new HttpError(400, 'Choose a valid on-stream placement before activating this interaction.', { code: 'placement_required' });
+          }
+          return normalizedEvent(claims, requestId, action, { placement });
+        });
         return sendJson(response, result.status, result.body, origin);
       }
       const streamingInteractionMatch = requestUrl.pathname.match(/^\/v1\/extension\/streaming\/interactions\/([^/]+)\/trigger$/);

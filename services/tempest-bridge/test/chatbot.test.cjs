@@ -29,6 +29,7 @@ test('starts with public-safe commands and no personal response providers', asyn
   assert.equal(status.providers.nowPlaying, undefined);
   assert.ok(status.commands.some((command) => command.name === 'studio' && command.aliases.includes('tempest')));
   assert.ok(status.commands.some((command) => command.name === 'clip' && command.handler === 'twitch-clip' && command.allowSharedChat === false));
+  assert.ok(status.commands.some((command) => command.name === 'roll' && command.aliases.includes('dice') && command.handler === 'dice-roll'));
   assert.equal(status.commands.some((command) => command.handler === 'local-weather' || command.handler === 'seattle-weather' || command.handler === 'radio-now-playing'), false);
   assert.equal(await chatbot.radioStatus(), null);
 });
@@ -57,6 +58,84 @@ test('creates a titled Twitch clip through the default home-channel command', as
   assert.equal(result.response, 'Clip created by Nova: https://clips.twitch.tv/GreatClip');
   assert.equal(sentMessages[0].body.message, result.response);
   assert.doesNotMatch(sentMessages[0].body.message, /\/edit/);
+});
+
+test('times out an unresponsive upstream request instead of stalling chatbot work', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-request-timeout-'));
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    requestTimeoutMs: 100,
+    fetchImplementation: async (_url, options = {}) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason || new Error('aborted')), { once: true });
+    })
+  });
+  await chatbot.initialize('client123');
+  await assert.rejects(chatbot.startDeviceAuthorization(), /timed out after 1 seconds/);
+});
+
+test('prunes expired chatbot runtime maps without scanning them on every message', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-runtime-pruning-'));
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await chatbot.initialize('client123');
+  const now = Date.now();
+  chatbot.seenEventIds.set('expired-event', now - 11 * 60_000);
+  chatbot.seenEventIds.set('recent-event', now);
+  chatbot.lastViewerUse.set('expired-viewer', now - 86_400_001);
+  chatbot.lastViewerUse.set('recent-viewer', now);
+  chatbot.lastShoutoutByTarget.set('expired-channel', now - 86_400_001);
+  chatbot.lastShoutoutByTarget.set('recent-channel', now);
+  await chatbot.processChatEvent({
+    schemaVersion: 1, id: 'new-event', topic: 'system.test', occurredAt: new Date(now).toISOString(), source: 'twitch',
+    channel: { id: '123456', login: 'tempest' }, payload: {}
+  });
+  assert.deepEqual([...chatbot.seenEventIds.keys()].sort(), ['new-event', 'recent-event']);
+  assert.deepEqual([...chatbot.lastViewerUse.keys()], ['recent-viewer']);
+  assert.deepEqual([...chatbot.lastShoutoutByTarget.keys()], ['recent-channel']);
+  const prunedAt = chatbot.lastRuntimeStatePrunedAt;
+  await chatbot.processChatEvent({
+    schemaVersion: 1, id: 'next-event', topic: 'system.test', occurredAt: new Date(now).toISOString(), source: 'twitch',
+    channel: { id: '123456', login: 'tempest' }, payload: {}
+  });
+  assert.equal(chatbot.lastRuntimeStatePrunedAt, prunedAt, 'the next message does not rescan the maps');
+});
+
+test('runs chat-triggered 3D dice through the overlay callback and reports the physical result', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-dice-'));
+  const rolls = [];
+  const messages = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    rollDice: async (request) => {
+      rolls.push(request);
+      return { expression: '2d6+3', total: 11, reason: request.reason };
+    },
+    sendPlatformMessage: async (platform, message) => messages.push({ platform, message })
+  });
+  await chatbot.initialize('client123');
+
+  const preview = await chatbot.testCommand({ message: '!roll 1d20 initiative', viewerName: 'StudioTester', roles: [] });
+  assert.equal(preview.accepted, true);
+  assert.equal(preview.response, 'StudioTester would roll 1d20 in the 3D Dice Browser Source · initiative.');
+  assert.equal(rolls.length, 0);
+
+  const event = {
+    schemaVersion: 1,
+    id: 'kick-dice-0001',
+    topic: 'viewer.chat.message',
+    occurredAt: new Date().toISOString(),
+    source: 'kick',
+    channel: { id: 'kick-channel', login: 'tempest' },
+    viewer: { id: 'viewer-1', login: 'dicefan', displayName: 'DiceFan', roles: [] },
+    payload: { messageId: 'kick-message-1', text: '!dice 2d6+3 initiative' }
+  };
+  const result = await chatbot.processChatEvent(event);
+  assert.equal(result.accepted, true);
+  assert.equal(result.response, 'DiceFan rolled 2d6+3: 11 · initiative');
+  assert.deepEqual(rolls, [{ expression: '2d6+3', reason: 'initiative', rollerName: 'DiceFan', simulated: false }]);
+  assert.deepEqual(messages, [{ platform: 'kick', message: 'DiceFan rolled 2d6+3: 11 · initiative' }]);
+  await chatbot.close();
 });
 
 test('persists commands and simulates permissions, replies, and workflow dispatch', async () => {
@@ -185,16 +264,21 @@ test('filters links and spam with moderator-safe deletes, exemptions, previews, 
 test('persists streamer-named counters shared by Twitch and Kick chat', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-counter-'));
   const messages = [];
-  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), sendPlatformMessage: async (_platform, message) => messages.push(message) });
+  let catalogChanges = 0;
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), sendPlatformMessage: async (_platform, message) => messages.push(message), onCatalogChanged: () => { catalogChanges += 1; } });
   await chatbot.initialize('client123');
   await chatbot.upsertCommand({ name: 'death', aliases: ['deaths'], enabled: true, permission: 'everyone', response: '{counterLabel}: {counter}', handler: 'counter', counterLabel: 'Ship Restarts', counterValue: 3, viewerCooldownMs: 0, globalCooldownMs: 0 });
   const result = await chatbot.processChatEvent({ schemaVersion: 1, id: 'kick-counter-0001', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'kick', channel: { id: 'kick-channel', login: 'storm' }, viewer: { id: 'viewer-1', login: 'friend', displayName: 'Friend', roles: [] }, payload: { text: '!death' } });
   assert.equal(result.accepted, true);
   assert.equal(result.response, 'Ship Restarts: 4');
+  assert.deepEqual(chatbot.publicCounters(), [{ id: chatbot.publicCounters()[0].id, command: 'death', trigger: '!death', label: 'Ship Restarts', value: 4 }]);
+  assert.ok(chatbot.publicCommands().some((command) => command.trigger === '!death' && command.permission === 'everyone'));
+  assert.ok(chatbot.publicCommands().every((command) => !Object.hasOwn(command, 'response') && !Object.hasOwn(command, 'workflowId')));
   assert.deepEqual(messages, ['Ship Restarts: 4']);
   const counterId = chatbot.status().commands.find((entry) => entry.name === 'death').id;
   const adjusted = await chatbot.adjustCounter(counterId, 2, 'Twitch Bits interaction');
   assert.equal(adjusted.value, 6);
+  assert.equal(catalogChanges, 3);
   const restored = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
   await restored.initialize('client123');
   const counter = restored.status().commands.find((entry) => entry.name === 'death');
@@ -204,7 +288,8 @@ test('persists streamer-named counters shared by Twitch and Kick chat', async ()
 
 test('records one numeric poll vote per chat account and keeps aggregate results after voting ends', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-poll-'));
-  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  const pollChanges = [];
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), onPollChanged: (poll) => pollChanges.push(poll) });
   await chatbot.initialize('client123');
   chatbot.startNumericPoll({ question: 'What should we play?', options: ['Game One', 'Game Two', 'Game Three'] });
   const event = (id, text, viewerId, source = 'twitch') => ({
@@ -220,19 +305,30 @@ test('records one numeric poll vote per chat account and keeps aggregate results
   await chatbot.processChatEvent(event('not-a-vote', 'I choose 3', 'viewer-three'));
   await chatbot.processChatEvent(event('out-of-range', '9', 'viewer-four'));
 
+  const duplicatePanelVote = chatbot.recordNumericPollVote({ pollId: chatbot.status().poll.id, optionNumber: 1, voterId: 'viewer-one', source: 'twitch' });
+  assert.equal(duplicatePanelVote.accepted, false);
+  assert.equal(duplicatePanelVote.duplicate, true);
+  assert.equal(duplicatePanelVote.optionNumber, 2);
+  const panelVote = chatbot.recordNumericPollVote({ pollId: chatbot.status().poll.id, optionNumber: 1, voterId: 'viewer-five', source: 'twitch' });
+  assert.equal(panelVote.accepted, true);
+  assert.equal(panelVote.optionNumber, 1);
+
   let poll = chatbot.status().poll;
   assert.equal(poll.state, 'active');
-  assert.equal(poll.totalVotes, 2);
-  assert.deepEqual(poll.options.map((option) => option.votes), [0, 2, 0]);
-  assert.equal(poll.options[1].percentage, 100);
+  assert.equal(poll.totalVotes, 3);
+  assert.deepEqual(poll.options.map((option) => option.votes), [1, 2, 0]);
+  assert.equal(poll.options[1].percentage, 66.7);
 
   chatbot.stopNumericPoll();
   await chatbot.processChatEvent(event('after-close', '1', 'viewer-five'));
   poll = chatbot.status().poll;
   assert.equal(poll.state, 'closed');
-  assert.equal(poll.totalVotes, 2);
+  assert.equal(poll.totalVotes, 3);
   chatbot.clearNumericPoll();
   assert.deepEqual(chatbot.status().poll, { state: 'idle', options: [], totalVotes: 0 });
+  assert.deepEqual(pollChanges.map((poll) => [poll.state, poll.totalVotes]), [
+    ['active', 0], ['active', 1], ['active', 2], ['active', 3], ['closed', 3], ['idle', 0]
+  ]);
   await chatbot.close();
 });
 
@@ -511,6 +607,39 @@ test('restricts Extension interactions to Twitch-verified assigned creators with
   await chatbot.close();
 });
 
+test('resolves reusable viewer groups locally and enforces them per interaction', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-viewer-groups-'));
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory,
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url) => {
+      requests.push(String(url));
+      return jsonResponse({ data: [{ id: '111', login: 'campaign_player' }, { id: '222', login: 'trusted_regular' }] });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: '900' };
+  await chatbot.configure({ viewerGroups: [{ id: 'campaign-players', name: 'Campaign Players', logins: ['@Campaign_Player', 'trusted_regular'] }] });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(chatbot.status().viewerGroups, [{ id: 'campaign-players', name: 'Campaign Players', logins: ['campaign_player', 'trusted_regular'], resolvedViewers: 2 }]);
+  assert.deepEqual(chatbot.resolvedViewerGroupIds('campaign-players'), ['111', '222']);
+  const interaction = (viewer) => ({ schemaVersion: 1, id: `group-${viewer.id}`, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1' }, viewer, payload: { action: 'sound-alert.group-only' } });
+  const alert = { accessMode: 'viewer-group', viewerGroupId: 'campaign-players' };
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '111', roles: ['viewer'] }), alert)).allowed, true);
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '333', roles: ['viewer'] }), alert)).code, 'not-allowed');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: 'Uopaqueviewer', roles: ['viewer'] }), alert)).code, 'identity-required');
+  assert.equal((await chatbot.authorizeInteraction(interaction({ id: '333', roles: ['moderator'] }), alert)).allowed, true);
+  await chatbot.close();
+
+  const restored = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore() });
+  await restored.initialize('client123');
+  assert.deepEqual(restored.resolvedViewerGroupIds('campaign-players'), ['111', '222']);
+  assert.equal(restored.status().viewerGroups[0].resolvedViewers, 2);
+  await restored.close();
+});
+
 test('serves optional local weather from the National Weather Service without an API key', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-weather-'));
   const requests = [];
@@ -560,6 +689,11 @@ test('serves a configurable AzuraCast station with an outage-safe fallback', asy
   const provider = { provider: 'azuracast', stationName: 'Example Radio', apiUrl: 'https://radio.example/api/nowplaying/station', publicPlayerUrl: 'https://radio.example/public/station', streamUrl: 'https://radio.example/listen/station/radio.mp3' };
   await chatbot.configure({ nowPlayingProvider: provider });
   await chatbot.upsertCommand({ name: 'song', aliases: ['nowplaying'], enabled: true, permission: 'everyone', response: '', handler: 'radio-now-playing', viewerCooldownMs: 15_000, globalCooldownMs: 10_000 });
+
+  const [concurrentRadioA, concurrentRadioB] = await Promise.all([chatbot.radioStatus(), chatbot.radioStatus()]);
+  assert.equal(concurrentRadioA.nowPlaying.title, 'Error Stars');
+  assert.equal(concurrentRadioB.nowPlaying.title, 'Error Stars');
+  assert.equal(requests.length, 1, 'concurrent Now Playing readers share one provider request');
 
   const first = await chatbot.testCommand({ message: '!song', viewerName: 'SampleViewer', roles: [] });
   assert.equal(first.accepted, true);
@@ -655,9 +789,46 @@ test('installs a command directory and serves cached Twitch channel information 
   const schedule = await chatbot.testCommand({ message: '!schedule', viewerName: 'Viewer', roles: [] });
   assert.match(schedule.response, /Next stream:/);
   assert.match(schedule.response, /Mainframe Monday/);
+  assert.deepEqual(await chatbot.publicSchedule(), { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' });
+  const publicStream = await chatbot.publicStream();
+  assert.equal(publicStream.live, true);
+  assert.equal(publicStream.title, 'Building Tempest Streaming Studio');
+  assert.equal(publicStream.category, 'Software and Game Development');
+  assert.equal(publicStream.startedAt, startedAt);
+  assert.equal(publicStream.viewerCount, 42);
+  assert.ok(Number.isFinite(Date.parse(publicStream.checkedAt)));
 
   assert.equal(requests.length, 3);
   assert.match(requests[0], /helix\/streams\?user_id=channel-1/);
   assert.match(requests[1], /helix\/channels\?broadcaster_id=channel-1/);
   assert.match(requests[2], /helix\/schedule\?broadcaster_id=channel-1&first=1/);
+});
+
+test('coalesces concurrent Extension stream metadata and invalidates it when the channel changes', async () => {
+  const requests = [];
+  const chatbot = new TwitchChatbot({
+    dataDirectory: await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-provider-coalescing-')),
+    credentialStore: memoryCredentialStore(),
+    fetchImplementation: async (url) => {
+      const address = String(url);
+      requests.push(address);
+      await new Promise((resolve) => setImmediate(resolve));
+      if (address.includes('/streams?')) return jsonResponse({ data: [{ started_at: '2030-01-01T00:00:00Z', viewer_count: 10 }] });
+      if (address.includes('/channels?')) return jsonResponse({ data: [{ title: `Channel ${new URL(address).searchParams.get('broadcaster_id')}`, game_name: 'Science & Technology' }] });
+      return jsonResponse({ data: { segments: [] } });
+    }
+  });
+  await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-1', channelLogin: 'one' });
+
+  const first = await Promise.all([chatbot.publicStream(), chatbot.publicStream(), chatbot.publicStream()]);
+  assert.ok(first.every((stream) => stream.title === 'Channel channel-1'));
+  assert.equal(requests.length, 2, 'three readers share one streams and one channels request');
+
+  await chatbot.connectChannel({ clientId: 'client123', channelId: 'channel-2', channelLogin: 'two' });
+  const second = await chatbot.publicStream();
+  assert.equal(second.title, 'Channel channel-2');
+  assert.equal(requests.length, 4);
+  assert.ok(requests.slice(2).every((address) => address.includes('channel-2')));
 });

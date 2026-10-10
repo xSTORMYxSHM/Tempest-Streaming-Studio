@@ -2,6 +2,8 @@
 
 ## 1.7.0 — Unified interaction stage and companion Extensions
 
+Released 2026-10-10.
+
 - Added one Unified Stage Browser Source for alerts, polls, avatars, pets, games, emotes, Discord guests, Twitch experiences, interaction visuals, and Dice Box rendering. Disabled modules no longer open their renderer or event connection; Dice Box creates its WebGL renderer only for an active roll.
 - Added the first Streamworld foundation: persistent viewer profiles, code-free Stage Actor packs, a canonical row-atlas format, Storm Wisp, floor and platform physics, movement controls, Channel Point avatar unlocks, and streamer-controlled crowd sizing.
 - Reorganized Studio around Live Desk, Alerts, Interactive Stage, Chatbot, platform connections, and operator settings while retaining Streamer Mode and advanced controls.
@@ -10,6 +12,87 @@
 - Added per-feature Extension placement controls. Streamers can publish each viewer action to the Mainframe panel, Streaming overlay, both, or neither; Dice now defaults to a free Streaming-overlay d20 action.
 - Kept protocol `1.0` compatibility with Tempest Broadcast 1.5.0 and added a migration tool that consolidates compatible Broadcast Browser Sources into the Unified Stage without changing Broadcast-owned scenes, encoding, recording, or output services.
 - Added production package verification for both Twitch Extensions and retained backwards-compatible reading of legacy Extension edition and Stage Actor data.
+
+## 1.6.0 — Extension platform and managed media
+
+Released 2026-10-02.
+
+- Promoted the existing no-Bits viewer experience to **Tempest Streaming Extension**, the single primary Twitch Extension in Studio.
+- Removed the Free/Bits selector from the normal Studio workflow and automatically normalize legacy Bits selections to the no-Bits edition before connecting the relay.
+- Kept the Bits-capable implementation dormant in source for possible future onboarding without exposing payment or transaction controls to current streamers or viewers.
+- Updated the default Panel, Video Component, configuration branding, local test workflow, and current documentation around the primary extension.
+- Added reusable streamer-named viewer groups for per-interaction access. Studio verifies Twitch logins locally, caches their numeric identities, keeps group names and rosters out of viewer responses, and flattens only eligible IDs into the existing hosted enforcement boundary.
+- Removed the stale Bits-ready label from Viewer Interactions now that the no-Bits Tempest Streaming Extension is the primary surface.
+- Added a Studio-managed Media Library for reusable alert audio, images, GIFs, and videos. Imports are copied into local Studio data, streamed through SHA-256 verification, content-addressed, deduplicated, searchable, and assignable to Interaction Alerts, Twitch Alerts, and alert variants.
+- Made new alert file assignments register their managed media automatically, prevent deletion while an alert still uses an item, and delete only Studio's copy after explicit removal. The original imported file is never changed.
+- Included managed Media Library items in portable Studio backups even when they are not assigned to an alert, while continuing to exclude externally registered asset paths.
+- Unified GIPHY downloads and verified Alert Pack media with the managed Media Library, preserving friendly names, source tags, deduplication, reuse, and backup behavior instead of leaving media in feature-specific folders.
+- Added explicit **Adopt Assigned Media** migration for alert files configured before the library existed. Studio verifies each file is still assigned, copies it into managed storage, updates every affected base alert and variant, and leaves the original untouched.
+- Added lazy Media Library previews, editable display names and tags, streamer-defined collections, and favorites. Visual files load only when previewed, only one audio preview plays at a time, and organization metadata reuses the same verified file.
+- Reduced the Railway EBS image to a non-root, production-only runtime with an in-container `/health` check, while retaining Railway's injected `PORT` and HTTPS termination boundary.
+- Added one-command hosted release preparation that rebuilds and tests the EBS and primary no-Bits Extension, validates the official Signal origin and secret-free upload surface, packages a Twitch-ready ZIP, and records its SHA-256 manifest.
+- Added a separate Linux CI gate that validates the hosted boundary and builds the exact production Railway EBS image without production secrets, preventing desktop-only checks from masking a broken hosted deployment.
+- Completed the Extension pivot terminology pass across active service errors, clean-install UI, privacy and architecture documentation, while preserving the legacy `free|bits` wire values solely for saved-data and hosted-service compatibility.
+- Added the missing Twitch Asset Hosting entry files for Mobile and Video - Fullscreen. They are verified aliases of the responsive viewer component, and hosted packaging now fails if any configured surface path is absent.
+- Expanded the Twitch Panel Designer so streamers can show or hide every viewer-facing module from one screen, jump to each module's source settings, and preview the resulting panel before publishing it.
+
+## 1.5.1 — Free Extension utilities and production hardening
+
+Released 2026-09-29.
+
+- Integrated one-click localhost HTTPS preparation into Studio with a SHA-256-pinned official mkcert 1.4.4 helper, an isolated per-installation CA, a Windows-native offline fallback, visible certificate status, and complete trust/private-key removal.
+- Added active Studio polls to the free Tempest Mainframe Twitch Extension. Identity-linked viewers can vote once from the Panel or Video Component, the same Twitch account cannot vote again through chat, and live/final totals remain visible without any Bits dependency.
+- Ensured a newly closed poll always replaces optimistic in-panel voting state, even when a slightly older catalog response reported fewer votes.
+- Added a default `!roll` / `!dice` command for Twitch, Stream Together, and Kick chat. Viewer rolls use the same hardened Dice Box Browser Source, physical settled result, access rules, and adjustable command cooldowns as operator rolls, then report the result back on the originating platform.
+- Added a compact 3D Dice picker to the free Tempest Mainframe Extension. Viewers can choose d4, d6, d8, d10, d12, d20, 1–50, d100, or an exact custom 1–N maximum from 2 through 100; Studio applies its assigned-creator access policy and shared 30-second viewer/5-second global cooldowns before starting the physical on-stream roll.
+- Added read-only live counter cards to the free Extension for enabled Studio counter commands such as deaths or restarts. Values publish immediately after chat, operator, or viewer-interaction adjustments without giving the Extension a counter mutation endpoint.
+- Added a read-only stream-goal card to the free Extension. Twitch-native or Studio-managed goal progress publishes immediately from Studio, while local preview goals are kept private and the Extension receives no goal mutation route.
+- Added a read-only Now Playing card to the free Extension for the broadcaster's configured AzuraCast provider, including a Twitch-safe Listen action. Studio polls only while its Extension relay is connected, and the hosted catalog never receives the private API or direct stream URL.
+- Added the next scheduled Twitch stream to the free Extension as a localized read-only card. It reuses the Chatbot's five-minute Twitch schedule cache, needs no new OAuth scope, and stays hidden when Twitch has no upcoming segment or the schedule cannot be verified.
+- Coalesced bursty Studio catalog updates into at most a leading and trailing relay message, with a separate one-second dynamic-metadata refresh window. Free Extension polling now uses catalog ETags and skips JSON parsing and rendering on unchanged responses.
+- Pinned the production `js-yaml` transitive dependency to patched version 4.3.2, removing the high-severity empty-merge CPU-exhaustion advisory inherited through the desktop updater.
+- Removed raw allow-list and block-list Twitch user IDs from Free and Bits viewer catalog responses. The hosted service now returns only per-viewer eligibility, hides configured locked items, and enforces access before relaying an interaction; Studio retains its independent enforcement as the final boundary.
+- Made Twitch's identity-sharing consent reachable from visible restricted-interaction cards. Anonymous viewers now see an explicit **Share Twitch Identity** action while locked and hidden interactions remain unavailable, with the hosted service and Studio still enforcing the configured audience after consent.
+- Reduced Bits Extension background work by caching Twitch product metadata for 60 seconds and using ETag/`304 Not Modified` responses for unchanged five-second eligibility checks. Authorization and Twitch feature changes still force an immediate full refresh.
+- Coalesced overlapping Free and Bits Extension catalog refreshes into one active request plus at most one trailing refresh, and discard responses signed with a superseded Twitch authorization token.
+- Bounded Free and Bits Extension calls to Tempest Signal at ten seconds so an interrupted network cannot permanently freeze catalog updates, poll voting, or an interaction control.
+- Suspended Extension viewer polling and cooldown repaint work while its Twitch surface is hidden, refresh immediately when the Bits surface becomes visible again, and bound Twitch's product-catalog promise so an SDK stall cannot freeze paid-interaction eligibility.
+- Fixed a Discord local-RPC timeout leak that could leave a 10 ms READY poll running indefinitely after a failed connection, and bound queued dispatch state across reconnects.
+- Coalesced bursts of Discord voice join, leave, and state events into one active channel read plus at most one trailing read, avoiding overlapping RPC command batches and out-of-order guest overlay updates.
+- Coalesced concurrent Chatbot stream, channel, schedule, weather, and Now Playing lookups so commands, automatic messages, and Extension refreshes share one upstream request. Channel/provider changes now invalidate caches and cannot be overwritten by a stale response.
+- Isolated the free Extension's Now Playing, schedule, and Current Stream refresh results so one temporarily unavailable metadata provider no longer prevents the other live cards from updating.
+- Bounded hosted relay rate-limit and Bits cooldown state, capped simultaneous paid-interaction reservations, and added separate per-viewer/channel request limits to Bits reservation and transaction endpoints so invalid traffic cannot grow long-running service memory without limit.
+- Throttled hosted replay-cache pruning, capped simultaneous Studio relay acknowledgements, and pre-indexed Bits interactions and active reservations so large multi-channel catalogs avoid repeated full-map scans while retaining per-request expiry enforcement.
+- Raised the authenticated Studio relay's bounded catalog envelope to 2 MiB so valid larger catalogs with per-viewer access lists no longer disconnect at the old 64 KiB transport ceiling; nested item and identity-list limits remain enforced before storage.
+- Added ten-second cancellation bounds to the hosted service's Twitch, Kick, and Discord identity-provider requests so a stalled upstream cannot retain pairing or authorization handlers indefinitely.
+- Return a clear `400` response for malformed signed Kick webhook JSON instead of treating a client payload error as an internal hosted-service failure.
+- Reduced Studio's visible-window one-second refresh from 22 unconditional status calls to six production-critical calls plus only the active workspace's data. Switching workspaces refreshes that workspace immediately, and the setup wizard still loads every readiness source it needs.
+- Bounded desktop calls to the local Bridge at five seconds and hosted pairing, Kick linking, and Discord token exchange at ten seconds so an unavailable service cannot leave Studio controls or refreshes pending indefinitely.
+- Coalesced Studio's periodic/visibility full refreshes and pause one-second workspace polling while a full refresh is active, preventing duplicate batches of up to 28 Bridge and desktop status requests.
+- Streamed Asset Library SHA-256 calculation instead of loading an entire selected video or media file into desktop memory, and bounded imported application manifests to 1 MB before parsing.
+- Streamed GIPHY downloads through a hard 25 MB reader limit, including responses without a trustworthy Content-Length header, instead of allocating an unbounded response before validating its size.
+- Streamed assigned alert audio through a hard 100 MB Browser Source compatibility-fallback limit, including responses without a trustworthy Content-Length header, while leaving normal media-element streaming unchanged.
+- Deferred concatenating streamed alert-audio fallback chunks unless both media-element playback paths fail and Web Audio decoding is actually needed, reducing peak Browser Source memory in the common compatibility path.
+- Copied imported Dice Box theme assets without buffering each file in desktop memory and rejected oversized theme manifests before JSON parsing.
+- Kept the third-party emote provider timeout active through body download and enforced the 4 MB catalog/media ceiling while streaming, preventing stalled or oversized provider bodies from retaining the Bridge or allocating without bound.
+- Bounded third-party emote names, each provider catalog, and the long-session media-source lookup so a high-volume chat cannot accumulate every distinct community emote until Studio exits.
+- Collapsed Studio's six always-on one-second Bridge status calls into one authenticated runtime snapshot while retaining the individual endpoints for compatibility, removing roughly 18,000 local HTTP requests from a typical one-hour stream.
+- Isolated active-workspace refresh failures from the core runtime snapshot so a temporarily unavailable optional tool no longer makes Studio falsely report that the entire local Bridge is offline.
+- Reused the runtime snapshot in full refreshes and retained successful optional results independently, reducing each full batch by five more local requests and preventing one optional integration failure from discarding every other fresh status.
+- Reduced the background compatibility refresh from every 15 seconds to every 60 seconds now that the visible workspace keeps its live state current each second and operator actions refresh explicitly, removing another roughly 4,140 local requests from a one-hour stream.
+- Skipped active-workspace DOM reconstruction when its fetched state is unchanged, while retaining one-second safety countdowns and immediate renders for every changed live data source.
+- Added a shared bounded ten-second timeout to Chatbot, primary Twitch gateway, and Kick gateway requests so an unresponsive upstream cannot stall Extension metadata, automated messages, commands, OAuth, or account operations indefinitely.
+- Replaced per-message full scans of Chatbot EventSub deduplication state with once-per-minute pruning, and bounded expired viewer-cooldown and shoutout history so long streams cannot accumulate unbounded runtime maps.
+- Applied the same throttled pruning and 24-hour/50,000-entry bounds to Twitch gateway deduplication, Interaction Alert viewer cooldowns, and workflow viewer cooldowns, removing more per-event full-map scans from long streams.
+- Added end-to-end viewer placement to free Extension interactions. Stickers, GIFs, and effects configured as viewer-placeable now open a crosshair layer, submit bounded normalized coordinates through Tempest Signal, and use Studio's existing horizontal/vertical render mapping.
+- Added a read-only Current Stream card to the free Extension with Twitch live/offline state, title, category, uptime, and viewer count. Studio reuses its existing 30-second stream and 60-second channel-information caches and requires no new OAuth scope.
+- Added a read-only chat-command directory to the free Extension. It publishes only bounded enabled triggers, aliases, permissions, and Shared Chat availability; response text, workflow links, cooldown state, and other private Chatbot configuration remain local.
+- Made free Extension counter cards display the streamer's configured Chatbot prefix instead of assuming every counter command begins with `!`.
+- Bounded Kick OAuth, identity, chat-send, and subscription response bodies to 1 MiB with a ten-second streamed-body timeout, preventing a stalled or oversized provider response from retaining Studio work indefinitely.
+- Applied the same streamed-body timeout and 1 MiB ceiling to Twitch OAuth, token validation, refresh, and EventSub subscription responses.
+- Bounded Chatbot Twitch, weather, schedule, Shared Chat, and Now Playing response bodies to 2 MiB and kept the response timeout active through their streamed downloads.
+- Bounded hosted Twitch, Kick, and Discord identity/token response bodies to 1 MiB with a streamed-body timeout, closing the same post-header stall path in Tempest Signal.
+- Bounded Studio's hosted pairing, Kick linking, Panel design, Discord token exchange, and GIPHY JSON bodies to 1 MiB with a streamed-body timeout so the desktop cannot be held after response headers arrive.
 
 ## 1.4.7 — 3D Dice and Browser Source audio
 

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { validateLocalExtensionSettings, localExtensionUrls } = require('../dist/local-extension.js');
 const { validateTwitchPanelDesign } = require('../dist/panel-design.js');
 const hostedExtension = require('../dist/hosted-extension.js');
-const { OFFICIAL_HOSTED_EBS_URL, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCompanions, validateHostedExtensionCredentials, validateTwitchExtensionEdition } = require('../dist/hosted-extension.js');
+const { OFFICIAL_HOSTED_EBS_URL, activeTwitchExtensionEdition, describeHostedExtensionPairingFailure, hostedExtensionRelayOptions, isOfficialHostedEbsUrl, syncHostedExtensionPanelDesign, validateHostedEbsUrl, validateHostedExtensionCredentials, validateTwitchExtensionEdition } = hostedExtension;
 
 test('validates one numeric channel and a base64 Extension secret', () => {
   const extensionSecret = randomBytes(32).toString('base64');
@@ -20,14 +20,17 @@ test('keeps the local Extension on loopback HTTPS ports', () => {
   assert.equal(localExtensionUrls.ebsUrl, 'https://localhost:8090');
 });
 
-test('validates channel-specific Twitch Panel appearance without executable code', () => {
-  const design = validateTwitchPanelDesign({ brandName: 'Creator Studio', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false });
+test('validates channel-specific Twitch Panel appearance and content visibility without executable code', () => {
+  const design = validateTwitchPanelDesign({ brandName: 'Creator Studio', preset: 'neon', accent: '#a66bff', cornerRadius: 99, cardLayout: 'list', showSearch: false, showPoll: false, showDice: false });
   assert.equal(design.brandName, 'Creator Studio');
   assert.equal(design.preset, 'neon');
   assert.equal(design.accent, '#A66BFF');
   assert.equal(design.cornerRadius, 24);
   assert.equal(design.cardLayout, 'list');
   assert.equal(design.showSearch, false);
+  assert.equal(design.showPoll, false);
+  assert.equal(design.showDice, false);
+  assert.equal(design.showCurrentStream, true);
   assert.equal(Object.hasOwn(design, 'javascript'), false);
 });
 
@@ -59,7 +62,8 @@ test('validates a public hosted EBS and derives a credential-free WSS relay URL'
   assert.throws(() => hostedExtension.validateTwitchExtensionCompanions({ mainframe: false, streaming: false }), /at least one/i);
   assert.equal(validateTwitchExtensionEdition(undefined), 'free');
   assert.equal(validateTwitchExtensionEdition('bits'), 'bits');
-  assert.throws(() => validateTwitchExtensionEdition('paid'), /Free.*Bits/);
+  assert.equal(activeTwitchExtensionEdition('bits'), 'free');
+  assert.throws(() => validateTwitchExtensionEdition('paid'), /invalid/);
   assert.throws(() => validateHostedEbsUrl('http://tempest.example.com'), /HTTPS/);
   assert.throws(() => validateHostedEbsUrl('https://user:pass@tempest.example.com'), /credentials/);
 });

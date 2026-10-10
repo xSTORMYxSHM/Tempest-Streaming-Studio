@@ -18,6 +18,11 @@ export interface LocalExtensionStatus {
   componentUrl: string;
   ebsUrl: string;
   certificateAvailable: boolean;
+  certificateProvider?: 'mkcert' | 'windows-native';
+  certificateProviderVersion?: string;
+  certificateTrusted?: boolean;
+  certificateExpiresAt?: string;
+  certificateHosts?: string[];
   secretStored: boolean;
   lastError?: string;
 }

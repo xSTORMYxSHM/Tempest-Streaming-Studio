@@ -12,6 +12,7 @@ Tempest Streaming Studio is built with third-party software including:
 - Ammo.js / Bullet Physics — zlib License — https://github.com/kripken/ammo.js
 - TypeScript — Apache License 2.0 — https://github.com/microsoft/TypeScript
 - Node.js type definitions — MIT License — https://github.com/DefinitelyTyped/DefinitelyTyped
+- mkcert 1.4.4 — BSD 3-Clause License, Copyright 2018 The mkcert Authors — https://github.com/FiloSottile/mkcert
 
 The Windows distribution also includes Chromium, Node.js, FFmpeg, and other components distributed as part of Electron. Their notices and licenses are included with Electron and remain governed by their original terms.
 

@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { WebSocket } from 'ws';
+import { boundedFetch } from './bounded-fetch';
+import { readBoundedJsonResponse } from './bounded-response';
 import {
   normalizedTwitchEventTopics,
   TempestNormalizedTwitchEvent,
@@ -23,6 +25,7 @@ export const defaultTwitchScopes = [
 // Twitch Client IDs are public application identifiers. This Public client uses
 // Device Code authorization, so no client secret is embedded or accepted.
 export const OFFICIAL_TWITCH_CLIENT_ID = 'n04l25zbygbsnq6nj7gupboyeji820';
+const maximumProviderResponseBytes = 1024 * 1024;
 
 export interface TwitchTokenSet {
   accessToken: string;
@@ -127,6 +130,7 @@ export interface TwitchIntegrationGatewayOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   onEvent?: (event: TempestNormalizedTwitchEvent) => void | Promise<void>;
 }
 
@@ -249,6 +253,7 @@ export class TwitchIntegrationGateway {
   private oauthState: TwitchIntegrationStatus['oauth']['state'] = 'not-configured';
   private lastError?: string;
   private seenEvents = new Map<string, number>();
+  private lastSeenEventsPrunedAt = 0;
   private acceptedEvents = 0;
   private duplicateEvents = 0;
   private lastEventAt?: string;
@@ -269,7 +274,7 @@ export class TwitchIntegrationGateway {
 
   constructor(private readonly options: TwitchIntegrationGatewayOptions) {
     this.credentialStore = options.credentialStore;
-    this.request = options.fetchImplementation || fetch;
+    this.request = boundedFetch(options.fetchImplementation, options.requestTimeoutMs);
   }
 
   get configurationPath(): string {
@@ -392,7 +397,7 @@ export class TwitchIntegrationGateway {
     if (!this.credentialStore?.available) throw new Error('Secure operating-system credential storage is unavailable.');
     const body = new URLSearchParams({ client_id: this.configuration.clientId, scopes: this.configuration.scopes.join(' ') });
     const response = await this.request('https://id.twitch.tv/oauth2/device', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string };
+    const result = await readBoundedJsonResponse<{ device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string }>(response, maximumProviderResponseBytes);
     if (!response.ok || !result.device_code || !result.user_code || !result.verification_uri) throw new Error(describeTwitchOAuthError(result.message, `Twitch device authorization failed with ${response.status}.`));
     const intervalSeconds = Math.max(1, Number(result.interval) || 5);
     this.pendingDevice = {
@@ -427,7 +432,7 @@ export class TwitchIntegrationGateway {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
     });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readBoundedJsonResponse<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response, maximumProviderResponseBytes);
     if (!response.ok) {
       if (result.message === 'authorization_pending') return { pending: true, status: this.status(), retryAfterSeconds: pending.intervalSeconds };
       this.lastError = describeTwitchOAuthError(result.message, `Twitch token exchange failed with ${response.status}.`);
@@ -457,7 +462,7 @@ export class TwitchIntegrationGateway {
       await this.refreshAuthorization();
       response = await this.request('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${this.tokens.accessToken}` } });
     }
-    const result = await response.json() as { client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string };
+    const result = await readBoundedJsonResponse<{ client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string }>(response, maximumProviderResponseBytes);
     if (!response.ok || !result.client_id || !result.login || !result.user_id) {
       this.lastError = describeTwitchOAuthError(result.message, `Twitch token validation failed with ${response.status}.`);
       this.setOauthState('error');
@@ -685,7 +690,7 @@ export class TwitchIntegrationGateway {
       });
       if (response.status === 202) this.activeEventSubTypes.add(definition.type);
       else {
-        const body = await response.json().catch(() => ({})) as { message?: string };
+        const body = await readBoundedJsonResponse<{ message?: string }>(response, maximumProviderResponseBytes).catch(() => ({} as { message?: string }));
         failures.push(`${definition.type}: ${body.message || response.status}`);
       }
     }
@@ -723,7 +728,7 @@ export class TwitchIntegrationGateway {
     this.setOauthState('refreshing');
     const body = new URLSearchParams({ client_id: this.configuration.clientId, grant_type: 'refresh_token', refresh_token: this.tokens.refreshToken });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readBoundedJsonResponse<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response, maximumProviderResponseBytes);
     if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(describeTwitchOAuthError(result.message, `Twitch token refresh failed with ${response.status}.`));
     this.tokens = {
       accessToken: result.access_token,
@@ -775,10 +780,13 @@ export class TwitchIntegrationGateway {
   }
 
   private pruneSeenEvents(): void {
-    const cutoff = Date.now() - 10 * 60 * 1000;
+    const now = Date.now();
+    if (now - this.lastSeenEventsPrunedAt < 60_000 && this.seenEvents.size <= 5_000) return;
+    const cutoff = now - 10 * 60 * 1000;
     for (const [id, seenAt] of this.seenEvents) {
       if (seenAt < cutoff) this.seenEvents.delete(id);
     }
     while (this.seenEvents.size > 5000) this.seenEvents.delete(this.seenEvents.keys().next().value as string);
+    this.lastSeenEventsPrunedAt = now;
   }
 }

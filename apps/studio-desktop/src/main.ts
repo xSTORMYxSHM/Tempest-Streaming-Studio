@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
 import { startVTubeStudioAdapter, VTubeStudioAdapterRuntime, VTubeStudioTokenStore } from '@tempest/vtube-studio-adapter';
@@ -22,7 +22,7 @@ import {
   validateLocalExtensionSettings
 } from './local-extension';
 import { defaultTwitchPanelDesign, TwitchPanelDesign, validateTwitchPanelDesign } from './panel-design';
-import { buildTempestAlertPack, importTempestAlertPack } from './alert-packs';
+import { buildTempestAlertPack, importTempestAlertPack, inspectTempestAlertPack } from './alert-packs';
 import { buildTempestDiscordProfilePack, importTempestDiscordProfilePack } from './discord-profile-packs';
 import { importDiceBoxTheme } from './dice-theme-import';
 import { buildPortableStageActorPack, buildStageActorAtlasPack, buildStageActorPack, buildStageActorTemplatePack, importPortableStageActorPack, importStreamingAvatarsLibrary, inspectStageActorStrip, installBundledStageActorPacks, updateStageActorPack } from './stage-actor-packs';
@@ -45,9 +45,19 @@ import {
 } from './hosted-extension';
 import { DiscordRpcTokenSet, DiscordRpcTokenStore, OFFICIAL_DISCORD_CLIENT_ID, OFFICIAL_DISCORD_TOKEN_EXCHANGE_URL, TempestDiscordRpcClient } from './discord-rpc';
 import { chromeCompatibleUserAgent, isTwitchWebUrl, normalizeTwitchLogin, streamTogetherUrl } from './stream-together';
+import { boundedFetch } from './bounded-fetch';
+import { readResponseBuffer, readResponseJson } from './bounded-response';
+import { importManagedMediaAsset, importManagedMediaBuffer, removeManagedMediaAsset } from './media-library';
 
 const bridgePort = Number(process.env.TEMPEST_BRIDGE_PORT) || 4765;
 const productName = 'Tempest Streaming Studio';
+const localServiceFetch = boundedFetch(fetch, 5_000);
+const hostedServiceFetch = boundedFetch(fetch, 10_000);
+const maximumHostedResponseBytes = 1024 * 1024;
+
+async function readOptionalHostedJson<T extends object>(response: Response): Promise<Partial<T>> {
+  return readResponseJson<T>(response, maximumHostedResponseBytes).catch(() => ({}));
+}
 const captureArgument = process.argv.find((argument) => argument.startsWith('--capture-ui='));
 const captureSectionArgument = process.argv.find((argument) => argument.startsWith('--capture-section='));
 const captureTargetArgument = process.argv.find((argument) => argument.startsWith('--capture-target='));
@@ -281,6 +291,38 @@ function extensionCertificateDirectory(): string {
 
 function extensionCertificatePath(): string {
   return path.join(extensionCertificateDirectory(), 'localhost.pfx');
+}
+
+function extensionCertificateMetadataPath(): string {
+  return path.join(extensionCertificateDirectory(), 'certificate.json');
+}
+
+interface LocalExtensionCertificateMetadata {
+  schemaVersion: 1;
+  provider: 'mkcert' | 'windows-native';
+  providerVersion: string;
+  trusted: boolean;
+  hosts: string[];
+  expiresAt: string;
+}
+
+async function loadLocalExtensionCertificateMetadata(): Promise<LocalExtensionCertificateMetadata | null> {
+  try {
+    const parsed = JSON.parse(await readFile(extensionCertificateMetadataPath(), 'utf8')) as Partial<LocalExtensionCertificateMetadata>;
+    if (parsed.schemaVersion !== 1 || !['mkcert', 'windows-native'].includes(String(parsed.provider))) return null;
+    const hosts = Array.isArray(parsed.hosts) ? parsed.hosts.map(String).filter((host) => ['localhost', '127.0.0.1', '::1'].includes(host)) : [];
+    if (!parsed.providerVersion || !parsed.expiresAt || !Number.isFinite(Date.parse(parsed.expiresAt))) return null;
+    return {
+      schemaVersion: 1,
+      provider: parsed.provider as LocalExtensionCertificateMetadata['provider'],
+      providerVersion: String(parsed.providerVersion).slice(0, 80),
+      trusted: parsed.trusted === true,
+      hosts,
+      expiresAt: new Date(parsed.expiresAt).toISOString()
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface StoredLocalExtensionSettings {
@@ -562,15 +604,21 @@ async function saveLocalExtensionSettings(settings: StoredLocalExtensionSettings
 }
 
 async function getLocalExtensionStatus(): Promise<LocalExtensionStatus> {
-  const [stored, certificate] = await Promise.all([
+  const [stored, certificate, certificateMetadata] = await Promise.all([
     loadLocalExtensionSettings().catch(() => null),
-    stat(extensionCertificatePath()).catch(() => null)
+    stat(extensionCertificatePath()).catch(() => null),
+    loadLocalExtensionCertificateMetadata()
   ]);
   return {
     running: Boolean(localExtension),
     channelId: localExtension?.status().channelId || stored?.channelId,
     ...localExtensionUrls,
     certificateAvailable: Boolean(certificate?.isFile()),
+    certificateProvider: certificateMetadata?.provider,
+    certificateProviderVersion: certificateMetadata?.providerVersion,
+    certificateTrusted: certificateMetadata?.trusted,
+    certificateExpiresAt: certificateMetadata?.expiresAt,
+    certificateHosts: certificateMetadata?.hosts,
     secretStored: Boolean(stored),
     lastError: localExtensionLastError
   };
@@ -590,6 +638,20 @@ function applyAdaptiveStudioZoom(window: BrowserWindow): void {
   const heightScale = height / 1150;
   const zoomFactor = Math.min(1.22, Math.max(1, Math.min(widthScale, heightScale)));
   window.webContents.setZoomFactor(Number(zoomFactor.toFixed(2)));
+}
+
+async function runExtensionCertificateScript(argumentsList: string[], action: string): Promise<void> {
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), ...argumentsList], {
+    cwd: supportRoot,
+    windowsHide: true,
+    stdio: 'ignore',
+    shell: false
+  });
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code) => resolve(code ?? 1));
+  });
+  if (exitCode !== 0) throw new Error(`Local certificate ${action} failed with exit code ${exitCode}.`);
 }
 
 function createWindow(): BrowserWindow {
@@ -900,7 +962,7 @@ function registerDesktopHandlers(): void {
   handleDesktop('studio:export-diagnostics', async () => {
     if (!bridge) throw new Error('Local control service is not running.');
     const bridgeGet = async (requestPath: string): Promise<unknown> => {
-      const response = await fetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
+      const response = await localServiceFetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
       return response.ok ? response.json() : { status: response.status };
     };
     const [health, alerts, sources, kick] = await Promise.all([bridgeGet('/health'), bridgeGet('/v1/alert-diagnostics'), bridgeGet('/v1/visual-alerts'), bridgeGet('/v1/integrations/kick')]);
@@ -926,7 +988,7 @@ function registerDesktopHandlers(): void {
     if (requestPath !== '/health' && !requestPath.startsWith('/v1/')) throw new Error('Bridge route is outside the Studio API boundary.');
     const method = String(request?.method || 'GET').toUpperCase();
     if (!['GET', 'POST', 'DELETE'].includes(method)) throw new Error('Bridge request method is not permitted.');
-    const response = await fetch(`${bridge.baseUrl}${requestPath}`, {
+    const response = await localServiceFetch(`${bridge.baseUrl}${requestPath}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -1009,7 +1071,7 @@ function registerDesktopHandlers(): void {
     hostedExtensionLastError = undefined;
     const ebsBaseUrl = validateHostedEbsUrl(input?.ebsBaseUrl || OFFICIAL_HOSTED_EBS_URL);
     const officialService = ebsBaseUrl === OFFICIAL_HOSTED_EBS_URL;
-    const validation = await fetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
+    const validation = await localServiceFetch(`${bridge.baseUrl}/v1/integrations/twitch/oauth/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: '{}' });
     const validationResult = await validation.json().catch(() => ({})) as { error?: string; clientIdMode?: 'official' | 'custom' };
     if (!validation.ok) {
       throw new Error(validationResult.error || 'Validate the broadcaster authorization before pairing the hosted Extension.');
@@ -1034,12 +1096,12 @@ function registerDesktopHandlers(): void {
     }
     hostedExtensionLastError = undefined;
     try {
-      const response = await fetch(`${ebsBaseUrl}/v1/installations/pair`, {
+      const response = await hostedServiceFetch(`${ebsBaseUrl}/v1/installations/pair`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Twitch-OAuth': tokens.accessToken },
         body: JSON.stringify({ product: productName, productVersion: TEMPEST_STUDIO_VERSION })
       });
-      const result = await response.json().catch(() => ({})) as { error?: string; code?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } };
+      const result = await readOptionalHostedJson<{ error?: string; code?: string; installationId?: unknown; relayToken?: unknown; relayPath?: unknown; pairedAt?: unknown; channel?: { id?: unknown; login?: unknown } }>(response);
       if (!response.ok) throw new Error(describeHostedExtensionPairingFailure(response.status, result, officialService, officialTwitchAuthorization));
       const credentials = validateHostedExtensionCredentials({
         schemaVersion: 1,
@@ -1066,8 +1128,8 @@ function registerDesktopHandlers(): void {
     if (!credentials) return getHostedExtensionStatus();
     hostedExtensionLastError = undefined;
     try {
-      const response = await fetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
-      const result = await response.json().catch(() => ({})) as { error?: string };
+      const response = await hostedServiceFetch(`${credentials.ebsBaseUrl}/v1/installations/current`, { method: 'DELETE', headers: { Authorization: `Bearer ${credentials.relayToken}` } });
+      const result = await readOptionalHostedJson<{ error?: string }>(response);
       if (!response.ok && response.status !== 401 && response.status !== 404) throw new Error(result.error || `Hosted Extension revocation failed with ${response.status}.`);
       await bridge.configureExtensionRelay(undefined);
       await unlink(hostedExtensionCredentialPath()).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
@@ -1081,19 +1143,19 @@ function registerDesktopHandlers(): void {
     const [hosted, kick] = await Promise.all([loadHostedExtensionCredentials(), kickCredentialStore?.load()]);
     if (!hosted) throw new Error('Pair the Hosted Extension relay in Twitch Gateway before enabling Kick webhooks.');
     if (!kick?.accessToken) throw new Error('Connect the Kick broadcaster account first.');
-    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, {
+    const response = await hostedServiceFetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${hosted.relayToken}`, 'X-Kick-OAuth': kick.accessToken }
     });
-    const result = await response.json().catch(() => ({})) as { error?: string; linked?: boolean; kick?: { userId?: string; username?: string } };
+    const result = await readOptionalHostedJson<{ error?: string; linked?: boolean; kick?: { userId?: string; username?: string } }>(response);
     if (!response.ok || !result.linked) throw new Error(result.error || `Hosted Kick relay linking failed with ${response.status}.`);
     return result;
   });
   handleDesktop('studio:unlink-hosted-kick', async () => {
     const hosted = await loadHostedExtensionCredentials();
     if (!hosted) return { unlinked: true };
-    const response = await fetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
-    const result = await response.json().catch(() => ({})) as { error?: string; unlinked?: boolean };
+    const response = await hostedServiceFetch(`${hosted.ebsBaseUrl}/v1/installations/current/kick`, { method: 'DELETE', headers: { Authorization: `Bearer ${hosted.relayToken}` } });
+    const result = await readOptionalHostedJson<{ error?: string; unlinked?: boolean }>(response);
     if (!response.ok && response.status !== 404) throw new Error(result.error || `Hosted Kick relay unlinking failed with ${response.status}.`);
     return { unlinked: true };
   });
@@ -1144,25 +1206,33 @@ function registerDesktopHandlers(): void {
     const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
       type: 'warning',
       title: 'Trust a localhost development certificate?',
-      message: 'Studio will create a localhost certificate and add it to the current Windows user trusted root store.',
-      detail: 'This is only needed for Twitch local Extension testing. You can remove it later with the Untrust command in the local testing guide.',
+      message: 'Studio will prepare and trust a localhost certificate for Twitch Extension testing.',
+      detail: 'Studio downloads the pinned official mkcert 1.4.4 Windows helper, verifies its SHA-256 hash before running it, and keeps its private local CA inside Studio data. If the download is unavailable, Studio uses its offline Windows certificate generator instead. Nothing is installed silently without this confirmation.',
       buttons: ['Cancel', 'Create and trust'],
       defaultId: 0,
       cancelId: 0,
       noLink: true
     });
     if (confirmation.response !== 1) throw new Error('Local certificate preparation was canceled.');
-    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', extensionCertificateScript, '-OutputDirectory', extensionCertificateDirectory(), '-Trust'], {
-      cwd: supportRoot,
-      windowsHide: true,
-      stdio: 'ignore',
-      shell: false
+    await runExtensionCertificateScript(['-Trust'], 'preparation');
+    return getLocalExtensionStatus();
+  });
+
+  handleDesktop('studio:remove-local-extension-certificate', async () => {
+    const confirmation = await dialog.showMessageBox(mainWindow || undefined as never, {
+      type: 'warning',
+      title: 'Remove local Twitch test trust?',
+      message: 'Studio will stop the Local Extension and remove its localhost certificate and local certificate authority.',
+      detail: 'Your encrypted Extension Secret and normal Twitch authorization are not removed. Local HTTPS testing will remain unavailable until you prepare another certificate.',
+      buttons: ['Cancel', 'Remove certificate'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
     });
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('exit', (code) => resolve(code ?? 1));
-    });
-    if (exitCode !== 0) throw new Error(`Local certificate preparation failed with exit code ${exitCode}.`);
+    if (confirmation.response !== 1) throw new Error('Local certificate removal was canceled.');
+    await stopLocalExtension();
+    await runExtensionCertificateScript(['-Untrust'], 'removal');
+    localExtensionLastError = undefined;
     return getLocalExtensionStatus();
   });
 
@@ -1183,6 +1253,8 @@ function registerDesktopHandlers(): void {
     });
     if (result.canceled || !result.filePaths[0]) return null;
     const manifestPath = result.filePaths[0];
+    const manifestDetails = await stat(manifestPath);
+    if (!manifestDetails.isFile() || manifestDetails.size > 1024 * 1024) throw new Error('Application manifests must be JSON files smaller than 1 MB.');
     const parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as TempestApplicationManifest;
     const validation = validateApplicationManifest(parsed);
     if (!validation.ok || !validation.value) throw new Error(validation.errors.join('\n'));
@@ -1202,25 +1274,52 @@ function registerDesktopHandlers(): void {
 
   handleDesktop('studio:select-asset', async () => {
     const result = await dialog.showOpenDialog(mainWindow || undefined as never, {
-      title: 'Add Asset to Tempest Library',
+      title: 'Import Media into Studio',
       properties: ['openFile'],
-      filters: [{ name: 'All assets', extensions: ['*'] }]
+      filters: [
+        { name: 'Alert audio and visuals', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = result.filePaths[0];
-    const bytes = await readFile(filePath);
-    const details = await stat(filePath);
-    const baseName = path.basename(filePath, path.extname(filePath));
-    const slug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'asset';
-    return {
-      path: filePath,
-      uri: pathToFileURL(filePath).href,
-      name: baseName,
-      suggestedId: `com.tempestmainframe.asset.${slug}`,
-      checksum: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
-      size: details.size,
-      extension: path.extname(filePath).toLowerCase()
+    return importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+  });
+
+  handleDesktop('studio:remove-managed-asset', async (_event, uri: unknown) => {
+    return { removed: await removeManagedMediaAsset(String(uri || ''), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media')) };
+  });
+
+  handleDesktop('studio:adopt-assigned-assets', async (_event, value: unknown) => {
+    if (!bridge) throw new Error('Local control service is not running.');
+    if (!Array.isArray(value) || value.length > 200) throw new Error('Assigned media adoption accepts at most 200 files at once.');
+    const requested = [...new Set(value.map((entry) => String(entry || '')).filter((entry) => entry.length > 0 && entry.length <= 4096))];
+    const readAlerts = async (requestPath: string): Promise<{ alerts?: Array<Record<string, unknown>> }> => {
+      const response = await localServiceFetch(`${bridge!.baseUrl}${requestPath}`, { headers: { 'X-Tempest-Token': bridge!.token } });
+      if (!response.ok) throw new Error(`Could not read assigned alert media (${response.status}).`);
+      return readResponseJson(response, 2 * 1024 * 1024);
     };
+    const [interactionDocument, twitchDocument] = await Promise.all([readAlerts('/v1/sound-alerts'), readAlerts('/v1/visual-alerts/twitch')]);
+    const assigned = new Set<string>();
+    const remember = (alert: Record<string, unknown>): void => {
+      for (const key of ['audioUri', 'visualUri']) if (typeof alert[key] === 'string') assigned.add(alert[key] as string);
+      if (Array.isArray(alert.alertVariants)) for (const variant of alert.alertVariants) if (variant && typeof variant === 'object' && !Array.isArray(variant)) remember(variant as Record<string, unknown>);
+    };
+    for (const alert of [...(interactionDocument.alerts || []), ...(twitchDocument.alerts || [])]) remember(alert);
+    const imports = [];
+    const failures: Array<{ sourceUri: string; message: string }> = [];
+    const libraryDirectory = path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media');
+    for (const sourceUri of requested) {
+      try {
+        if (!assigned.has(sourceUri)) throw new Error('The file is no longer assigned to an alert.');
+        const sourceUrl = new URL(sourceUri);
+        if (sourceUrl.protocol !== 'file:') throw new Error('Only assigned local files can be adopted.');
+        const imported = await importManagedMediaAsset(fileURLToPath(sourceUrl), libraryDirectory, { tags: ['adopted'] });
+        imports.push({ sourceUri, ...imported });
+      } catch (error) {
+        failures.push({ sourceUri, message: (error as Error).message });
+      }
+    }
+    return { imports, failures };
   });
 
   handleDesktop('studio:select-sound-alert-audio', async () => {
@@ -1233,10 +1332,8 @@ function registerDesktopHandlers(): void {
       ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = path.normalize(result.filePaths[0]);
-    const details = await stat(filePath);
-    if (!details.isFile()) throw new Error('The selected Sound Alert audio is not a file.');
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+    const imported = await importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   handleDesktop('studio:select-sound-alert-visual', async () => {
@@ -1249,10 +1346,8 @@ function registerDesktopHandlers(): void {
       ]
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = path.normalize(result.filePaths[0]);
-    const details = await stat(filePath);
-    if (!details.isFile()) throw new Error('The selected Sound Alert visual is not a file.');
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: details.size };
+    const imported = await importManagedMediaAsset(path.normalize(result.filePaths[0]), path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   ipcMain.handle('studio:select-twitch-experience-media', async () => {
@@ -1379,12 +1474,12 @@ function registerDesktopHandlers(): void {
     const details = await stat(filePath);
     if (!details.isFile() || details.size > 205 * 1024 * 1024) throw new Error('Alert Packs must be smaller than 205 MB.');
     const document = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-    const imported = await importTempestAlertPack(document, path.join(app.getPath('userData'), 'bridge', 'visual-alerts', 'imported'));
-    if (imported.containsCustomCode) {
+    const inspection = inspectTempestAlertPack(document);
+    if (inspection.containsCustomCode) {
       const decision = await dialog.showMessageBox(mainWindow || undefined as never, {
         type: 'warning',
         title: 'Custom Alert Code',
-        message: `${imported.name} contains custom HTML, CSS, or JavaScript.`,
+        message: `${inspection.name} contains custom HTML, CSS, or JavaScript.`,
         detail: 'Custom code runs only inside the local Browser Source, but you should import packs only from creators you trust.',
         buttons: ['Cancel Import', 'Import Trusted Pack'],
         defaultId: 0,
@@ -1393,6 +1488,7 @@ function registerDesktopHandlers(): void {
       });
       if (decision.response !== 1) return null;
     }
+    const imported = await importTempestAlertPack(document, path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'));
     return { ...imported, sourcePath: filePath };
   });
 
@@ -1663,7 +1759,7 @@ function registerDesktopHandlers(): void {
     url.searchParams.set('rating', 'pg-13');
     const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error(`GIPHY search returned HTTP ${response.status}.`);
-    const body = await response.json() as { data?: Array<{ id?: string; title?: string; images?: Record<string, { url?: string }> }> };
+    const body = await readResponseJson<{ data?: Array<{ id?: string; title?: string; images?: Record<string, { url?: string }> }> }>(response, maximumHostedResponseBytes, 8_000);
     return {
       results: (body.data || []).flatMap((entry) => {
         const previewUrl = entry.images?.fixed_width_small?.url || entry.images?.fixed_width?.url;
@@ -1673,27 +1769,27 @@ function registerDesktopHandlers(): void {
     };
   });
 
-  handleDesktop('studio:import-giphy-visual', async (_event, input: { id?: unknown; mediaUrl?: unknown }) => {
+  handleDesktop('studio:import-giphy-visual', async (_event, input: { id?: unknown; title?: unknown; mediaUrl?: unknown }) => {
     const id = String(input?.id || '').trim();
     if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('The selected GIPHY result has an invalid identifier.');
+    const title = String(input?.title || '').trim().replace(/[\r\n\0]/g, ' ').slice(0, 120) || `GIPHY ${id}`;
     const mediaUrl = new URL(String(input?.mediaUrl || ''));
     if (mediaUrl.protocol !== 'https:' || !/^(?:media\d*|i)\.giphy\.com$/i.test(mediaUrl.hostname)) throw new Error('Only GIPHY-hosted media can be imported through this picker.');
     const response = await fetch(mediaUrl, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(`GIPHY media download returned HTTP ${response.status}.`);
     const finalUrl = new URL(response.url);
     if (finalUrl.protocol !== 'https:' || !/^(?:media\d*|i)\.giphy\.com$/i.test(finalUrl.hostname)) throw new Error('GIPHY redirected the media download to an unapproved host.');
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (contentLength > 25 * 1024 * 1024) throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > 25 * 1024 * 1024) throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
+    let bytes: Buffer;
+    try { bytes = await readResponseBuffer(response, 25 * 1024 * 1024); }
+    catch (error) {
+      if ((error as Error).message === 'Response exceeds the permitted size.') throw new Error('The selected GIF exceeds the 25 MB local alert limit.');
+      throw error;
+    }
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     if (!['image/gif', 'image/webp', 'video/mp4'].includes(contentType || '')) throw new Error('GIPHY returned an unsupported media format.');
     const extension = contentType === 'image/webp' ? '.webp' : contentType === 'video/mp4' ? '.mp4' : '.gif';
-    const directory = path.join(app.getPath('userData'), 'bridge', 'visual-alerts', 'giphy');
-    await mkdir(directory, { recursive: true });
-    const filePath = path.join(directory, `${id}${extension}`);
-    await writeFile(filePath, bytes, { mode: 0o600 });
-    return { path: filePath, uri: pathToFileURL(filePath).href, name: `GIPHY ${id}${extension}`, size: bytes.length };
+    const imported = await importManagedMediaBuffer(bytes, extension, path.join(app.getPath('userData'), 'bridge', 'asset-library', 'media'), { originalName: `${title}${extension}`, tags: ['giphy'] });
+    return { ...imported, uri: imported.manifest.uri, name: imported.manifest.name };
   });
 
   handleDesktop('studio:launch-application', async (_event, input: unknown) => {
@@ -1763,7 +1859,7 @@ app.whenReady().then(async () => {
   });
   const publishDiscord = async (requestPath: string, body: unknown): Promise<void> => {
     if (!bridge) return;
-    const response = await fetch(`${bridge.baseUrl}${requestPath}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(body) });
+    const response = await localServiceFetch(`${bridge.baseUrl}${requestPath}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify(body) });
     if (!response.ok) {
       const result = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(result.error || `Discord Voice bridge update failed with ${response.status}.`);
@@ -1829,13 +1925,13 @@ app.whenReady().then(async () => {
       if (captureOverlay && bridge) {
         await mainWindow.loadURL(`${bridge.baseUrl}/visual-alerts`);
         for (let attempt = 0; attempt < 30; attempt += 1) {
-          const status = await fetch(`${bridge.baseUrl}/v1/visual-alerts`, { headers: { 'X-Tempest-Token': bridge.token } }).then((response) => response.json()) as { connectedClients?: number };
+          const status = await localServiceFetch(`${bridge.baseUrl}/v1/visual-alerts`, { headers: { 'X-Tempest-Token': bridge.token } }).then((response) => response.json()) as { connectedClients?: number };
           if ((status.connectedClients || 0) > 0) break;
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         const previewAlertId = capturePreviewArgument?.slice('--capture-preview='.length);
         if (previewAlertId && /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(previewAlertId)) {
-          await fetch(`${bridge.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent(previewAlertId)}/preview`, {
+          await localServiceFetch(`${bridge.baseUrl}/v1/visual-alerts/twitch/${encodeURIComponent(previewAlertId)}/preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token },
             body: '{}'

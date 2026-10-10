@@ -3,6 +3,9 @@
 
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING', eyebrow: 'LIVE CONTROL NODE', title: 'Shape the stream', accent: '#54F2EB', background: '#04080D', surface: '#07121B', text: '#EDFAFF', muted: '#89A3AD', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 14, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const state = { auth: null, config: null, actions: [], busyAction: '', placementAction: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay' };
+  let catalogEtag = '';
+  let catalogRefreshPromise = null;
+  let catalogRefreshPending = false;
   const avatarControlIds = new Set(['tempest.avatar.left', 'tempest.avatar.right', 'tempest.avatar.jump', 'tempest.avatar.drop', 'tempest.avatar.interact', 'tempest.avatar.emote', 'tempest.avatar.unstuck']);
   const localMockRequested = ['127.0.0.1', 'localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('mock') === '1';
   const $ = (selector) => document.querySelector(selector);
@@ -71,6 +74,19 @@
     state.config = { ...(state.config || {}), panelDesign: design };
   }
 
+  async function fetchWithTimeout(input, init = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Tempest Signal did not respond in time.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function setStatus(label, online = false) {
     $('#statusLabel').textContent = label;
     $('#statusDot').classList.toggle('online', online);
@@ -130,17 +146,39 @@
     render();
   }
 
-  async function refreshCatalog() {
+  async function refreshCatalogOnce() {
     if (!state.auth || !state.config?.ebsBaseUrl) return;
-    const response = await fetch(`${state.config.ebsBaseUrl}/v1/extension/streaming/catalog`, { headers: { 'X-Extension-JWT': state.auth.token }, cache: 'no-store' });
+    const authToken = state.auth.token;
+    const response = await fetchWithTimeout(`${state.config.ebsBaseUrl}/v1/extension/streaming/catalog`, { headers: { 'X-Extension-JWT': authToken, ...(catalogEtag ? { 'If-None-Match': catalogEtag } : {}) }, cache: 'no-store' });
+    if (state.auth?.token !== authToken) return;
+    if (response.status === 304) return;
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || 'The Tempest Streaming catalog is unavailable.');
+    catalogEtag = response.headers.get('ETag') || '';
     if (body.panelDesign && typeof body.panelDesign === 'object') applyPanelDesign(body.panelDesign);
     state.actions = Array.isArray(body.items) ? body.items : [];
     state.studioConnected = Boolean(body.studioConnected);
     setStatus(state.studioConnected ? 'STUDIO ONLINE' : 'STUDIO OFFLINE', state.studioConnected);
     $('#viewerState').textContent = state.studioConnected ? 'Choose a free action to send it to the stream' : 'The creator must open Tempest Streaming Studio';
     render();
+  }
+
+  async function refreshCatalog() {
+    if (catalogRefreshPromise) {
+      catalogRefreshPending = true;
+      return catalogRefreshPromise;
+    }
+    catalogRefreshPromise = (async () => {
+      do {
+        catalogRefreshPending = false;
+        await refreshCatalogOnce();
+      } while (catalogRefreshPending);
+    })();
+    try {
+      await catalogRefreshPromise;
+    } finally {
+      catalogRefreshPromise = null;
+    }
   }
 
   async function triggerAction(action, placement) {
@@ -157,7 +195,7 @@
     render();
     try {
       const requestId = createRequestId();
-      const response = await fetch(`${state.config.ebsBaseUrl}/v1/extension/streaming/interactions/${encodeURIComponent(action.id)}/trigger`, {
+      const response = await fetchWithTimeout(`${state.config.ebsBaseUrl}/v1/extension/streaming/interactions/${encodeURIComponent(action.id)}/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId },
         body: JSON.stringify({ requestId, ...(placement ? { placement } : {}) })
@@ -200,6 +238,7 @@
     if (!window.Twitch?.ext) return void loadMockCatalog();
     window.Twitch.ext.onAuthorized((auth) => {
       state.auth = auth;
+      catalogEtag = '';
       void refreshCatalog().catch((error) => { setStatus('PAIRING REQUIRED'); notice(error.message, true); });
     });
     window.Twitch.ext.onError(() => setStatus('TWITCH LINK ERROR'));
@@ -226,6 +265,9 @@
   });
   document.body.appendChild(placementLayer);
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.placementAction) cancelPlacement(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.auth && !state.busyAction && !state.placementAction) void refreshCatalog().catch(() => undefined);
+  });
 
   void readConfiguration().then((config) => {
     state.config = config;
@@ -233,5 +275,5 @@
     if (config.mockMode || localMockRequested) return loadMockCatalog();
     bindTwitch();
   }).catch((error) => { setStatus('CONFIGURATION ERROR'); notice(error.message, true); });
-  setInterval(() => { if (state.auth && !state.busyAction && !state.placementAction) void refreshCatalog().catch(() => undefined); }, 5000);
+  setInterval(() => { if (!document.hidden && state.auth && !state.busyAction && !state.placementAction) void refreshCatalog().catch(() => undefined); }, 10000);
 })();

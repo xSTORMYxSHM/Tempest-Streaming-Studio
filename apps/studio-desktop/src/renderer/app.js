@@ -46,7 +46,8 @@
       { section: 'alerts', label: 'Unified Alerts' },
       { section: 'visualalerts', label: 'Twitch Events' },
       { section: 'chatoverlay', label: 'Chat' },
-      { section: 'discordvoice', label: 'Guests' }
+      { section: 'discordvoice', label: 'Guests' },
+      { section: 'assets', label: 'Media Library' }
     ],
     extensions: [
       { section: 'twitch', label: 'Companions' },
@@ -68,7 +69,7 @@
     overview: 'home',
     chatbot: 'live', streamtogether: 'live', simulcast: 'live', dice: 'live',
     world: 'interact', interactivestage: 'interact', soundalerts: 'interact',
-    alerts: 'overlays', visualalerts: 'overlays', chatoverlay: 'overlays', discordvoice: 'overlays',
+    alerts: 'overlays', visualalerts: 'overlays', chatoverlay: 'overlays', discordvoice: 'overlays', assets: 'overlays',
     twitch: 'extensions', extensiondesigner: 'extensions', dualformat: 'extensions',
     kick: 'connect', api: 'connect',
     settings: 'settings', events: 'settings'
@@ -87,6 +88,7 @@
     health: null,
     safety: { armed: false, activeRuns: 0 },
     applications: [],
+    assets: [],
     connections: [],
     dualFormat: null,
     simulcast: null,
@@ -128,6 +130,8 @@
   };
   let toastTimer = null;
   let runtimeRefreshBusy = false;
+  let fullRefreshPromise = null;
+  const runtimeDataSignatures = new Map();
   let twitchPollTimer = null;
   let chatbotPollTimer = null;
   let onboardingStep = 0;
@@ -157,10 +161,14 @@
   const stageActorDraftStrips = new Map();
   let stageActorDraftTexture = null;
   let stageActorDraftAtlas = null;
+  let editingViewerGroupId = '';
+  const assetPreviewIds = new Set();
+  let assetPreviewAudio = null;
   const twitchExperienceDraftMedia = Object.create(null);
   const onboardingStorageKey = 'tempest.streaming-studio.onboarding.v1';
   const simulcastChecklistStorageKey = 'tempest.streaming-studio.simulcast-checklist.v1';
   const simulcastOperationsStorageKey = 'tempest.streaming-studio.simulcast-operations.v1';
+  const fullRefreshIntervalMs = 60_000;
   let simulcastOperations = {
     active: false, startedAt: null, endedAt: null, incidents: [],
     previousTwitchActive: false, previousKickActive: false,
@@ -386,6 +394,7 @@
     $('#sectionTitle').textContent = definition.title;
     $('#sectionKicker').textContent = definition.kicker;
     document.querySelector('main').scrollTo({ top: 0, left: 0 });
+    if (state.config) void refreshRuntime({ quiet: true });
   }
 
   async function api(path, options = {}) {
@@ -1741,6 +1750,8 @@
 
   function soundAlertAudioName(uri) {
     if (!uri) return 'No local audio assigned';
+    const managed = state.assets.find((asset) => asset.uri === uri);
+    if (managed) return managed.name;
     try {
       const pathname = decodeURIComponent(new URL(uri).pathname);
       return pathname.split('/').filter(Boolean).at(-1) || 'Local audio assigned';
@@ -1749,6 +1760,8 @@
 
   function soundAlertVisualName(uri) {
     if (!uri) return 'No local visual assigned';
+    const managed = state.assets.find((asset) => asset.uri === uri);
+    if (managed) return managed.name;
     try {
       const pathname = decodeURIComponent(new URL(uri).pathname);
       return pathname.split('/').filter(Boolean).at(-1) || 'Local visual assigned';
@@ -1766,6 +1779,291 @@
       audio: Array.isArray(inventory?.audio) ? inventory.audio.filter((entry) => typeof entry === 'string') : [],
       visual: Array.isArray(inventory?.visual) ? inventory.visual.filter((entry) => typeof entry === 'string') : []
     };
+  }
+
+  function assetRole(asset) {
+    if (asset?.type === 'tempest.media.audio') return 'audio';
+    if (asset?.type === 'tempest.media.visual') return 'visual';
+    return 'other';
+  }
+
+  function assetUses(uri) {
+    if (!uri) return [];
+    const uses = [];
+    for (const alert of state.soundAlerts?.alerts || []) {
+      if (alert.audioUri === uri) uses.push(`Interaction · ${alert.name} sound`);
+      if (alert.visualUri === uri) uses.push(`Interaction · ${alert.name} visual`);
+    }
+    for (const alert of state.twitchVisualAlerts?.alerts || []) {
+      if (alert.audioUri === uri) uses.push(`Twitch · ${alert.name} sound`);
+      if (alert.visualUri === uri) uses.push(`Twitch · ${alert.name} visual`);
+      for (const variant of alert.alertVariants || []) {
+        if (variant.audioUri === uri) uses.push(`Variant · ${variant.name} sound`);
+        if (variant.visualUri === uri) uses.push(`Variant · ${variant.name} visual`);
+      }
+    }
+    return uses;
+  }
+
+  function assignedMediaUris() {
+    const uris = [];
+    const remember = (entry) => {
+      if (entry?.audioUri) uris.push(entry.audioUri);
+      if (entry?.visualUri) uris.push(entry.visualUri);
+    };
+    for (const alert of state.soundAlerts?.alerts || []) remember(alert);
+    for (const alert of state.twitchVisualAlerts?.alerts || []) {
+      remember(alert);
+      for (const variant of alert.alertVariants || []) remember(variant);
+    }
+    return [...new Set(uris)];
+  }
+
+  function unmanagedAssignedMediaUris() {
+    const managedUris = new Set((state.assets || []).filter((asset) => asset.metadata?.managed === true).map((asset) => asset.uri));
+    return assignedMediaUris().filter((uri) => !managedUris.has(uri));
+  }
+
+  function assetTargetOptions() {
+    const interactions = (state.soundAlerts?.alerts || []).map((alert) => `<option value="interaction|${escapeHtml(alert.id)}">Interaction · ${escapeHtml(alert.name)}</option>`);
+    const twitch = (state.twitchVisualAlerts?.alerts || []).flatMap((alert) => [
+      `<option value="twitch|${escapeHtml(alert.id)}">Twitch · ${escapeHtml(alert.name)}</option>`,
+      ...(alert.alertVariants || []).map((variant) => `<option value="twitch-variant|${escapeHtml(alert.id)}|${escapeHtml(variant.id)}">Variant · ${escapeHtml(variant.name)}</option>`)
+    ]);
+    return '<option value="">Choose an alert</option>' + [...interactions, ...twitch].join('');
+  }
+
+  function formatAssetBytes(value) {
+    const bytes = Math.max(0, Number(value || 0));
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
+  }
+
+  function assetExtension(asset) {
+    return String(asset?.metadata?.extension || '').toLowerCase();
+  }
+
+  function assetPreviewMarkup(asset, role) {
+    if (!assetPreviewIds.has(asset.id) || role !== 'visual') return '';
+    const extension = assetExtension(asset);
+    if (extension === '.mp4' || extension === '.webm') return `<div class="asset-library-preview"><video src="${escapeHtml(asset.uri)}" controls muted playsinline preload="metadata"></video></div>`;
+    return `<div class="asset-library-preview"><img src="${escapeHtml(asset.uri)}" alt="Preview of ${escapeHtml(asset.name)}" loading="lazy" /></div>`;
+  }
+
+  function renderAssetLibrary() {
+    const assets = state.assets || [];
+    const query = ($('#assetLibrarySearch')?.value || '').trim().toLowerCase();
+    const filter = $('#assetLibraryFilter')?.value || 'all';
+    const collectionFilter = $('#assetLibraryCollection')?.value || '';
+    const enriched = assets.map((asset) => ({ asset, role: assetRole(asset), uses: assetUses(asset.uri) }))
+      .sort((left, right) => Number(Boolean(right.asset.metadata?.favorite)) - Number(Boolean(left.asset.metadata?.favorite)) || left.asset.name.localeCompare(right.asset.name));
+    const targetSelect = $('#assetLibraryTarget');
+    const selectedTarget = targetSelect?.value || '';
+    if (targetSelect) {
+      targetSelect.innerHTML = assetTargetOptions();
+      if ([...targetSelect.options].some((option) => option.value === selectedTarget)) targetSelect.value = selectedTarget;
+    }
+    const collectionSelect = $('#assetLibraryCollection');
+    if (collectionSelect) {
+      const collections = [...new Set(assets.map((asset) => String(asset.metadata?.collection || '').trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+      collectionSelect.innerHTML = '<option value="">All collections</option>' + collections.map((collection) => `<option value="${escapeHtml(collection)}">${escapeHtml(collection)}</option>`).join('');
+      if (collections.includes(collectionFilter)) collectionSelect.value = collectionFilter;
+    }
+    const filtered = enriched.filter(({ asset, role, uses }) => {
+      if (filter === 'favorites' && asset.metadata?.favorite !== true) return false;
+      if (filter === 'audio' && role !== 'audio') return false;
+      if (filter === 'visual' && role !== 'visual') return false;
+      if (filter === 'used' && !uses.length) return false;
+      if (filter === 'unused' && uses.length) return false;
+      if (collectionFilter && asset.metadata?.collection !== collectionFilter) return false;
+      return !query || [asset.name, asset.type, asset.metadata?.collection || '', ...(asset.tags || [])].join(' ').toLowerCase().includes(query);
+    });
+    $('#assetLibraryCount').textContent = assets.length;
+    $('#assetLibraryAudioCount').textContent = enriched.filter((entry) => entry.role === 'audio').length;
+    $('#assetLibraryVisualCount').textContent = enriched.filter((entry) => entry.role === 'visual').length;
+    $('#assetLibraryUsedCount').textContent = enriched.filter((entry) => entry.uses.length).length;
+    const adoptButton = $('#adoptAssignedMedia');
+    const unmanagedCount = unmanagedAssignedMediaUris().length;
+    adoptButton.disabled = unmanagedCount === 0;
+    adoptButton.textContent = unmanagedCount ? `Adopt Assigned Media (${unmanagedCount})` : 'Assigned Media Managed';
+    const grid = $('#assetLibraryGrid');
+    grid.classList.toggle('empty-state', !filtered.length);
+    grid.innerHTML = filtered.length ? filtered.map(({ asset, role, uses }) => {
+      const size = Number(asset.metadata?.size || 0);
+      const managed = asset.metadata?.managed === true;
+      const checksum = String(asset.checksum || '').replace(/^sha256:/, '').slice(0, 12);
+      const favorite = asset.metadata?.favorite === true;
+      const collection = String(asset.metadata?.collection || '').trim();
+      return `<article class="asset-library-card ${uses.length ? 'used' : ''} ${favorite ? 'favorite' : ''}">
+        <div class="asset-library-icon ${escapeHtml(role)}">${role === 'audio' ? '♪' : role === 'visual' ? '▣' : '◇'}</div>
+        <div class="asset-library-copy"><span>${favorite ? '★ FAVORITE · ' : ''}${escapeHtml(role.toUpperCase())} · ${managed ? 'STUDIO MANAGED' : 'INDEXED'}</span><h3>${escapeHtml(asset.name)}</h3><p>${escapeHtml((asset.tags || []).join(' · ') || asset.type)}</p><small>${collection ? `${escapeHtml(collection)} · ` : ''}${formatAssetBytes(size)}${checksum ? ` · SHA-256 ${escapeHtml(checksum)}…` : ''}</small><em>${uses.length ? escapeHtml(uses.slice(0, 2).join(' · ')) : 'Not assigned to an alert'}</em></div>
+        ${assetPreviewMarkup(asset, role)}
+        <div class="asset-library-actions"><button data-asset-preview="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>${assetPreviewIds.has(asset.id) && role === 'visual' ? 'Hide Preview' : 'Preview'}</button><button data-asset-edit="${escapeHtml(asset.id)}">Edit Details</button><button data-asset-assign="${escapeHtml(asset.id)}" ${role === 'other' ? 'disabled' : ''}>Assign</button><button class="danger-outline" data-asset-remove="${escapeHtml(asset.id)}" ${uses.length ? 'disabled title="Remove this media from every alert before deleting it"' : ''}>Remove</button></div>
+      </article>`;
+    }).join('') : (assets.length ? 'No media matches this search or filter.' : 'No media has been imported yet.');
+  }
+
+  async function importMediaAsset() {
+    try {
+      const imported = await window.tempestStudio.selectAsset();
+      if (!imported) return;
+      const result = await api('/v1/assets', { method: 'POST', body: imported.manifest });
+      state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)].sort((left, right) => left.name.localeCompare(right.name));
+      renderAssetLibrary();
+      toast(`${result.asset.name} ${imported.reused ? 'was already in' : 'was copied into'} the Media Library.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function previewLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    if (assetRole(asset) === 'audio') {
+      try {
+        if (assetPreviewAudio) { assetPreviewAudio.pause(); assetPreviewAudio = null; }
+        const audio = new Audio(asset.uri);
+        assetPreviewAudio = audio;
+        audio.volume = 0.75;
+        audio.addEventListener('ended', () => { if (assetPreviewAudio === audio) assetPreviewAudio = null; }, { once: true });
+        await audio.play();
+        toast(`Previewing ${asset.name}.`);
+      } catch (error) { toast(`Could not preview ${asset.name}: ${error.message}`, true); }
+      return;
+    }
+    if (assetPreviewIds.has(id)) assetPreviewIds.delete(id);
+    else assetPreviewIds.add(id);
+    renderAssetLibrary();
+  }
+
+  function openAssetEditor(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    $('#assetEditorId').value = asset.id;
+    $('#assetEditorName').value = asset.name;
+    $('#assetEditorTags').value = (asset.tags || []).filter((tag) => !['audio', 'visual', 'managed'].includes(tag)).join(', ');
+    $('#assetEditorCollection').value = String(asset.metadata?.collection || '');
+    $('#assetEditorFavorite').checked = asset.metadata?.favorite === true;
+    $('#assetEditorDialog').showModal();
+    $('#assetEditorName').focus();
+  }
+
+  async function saveAssetDetails(event) {
+    event.preventDefault();
+    const id = $('#assetEditorId').value;
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return $('#assetEditorDialog').close();
+    const name = $('#assetEditorName').value.trim().slice(0, 120);
+    if (!name) return toast('Media display name is required.', true);
+    const reservedTags = [assetRole(asset), assetExtension(asset).replace(/^\./, ''), ...(asset.metadata?.managed === true ? ['managed'] : [])].filter(Boolean);
+    const customTags = $('#assetEditorTags').value.split(',').map((tag) => tag.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 40)).filter(Boolean);
+    const tags = [...new Set([...reservedTags, ...customTags])].slice(0, 20);
+    const collection = $('#assetEditorCollection').value.trim().replace(/[\r\n\0]/g, ' ').slice(0, 60);
+    try {
+      const result = await api('/v1/assets', { method: 'POST', body: {
+        ...asset,
+        name,
+        tags,
+        metadata: { ...(asset.metadata || {}), favorite: $('#assetEditorFavorite').checked, collection }
+      } });
+      state.assets = [result.asset, ...state.assets.filter((entry) => entry.id !== id)].sort((left, right) => left.name.localeCompare(right.name));
+      $('#assetEditorDialog').close();
+      renderAssetLibrary();
+      renderSoundAlerts();
+      renderVisualAlerts();
+      toast(`${result.asset.name} details saved.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function registerManagedManifests(manifests) {
+    for (const manifest of manifests || []) {
+      const existing = state.assets.find((asset) => asset.id === manifest.id && asset.metadata?.managed === true);
+      const merged = existing ? {
+        ...manifest,
+        name: existing.name,
+        tags: [...new Set([...(existing.tags || []), ...(manifest.tags || [])])],
+        metadata: { ...(manifest.metadata || {}), ...(existing.metadata || {}), managed: true }
+      } : manifest;
+      const result = await api('/v1/assets', { method: 'POST', body: merged });
+      state.assets = [result.asset, ...state.assets.filter((asset) => asset.id !== result.asset.id)];
+    }
+    state.assets.sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async function adoptAssignedMedia() {
+    const candidates = unmanagedAssignedMediaUris();
+    if (!candidates.length) return toast('Every assigned alert file is already managed by the Media Library.');
+    if (!confirm(`Copy ${candidates.length} assigned media file${candidates.length === 1 ? '' : 's'} into Studio-managed storage and update the alerts to use those verified copies? Your original files will remain untouched.`)) return;
+    const button = $('#adoptAssignedMedia');
+    button.disabled = true;
+    button.textContent = 'Adopting…';
+    try {
+      const result = await window.tempestStudio.adoptAssignedAssets(candidates);
+      for (const imported of result.imports || []) await registerManagedSelection(imported);
+      const replacements = new Map((result.imports || []).map((entry) => [entry.sourceUri, entry.manifest.uri]));
+      let updatedAlerts = 0;
+      for (const alert of [...(state.soundAlerts?.alerts || [])]) {
+        const patch = {};
+        if (replacements.has(alert.audioUri) && replacements.get(alert.audioUri) !== alert.audioUri) patch.audioUri = replacements.get(alert.audioUri);
+        if (replacements.has(alert.visualUri) && replacements.get(alert.visualUri) !== alert.visualUri) patch.visualUri = replacements.get(alert.visualUri);
+        if (Object.keys(patch).length) {
+          const response = await api(`/v1/sound-alerts/${encodeURIComponent(alert.id)}`, { method: 'POST', body: patch });
+          state.soundAlerts.alerts[state.soundAlerts.alerts.findIndex((entry) => entry.id === alert.id)] = response.alert;
+          updatedAlerts += 1;
+        }
+      }
+      for (const alert of [...(state.twitchVisualAlerts?.alerts || [])]) {
+        const patch = {};
+        if (replacements.has(alert.audioUri) && replacements.get(alert.audioUri) !== alert.audioUri) patch.audioUri = replacements.get(alert.audioUri);
+        if (replacements.has(alert.visualUri) && replacements.get(alert.visualUri) !== alert.visualUri) patch.visualUri = replacements.get(alert.visualUri);
+        let variantsChanged = false;
+        const alertVariants = (alert.alertVariants || []).map((variant) => {
+          const next = { ...variant };
+          if (replacements.has(variant.audioUri) && replacements.get(variant.audioUri) !== variant.audioUri) { next.audioUri = replacements.get(variant.audioUri); variantsChanged = true; }
+          if (replacements.has(variant.visualUri) && replacements.get(variant.visualUri) !== variant.visualUri) { next.visualUri = replacements.get(variant.visualUri); variantsChanged = true; }
+          return next;
+        });
+        if (variantsChanged) patch.alertVariants = alertVariants;
+        if (Object.keys(patch).length) {
+          const response = await api(`/v1/visual-alerts/twitch/${encodeURIComponent(alert.id)}`, { method: 'POST', body: patch });
+          state.twitchVisualAlerts.alerts[state.twitchVisualAlerts.alerts.findIndex((entry) => entry.id === alert.id)] = response.alert;
+          updatedAlerts += 1;
+        }
+      }
+      renderSoundAlerts();
+      renderVisualAlerts();
+      renderAssetLibrary();
+      const failed = result.failures?.length || 0;
+      toast(`${result.imports.length} assigned media file${result.imports.length === 1 ? '' : 's'} adopted and ${updatedAlerts} alert${updatedAlerts === 1 ? '' : 's'} updated.${failed ? ` ${failed} file${failed === 1 ? '' : 's'} could not be adopted.` : ''}`, failed > 0);
+    } catch (error) { toast(error.message, true); }
+    finally { renderAssetLibrary(); }
+  }
+
+  async function assignLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    const target = $('#assetLibraryTarget').value;
+    if (!asset || !target) return toast('Choose an alert before assigning this media.', true);
+    const [kind, alertId, variantId] = target.split('|');
+    const field = assetRole(asset) === 'audio' ? 'audioUri' : 'visualUri';
+    let updated;
+    if (kind === 'interaction') updated = await updateSoundAlert(alertId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    else if (kind === 'twitch') updated = await updateTwitchVisualAlert(alertId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    else if (kind === 'twitch-variant') updated = await updateTwitchVariant(alertId, variantId, { [field]: asset.uri }, `${asset.name} assigned from the Media Library.`);
+    if (updated) renderAssetLibrary();
+  }
+
+  async function removeLibraryAsset(id) {
+    const asset = state.assets.find((entry) => entry.id === id);
+    if (!asset) return;
+    const uses = assetUses(asset.uri);
+    if (uses.length) return toast('Remove this media from every alert before deleting it.', true);
+    if (!confirm(`Remove ${asset.name} from the Media Library?${asset.metadata?.managed === true ? " Studio's managed copy will be deleted; your original file will stay untouched." : ''}`)) return;
+    try {
+      await api(`/v1/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      state.assets = state.assets.filter((entry) => entry.id !== id);
+      if (asset.metadata?.managed === true) await window.tempestStudio.removeManagedAsset(asset.uri);
+      renderAssetLibrary();
+      toast(`${asset.name} removed from the Media Library.`);
+    } catch (error) { toast(error.message, true); }
   }
 
   function soundAlertOptions(values, selected) {
@@ -1786,7 +2084,79 @@
     return preserved + placeholder + hotkeys.map((hotkey) => `<option value="${escapeHtml(hotkey.hotkeyID)}" ${hotkey.hotkeyID === selected ? 'selected' : ''}>${escapeHtml(hotkey.name)} · ${escapeHtml(hotkey.type)}</option>`).join('');
   }
 
+  function viewerGroupOptions(selected = '') {
+    const groups = state.chatbot?.viewerGroups || [];
+    const known = groups.some((group) => group.id === selected);
+    const preserved = selected && !known ? `<option value="${escapeHtml(selected)}" selected>Unavailable viewer group</option>` : '';
+    const placeholder = groups.length ? '<option value="">Choose a viewer group</option>' : '<option value="">Create a viewer group above</option>';
+    return preserved + placeholder + groups.map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === selected ? 'selected' : ''}>${escapeHtml(group.name)} · ${group.resolvedViewers}/${group.logins.length} verified</option>`).join('');
+  }
+
+  function renderViewerGroups() {
+    const groups = state.chatbot?.viewerGroups || [];
+    $('#viewerGroupCount').textContent = `${groups.length} GROUP${groups.length === 1 ? '' : 'S'}`;
+    const list = $('#viewerGroupList');
+    list.classList.toggle('empty-state', !groups.length);
+    list.innerHTML = groups.length ? groups.map((group) => `<article class="viewer-group-card">
+      <div><strong>${escapeHtml(group.name)}</strong><span>${group.resolvedViewers}/${group.logins.length} Twitch accounts verified</span><small>${group.logins.map((login) => `@${escapeHtml(login)}`).join(', ')}</small></div>
+      <div><button type="button" data-viewer-group-edit="${escapeHtml(group.id)}">Edit</button><button type="button" class="danger-outline" data-viewer-group-delete="${escapeHtml(group.id)}">Delete</button></div>
+    </article>`).join('') : 'No reusable viewer groups yet.';
+  }
+
+  function resetViewerGroupForm() {
+    editingViewerGroupId = '';
+    $('#viewerGroupForm').reset();
+    $('#viewerGroupId').value = '';
+    $('#cancelViewerGroupEdit').hidden = true;
+  }
+
+  function editViewerGroup(id) {
+    const group = state.chatbot?.viewerGroups?.find((entry) => entry.id === id);
+    if (!group) return;
+    editingViewerGroupId = group.id;
+    $('#viewerGroupId').value = group.id;
+    $('#viewerGroupName').value = group.name;
+    $('#viewerGroupLogins').value = group.logins.join(', ');
+    $('#cancelViewerGroupEdit').hidden = false;
+    $('#viewerGroupName').focus();
+  }
+
+  async function saveViewerGroup(event) {
+    event.preventDefault();
+    const name = $('#viewerGroupName').value.trim();
+    const logins = $('#viewerGroupLogins').value.split(/[\s,]+/).map((login) => login.trim().replace(/^@+/, '').toLowerCase()).filter(Boolean);
+    const current = state.chatbot?.viewerGroups || [];
+    let id = editingViewerGroupId;
+    if (!id) {
+      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 42) || 'viewer-group';
+      id = base;
+      for (let suffix = 2; current.some((group) => group.id === id); suffix += 1) id = `${base}-${suffix}`.slice(0, 48);
+    }
+    const viewerGroups = editingViewerGroupId
+      ? current.map((group) => group.id === editingViewerGroupId ? { id, name, logins } : { id: group.id, name: group.name, logins: group.logins })
+      : [...current.map((group) => ({ id: group.id, name: group.name, logins: group.logins })), { id, name, logins }];
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { viewerGroups } });
+      resetViewerGroupForm();
+      renderSoundAlerts();
+      toast(`${name} saved as a reusable viewer group.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function deleteViewerGroup(id) {
+    const group = state.chatbot?.viewerGroups?.find((entry) => entry.id === id);
+    if (!group || !confirm(`Delete ${group.name}? Alerts assigned to it will remain locked until you choose another group.`)) return;
+    const viewerGroups = state.chatbot.viewerGroups.filter((entry) => entry.id !== id).map((entry) => ({ id: entry.id, name: entry.name, logins: entry.logins }));
+    try {
+      state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { viewerGroups } });
+      if (editingViewerGroupId === id) resetViewerGroupForm();
+      renderSoundAlerts();
+      toast(`${group.name} removed.`);
+    } catch (error) { toast(error.message, true); }
+  }
+
   function renderSoundAlerts() {
+    renderViewerGroups();
     const alerts = state.soundAlerts?.alerts || [];
     const inventory = broadcastSourceInventory();
     $('#soundAlertCount').textContent = alerts.length;
@@ -1832,7 +2202,8 @@
           <label>Placement <select data-alert-placement="${escapeHtml(alert.id)}"><option value="fixed" ${(alert.placementMode || 'fixed') === 'fixed' ? 'selected' : ''}>STREAMER PLACED</option><option value="viewer" ${alert.placementMode === 'viewer' ? 'selected' : ''}>VIEWER CLICK / TAP</option></select></label>
           <label>Viewer cooldown <span><input data-alert-viewer-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.viewerCooldownMs / 1000)}" /> sec</span></label>
           <label>Global cooldown <span><input data-alert-global-cooldown="${escapeHtml(alert.id)}" type="number" min="0" max="86400" value="${Math.round(alert.globalCooldownMs / 1000)}" /> sec</span></label>
-          <label>Who can activate <select data-alert-access="${escapeHtml(alert.id)}"><option value="everyone" ${(alert.accessMode || 'everyone') === 'everyone' ? 'selected' : ''}>EVERYONE</option><option value="staff" ${alert.accessMode === 'staff' ? 'selected' : ''}>BROADCASTER + MODS</option><option value="assigned-creators" ${alert.accessMode === 'assigned-creators' ? 'selected' : ''}>ASSIGNED CREATORS</option><option value="specific-viewers" ${alert.accessMode === 'specific-viewers' ? 'selected' : ''}>SPECIFIC TWITCH IDS</option></select></label>
+          <label>Who can activate <select data-alert-access="${escapeHtml(alert.id)}"><option value="everyone" ${(alert.accessMode || 'everyone') === 'everyone' ? 'selected' : ''}>EVERYONE</option><option value="staff" ${alert.accessMode === 'staff' ? 'selected' : ''}>BROADCASTER + MODS</option><option value="assigned-creators" ${alert.accessMode === 'assigned-creators' ? 'selected' : ''}>ASSIGNED CREATORS</option><option value="viewer-group" ${alert.accessMode === 'viewer-group' ? 'selected' : ''}>VIEWER GROUP</option><option value="specific-viewers" ${alert.accessMode === 'specific-viewers' ? 'selected' : ''}>SPECIFIC TWITCH IDS</option></select></label>
+          <label>Viewer group <select data-alert-viewer-group="${escapeHtml(alert.id)}">${viewerGroupOptions(alert.viewerGroupId || '')}</select></label>
           <label>Allowed Twitch IDs <input data-alert-allowed-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Comma-separated numeric IDs" value="${escapeHtml((alert.allowedViewerIds || []).join(', '))}" /></label>
           <label>Blocked Twitch IDs <input data-alert-blocked-viewers="${escapeHtml(alert.id)}" maxlength="3200" placeholder="Optional numeric IDs" value="${escapeHtml((alert.blockedViewerIds || []).join(', '))}" /></label>
           <label class="toggle-label"><input data-alert-hide-locked="${escapeHtml(alert.id)}" type="checkbox" ${alert.hideWhenLocked ? 'checked' : ''} /> Hide when viewer is locked out</label>
@@ -2938,7 +3309,7 @@
     const handlerSignature = handlers.join('|');
     if (handlerSelect.dataset.handlers !== handlerSignature) {
       const currentHandler = handlerSelect.value;
-      const labels = { 'command-directory': 'Enabled command directory', 'stream-uptime': 'Current stream uptime', 'channel-title': 'Current Twitch title', 'channel-game': 'Current Twitch category', 'stream-schedule': 'Next scheduled stream', 'local-weather': 'Local time and weather — National Weather Service', 'radio-now-playing': 'Configured station — now playing' };
+      const labels = { 'command-directory': 'Enabled command directory', 'stream-uptime': 'Current stream uptime', 'channel-title': 'Current Twitch title', 'channel-game': 'Current Twitch category', 'stream-schedule': 'Next scheduled stream', 'local-weather': 'Local time and weather — National Weather Service', 'radio-now-playing': 'Configured station — now playing', 'dice-roll': '3D Dice roll from command arguments' };
       handlerSelect.innerHTML = '<option value="">Custom chat response</option>' + handlers.map((handler) => `<option value="${escapeHtml(handler)}">${escapeHtml(labels[handler] || handler)}</option>`).join('');
       if ([...handlerSelect.options].some((option) => option.value === currentHandler)) handlerSelect.value = currentHandler;
       handlerSelect.dataset.handlers = handlerSignature;
@@ -2952,7 +3323,7 @@
     const commands = chatbot.commands || [];
     const list = $('#chatbotCommandList');
     list.classList.toggle('empty-state', !commands.length);
-    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'Stream Together chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'twitch-clip' ? 'TWITCH CLIP' : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
+    list.innerHTML = commands.length ? commands.map((command) => `<button class="chatbot-command-row ${command.enabled ? '' : 'disabled'}" data-chatbot-command="${escapeHtml(command.id)}"><span><strong>${escapeHtml(chatbot.prefix || '!')}${escapeHtml(command.name)}</strong><small>${escapeHtml(command.permission)} · ${command.allowSharedChat ? 'Stream Together chat' : 'home chat only'} · viewer ${durationLabel(command.viewerCooldownMs)} · global ${durationLabel(command.globalCooldownMs)}</small></span><span>${command.handler === 'counter' ? `${escapeHtml(command.counterLabel || command.name).toUpperCase()} · ${Number(command.counterValue || 0).toLocaleString()}` : command.handler === 'twitch-clip' ? 'TWITCH CLIP' : command.handler === 'local-weather' || command.handler === 'seattle-weather' ? 'LOCAL WEATHER' : command.handler === 'radio-now-playing' ? 'NOW PLAYING' : command.handler === 'dice-roll' ? '3D DICE' : command.workflowId ? 'WORKFLOW' : 'REPLY'}${command.response && (command.workflowId || command.handler) ? ' + REPLY' : ''}</span></button>`).join('') : 'No chatbot commands configured.';
 
     const activity = chatbot.activity || [];
     const activityList = $('#chatbotActivity');
@@ -3095,7 +3466,10 @@
     $('#localExtensionBadge').textContent = local.running ? 'RUNNING' : 'STOPPED';
     $('#localExtensionBadge').classList.toggle('offline', !local.running);
     $('#localExtensionSecretState').textContent = local.secretStored ? 'WINDOWS ENCRYPTED' : 'NOT STORED';
-    $('#localExtensionCertificateState').textContent = local.certificateAvailable ? 'CERT FILE READY' : 'NOT READY';
+    const certificateProvider = local.certificateProvider === 'mkcert'
+      ? `MKCERT ${local.certificateProviderVersion || ''}`.trim()
+      : local.certificateProvider === 'windows-native' ? 'WINDOWS HTTPS' : 'CERT FILE READY';
+    $('#localExtensionCertificateState').textContent = local.certificateAvailable ? certificateProvider : 'NOT READY';
     $('#localExtensionChannelState').textContent = local.channelId || accountChannelId || '—';
     $('#localExtensionPanelUrl').textContent = local.panelUrl || 'https://localhost:8080/panel.html';
     $('#localExtensionSecret').placeholder = local.secretStored ? 'Stored securely; leave blank to reuse' : 'Paste once; stored with Windows encryption';
@@ -3103,12 +3477,21 @@
     $('#stopLocalExtension').disabled = !local.running;
     $('#openLocalExtensionPanel').disabled = !local.running;
     $('#prepareLocalExtensionCertificate').disabled = Boolean(local.running);
+    $('#removeLocalExtensionCertificate').disabled = Boolean(local.running) || !Boolean(local.certificateAvailable);
     $('#forgetLocalExtensionSecret').disabled = !local.secretStored && !local.running;
+    const certificateExpiry = local.certificateExpiresAt && Number.isFinite(Date.parse(local.certificateExpiresAt))
+      ? new Date(local.certificateExpiresAt).toLocaleDateString()
+      : '';
+    const certificateReadyMessage = local.certificateTrusted === false
+      ? 'A local HTTPS certificate exists but is not marked trusted; run Prepare HTTPS before using Twitch Extension testing.'
+      : local.certificateProvider === 'mkcert'
+        ? `Trusted local HTTPS is ready through verified mkcert ${local.certificateProviderVersion || ''}${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`
+        : `Local HTTPS is ready${certificateExpiry ? ` until ${certificateExpiry}` : ''}.`;
     $('#localExtensionMessage').textContent = local.lastError || (local.running
       ? 'Your single-channel Extension services are running. Refresh the installed Twitch panel to send signals into Studio.'
       : !local.certificateAvailable ? 'Prepare the trusted localhost certificate once, then start the Local Panel.'
-        : local.secretStored ? 'The Extension secret is stored with Windows encryption. Start the Local Panel whenever you want to test it.'
-          : 'Paste the revealed Extension Secret once. Studio will encrypt it and start the panel services without PowerShell.');
+        : local.secretStored ? `${certificateReadyMessage} The Extension secret is stored with Windows encryption; start the Local Panel whenever you want to test it.`
+          : `${certificateReadyMessage} Paste the revealed Extension Secret once; Studio will encrypt it and start the panel services without PowerShell.`);
   }
 
   function parseRewardMappings() {
@@ -3702,6 +4085,14 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function removeLocalExtensionCertificate() {
+    try {
+      state.localExtension = await window.tempestStudio.removeLocalExtensionCertificate();
+      renderLocalExtension();
+      toast('Local Extension HTTPS trust removed.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function forgetLocalExtensionSecret() {
     if (!confirm('Stop the Local Extension and remove its encrypted secret from this computer?')) return;
     try {
@@ -3713,7 +4104,7 @@
   }
 
   function defaultPanelDesign() {
-    return { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
+    return { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true, showCurrentStream: true, showNowPlaying: true, showSchedule: true, showGoal: true, showPoll: true, showCounters: true, showCommands: true, showDice: true, showFeatured: true, showPerformances: true };
   }
 
   const panelPresetValues = {
@@ -3744,11 +4135,21 @@
     $('#panelDesignShowFilters').checked = design.showFilters;
     $('#panelDesignShowPattern').checked = design.showPattern;
     $('#panelDesignUppercase').checked = design.uppercaseLabels;
+    $('#panelDesignShowCurrentStream').checked = design.showCurrentStream;
+    $('#panelDesignShowNowPlaying').checked = design.showNowPlaying;
+    $('#panelDesignShowSchedule').checked = design.showSchedule;
+    $('#panelDesignShowGoal').checked = design.showGoal;
+    $('#panelDesignShowPoll').checked = design.showPoll;
+    $('#panelDesignShowCounters').checked = design.showCounters;
+    $('#panelDesignShowCommands').checked = design.showCommands;
+    $('#panelDesignShowDice').checked = design.showDice;
+    $('#panelDesignShowFeatured').checked = design.showFeatured;
+    $('#panelDesignShowPerformances').checked = design.showPerformances;
     updatePanelDesignPreview();
   }
 
   function readPanelDesign() {
-    return { schemaVersion: 1, preset: $('#panelDesignPreset').value, brandName: $('#panelDesignBrandName').value.trim(), eyebrow: $('#panelDesignEyebrow').value.trim(), title: $('#panelDesignTitle').value.trim(), accent: $('#panelDesignAccent').value, background: $('#panelDesignBackground').value, surface: $('#panelDesignSurface').value, text: $('#panelDesignText').value, muted: $('#panelDesignMuted').value, font: $('#panelDesignFont').value, cardLayout: $('#panelDesignCardLayout').value, density: $('#panelDesignDensity').value, cornerRadius: Number($('#panelDesignRadius').value), showLogo: $('#panelDesignShowLogo').checked, showStatus: $('#panelDesignShowStatus').checked, showSearch: $('#panelDesignShowSearch').checked, showFilters: $('#panelDesignShowFilters').checked, showPattern: $('#panelDesignShowPattern').checked, uppercaseLabels: $('#panelDesignUppercase').checked };
+    return { schemaVersion: 1, preset: $('#panelDesignPreset').value, brandName: $('#panelDesignBrandName').value.trim(), eyebrow: $('#panelDesignEyebrow').value.trim(), title: $('#panelDesignTitle').value.trim(), accent: $('#panelDesignAccent').value, background: $('#panelDesignBackground').value, surface: $('#panelDesignSurface').value, text: $('#panelDesignText').value, muted: $('#panelDesignMuted').value, font: $('#panelDesignFont').value, cardLayout: $('#panelDesignCardLayout').value, density: $('#panelDesignDensity').value, cornerRadius: Number($('#panelDesignRadius').value), showLogo: $('#panelDesignShowLogo').checked, showStatus: $('#panelDesignShowStatus').checked, showSearch: $('#panelDesignShowSearch').checked, showFilters: $('#panelDesignShowFilters').checked, showPattern: $('#panelDesignShowPattern').checked, uppercaseLabels: $('#panelDesignUppercase').checked, showCurrentStream: $('#panelDesignShowCurrentStream').checked, showNowPlaying: $('#panelDesignShowNowPlaying').checked, showSchedule: $('#panelDesignShowSchedule').checked, showGoal: $('#panelDesignShowGoal').checked, showPoll: $('#panelDesignShowPoll').checked, showCounters: $('#panelDesignShowCounters').checked, showCommands: $('#panelDesignShowCommands').checked, showDice: $('#panelDesignShowDice').checked, showFeatured: $('#panelDesignShowFeatured').checked, showPerformances: $('#panelDesignShowPerformances').checked };
   }
 
   function updatePanelDesignPreview() {
@@ -3771,6 +4172,16 @@
     preview.classList.toggle('no-filters', !design.showFilters);
     preview.classList.toggle('no-pattern', !design.showPattern);
     preview.classList.toggle('uppercase', design.uppercaseLabels);
+    $('#panelPreviewCurrentStream').hidden = !design.showCurrentStream;
+    $('#panelPreviewNowPlaying').hidden = !design.showNowPlaying;
+    $('#panelPreviewSchedule').hidden = !design.showSchedule;
+    $('#panelPreviewGoal').hidden = !design.showGoal;
+    $('#panelPreviewPoll').hidden = !design.showPoll;
+    $('#panelPreviewCounters').hidden = !design.showCounters;
+    $('#panelPreviewCommands').hidden = !design.showCommands;
+    $('#panelPreviewDice').hidden = !design.showDice;
+    $('#panelPreviewFeatured').hidden = !design.showFeatured;
+    $('#panelPreviewPerformances').hidden = !design.showPerformances;
     $('#panelPreviewBrand').textContent = design.brandName || 'YOUR CHANNEL';
     $('#panelPreviewEyebrow').textContent = design.eyebrow || 'VIEWER INTERACTIONS';
     $('#panelPreviewTitle').textContent = design.title || 'Signal deck';
@@ -4056,6 +4467,7 @@
     renderEvents();
     renderAlertHistory();
     renderSoundAlerts();
+    renderAssetLibrary();
     renderDiceOverlay({ settings: true });
     renderVisualAlerts();
     renderChatOverlay({ settings: true });
@@ -4103,91 +4515,243 @@
     } finally { inputs.forEach((input) => { input.disabled = false; }); }
   }
 
-  function renderRuntimeSection() {
+  function renderRuntimeSection(changedKeys) {
     const activeSection = document.querySelector('.page.active')?.id;
-    if (activeSection === 'overviewSection') renderOverview();
-    else if (activeSection === 'alertsSection') renderUnifiedAlerts();
+    const changed = (...keys) => !changedKeys || keys.some((key) => changedKeys.has(key));
+    if (activeSection === 'overviewSection' && changed('runtimeSummary', 'events')) renderOverview();
+    else if (activeSection === 'alertsSection' && changed('visualAlerts', 'twitchVisualAlerts', 'soundAlerts')) renderUnifiedAlerts();
     else if (activeSection === 'eventsSection') {
+      if (!changed('events', 'alertHistory', 'alertDiagnostics')) return;
       renderEvents();
       renderAlertHistory();
-    } else if (activeSection === 'soundalertsSection') renderVisualAlertStatus();
-    else if (activeSection === 'diceSection') renderDiceOverlay();
-    else if (activeSection === 'visualalertsSection') {
+    } else if (activeSection === 'soundalertsSection' && changed('visualAlerts', 'chatbot')) {
+      if (changed('chatbot')) renderSoundAlerts();
+      renderVisualAlertStatus();
+    }
+    else if (activeSection === 'assetsSection' && changed('assets', 'soundAlerts', 'twitchVisualAlerts')) renderAssetLibrary();
+    else if (activeSection === 'diceSection' && changed('diceOverlay')) renderDiceOverlay();
+    else if (activeSection === 'visualalertsSection' && changed('visualAlerts', 'twitchExperiences')) {
       renderVisualAlertStatus();
       renderTwitchExperiences();
-    } else if (activeSection === 'chatoverlaySection') {
+    } else if (activeSection === 'chatoverlaySection' && changed('chatbot', 'chatOverlay', 'emoteWall')) {
       renderChatOverlay();
       renderEmoteWall();
-    } else if (activeSection === 'discordvoiceSection') renderDiscordVoice();
-    else if (activeSection === 'worldSection') renderInteractiveWorld();
-    else if (activeSection === 'interactivestageSection') renderInteractiveStage();
-    else if (activeSection === 'twitchSection') {
+    } else if (activeSection === 'discordvoiceSection' && changed('discordVoice', 'discordRpc')) renderDiscordVoice();
+    else if (activeSection === 'worldSection' && changed('interactiveWorld')) renderInteractiveWorld();
+    else if (activeSection === 'interactivestageSection' && changed('unifiedStage', 'interactiveStage', 'stageActors', 'interactionComposer')) renderInteractiveStage();
+    else if (activeSection === 'twitchSection' && changed('localExtension', 'hostedExtension')) {
       renderLocalExtension();
       renderHostedExtension();
-    } else if (activeSection === 'kickSection') renderKick();
-    else if (activeSection === 'chatbotSection') renderChatbot();
-    else if (activeSection === 'dualformatSection') renderDualFormat();
-    else if (activeSection === 'simulcastSection') renderSimulcast();
-    else if (activeSection === 'apiSection') {
+    } else if (activeSection === 'kickSection' && changed('kick', 'hostedExtension')) renderKick();
+    else if (activeSection === 'chatbotSection' && changed('chatbot', 'kick')) renderChatbot();
+    else if (activeSection === 'dualformatSection' && changed('runtimeSummary', 'visualAlerts')) renderDualFormat();
+    else if (activeSection === 'simulcastSection' && changed('runtimeSummary')) renderSimulcast();
+    else if (activeSection === 'apiSection' && changed('runtimeSummary', 'warudo', 'vtubeStudio')) {
       renderWarudo();
       renderVTubeStudio();
       renderApi();
     }
   }
 
+  function runtimeRefreshTasks(activeSection) {
+    const tasks = new Map([
+      ['runtimeSummary', () => api('/v1/runtime-summary')]
+    ]);
+    const add = (key, loader) => { if (!tasks.has(key)) tasks.set(key, loader); };
+    if (activeSection === 'overviewSection') add('events', () => api('/v1/events?limit=150'));
+    else if (activeSection === 'alertsSection') {
+      add('soundAlerts', () => api('/v1/sound-alerts'));
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('twitchVisualAlerts', () => api('/v1/visual-alerts/twitch'));
+    }
+    else if (activeSection === 'eventsSection') {
+      add('events', () => api('/v1/events?limit=150'));
+      add('alertHistory', () => api('/v1/alert-history?limit=200'));
+      add('alertDiagnostics', () => api('/v1/alert-diagnostics'));
+    } else if (activeSection === 'soundalertsSection') {
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('chatbot', () => api('/v1/chatbot'));
+    }
+    else if (activeSection === 'assetsSection') {
+      add('assets', () => api('/v1/assets'));
+      add('soundAlerts', () => api('/v1/sound-alerts'));
+      add('twitchVisualAlerts', () => api('/v1/visual-alerts/twitch'));
+    }
+    else if (activeSection === 'diceSection') add('diceOverlay', () => api('/v1/dice-overlay'));
+    else if (activeSection === 'visualalertsSection') {
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('twitchExperiences', () => api('/v1/twitch-experiences'));
+    } else if (activeSection === 'chatoverlaySection') {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('chatOverlay', () => api('/v1/chat-overlay'));
+      add('emoteWall', () => api('/v1/emote-wall'));
+    } else if (activeSection === 'discordvoiceSection') {
+      add('discordVoice', () => api('/v1/discord-voice'));
+      add('discordRpc', () => window.tempestStudio.getDiscordVoiceStatus());
+    } else if (activeSection === 'worldSection') {
+      add('interactiveWorld', () => api('/v1/interactive-world'));
+    } else if (activeSection === 'interactivestageSection') {
+      add('unifiedStage', () => api('/v1/unified-stage'));
+      add('interactiveStage', () => api('/v1/interactive-stage'));
+      add('stageActors', () => api('/v1/stage-actors'));
+      add('interactionComposer', () => api('/v1/interaction-composer'));
+    } else if (activeSection === 'twitchSection') {
+      add('twitch', () => api('/v1/integrations/twitch'));
+      add('extensionFeatures', () => api('/v1/extension-features'));
+      add('localExtension', () => window.tempestStudio.getLocalExtensionStatus());
+      add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
+    } else if (activeSection === 'kickSection') {
+      add('kick', () => api('/v1/integrations/kick'));
+      add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
+    } else if (activeSection === 'chatbotSection') {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('kick', () => api('/v1/integrations/kick'));
+    } else if (activeSection === 'dualformatSection') add('visualAlerts', () => api('/v1/visual-alerts'));
+    else if (activeSection === 'apiSection') {
+      add('warudo', () => window.tempestStudio.getWarudoStatus());
+      add('vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus());
+    }
+    if ($('#onboardingDialog').open) {
+      add('chatbot', () => api('/v1/chatbot'));
+      add('visualAlerts', () => api('/v1/visual-alerts'));
+      add('chatOverlay', () => api('/v1/chat-overlay'));
+      add('emoteWall', () => api('/v1/emote-wall'));
+      add('twitchExperiences', () => api('/v1/twitch-experiences'));
+    }
+    return tasks;
+  }
+
   async function refreshRuntime({ quiet = true } = {}) {
+    if (fullRefreshPromise) {
+      await fullRefreshPromise;
+      return;
+    }
     if (runtimeRefreshBusy) return;
     runtimeRefreshBusy = true;
     try {
-      const diagnosticsVisible = $('#eventsSection').classList.contains('active');
-      const [health, connections, dualFormat, simulcast, runs, events, safety, twitch, chatbot, kick, visualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, unifiedStage, interactiveStage, interactiveWorld, stageActors, interactionComposer, extensionFeatures, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/chatbot'), api('/v1/integrations/kick'), api('/v1/visual-alerts'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), api('/v1/unified-stage'), api('/v1/interactive-stage'), api('/v1/interactive-world'), api('/v1/stage-actors'), api('/v1/interaction-composer'), api('/v1/extension-features'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), diagnosticsVisible ? api('/v1/alert-history?limit=200') : Promise.resolve(state.alertHistory), diagnosticsVisible ? api('/v1/alert-diagnostics') : Promise.resolve(state.alertDiagnostics)]);
-      state.health = health;
-      state.connections = connections.connections || [];
-      state.dualFormat = dualFormat;
-      state.simulcast = simulcast;
-      state.runs = runs.runs || [];
-      state.events = events.events || [];
-      state.safety = safety;
-      state.twitch = twitch;
-      state.chatbot = chatbot;
-      state.kick = kick;
-      state.visualAlerts = visualAlerts;
-      state.diceOverlay = diceOverlay;
-      state.chatOverlay = chatOverlay;
-      state.emoteWall = emoteWall;
-      state.twitchExperiences = twitchExperiences;
-      state.discordVoice = discordVoice;
-      state.unifiedStage = unifiedStage;
-      state.interactiveStage = interactiveStage;
-      state.interactiveWorld = interactiveWorld;
-      state.stageActors = stageActors;
-      state.interactionComposer = interactionComposer;
-      state.extensionFeatures = extensionFeatures;
-      state.discordRpc = discordRpc;
-      state.warudo = warudo;
-      state.vtubeStudio = vtubeStudio;
-      state.localExtension = localExtension;
-      state.hostedExtension = hostedExtension;
-      state.alertHistory = alertHistory;
-      state.alertDiagnostics = alertDiagnostics;
+      const activeSection = document.querySelector('.page.active')?.id || 'overviewSection';
+      const entries = [...runtimeRefreshTasks(activeSection)];
+      const results = await Promise.allSettled(entries.map(([, loader]) => loader()));
+      const refreshed = {};
+      const changedKeys = new Set();
+      let optionalError;
+      for (let index = 0; index < entries.length; index += 1) {
+        const [key] = entries[index];
+        const result = results[index];
+        if (result.status === 'fulfilled') refreshed[key] = result.value;
+        else if (key === 'runtimeSummary') throw result.reason;
+        else optionalError ||= result.reason;
+      }
+      if (refreshed.runtimeSummary) {
+        const summary = refreshed.runtimeSummary;
+        state.health = summary.health;
+        state.connections = summary.connections || [];
+        state.dualFormat = summary.dualFormat;
+        state.simulcast = summary.simulcast;
+        state.runs = summary.runs || [];
+        state.safety = summary.safety;
+      }
+      for (const [key, value] of Object.entries(refreshed)) {
+        const signature = JSON.stringify(value);
+        if (runtimeDataSignatures.get(key) !== signature) changedKeys.add(key);
+        runtimeDataSignatures.set(key, signature);
+      }
+      if (refreshed.events) state.events = refreshed.events.events || [];
+      if (refreshed.assets) state.assets = refreshed.assets.assets || [];
+      if (refreshed.soundAlerts) state.soundAlerts = refreshed.soundAlerts;
+      if (refreshed.twitchVisualAlerts) state.twitchVisualAlerts = refreshed.twitchVisualAlerts;
+      for (const key of ['safety', 'twitch', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
+        if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
+      }
       renderBridgeStatus(true);
-      renderSafety();
-      renderRuntimeSection();
+      if (changedKeys.has('runtimeSummary') || Number(state.safety?.activeRuns || 0) > 0) renderSafety();
+      renderRuntimeSection(changedKeys);
+      if (!quiet && optionalError) toast(optionalError?.message || 'The active workspace could not be fully refreshed.', true);
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
     } finally { runtimeRefreshBusy = false; }
   }
 
-  async function refresh({ quiet = false } = {}) {
+  async function performFullRefresh({ quiet = false } = {}) {
     try {
-      const [health, applications, connections, dualFormat, simulcast, workflows, runs, events, safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, unifiedStage, interactiveStage, interactiveWorld, stageActors, interactionComposer, extensionFeatures, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics] = await Promise.all([api('/health'), api('/v1/applications'), api('/v1/connections'), api('/v1/broadcast/dual-format'), api('/v1/broadcast/simulcast'), api('/v1/workflows'), api('/v1/runs?limit=50'), api('/v1/events?limit=150'), api('/v1/safety'), api('/v1/integrations/twitch'), api('/v1/integrations/kick'), api('/v1/chatbot'), api('/v1/sound-alerts'), api('/v1/visual-alerts'), api('/v1/visual-alerts/twitch'), api('/v1/dice-overlay'), api('/v1/chat-overlay'), api('/v1/emote-wall'), api('/v1/twitch-experiences'), api('/v1/discord-voice'), api('/v1/unified-stage'), api('/v1/interactive-stage'), api('/v1/interactive-world'), api('/v1/stage-actors'), api('/v1/interaction-composer'), api('/v1/extension-features'), window.tempestStudio.getDiscordVoiceStatus(), window.tempestStudio.getWarudoStatus(), window.tempestStudio.getVTubeStudioStatus(), window.tempestStudio.getLocalExtensionStatus(), window.tempestStudio.getHostedExtensionStatus(), window.tempestStudio.getGiphyStatus(), api('/v1/alert-history?limit=200'), api('/v1/alert-diagnostics')]);
-      Object.assign(state, { health, applications: applications.applications || [], connections: connections.connections || [], dualFormat, simulcast, workflows: workflows.workflows || [], runs: runs.runs || [], events: events.events || [], safety, twitch, kick, chatbot, soundAlerts, visualAlerts, twitchVisualAlerts, diceOverlay, chatOverlay, emoteWall, twitchExperiences, discordVoice, unifiedStage, interactiveStage, interactiveWorld, stageActors, interactionComposer, extensionFeatures, discordRpc, warudo, vtubeStudio, localExtension, hostedExtension, giphy, alertHistory, alertDiagnostics });
+      const tasks = new Map([
+        ['runtimeSummary', () => api('/v1/runtime-summary')],
+        ['applications', () => api('/v1/applications')],
+        ['assets', () => api('/v1/assets')],
+        ['workflows', () => api('/v1/workflows')],
+        ['events', () => api('/v1/events?limit=150')],
+        ['twitch', () => api('/v1/integrations/twitch')],
+        ['kick', () => api('/v1/integrations/kick')],
+        ['chatbot', () => api('/v1/chatbot')],
+        ['soundAlerts', () => api('/v1/sound-alerts')],
+        ['visualAlerts', () => api('/v1/visual-alerts')],
+        ['twitchVisualAlerts', () => api('/v1/visual-alerts/twitch')],
+        ['diceOverlay', () => api('/v1/dice-overlay')],
+        ['chatOverlay', () => api('/v1/chat-overlay')],
+        ['emoteWall', () => api('/v1/emote-wall')],
+        ['twitchExperiences', () => api('/v1/twitch-experiences')],
+        ['discordVoice', () => api('/v1/discord-voice')],
+        ['unifiedStage', () => api('/v1/unified-stage')],
+        ['interactiveStage', () => api('/v1/interactive-stage')],
+        ['interactiveWorld', () => api('/v1/interactive-world')],
+        ['stageActors', () => api('/v1/stage-actors')],
+        ['interactionComposer', () => api('/v1/interaction-composer')],
+        ['extensionFeatures', () => api('/v1/extension-features')],
+        ['discordRpc', () => window.tempestStudio.getDiscordVoiceStatus()],
+        ['warudo', () => window.tempestStudio.getWarudoStatus()],
+        ['vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus()],
+        ['localExtension', () => window.tempestStudio.getLocalExtensionStatus()],
+        ['hostedExtension', () => window.tempestStudio.getHostedExtensionStatus()],
+        ['giphy', () => window.tempestStudio.getGiphyStatus()],
+        ['alertHistory', () => api('/v1/alert-history?limit=200')],
+        ['alertDiagnostics', () => api('/v1/alert-diagnostics')]
+      ]);
+      const entries = [...tasks];
+      const results = await Promise.allSettled(entries.map(([, loader]) => loader()));
+      const refreshed = {};
+      let optionalError;
+      for (let index = 0; index < entries.length; index += 1) {
+        const [key] = entries[index];
+        const result = results[index];
+        if (result.status === 'fulfilled') refreshed[key] = result.value;
+        else if (key === 'runtimeSummary') throw result.reason;
+        else optionalError ||= result.reason;
+      }
+      const summary = refreshed.runtimeSummary;
+      Object.assign(state, {
+        health: summary.health,
+        connections: summary.connections || [],
+        dualFormat: summary.dualFormat,
+        simulcast: summary.simulcast,
+        runs: summary.runs || [],
+        safety: summary.safety,
+        ...(refreshed.applications ? { applications: refreshed.applications.applications || [] } : {}),
+        ...(refreshed.assets ? { assets: refreshed.assets.assets || [] } : {}),
+        ...(refreshed.workflows ? { workflows: refreshed.workflows.workflows || [] } : {}),
+        ...(refreshed.events ? { events: refreshed.events.events || [] } : {})
+      });
+      for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
+        if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
+      }
+      for (const [key, value] of Object.entries(refreshed)) runtimeDataSignatures.set(key, JSON.stringify(value));
       renderBridgeStatus(true);
       renderAll();
+      if (!quiet && optionalError) toast(optionalError?.message || 'Some optional Studio services could not be refreshed.', true);
     } catch (error) {
       renderBridgeStatus(false);
       if (!quiet) toast(error.message, true);
+    }
+  }
+
+  async function refresh(options = {}) {
+    if (fullRefreshPromise) return fullRefreshPromise;
+    const pending = performFullRefresh(options);
+    fullRefreshPromise = pending;
+    try {
+      await pending;
+    } finally {
+      if (fullRefreshPromise === pending) fullRefreshPromise = null;
     }
   }
 
@@ -4211,6 +4775,7 @@
       if (index >= 0) state.soundAlerts.alerts[index] = result.alert;
       renderSoundAlerts();
       renderVisualAlerts();
+      renderAssetLibrary();
       toast(message || `${result.alert.name} updated.`);
       return result.alert;
     } catch (error) { toast(error.message, true); return null; }
@@ -4250,6 +4815,7 @@
       if (!imported) return;
       const alert = imported.alert;
       if (imported.kind === 'interaction') {
+        await registerManagedManifests(imported.assets);
         const id = uniqueImportedAlertId('sound-alert', alert.id || imported.name, state.soundAlerts.alerts);
         const result = await api('/v1/sound-alerts', { method: 'POST', body: { ...alert, id, cue: id, custom: undefined, updatedAt: undefined } });
         state.soundAlerts.alerts.push(result.alert);
@@ -4263,8 +4829,10 @@
       const existing = state.twitchVisualAlerts.alerts.find((entry) => entry.topic === alert.topic && (entry.topic !== 'viewer.subscription.started' || (entry.variant || 'standard') === subscriptionVariant));
       if (existing) {
         if (!confirm(`${existing.name} already handles ${alert.topic}${subscriptionVariant ? ` (${subscriptionVariant})` : ''}. Replace its design, media, timing, and variants with ${imported.name}?`)) return;
+        await registerManagedManifests(imported.assets);
         await updateTwitchVisualAlert(existing.id, { enabled: alert.enabled !== false, durationMs: alert.durationMs, audioUri: alert.audioUri || null, volume: alert.volume, visualUri: alert.visualUri || null, accent: alert.accent, design: alert.design, alertVariants: alert.alertVariants || [] }, `${imported.name} imported into ${existing.name}.`);
       } else {
+        await registerManagedManifests(imported.assets);
         const id = uniqueImportedAlertId('twitch', alert.id || imported.name, state.twitchVisualAlerts.alerts);
         const result = await api('/v1/visual-alerts/twitch', { method: 'POST', body: { ...alert, id, custom: undefined, updatedAt: undefined } });
         state.twitchVisualAlerts.alerts.push(result.alert);
@@ -4348,10 +4916,17 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function registerManagedSelection(selection) {
+    if (!selection?.manifest) return selection;
+    await registerManagedManifests([selection.manifest]);
+    return selection;
+  }
+
   async function assignSoundAlertAudio(id) {
     try {
       const selection = await window.tempestStudio.selectSoundAlertAudio();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateSoundAlert(id, { audioUri: selection.uri }, `${selection.name} assigned to the Interaction Alert sound.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -4360,6 +4935,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateSoundAlert(id, { visualUri: selection.uri }, `${selection.name} assigned to the Interaction Alert visual.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -4370,6 +4946,7 @@
       const index = state.twitchVisualAlerts.alerts.findIndex((entry) => entry.id === id);
       if (index >= 0) state.twitchVisualAlerts.alerts[index] = result.alert;
       renderVisualAlerts();
+      renderAssetLibrary();
       toast(message || `${result.alert.name} updated.`);
       return result.alert;
     } catch (error) { toast(error.message, true); return null; }
@@ -4589,6 +5166,7 @@
     try {
       const selection = kind === 'audio' ? await window.tempestStudio.selectSoundAlertAudio() : await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVariant(alertId, variantId, { [kind === 'audio' ? 'audioUri' : 'visualUri']: selection.uri }, `${selection.name} assigned to the variant ${kind === 'audio' ? 'sound' : 'visual'}.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -4616,6 +5194,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertVisual();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVisualAlert(id, { visualUri: selection.uri }, `${selection.name} assigned to the Twitch Alert.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -4624,6 +5203,7 @@
     try {
       const selection = await window.tempestStudio.selectSoundAlertAudio();
       if (!selection) return;
+      await registerManagedSelection(selection);
       await updateTwitchVisualAlert(id, { audioUri: selection.uri }, `${selection.name} assigned to the Twitch Alert sound.`);
     } catch (error) { toast(error.message, true); }
   }
@@ -5513,7 +6093,7 @@
       grid.textContent = 'Searching GIPHY…';
       const result = await window.tempestStudio.searchGiphy(query);
       grid.classList.toggle('empty-state', !result.results.length);
-      grid.innerHTML = result.results.length ? result.results.map((entry) => `<article class="giphy-result"><img src="${escapeHtml(entry.previewUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" /><div><strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong><button data-giphy-result="${escapeHtml(entry.id)}" data-giphy-media-url="${escapeHtml(entry.mediaUrl)}" aria-label="Assign this GIF to ${escapeHtml(alertName)}">Assign GIF</button></div></article>`).join('') : 'No GIFs matched that search.';
+      grid.innerHTML = result.results.length ? result.results.map((entry) => `<article class="giphy-result"><img src="${escapeHtml(entry.previewUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" /><div><strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong><button data-giphy-result="${escapeHtml(entry.id)}" data-giphy-title="${escapeHtml(entry.title)}" data-giphy-media-url="${escapeHtml(entry.mediaUrl)}" aria-label="Assign this GIF to ${escapeHtml(alertName)}">Assign GIF</button></div></article>`).join('') : 'No GIFs matched that search.';
       $('#giphyResultSummary').textContent = `${result.results.length} result${result.results.length === 1 ? '' : 's'} for “${query}”`;
       $('#giphyTargetSummary').textContent = result.results.length
         ? `Select a GIF to download and assign it to ${alertName}.`
@@ -5528,7 +6108,7 @@
     }
   }
 
-  async function chooseGiphyResult(id, mediaUrl, button) {
+  async function chooseGiphyResult(id, title, mediaUrl, button) {
     const originalLabel = button?.textContent || 'Assign GIF';
     const card = button?.closest('.giphy-result');
     try {
@@ -5536,7 +6116,8 @@
       if (!target) throw new Error('Choose an alert before selecting a GIF.');
       if (button) { button.disabled = true; button.textContent = 'Downloading…'; }
       card?.classList.add('assigning');
-      const imported = await window.tempestStudio.importGiphyVisual({ id, mediaUrl });
+      const imported = await window.tempestStudio.importGiphyVisual({ id, title, mediaUrl });
+      await registerManagedSelection(imported);
       if (target.kind === 'interaction') await updateSoundAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
       else if (target.kind === 'twitch') await updateTwitchVisualAlert(target.alertId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
       else await updateTwitchVariant(target.alertId, target.variantId, { visualUri: imported.uri }, `${imported.name} downloaded and assigned to ${target.name}.`);
@@ -5983,6 +6564,7 @@
     const interactionCategory = document.querySelector(`[data-alert-category="${selectorId}"]`).value;
     const placementMode = document.querySelector(`[data-alert-placement="${selectorId}"]`).value;
     const accessMode = document.querySelector(`[data-alert-access="${selectorId}"]`).value;
+    const viewerGroupId = document.querySelector(`[data-alert-viewer-group="${selectorId}"]`).value;
     const allowedViewerIds = document.querySelector(`[data-alert-allowed-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
     const blockedViewerIds = document.querySelector(`[data-alert-blocked-viewers="${selectorId}"]`).value.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
     const hideWhenLocked = document.querySelector(`[data-alert-hide-locked="${selectorId}"]`).checked;
@@ -6006,6 +6588,7 @@
       interactionCategory,
       placementMode,
       accessMode,
+      viewerGroupId,
       allowedViewerIds,
       blockedViewerIds,
       hideWhenLocked,
@@ -6135,6 +6718,12 @@
     if (button.dataset.tobiiAdapter) return controlTobiiAdapter(button.dataset.tobiiAdapter);
     if (button.dataset.exportStudioBackup) return exportStudioBackup();
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
+    if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
+    if (button.dataset.viewerGroupDelete) return deleteViewerGroup(button.dataset.viewerGroupDelete);
+    if (button.dataset.assetPreview) return previewLibraryAsset(button.dataset.assetPreview);
+    if (button.dataset.assetEdit) return openAssetEditor(button.dataset.assetEdit);
+    if (button.dataset.assetAssign) return assignLibraryAsset(button.dataset.assetAssign);
+    if (button.dataset.assetRemove) return removeLibraryAsset(button.dataset.assetRemove);
     if (button.dataset.clearAlertHistory) return clearAlertHistory();
     if (button.dataset.designCodeTab) return switchAlertCodeTab(button.dataset.designCodeTab);
     if (button.dataset.onboardingStep !== undefined) {
@@ -6198,7 +6787,7 @@
     if (button.dataset.twitchVisualPreview) return previewTwitchVisualAlert(button.dataset.twitchVisualPreview);
     if (button.dataset.giphySave) return saveGiphyKey();
     if (button.dataset.giphySearch) return searchGiphy();
-    if (button.dataset.giphyResult) return chooseGiphyResult(button.dataset.giphyResult, button.dataset.giphyMediaUrl, button);
+    if (button.dataset.giphyResult) return chooseGiphyResult(button.dataset.giphyResult, button.dataset.giphyTitle, button.dataset.giphyMediaUrl, button);
     if (button.dataset.giphyAlertTarget) return openGiphyForAlert(button.dataset.giphyAlertTarget);
     if (button.dataset.chatOverlaySave) return saveChatOverlaySettings();
     if (button.dataset.chatOverlayPreview) return previewChatOverlay();
@@ -6366,6 +6955,14 @@
       });
     }
     $('#newInteractionAlertButton').addEventListener('click', openInteractionAlertDialog);
+    $('#importMediaAsset').addEventListener('click', importMediaAsset);
+    $('#adoptAssignedMedia').addEventListener('click', adoptAssignedMedia);
+    $('#assetLibrarySearch').addEventListener('input', renderAssetLibrary);
+    $('#assetLibraryFilter').addEventListener('change', renderAssetLibrary);
+    $('#assetLibraryCollection').addEventListener('change', renderAssetLibrary);
+    $('#assetEditorForm').addEventListener('submit', saveAssetDetails);
+    $('#viewerGroupForm').addEventListener('submit', saveViewerGroup);
+    $('#cancelViewerGroupEdit').addEventListener('click', resetViewerGroupForm);
     $('#newTwitchAlertButton').addEventListener('click', openTwitchAlertDialog);
     $('#interactionAlertForm').addEventListener('submit', createInteractionAlert);
     $('#twitchAlertForm').addEventListener('submit', createTwitchAlert);
@@ -6488,6 +7085,7 @@
     $('#stopLocalExtension').addEventListener('click', stopLocalExtension);
     $('#openLocalExtensionPanel').addEventListener('click', () => window.tempestStudio.openLocalExtensionPanel().catch((error) => toast(error.message, true)));
     $('#prepareLocalExtensionCertificate').addEventListener('click', prepareLocalExtensionCertificate);
+    $('#removeLocalExtensionCertificate').addEventListener('click', removeLocalExtensionCertificate);
     $('#forgetLocalExtensionSecret').addEventListener('click', forgetLocalExtensionSecret);
     $('#panelDesignForm').addEventListener('submit', savePanelDesign);
     $('#panelDesignForm').querySelectorAll('input, select').forEach((input) => input.addEventListener('input', updatePanelDesignPreview));
@@ -6588,7 +7186,7 @@
       if (!document.hidden) void refresh({ quiet: true });
     });
     setInterval(() => { if (!document.hidden) void refreshRuntime(); }, 1000);
-    setInterval(() => { if (!document.hidden) void refresh({ quiet: true }); }, 15000);
+    setInterval(() => { if (!document.hidden) void refresh({ quiet: true }); }, fullRefreshIntervalMs);
     window.__tempestStudioReady = true;
   }
 

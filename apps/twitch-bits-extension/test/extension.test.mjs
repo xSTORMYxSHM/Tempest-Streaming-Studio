@@ -28,6 +28,13 @@ test('uses the free Streaming companion catalog and action route without purchas
   assert.match(script, /placement/);
   assert.match(script, /avatarControlPad/);
   assert.match(script, /tempest\.avatar\.left/);
+  assert.match(script, /If-None-Match/);
+  assert.match(script, /response\.status === 304/);
+  assert.match(script, /catalogRefreshPromise/);
+  assert.match(script, /fetchWithTimeout/);
+  assert.match(script, /controller\.abort\(\)/);
+  assert.match(script, /!document\.hidden && state\.auth/);
+  assert.match(script, /state\.auth\?\.token !== authToken/);
   assert.doesNotMatch(script, /bits\.|transactionReceipt|reservationToken|useBits|getProducts/);
   assert.doesNotMatch(script, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });

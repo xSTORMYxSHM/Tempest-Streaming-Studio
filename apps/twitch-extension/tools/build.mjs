@@ -10,6 +10,12 @@ const officialEbsUrl = 'https://signal.tempestmainframe.com';
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await cp(sourceDirectory, outputDirectory, { recursive: true });
+// Twitch validates every configured Asset Hosting surface as a literal ZIP
+// entry. The responsive viewer supports component, fullscreen, and mobile
+// surfaces, so keep those entry paths as byte-identical aliases.
+for (const alias of ['mobile.html', 'video_overlay.html', 'video_fullscreen.html']) {
+  await cp(path.join(sourceDirectory, 'video_component.html'), path.join(outputDirectory, alias));
+}
 const mockMode = process.env.TEMPEST_EXTENSION_MOCK_MODE === '1';
 const configuredEbsUrl = String(mockMode ? '' : process.env.TEMPEST_EXTENSION_EBS_URL || officialEbsUrl).trim().replace(/\/$/, '');
 if (configuredEbsUrl) {

@@ -28,6 +28,68 @@ export interface PublicExtensionCompanions {
   streaming: boolean;
 }
 
+export interface PublicExtensionPoll {
+  id: string;
+  state: 'active' | 'closed';
+  question: string;
+  options: Array<{ number: number; label: string; votes: number; percentage: number }>;
+  totalVotes: number;
+  startedAt: string;
+  endedAt?: string;
+  lastVoteAt?: string;
+}
+
+export interface PublicExtensionCounter {
+  id: string;
+  command: string;
+  trigger?: string;
+  label: string;
+  value: number;
+}
+
+export interface PublicExtensionCommand {
+  trigger: string;
+  aliases: string[];
+  permission: 'everyone' | 'subscriber' | 'moderator' | 'broadcaster';
+  allowSharedChat: boolean;
+}
+
+export interface PublicExtensionGoal {
+  source: 'twitch' | 'studio';
+  kind: 'subscriptions' | 'followers' | 'bits' | 'donations' | 'custom';
+  title: string;
+  currentAmount: number;
+  targetAmount: number;
+  percentage: number;
+  unit: string;
+  accent: string;
+}
+
+export interface PublicExtensionNowPlaying {
+  stationName: string;
+  state: 'online' | 'offline' | 'unavailable';
+  artist?: string;
+  title?: string;
+  text?: string;
+  album?: string;
+  publicPlayerUrl: string;
+  checkedAt: string;
+}
+
+export interface PublicExtensionSchedule {
+  title?: string;
+  startTime: string;
+}
+
+export interface PublicExtensionStream {
+  live: boolean;
+  title: string;
+  category?: string;
+  startedAt?: string;
+  viewerCount?: number;
+  checkedAt: string;
+}
+
 export interface PublicExtensionPanelDesign {
   schemaVersion: 1;
   preset: 'tempest' | 'minimal' | 'neon' | 'soft';
@@ -49,6 +111,16 @@ export interface PublicExtensionPanelDesign {
   showFilters: boolean;
   showPattern: boolean;
   uppercaseLabels: boolean;
+  showCurrentStream: boolean;
+  showNowPlaying: boolean;
+  showSchedule: boolean;
+  showGoal: boolean;
+  showPoll: boolean;
+  showCounters: boolean;
+  showCommands: boolean;
+  showDice: boolean;
+  showFeatured: boolean;
+  showPerformances: boolean;
 }
 
 export interface PublicExtensionCatalog {
@@ -58,6 +130,13 @@ export interface PublicExtensionCatalog {
   extensionEdition: 'free' | 'bits';
   updatedAt: string;
   items: PublicExtensionCatalogItem[];
+  poll?: PublicExtensionPoll;
+  counters?: PublicExtensionCounter[];
+  commands?: PublicExtensionCommand[];
+  goal?: PublicExtensionGoal;
+  nowPlaying?: PublicExtensionNowPlaying;
+  schedule?: PublicExtensionSchedule;
+  stream?: PublicExtensionStream;
   panelDesign?: PublicExtensionPanelDesign;
 }
 

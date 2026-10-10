@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface ImportedDiceTheme {
@@ -11,6 +11,7 @@ export interface ImportedDiceTheme {
 }
 
 const maximumFiles = 96;
+const maximumManifestBytes = 1024 * 1024;
 const maximumFileBytes = 64 * 1024 * 1024;
 const maximumThemeBytes = 150 * 1024 * 1024;
 const allowedExtensions = new Set(['.json', '.png', '.jpg', '.jpeg', '.webp']);
@@ -65,6 +66,7 @@ export async function importDiceBoxTheme(sourceDirectory: string, destinationRoo
   const manifestPath = path.join(sourceDirectory, 'theme.config.json');
   const manifestDetails = await stat(manifestPath).catch(() => undefined);
   if (!manifestDetails?.isFile()) throw new Error('The selected folder does not contain theme.config.json.');
+  if (manifestDetails.size > maximumManifestBytes) throw new Error('theme.config.json must be smaller than 1 MB.');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
   const id = themeId(manifest.systemName);
   const name = String(manifest.name || id).trim().slice(0, 80) || id;
@@ -98,7 +100,8 @@ export async function importDiceBoxTheme(sourceDirectory: string, destinationRoo
       const target = path.resolve(staging, file.relativePath);
       if (!target.startsWith(`${staging}${path.sep}`)) throw new Error('The Dice Box theme contains an unsafe asset path.');
       await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, await readFile(file.sourcePath), { mode: 0o600 });
+      await copyFile(file.sourcePath, target);
+      await chmod(target, 0o600);
     }
     await rename(staging, destination);
   } catch (error) {

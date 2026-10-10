@@ -39,7 +39,7 @@ Network render source ─────── NDI ──────────�
 
 ## Interaction path
 
-External integrations authenticate and normalize platform-specific events before they reach the workflow engine. For example, a free Twitch Extension interaction becomes `tempest.blackhole`; none of the downstream applications need Twitch-specific code. The engine checks safety state, concurrency, and cooldowns, creates a run, then issues capability-addressed commands.
+External integrations authenticate and normalize platform-specific events before they reach the workflow engine. For example, a Tempest Streaming Extension interaction becomes `tempest.blackhole`; none of the downstream applications need Twitch-specific code. The engine checks safety state, concurrency, and cooldowns, creates a run, then issues capability-addressed commands.
 
 Reversible commands carry leases. When a lease expires, Studio sends a release command. Emergency Restore cancels pending actions, releases active actions, marks runs stopped, and disarms new interactions. This makes temporary effects self-restoring even if an integration forgets to send a corresponding “off” event.
 
@@ -47,7 +47,7 @@ Every accepted Twitch event carries the upstream event/message/redemption ID. St
 
 ## Persistence
 
-The Bridge stores a registry document and authentication token under its data directory. Assets are indexed in place by URI and checksum; registering or removing an asset never copies or deletes the source file. A future managed-library feature may explicitly copy selected files into a content-addressed store.
+The Bridge stores a registry document and authentication token under its data directory. Its generic asset API indexes manifests by URI and checksum without mutating the referenced source. Studio's Media Library adds an explicit managed layer: selected alert media is copied into a content-addressed local store, registered with `metadata.managed: true`, and removed from that store only through Studio after confirming no configured alert still references it. The original imported file remains untouched.
 
 ## Service lifecycle
 

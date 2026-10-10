@@ -1,4 +1,5 @@
 import type { ExtensionRelayOptions } from '@tempest/bridge';
+import { readResponseJson } from './bounded-response';
 
 export const OFFICIAL_HOSTED_EBS_URL = 'https://signal.tempestmainframe.com';
 export type TwitchExtensionEdition = 'free' | 'bits';
@@ -19,7 +20,12 @@ export const defaultTwitchExtensionCompanions = (): TwitchExtensionCompanionSett
 export function validateTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
   if (value === undefined || value === null || value === '' || value === 'free') return 'free';
   if (value === 'bits') return 'bits';
-  throw new Error('Choose either Tempest Mainframe (Free) or Tempest Streaming (Bits).');
+  throw new Error('The saved Twitch Extension edition is invalid.');
+}
+
+export function activeTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
+  validateTwitchExtensionEdition(value);
+  return 'free';
 }
 
 export function validateTwitchExtensionCompanions(value: unknown): TwitchExtensionCompanionSettings {
@@ -134,7 +140,7 @@ export async function syncHostedExtensionPanelDesign(
     body: JSON.stringify({ panelDesign })
   });
   if (response.ok) return;
-  const result = await response.json().catch(() => ({})) as { error?: unknown };
+  const result = await readResponseJson<{ error?: unknown }>(response, 1024 * 1024).catch(() => ({} as { error?: unknown }));
   const detail = typeof result.error === 'string' ? result.error.trim() : '';
   throw new Error(detail || `Hosted Panel design sync failed with ${response.status}.`);
 }

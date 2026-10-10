@@ -20,6 +20,14 @@ Dice Box includes standard `d4`, `d6`, `d8`, `d10`, `d12`, `d20`, and `d100` mod
 
 The optional reason and roller name appear with the result. Studio retains the latest 20 rolls in memory for the current session; roll history is not written to disk. Presentation settings persist locally in `dice-overlay.json`.
 
+## Rolling from chat
+
+The installed `!roll` command (alias `!dice`) accepts the same notation as the Studio workspace. For example, `!roll 1d20 initiative` rolls a d20 and shows “initiative” as the reason. With no expression, `!roll` defaults to `1d20`.
+
+Twitch, Stream Together, and Kick viewers all use the same Browser Source and receive the settled physical result back on the platform where the command originated. Studio does not invent a separate server result. If the source is missing, disabled, already rolling, or cannot settle, the chatbot posts a short failure instead of claiming a number. The normal chatbot permission and Shared Chat controls apply, and the default viewer/global cooldowns are 30/5 seconds. Operators can change both in the command editor.
+
+Tempest Streaming Extension's Panel and Video Component also show a compact picker for d4, d6, d8, d10, d12, d20, 1–50, and d100 plus an exact custom 1–N maximum from 2 through 100. A successful click starts the local physical roll immediately and returns before the dice finish, keeping the public relay inside its response deadline. Studio—not the Extension service—checks Browser Source readiness, access, busy state, and the shared 30-second viewer/5-second global cooldown.
+
 ## Presentation and audio
 
 The workspace provides Stormglass, Brass, and Obsidian colors, display timing from 2.5 to 15 seconds, 60–140% scale, an optional reason line, and optional synthesized impact audio. When sound is enabled, turn on **Control audio via OBS** for the Browser Source and route it to the desired live and recording tracks. The default is silent.

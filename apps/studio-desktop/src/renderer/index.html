@@ -144,6 +144,19 @@
             <button class="active" data-go="soundalerts" role="tab" aria-selected="true">Viewer Interactions</button>
           </div>
           <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build free stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions from one reusable catalog.</p></div><div class="page-toolbar-actions"><span class="status-badge">FREE ACTIONS</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
+          <article class="panel viewer-groups-panel">
+            <div class="viewer-groups-heading"><div><span>VIEWER ACCESS</span><h3>Reusable viewer groups</h3><p>Use Twitch logins to build private groups for campaign players, regulars, collaborators, or any interaction audience.</p></div><strong id="viewerGroupCount" class="state-chip">0 GROUPS</strong></div>
+            <div class="viewer-groups-layout">
+              <form id="viewerGroupForm" class="viewer-group-form">
+                <input id="viewerGroupId" type="hidden" />
+                <label>Group name<input id="viewerGroupName" maxlength="60" required placeholder="Campaign players" /></label>
+                <label>Twitch logins<textarea id="viewerGroupLogins" rows="4" required placeholder="stormy_viewer, tabletop_friend"></textarea></label>
+                <small>Studio verifies these logins with Twitch. Group names and logins stay in your local Studio data; viewers never receive the group roster.</small>
+                <div><button id="cancelViewerGroupEdit" type="button" class="secondary-button" hidden>Cancel</button><button type="submit" class="primary-button">Save Group</button></div>
+              </form>
+              <div id="viewerGroupList" class="viewer-group-list empty-state">No reusable viewer groups yet.</div>
+            </div>
+          </article>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>
@@ -192,6 +205,24 @@
               </div>
             </div>
           </article>
+        </section>
+
+        <section id="assetsSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-MANAGED MEDIA</p><h2>Media Library</h2><p>Import alert sounds and visuals once, keep a verified local copy inside Studio, and reuse them across Viewer Interactions.</p></div><div class="page-toolbar-actions"><button id="adoptAssignedMedia" class="secondary-button">Adopt Assigned Media</button><button id="importMediaAsset" class="primary-button">Import Media</button></div></div>
+          <div class="metric-grid asset-library-metrics">
+            <article><span>MEDIA FILES</span><strong id="assetLibraryCount">0</strong><small>Indexed in this Studio</small></article>
+            <article><span>AUDIO</span><strong id="assetLibraryAudioCount">0</strong><small>Reusable alert sounds</small></article>
+            <article><span>VISUALS</span><strong id="assetLibraryVisualCount">0</strong><small>Images, GIFs, and videos</small></article>
+            <article><span>IN USE</span><strong id="assetLibraryUsedCount">0</strong><small>Assigned to at least one alert</small></article>
+          </div>
+          <div class="sound-alert-note"><strong>Managed storage:</strong> Imported media is copied into Studio data and deduplicated by SHA-256 content hash. Removing an unused managed item deletes only Studio's copy; the original file you imported is never changed.</div>
+          <div class="asset-library-toolbar">
+            <label>Search<input id="assetLibrarySearch" type="search" placeholder="Name, type, or tag" /></label>
+            <label>Show<select id="assetLibraryFilter"><option value="all">All media</option><option value="favorites">Favorites</option><option value="audio">Audio</option><option value="visual">Visuals</option><option value="used">In use</option><option value="unused">Unused</option></select></label>
+            <label>Collection<select id="assetLibraryCollection"><option value="">All collections</option></select></label>
+            <label>Assign to<select id="assetLibraryTarget"><option value="">Choose an alert</option></select></label>
+          </div>
+          <div id="assetLibraryGrid" class="asset-library-grid empty-state">No media has been imported yet.</div>
         </section>
 
         <section id="diceSection" class="page">
@@ -792,7 +823,7 @@
               <div class="twitch-form-stack">
                 <label>Your numeric Twitch channel ID<input id="localExtensionChannelId" data-sensitive inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Filled from the authorized Twitch account" /></label>
                 <label>Extension Secret Key<input id="localExtensionSecret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste once; stored with Windows encryption" /><small>Use Extension Client Configuration → Extension Secrets → Key. Studio never displays the saved value.</small></label>
-                <div class="twitch-setup-actions"><button id="startLocalExtension" class="primary-button">Start Local Panel</button><button id="stopLocalExtension" class="secondary-button">Stop</button><button id="openLocalExtensionPanel" class="secondary-button">Open Panel</button><button id="prepareLocalExtensionCertificate" class="secondary-button">Prepare Certificate</button><button id="forgetLocalExtensionSecret" class="secondary-button danger-outline">Forget Secret</button></div>
+                <div class="twitch-setup-actions"><button id="startLocalExtension" class="primary-button">Start Local Panel</button><button id="stopLocalExtension" class="secondary-button">Stop</button><button id="openLocalExtensionPanel" class="secondary-button">Open Panel</button><button id="prepareLocalExtensionCertificate" class="secondary-button">Prepare HTTPS</button><button id="removeLocalExtensionCertificate" class="secondary-button danger-outline">Remove HTTPS</button><button id="forgetLocalExtensionSecret" class="secondary-button danger-outline">Forget Secret</button></div>
               </div>
               <div class="twitch-auth-summary">
                 <span>LOCAL TRUST BOUNDARY</span>
@@ -809,7 +840,7 @@
         </section>
 
         <section id="extensiondesignerSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">CHANNEL-SPECIFIC EXTENSION THEME</p><h2>Twitch Panel Designer</h2><p>Customize how the universal Tempest Extension looks on your channel. Appearance is saved as safe configuration data—never arbitrary viewer-facing code.</p></div><span id="panelDesignStateBadge" class="status-badge">SAVED LOCALLY</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">CHANNEL-SPECIFIC EXTENSION CONTROL</p><h2>Twitch Panel Designer</h2><p>Control the panel's appearance and every viewer-facing module here. Each module links to its single source editor so settings never drift between screens.</p></div><span id="panelDesignStateBadge" class="status-badge">SAVED LOCALLY</span></div>
           <div class="extension-designer-layout">
             <form id="panelDesignForm" class="panel extension-design-controls">
               <div class="panel-header"><div><span>APPEARANCE</span><h3>Channel theme</h3></div><button id="resetPanelDesign" type="button" class="text-button">Reset</button></div>
@@ -822,6 +853,19 @@
               <div class="form-row panel-design-three"><label>Typography<select id="panelDesignFont"><option value="inter">Inter</option><option value="system">System</option><option value="condensed">Condensed</option><option value="serif">Serif</option></select></label><label>Card layout<select id="panelDesignCardLayout"><option value="grid">Two-column grid</option><option value="list">Single-column list</option></select></label><label>Density<select id="panelDesignDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label></div>
               <label>Corner radius <output id="panelDesignRadiusValue">10 px</output><input id="panelDesignRadius" type="range" min="0" max="24" step="1" /></label>
               <div class="panel-design-toggles"><label><input id="panelDesignShowLogo" type="checkbox" /> Logo</label><label><input id="panelDesignShowStatus" type="checkbox" /> Status</label><label><input id="panelDesignShowSearch" type="checkbox" /> Search</label><label><input id="panelDesignShowFilters" type="checkbox" /> Filters</label><label><input id="panelDesignShowPattern" type="checkbox" /> Grid pattern</label><label><input id="panelDesignUppercase" type="checkbox" /> Uppercase cards</label></div>
+              <div class="panel-design-subheading"><div><span>VIEWER-FACING MODULES</span><h3>Panel content</h3></div><small>Hide a module without disabling its Studio feature.</small></div>
+              <div class="panel-module-controls">
+                <article><label><input id="panelDesignShowCurrentStream" type="checkbox" /><span><strong>Current Stream</strong><small>Live title, category, viewers, and uptime.</small></span></label><button type="button" data-go="twitch">Edit source</button></article>
+                <article><label><input id="panelDesignShowNowPlaying" type="checkbox" /><span><strong>Now Playing</strong><small>Station and current song information.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowSchedule" type="checkbox" /><span><strong>Schedule</strong><small>The channel's next scheduled stream.</small></span></label><button type="button" data-go="twitch">Edit source</button></article>
+                <article><label><input id="panelDesignShowGoal" type="checkbox" /><span><strong>Goal</strong><small>Subscription, follower, Bits, or custom progress.</small></span></label><button type="button" data-go="visualalerts">Edit source</button></article>
+                <article><label><input id="panelDesignShowPoll" type="checkbox" /><span><strong>Poll</strong><small>Active one-vote-per-viewer poll.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowCounters" type="checkbox" /><span><strong>Counters</strong><small>Viewer-facing death, restart, or custom counts.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowCommands" type="checkbox" /><span><strong>Commands</strong><small>Published chat commands and permissions.</small></span></label><button type="button" data-go="chatbot">Edit source</button></article>
+                <article><label><input id="panelDesignShowDice" type="checkbox" /><span><strong>3D Dice</strong><small>Preset and custom viewer rolls.</small></span></label><button type="button" data-go="dice">Edit source</button></article>
+                <article><label><input id="panelDesignShowFeatured" type="checkbox" /><span><strong>Viewer Interactions</strong><small>Stickers, GIFs, effects, and placed interactions.</small></span></label><button type="button" data-go="soundalerts">Edit source</button></article>
+                <article><label><input id="panelDesignShowPerformances" type="checkbox" /><span><strong>Performances</strong><small>Sound and performance alert triggers.</small></span></label><button type="button" data-go="soundalerts">Edit source</button></article>
+              </div>
               <div class="extension-design-actions"><button type="submit" class="primary-button">Save Panel Design</button><button id="openDesignedPanel" type="button" class="secondary-button">Open Real Panel</button><span id="panelDesignSaveState">Changes are previewed live.</span></div>
             </form>
             <article class="panel extension-preview-panel">
@@ -832,7 +876,18 @@
                   <section class="preview-intro"><div><small id="panelPreviewEyebrow">VIEWER CONTROL NODE</small><h3 id="panelPreviewTitle">Signal deck</h3></div><b>6 AVAILABLE</b></section>
                   <div id="panelPreviewSearch" class="preview-search">⌕ <span>Search signals</span></div>
                   <nav id="panelPreviewFilters"><b>ALL</b><span>EVENTS</span><span>PERFORMANCES</span></nav>
-                  <main><small>FEATURED INTERACTION</small><div class="preview-featured"><i>FX</i><div><strong>Scene Shift</strong><span>READY · 15s EFFECT</span></div><b>›</b></div><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Celebration</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Spotlight</strong><span>READY TO PLAY · 12s</span></div></div></main>
+                  <main>
+                    <section id="panelPreviewCurrentStream" class="preview-module preview-stream"><small>LIVE NOW</small><strong>Building the next Tempest release</strong><span>Science &amp; Technology · 42 viewers</span></section>
+                    <section id="panelPreviewNowPlaying" class="preview-module"><small>NOW PLAYING</small><strong>The Midnight — Synthetic</strong><span>LISTEN NOW</span></section>
+                    <section id="panelPreviewSchedule" class="preview-module"><small>NEXT STREAM</small><strong>Tomorrow · 7:00 PM</strong><span>Pacific Time</span></section>
+                    <section id="panelPreviewGoal" class="preview-module preview-goal"><small>SUBSCRIPTION GOAL</small><strong>Road to 50 · 31 / 50</strong><i><b></b></i></section>
+                    <section id="panelPreviewPoll" class="preview-module"><small>VOTING OPEN</small><strong>What should happen next?</strong><span>1 · Roll dice &nbsp; 2 · Trigger effect</span></section>
+                    <section id="panelPreviewCounters" class="preview-module"><small>COUNTERS</small><strong>Ship Restarts · 7</strong><span>!death</span></section>
+                    <section id="panelPreviewCommands" class="preview-module"><small>COMMANDS</small><strong>!commands · !roll · !song</strong><span>EVERYONE</span></section>
+                    <section id="panelPreviewDice" class="preview-module"><small>3D DICE</small><strong>D6 · D20 · CUSTOM</strong><span>ROLL ON STREAM</span></section>
+                    <section id="panelPreviewFeatured"><small>VIEWER INTERACTION</small><div class="preview-featured"><i>FX</i><div><strong>Scene Shift</strong><span>READY · 15s EFFECT</span></div><b>›</b></div></section>
+                    <section id="panelPreviewPerformances"><small>PERFORMANCES</small><div id="panelPreviewCards" class="preview-cards"><div><strong>Moonlight Dance</strong><span>READY TO PLAY · 10s</span></div><div><strong>Celebration</strong><span>READY TO PLAY · 21s</span></div><div><strong>Galaxy Groove</strong><span>READY TO PLAY · 14s</span></div><div><strong>Spotlight</strong><span>READY TO PLAY · 12s</span></div></div></section>
+                  </main>
                   <footer>Viewer link established</footer>
                 </div>
               </div>
@@ -967,7 +1022,7 @@
             <div class="panel-header"><div><span>CHAT ENGAGEMENT</span><h3>Rotating Auto Messages</h3><p>Post reminders, links, or community prompts when either the time interval or chat-message threshold is reached.</p></div><span id="chatbotAutoMessagesBadge" class="status-badge offline">OFF</span></div>
             <label class="toggle-label automod-master"><input id="chatbotAutoMessagesEnabled" type="checkbox" /> Enable rotating Auto Messages</label>
             <div class="chatbot-auto-message-grid">
-              <fieldset><legend>MESSAGE ROTATION</legend><label>Messages<textarea id="chatbotAutoMessages" rows="7" maxlength="10019" placeholder="Follow the channel so you know when we go live.&#10;Listen to Storm Horizon Radio: https://www.tempestmainframe.com/listen"></textarea></label><small>Enter one message per line; Studio rotates through up to 20 messages. Variables: <code>{channel}</code> and <code>{bot}</code>.</small></fieldset>
+              <fieldset><legend>MESSAGE ROTATION</legend><label>Messages<textarea id="chatbotAutoMessages" rows="7" maxlength="10019" placeholder="Follow {channel} so you know when we go live.&#10;Use !commands to see what {bot} can do."></textarea></label><small>Enter one message per line; Studio rotates through up to 20 messages. Variables: <code>{channel}</code> and <code>{bot}</code>.</small></fieldset>
               <fieldset><legend>WHEN + WHERE</legend><div class="form-row"><label>Minutes between messages<input id="chatbotAutoMessageInterval" type="number" min="0" max="240" value="20" /><small>0 disables the time trigger.</small></label><label>Viewer chat messages<input id="chatbotAutoMessageThreshold" type="number" min="0" max="1000" value="30" /><small>0 disables the chat trigger.</small></label></div><div class="auto-message-platforms"><span>POST TO</span><label><input id="chatbotAutoMessagesTwitch" type="checkbox" checked /> Twitch</label><label><input id="chatbotAutoMessagesKick" type="checkbox" /> Kick</label></div><p id="chatbotAutoMessagesStatus">Auto Messages are off.</p><small>The first threshold reached wins. Studio requires recent viewer chat activity, checks that Twitch is live before posting there, and keeps a 15-second retry guard.</small></fieldset>
             </div>
             <div class="dialog-actions"><button class="primary-button" type="submit">Save Auto Messages</button></div>
@@ -1018,11 +1073,11 @@
                 <input id="chatbotCommandId" type="hidden" />
                 <div class="form-row"><label>Command name<div class="prefixed-input"><span id="chatbotPrefixLabel">!</span><input id="chatbotCommandName" required maxlength="32" placeholder="blackhole" /></div></label><label>Permission<select id="chatbotCommandPermission"><option value="everyone">Everyone</option><option value="subscriber">Subscribers</option><option value="moderator">Moderators</option><option value="broadcaster">Broadcaster only</option></select></label></div>
                 <label>Aliases<input id="chatbotCommandAliases" maxlength="240" placeholder="bh, gravity" /><small>Comma-separated; the command prefix is added automatically.</small></label>
-                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="counter">Custom counter (+1)</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option><option value="twitch-clip">Create a Twitch clip</option></select></label>
+                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="counter">Custom counter (+1)</option><option value="dice-roll">3D Dice roll from command arguments</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option><option value="twitch-clip">Create a Twitch clip</option></select></label>
                 <div id="chatbotCounterFields" class="form-row" hidden><label>Counter label<input id="chatbotCounterLabel" maxlength="80" placeholder="Deaths" /></label><label>Current value<input id="chatbotCounterValue" type="number" min="-1000000000" max="1000000000" step="1" value="0" /></label></div>
-                <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, {args}, {counterLabel}, and {counter}. Counter responses may be left blank.</small></label>
-                <label>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
-                <div class="form-row"><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
+                <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, {args}, {counterLabel}, {counter}, {dice}, {roll}, and {reason}. Counter and 3D Dice responses may be left blank.</small></label>
+                <label data-advanced>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
+                <div class="form-row" data-advanced><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
                 <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Stream Together Chat</label></div>
                 <small>Stream Together Chat commands can be invoked by viewers arriving through a collaborator's Twitch channel. Command permissions are still evaluated in your home channel.</small>
                 <div class="dialog-actions"><button id="deleteChatbotCommand" type="button" class="secondary-button danger-outline" disabled>Delete</button><button type="submit" class="primary-button">Save Command</button></div>
@@ -1230,6 +1285,18 @@
       </div>
     </dialog>
 
+    <dialog id="assetEditorDialog">
+      <form id="assetEditorForm">
+        <input id="assetEditorId" type="hidden" />
+        <div class="dialog-header"><div><span>MEDIA LIBRARY</span><h2>Edit Media Details</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>
+        <p class="dialog-help">Names, tags, collections, and favorites organize Studio's catalog without changing the underlying verified file.</p>
+        <label>Display name<input id="assetEditorName" required maxlength="120" /></label>
+        <label>Tags<input id="assetEditorTags" maxlength="300" placeholder="celebration, raid, community" /><small>Separate up to 20 tags with commas.</small></label>
+        <label>Collection<input id="assetEditorCollection" maxlength="60" placeholder="Seasonal Alerts" /></label>
+        <label class="interaction-integration-toggle"><input id="assetEditorFavorite" type="checkbox" /><span><strong>Favorite</strong><small>Keep this item at the top of the library.</small></span></label>
+        <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Save Details</button></div>
+      </form>
+    </dialog>
     <dialog id="interactionAlertDialog">
       <form id="interactionAlertForm">
         <div class="dialog-header"><div><span>CUSTOM INTERACTION</span><h2>Create Interaction Alert</h2></div><button type="button" data-close-dialog aria-label="Close">×</button></div>

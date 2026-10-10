@@ -54,7 +54,7 @@ import {
   TempestExtensionRelayClient,
   extensionCatalogKind
 } from './extension-relay';
-import { ChatbotDispatch, TwitchChatbot } from './chatbot';
+import { TwitchChatbot, type ChatbotDiceRollRequest, type ChatbotDiceRollResult, type ChatbotDispatch } from './chatbot';
 import { KickIntegrationGateway, type KickCredentialStore } from './kick-integration';
 
 export type { TwitchCredentialStore, TwitchTokenSet } from './twitch-integration';
@@ -118,13 +118,13 @@ const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
 
 const interactiveWorldCatalog = [
   { id: 'tempest.avatar.join', name: 'Join the Crowd', durationMs: 4_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'JOIN', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
-  { id: 'tempest.avatar.left', name: 'Move Avatar Left', durationMs: 700, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'LEFT', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.right', name: 'Move Avatar Right', durationMs: 700, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'RIGHT', kind: 'interaction' as const, destinations: ['streaming'] as const },
+  { id: 'tempest.avatar.left', name: 'Move Avatar Left', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'LEFT', kind: 'interaction' as const, destinations: ['streaming'] as const },
+  { id: 'tempest.avatar.right', name: 'Move Avatar Right', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'RGT', kind: 'interaction' as const, destinations: ['streaming'] as const },
   { id: 'tempest.avatar.jump', name: 'Make My Avatar Jump', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'JUMP', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.drop', name: 'Drop Through Platform', durationMs: 800, cooldownMs: 750, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'DROP', kind: 'interaction' as const, destinations: ['streaming'] as const },
+  { id: 'tempest.avatar.drop', name: 'Drop Through Platform', durationMs: 1_000, cooldownMs: 750, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'DROP', kind: 'interaction' as const, destinations: ['streaming'] as const },
   { id: 'tempest.avatar.interact', name: 'Interact Nearby', durationMs: 1_000, cooldownMs: 1_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'USE', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.emote', name: 'Avatar Emote', durationMs: 1_500, cooldownMs: 2_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'EMOTE', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.unstuck', name: 'Respawn My Avatar', durationMs: 1_000, cooldownMs: 10_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF667A', glyph: 'RESET', kind: 'interaction' as const, destinations: ['streaming'] as const },
+  { id: 'tempest.avatar.emote', name: 'Avatar Emote', durationMs: 1_500, cooldownMs: 2_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'EMO', kind: 'interaction' as const, destinations: ['streaming'] as const },
+  { id: 'tempest.avatar.unstuck', name: 'Respawn My Avatar', durationMs: 1_000, cooldownMs: 10_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF667A', glyph: 'RST', kind: 'interaction' as const, destinations: ['streaming'] as const },
   { id: 'tempest.pet.feed', name: 'Feed the Pet', durationMs: 3_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'FEED', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
   { id: 'tempest.pet.play', name: 'Play With Pet', durationMs: 5_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF9F43', glyph: 'PET', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
   { id: 'tempest.pet.pet', name: 'Pet the Pet', durationMs: 3_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'LOVE', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
@@ -171,6 +171,19 @@ const interactiveWorldActionIds = new Set([
 const simulcastStartCapability = 'broadcast.simulcast.start';
 const simulcastStopCapability = 'broadcast.simulcast.stop';
 const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
+const extensionDiceViewerCooldownMs = 30_000;
+const extensionDiceGlobalCooldownMs = 5_000;
+const extensionDicePresets = [
+  { id: 'tempest.dice.d4', expression: '1d4', name: 'Roll d4', glyph: 'D4' },
+  { id: 'tempest.dice.d6', expression: '1d6', name: 'Roll d6', glyph: 'D6' },
+  { id: 'tempest.dice.d8', expression: '1d8', name: 'Roll d8', glyph: 'D8' },
+  { id: 'tempest.dice.d10', expression: '1d10', name: 'Roll d10', glyph: 'D10' },
+  { id: 'tempest.dice.d12', expression: '1d12', name: 'Roll d12', glyph: 'D12' },
+  { id: 'tempest.dice.d20', expression: '1d20', name: 'Roll d20', glyph: 'D20' },
+  { id: 'tempest.dice.d50', expression: '1d50', name: 'Roll 1–50', glyph: 'D50' },
+  { id: 'tempest.dice.d100', expression: '1d100', name: 'Roll d100', glyph: 'D100' }
+] as const;
+const extensionDiceCustom = { id: 'tempest.dice.custom', name: 'Custom 1–N', glyph: '1N' } as const;
 const diceBoxDistributionDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-box/package.json')), 'dist');
 const diceBoxAssetsDirectory = path.join(diceBoxDistributionDirectory, 'assets');
 const diceThemeAssetsDirectory = path.join(path.dirname(require.resolve('@3d-dice/dice-themes/package.json')), 'themes');
@@ -453,6 +466,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   const clients = new Map<string, BridgeClient>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumBodyBytes });
   let ingestChatEvent: (event: TempestNormalizedChatEvent) => Promise<void> = async () => {};
+  let extensionRelay: TempestExtensionRelayClient | null = null;
   const twitchGateway = new TwitchIntegrationGateway({ dataDirectory: options.dataDirectory, credentialStore: options.twitchCredentialStore, onEvent: (event) => ingestChatEvent(event) });
   await twitchGateway.initialize();
   const connectedBroadcast = (): BridgeClient | undefined => [...clients.values()].find((client) => client.applicationId === broadcastApplicationId);
@@ -468,6 +482,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     return message.id;
   };
   let dispatchChatCommand: (dispatch: ChatbotDispatch) => Promise<void> = async () => {};
+  let dispatchChatDice: (request: ChatbotDiceRollRequest) => Promise<ChatbotDiceRollResult> = async () => { throw new Error('3D Dice is not ready.'); };
   let kickGateway!: KickIntegrationGateway;
   const chatbot = new TwitchChatbot({
     dataDirectory: options.dataDirectory,
@@ -476,8 +491,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     onEvent: (event) => ingestChatEvent(event),
     onCommand: (dispatch) => dispatchChatCommand(dispatch),
     createTwitchClip: (input) => twitchGateway.createClip(input),
+    rollDice: (request) => dispatchChatDice(request),
     sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
-    onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); }
+    onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); },
+    onPollChanged() { extensionRelay?.syncCatalog(); },
+    onCatalogChanged() { extensionRelay?.syncCatalog(); }
   });
   await chatbot.initialize(twitchGateway.status().clientId || '');
   kickGateway = new KickIntegrationGateway({
@@ -557,7 +575,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await chatOverlay.initialize();
   const emoteWall = new TempestEmoteWall(options.dataDirectory, options.emoteProviderFetchImplementation);
   await emoteWall.initialize();
-  const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory);
+  const twitchExperiences = new TempestTwitchExperiences(options.dataDirectory, () => extensionRelay?.syncCatalog());
   await twitchExperiences.initialize();
   const discordVoiceOverlay = new TempestDiscordVoiceOverlay(options.dataDirectory);
   await discordVoiceOverlay.initialize();
@@ -580,8 +598,20 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     if (!gaze.enabled || gaze.adapter !== 'tgi-sidecar') await interactiveWorld.configureGaze({ enabled: true, adapter: 'tgi-sidecar', effect: gaze.effect });
     await interactiveWorld.sampleGaze(sample);
   });
+  const extensionDiceViewerUses = new Map<string, number>();
+  let extensionDiceGlobalUse = 0;
+  dispatchChatDice = async (request) => {
+    const roll = await diceOverlay.roll({ expression: request.expression, reason: request.reason, rollerName: request.rollerName });
+    workflowEngine?.recordExternalEvent('studio.dice.chat-rolled', 'success', `${roll.rollerName} rolled ${roll.expression} from chat.`, {
+      rollId: roll.id,
+      expression: roll.expression,
+      total: roll.total,
+      reason: roll.reason,
+      rollerName: roll.rollerName
+    });
+    return { expression: roll.expression, total: roll.total, reason: roll.reason };
+  };
   let alertQueue: TempestAlertQueue | undefined;
-  let extensionRelay: TempestExtensionRelayClient | null = null;
   let runtime!: TempestBridgeRuntime;
 
   const activeBroadcastScene = (): string | undefined => {
@@ -1006,6 +1036,19 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
 
   let alertAudioBaseUrl = '';
 
+  const connectionsSnapshot = () => ({
+    connections: [...clients.values()].map((client) => ({
+      id: client.id,
+      applicationId: client.applicationId,
+      version: client.version,
+      capabilities: client.capabilities,
+      status: client.status,
+      connectedAt: client.connectedAt,
+      lastSeenAt: client.lastSeenAt,
+      subscriptions: [...client.subscriptions]
+    }))
+  });
+
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${host}`);
     try {
@@ -1283,6 +1326,18 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       }
       if (await serveAlertAudio(request, response, requestUrl)) return;
       if (requestToken(request, requestUrl) !== token) return sendJson(response, 401, { error: 'A valid Tempest Bridge token is required.' });
+
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/runtime-summary') {
+        const broadcast = connectedBroadcast();
+        return sendJson(response, 200, {
+          health: health(),
+          connections: connectionsSnapshot().connections,
+          dualFormat: dualFormatSnapshot(broadcast),
+          simulcast: simulcastSnapshot(broadcast),
+          runs: workflowEngine.listRuns(50),
+          safety: workflowEngine.safetyState()
+        });
+      }
 
       if (request.method === 'GET' && requestUrl.pathname === '/v1/broadcast/simulcast') {
         return sendJson(response, 200, simulcastSnapshot(connectedBroadcast()));
@@ -2130,12 +2185,81 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const configuredAlert = nativeWorldAction ? undefined : typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
           : typeof event.payload.cue === 'string' ? soundAlerts.find(event.payload.cue)
             : action ? soundAlerts.find(action) : undefined;
+        if (event.topic === 'viewer.interaction.requested' && action === 'tempest.poll.vote') {
+          const pollId = String(event.payload.pollId || '').trim();
+          const optionNumber = Number(event.payload.optionNumber);
+          const vote = chatbot.recordNumericPollVote({
+            pollId,
+            optionNumber,
+            voterId: String(event.viewer?.id || ''),
+            source: 'twitch'
+          });
+          workflowEngine.recordExternalEvent(
+            vote.accepted ? 'studio.poll.vote.accepted' : 'studio.poll.vote.ignored',
+            vote.accepted ? 'success' : 'info',
+            vote.accepted ? `Twitch viewer vote ${optionNumber} was recorded.` : `Twitch viewer poll vote was not recorded: ${vote.code}.`,
+            { eventId: event.id, pollId, optionNumber, viewerId: event.viewer?.id, voteCode: vote.code }
+          );
+          const pollVoteErrors: Record<string, string> = {
+            'poll-inactive': 'This poll is no longer accepting votes.',
+            'stale-poll': 'The active poll changed before this vote arrived.',
+            'invalid-option': 'That poll option is no longer available.',
+            'identity-required': 'A verified Twitch identity is required to vote.',
+            'already-voted': `This Twitch account already voted for option ${vote.optionNumber}.`
+          };
+          return sendJson(response, vote.accepted ? 202 : vote.duplicate ? 200 : 409, {
+            accepted: vote.accepted,
+            duplicate: vote.duplicate,
+            code: vote.code.replaceAll('-', '_'),
+            ...(!vote.accepted ? { error: pollVoteErrors[vote.code] || 'The poll vote was not accepted.' } : {}),
+            optionNumber: vote.optionNumber,
+            poll: vote.poll,
+            eventId: event.id
+          });
+        }
         if (event.topic === 'viewer.interaction.requested') {
           const access = await chatbot.authorizeInteraction(event, configuredAlert);
           if (!access.allowed) {
             workflowEngine.recordExternalEvent('viewer.interaction.denied', 'warning', access.reason || 'Viewer interaction access was denied.', { eventId: event.id, viewerId: event.viewer?.id, accessCode: access.code });
             return sendJson(response, 403, { accepted: false, error: access.reason, code: access.code.replaceAll('-', '_'), eventId: event.id });
           }
+        }
+        const extensionDicePreset = event.topic === 'viewer.interaction.requested'
+          ? extensionDicePresets.find((preset) => preset.id === action)
+          : undefined;
+        const extensionDiceMaximum = action === extensionDiceCustom.id ? Number(event.payload.maximum) : undefined;
+        const extensionDiceExpression = extensionDicePreset?.expression || (Number.isInteger(extensionDiceMaximum) && extensionDiceMaximum! >= 2 && extensionDiceMaximum! <= 100 ? `1d${extensionDiceMaximum}` : undefined);
+        if (action === extensionDiceCustom.id && !extensionDiceExpression) {
+          return sendJson(response, 400, { accepted: false, error: 'Choose a custom dice maximum from 2 through 100.', code: 'dice_maximum_invalid', eventId: event.id });
+        }
+        if (extensionDiceExpression) {
+          const now = Date.now();
+          for (const [viewerId, usedAt] of extensionDiceViewerUses) {
+            if (now - usedAt > extensionDiceViewerCooldownMs) extensionDiceViewerUses.delete(viewerId);
+          }
+          const viewerId = String(event.viewer?.id || 'anonymous');
+          const retryAfterMs = Math.max(
+            0,
+            extensionDiceGlobalUse + extensionDiceGlobalCooldownMs - now,
+            (extensionDiceViewerUses.get(viewerId) || 0) + extensionDiceViewerCooldownMs - now
+          );
+          if (retryAfterMs > 0) {
+            return sendJson(response, 429, { accepted: false, error: `3D Dice is recharging for ${Math.ceil(retryAfterMs / 1000)} seconds.`, code: 'dice_cooldown', retryAfterMs, eventId: event.id });
+          }
+          const diceStatus = diceOverlay.status(`${runtime.baseUrl}/dice-overlay`) as { connectedClients?: number; rolling?: boolean; engine?: string; settings?: { enabled?: boolean }; clients?: Array<{ state?: string; error?: string }> };
+          if (diceStatus.settings?.enabled !== true) return sendJson(response, 409, { accepted: false, error: 'The streamer has disabled 3D Dice.', code: 'dice_disabled', eventId: event.id });
+          if (!diceStatus.connectedClients) return sendJson(response, 409, { accepted: false, error: 'The 3D Dice Browser Source is not connected.', code: 'dice_source_offline', eventId: event.id });
+          if (diceStatus.clients?.some((client) => client.state === 'failed')) return sendJson(response, 409, { accepted: false, error: 'The 3D Dice Browser Source needs attention in Studio.', code: 'dice_source_failed', eventId: event.id });
+          if (diceStatus.rolling) return sendJson(response, 409, { accepted: false, error: 'The 3D dice are already rolling. Try again when they settle.', code: 'dice_busy', retryAfterMs: extensionDiceGlobalCooldownMs, eventId: event.id });
+          extensionDiceGlobalUse = now;
+          extensionDiceViewerUses.set(viewerId, now);
+          void diceOverlay.roll({ expression: extensionDiceExpression, rollerName: 'Twitch Viewer', reason: 'Viewer roll' }).then((roll) => {
+            workflowEngine?.recordExternalEvent('studio.dice.extension-rolled', 'success', `A Twitch viewer rolled ${roll.expression} from Tempest Streaming Extension.`, { eventId: event.id, rollId: roll.id, expression: roll.expression, total: roll.total, viewerId });
+          }).catch((error) => {
+            workflowEngine?.recordExternalEvent('studio.dice.extension-failed', 'error', `A Tempest Streaming Extension dice roll failed: ${(error as Error).message}`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
+          });
+          workflowEngine.recordExternalEvent('studio.dice.extension-started', 'success', `A Twitch viewer started ${extensionDiceExpression} from Tempest Streaming Extension.`, { eventId: event.id, expression: extensionDiceExpression, viewerId });
+          return sendJson(response, 202, { accepted: true, expression: extensionDiceExpression, cooldownMs: extensionDiceViewerCooldownMs, eventId: event.id });
         }
         workflowEngine.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
         broadcastSystemEvent(event.topic, event);
@@ -2262,18 +2386,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, run, ...(avatarRedemption ? { avatarRedemption } : {}) });
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/connections') {
-        return sendJson(response, 200, {
-          connections: [...clients.values()].map((client) => ({
-            id: client.id,
-            applicationId: client.applicationId,
-            version: client.version,
-            capabilities: client.capabilities,
-            status: client.status,
-            connectedAt: client.connectedAt,
-            lastSeenAt: client.lastSeenAt,
-            subscriptions: [...client.subscriptions]
-          }))
-        });
+        return sendJson(response, 200, connectionsSnapshot());
       }
       return sendJson(response, 404, { error: 'Tempest Bridge route was not found.' });
     } catch (error) {
@@ -2430,16 +2543,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     const nextRelay = new TempestExtensionRelayClient({
       ...relayOptions,
       logger,
-      catalog: () => [
-        ...interactiveWorldCatalog.map((item) => ({
-          ...item,
-          destinations: extensionFeatures.destinations(item.id, item.destinations)
-        })),
-        {
-          ...diceExtensionCatalogItem,
-          destinations: extensionFeatures.destinations(diceExtensionCatalogItem.id, diceExtensionCatalogItem.destinations)
-        },
-        ...soundAlerts.list().filter((alert) => alert.enabled && !interactiveWorldActionIds.has(alert.id)).map((alert) => ({
+      catalog: () => {
+        const alerts = soundAlerts.list().filter((alert) => alert.enabled && !interactiveWorldActionIds.has(alert.id)).map((alert) => ({
           id: alert.id,
           name: alert.name,
           durationMs: alert.durationMs,
@@ -2449,8 +2554,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           category: alert.interactionCategory || 'other',
           placementMode: alert.placementMode || 'fixed',
           access: {
-            mode: alert.accessMode || 'everyone',
-            allowedViewerIds: alert.accessMode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : alert.allowedViewerIds || [],
+            mode: alert.accessMode === 'viewer-group' ? 'specific-viewers' : alert.accessMode || 'everyone',
+            allowedViewerIds: alert.accessMode === 'assigned-creators'
+              ? chatbot.resolvedInteractionGroupViewerIds()
+              : alert.accessMode === 'viewer-group'
+                ? chatbot.resolvedViewerGroupIds(alert.viewerGroupId || '')
+                : alert.allowedViewerIds || [],
             blockedViewerIds: alert.blockedViewerIds || [],
             hideWhenLocked: alert.hideWhenLocked === true
           },
@@ -2458,8 +2567,75 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           glyph: alert.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'FX',
           kind: extensionCatalogKind(relayOptions.extensionEdition),
           destinations: extensionFeatures.destinations(alert.id, ['mainframe', 'streaming'])
-        }))
-      ],
+        }));
+        const diceStatus = diceOverlay.status('') as { settings?: { enabled?: boolean; durationMs?: number } };
+        const interactionAccess = chatbot.status().interactionAccess;
+        const legacyDiceItems = diceStatus.settings?.enabled !== true ? [] : [...extensionDicePresets, extensionDiceCustom].map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          durationMs: Number(diceStatus.settings?.durationMs) || 5_200,
+          cooldownMs: extensionDiceViewerCooldownMs,
+          viewerCooldownMs: extensionDiceViewerCooldownMs,
+          globalCooldownMs: extensionDiceGlobalCooldownMs,
+          category: 'community' as const,
+          placementMode: 'fixed' as const,
+          access: {
+            mode: interactionAccess.mode === 'assigned-creators' ? 'assigned-creators' as const : 'everyone' as const,
+            allowedViewerIds: interactionAccess.mode === 'assigned-creators' ? chatbot.resolvedInteractionGroupViewerIds() : [],
+            blockedViewerIds: [],
+            hideWhenLocked: false
+          },
+          accent: '#A66BFF',
+          glyph: preset.glyph,
+          kind: 'interaction' as const,
+          destinations: extensionFeatures.destinations(preset.id, ['mainframe'])
+        }));
+        return [
+          ...interactiveWorldCatalog.map((item) => ({
+            ...item,
+            destinations: extensionFeatures.destinations(item.id, item.destinations)
+          })),
+          {
+            ...diceExtensionCatalogItem,
+            destinations: extensionFeatures.destinations(diceExtensionCatalogItem.id, diceExtensionCatalogItem.destinations)
+          },
+          ...alerts,
+          ...legacyDiceItems
+        ];
+      },
+      poll: () => {
+        const poll = chatbot.pollStatus();
+        if (poll.state === 'idle' || !poll.id || !poll.question || !poll.startedAt) return undefined;
+        return {
+          id: poll.id,
+          state: poll.state,
+          question: poll.question,
+          options: poll.options,
+          totalVotes: poll.totalVotes,
+          startedAt: poll.startedAt,
+          endedAt: poll.endedAt,
+          lastVoteAt: poll.lastVoteAt
+        };
+      },
+      counters: () => chatbot.publicCounters(),
+      commands: () => chatbot.publicCommands(),
+      goal: () => twitchExperiences.publicGoal(),
+      nowPlaying: async () => {
+        const status = await chatbot.radioStatus();
+        if (!status) return undefined;
+        return {
+          stationName: status.name,
+          state: status.state,
+          artist: status.nowPlaying?.artist,
+          title: status.nowPlaying?.title,
+          text: status.nowPlaying?.text,
+          album: status.nowPlaying?.album,
+          publicPlayerUrl: status.publicPlayerUrl,
+          checkedAt: status.checkedAt
+        };
+      },
+      schedule: () => chatbot.publicSchedule(),
+      stream: () => chatbot.publicStream(),
       onStatus(status: ExtensionRelayStatus) {
         twitchGateway.setExtensionRelayStatus(status);
       },

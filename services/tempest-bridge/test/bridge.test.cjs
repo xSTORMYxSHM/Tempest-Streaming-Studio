@@ -6,8 +6,7 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const WebSocket = require('ws');
 const { startTempestBridge, TempestTwitchVisualAlertCatalog } = require('../dist');
-const { createBridgeMessage } = require('@tempest/contracts');
-const bridgePackageMetadata = require('../package.json');
+const { createBridgeMessage, TEMPEST_STUDIO_VERSION } = require('@tempest/contracts');
 
 const application = {
   schemaVersion: 1,
@@ -92,7 +91,7 @@ test('persists applications and assets behind authenticated routes', async (cont
 
   const health = await fetch(`${runtime.baseUrl}/health`).then((response) => response.json());
   assert.equal(health.status, 'online');
-  assert.equal(health.productVersion, bridgePackageMetadata.version);
+  assert.equal(health.productVersion, TEMPEST_STUDIO_VERSION);
 
   const unauthorized = await fetch(`${runtime.baseUrl}/v1/applications`);
   assert.equal(unauthorized.status, 401);
@@ -146,6 +145,48 @@ test('enforces assigned-creator access before Extension interactions enter Studi
   assert.equal(moderator.status, 202);
 });
 
+test('starts Tempest Streaming Extension dice on the physical Browser Source and enforces shared cooldowns', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-extension-dice-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const registered = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((response) => response.json());
+  await fetch(`${runtime.baseUrl}/dice-overlay/client-status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })
+  });
+  const event = (id, action, viewerId = 'Uviewer-dice') => ({
+    schemaVersion: 1, id, topic: 'viewer.interaction.requested', occurredAt: new Date().toISOString(), source: 'twitch',
+    channel: { id: '546679431' }, viewer: { id: viewerId, roles: ['viewer'] }, payload: { action }
+  });
+
+  const rollingResponse = fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
+    method: 'POST', headers, body: JSON.stringify({ ...event('extension-dice-custom', 'tempest.dice.custom'), payload: { action: 'tempest.dice.custom', maximum: 37 } })
+  });
+  const commands = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, after: registered.revision })
+  }).then((response) => response.json());
+  const rollRequest = commands.events.find((entry) => entry.type === 'roll-request').payload;
+  assert.equal(rollRequest.expression, '1d37');
+  assert.equal(rollRequest.physicalSides, 100);
+  assert.equal(rollRequest.rollerName, 'Twitch Viewer');
+
+  const accepted = await rollingResponse;
+  assert.equal(accepted.status, 202);
+  assert.deepEqual(await accepted.json(), { accepted: true, expression: '1d37', cooldownMs: 30000, eventId: 'extension-dice-custom' });
+  const coolingDown = await fetch(`${runtime.baseUrl}/v1/integrations/twitch/events`, {
+    method: 'POST', headers, body: JSON.stringify(event('extension-dice-d20', 'tempest.dice.d20'))
+  });
+  assert.equal(coolingDown.status, 429);
+  assert.equal((await coolingDown.json()).code, 'dice_cooldown');
+
+  await fetch(`${runtime.baseUrl}/dice-overlay/result`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rollRequest.id, token: rollRequest.token, values: [37] })
+  });
+  const diceStatus = await fetch(`${runtime.baseUrl}/v1/dice-overlay`, { headers }).then((response) => response.json());
+  assert.equal(diceStatus.latestRoll.expression, '1d37');
+  assert.equal(diceStatus.latestRoll.total, 37);
+});
+
 test('accepts authenticated WebSocket clients and sends a welcome envelope', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-socket-test-'));
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
@@ -197,6 +238,13 @@ test('reports adapter identity, capabilities, and published health on the connec
   assert.equal(body.connections[0].status.recording, true);
   assert.equal(body.connections[0].status.activeLeases, 1);
   assert.deepEqual(body.connections[0].status.canvasProfile, { baseWidth: 3440, baseHeight: 1440, outputWidth: 2580, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 });
+  const runtimeSummary = await fetch(`${runtime.baseUrl}/v1/runtime-summary`, { headers }).then((response) => response.json());
+  assert.equal(runtimeSummary.health.status, 'online');
+  assert.equal(runtimeSummary.connections[0].applicationId, 'com.tempestmainframe.tempest-broadcast');
+  assert.equal(runtimeSummary.dualFormat.state, 'update-required');
+  assert.equal(runtimeSummary.simulcast.state, 'update-required');
+  assert.deepEqual(runtimeSummary.runs, []);
+  assert.equal(runtimeSummary.safety.armed, true);
   const dualFormat = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
   assert.equal(dualFormat.state, 'update-required');
   assert.equal(dualFormat.ready, false);
@@ -384,7 +432,7 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
   assert.equal(blocked.status, 409);
 });
 
-test('owns a free Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
+test('owns the primary Sound Alert catalog, configuration, playback, and emergency stop', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-sound-alert-test-'));
   const visualPath = path.join(dataDirectory, 'hype-pulse.png');
   const audioPath = path.join(dataDirectory, 'hype-pulse.mp3');
@@ -484,6 +532,11 @@ test('owns a free Sound Alert catalog, configuration, playback, and emergency st
   const dedicatedAudioOrigin = overlayMarkup.match(/new URL\(data\.audioUrl,"(http:\/\/127\.0\.0\.1:\d+)"\)/)?.[1];
   assert.ok(dedicatedAudioOrigin, 'the Browser Source must receive its dedicated loopback audio origin');
   assert.equal((overlayMarkup.match(/(?:async )?function playAudio\(/g) || []).length, 1);
+  assert.match(overlayMarkup, /audio exceeds 100 MB fallback limit/);
+  assert.match(overlayMarkup, /response\.body\.getReader\(\)/);
+  assert.doesNotMatch(overlayMarkup, /encoded:await response\.arrayBuffer\(\)/);
+  assert.match(overlayMarkup, /new Blob\(body\.chunks/);
+  assert.match(overlayMarkup, /playWebAudio\(joinAudioBody\(payload\.body\)/);
   assert.equal((overlayMarkup.match(/function speak\(/g) || []).length, 1);
   assert.match(overlayMarkup, /async function playAudio\(data,current\)\{if\(!audioEnabled\|\|orientation==='vertical'/);
   assert.match(overlayMarkup, /id="customStyle"/);

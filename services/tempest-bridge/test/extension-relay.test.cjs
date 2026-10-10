@@ -35,8 +35,19 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   };
   let handled;
   let catalogSync;
+  const catalogMessages = [];
   let resolveCatalogSync;
   const catalogResult = new Promise((resolve) => { resolveCatalogSync = resolve; });
+  let nowPlayingCatalogSync;
+  let resolveNowPlayingCatalogSync;
+  const nowPlayingCatalogResult = new Promise((resolve) => { resolveNowPlayingCatalogSync = resolve; });
+  let resolveCounterBurst;
+  const counterBurstResult = new Promise((resolve) => { resolveCounterBurst = resolve; });
+  let resolvePartialDynamicRefresh;
+  const partialDynamicRefreshResult = new Promise((resolve) => { resolvePartialDynamicRefresh = resolve; });
+  let counterValue = 7;
+  let nowPlayingTitle = 'Track';
+  let scheduleFails = false;
   const result = new Promise((resolve, reject) => {
     webSockets.on('connection', (socket) => {
       socket.send(JSON.stringify({ protocolVersion: 1, type: 'interaction', requestId: randomUUID(), event }));
@@ -45,7 +56,14 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
         if (message.type === 'catalog.sync') {
           catalogSync = message.catalog;
           socket.send(JSON.stringify({ protocolVersion: 1, type: 'catalog.ack', revision: message.revision, companions: message.catalog.companions, extensionEdition: message.catalog.extensionEdition, itemCount: message.catalog.items.length }));
+          catalogMessages.push(message.catalog);
           resolveCatalogSync();
+          if (message.catalog.nowPlaying) {
+            nowPlayingCatalogSync = message.catalog;
+            resolveNowPlayingCatalogSync();
+          }
+          if (message.catalog.counters?.[0]?.value === 10) resolveCounterBurst();
+          if (message.catalog.nowPlaying?.title === 'Next Track') resolvePartialDynamicRefresh(message.catalog);
         }
         if (message.type === 'result') resolve(message);
       });
@@ -55,6 +73,15 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   const relay = new TempestExtensionRelayClient({
     url: `ws://127.0.0.1:${port}/v1/studio`, token, channelId, companions: { schemaVersion: 1, mainframe: true, streaming: true }, extensionEdition: 'free',
     catalog: () => [{ id: 'tempest.storm-pulse', name: 'Storm Pulse', durationMs: 8000, accent: '#54F2EB', glyph: 'SP', kind: 'interaction', destinations: ['mainframe', 'streaming'] }],
+    poll: () => ({ id: 'poll-1234567890123456', state: 'active', question: 'Choose one', options: [{ number: 1, label: 'One', votes: 2, percentage: 100 }, { number: 2, label: 'Two', votes: 0, percentage: 0 }], totalVotes: 2, startedAt: new Date().toISOString() }),
+    counters: () => [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: counterValue }],
+    goal: () => ({ source: 'studio', kind: 'subscriptions', title: 'Road to 50', currentAmount: 31, targetAmount: 50, unit: 'subs', accent: '#A7FF5C' }),
+    nowPlaying: async () => ({ stationName: 'Storm Horizon Radio', state: 'online', artist: 'Artist', title: nowPlayingTitle, publicPlayerUrl: 'https://www.tempestmainframe.com/listen', checkedAt: new Date().toISOString() }),
+    schedule: async () => {
+      if (scheduleFails) throw new Error('Schedule temporarily unavailable');
+      return { title: 'Mainframe Monday', startTime: '2030-01-07T20:00:00.000Z' };
+    },
+    stream: async () => ({ live: true, title: 'Building Tempest', category: 'Software and Game Development', startedAt: '2030-01-01T20:00:00.000Z', viewerCount: 42, checkedAt: new Date().toISOString() }),
     logger: { info() {}, warn() {}, error() {} },
     async handler(value) {
       handled = value;
@@ -70,6 +97,7 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   const acknowledgement = await result;
   await catalogResult;
   for (let attempt = 0; attempt < 20 && relay.status().catalogSync?.state !== 'synced'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  await nowPlayingCatalogResult;
   assert.equal(acknowledgement.status, 202);
   assert.equal(acknowledgement.body.accepted, true);
   assert.deepEqual(handled, event);
@@ -77,6 +105,33 @@ test('connects outbound, validates channel events, and acknowledges EBS interact
   assert.deepEqual(catalogSync.companions, { schemaVersion: 1, mainframe: true, streaming: true });
   assert.deepEqual(catalogSync.items[0].destinations, ['mainframe', 'streaming']);
   assert.equal(catalogSync.items[0].id, 'tempest.storm-pulse');
+  assert.equal(catalogSync.poll.question, 'Choose one');
+  assert.deepEqual(catalogSync.counters, [{ id: 'counter-1234567890123456', command: 'death', label: 'Ship Restarts', value: 7 }]);
+  assert.equal(catalogSync.goal.title, 'Road to 50');
+  assert.equal(nowPlayingCatalogSync.nowPlaying.title, 'Track');
+  assert.equal(nowPlayingCatalogSync.schedule.title, 'Mainframe Monday');
+  assert.equal(nowPlayingCatalogSync.stream.title, 'Building Tempest');
+  assert.equal(nowPlayingCatalogSync.stream.viewerCount, 42);
+  nowPlayingTitle = 'Next Track';
+  scheduleFails = true;
+  await new Promise((resolve) => setTimeout(resolve, 1_050));
+  relay.syncCatalog();
+  const partialDynamicCatalog = await partialDynamicRefreshResult;
+  assert.equal(partialDynamicCatalog.nowPlaying.title, 'Next Track');
+  assert.equal(partialDynamicCatalog.schedule.title, 'Mainframe Monday');
+  assert.equal(partialDynamicCatalog.stream.title, 'Building Tempest');
+  counterValue = 8;
+  relay.syncCatalog();
+  counterValue = 9;
+  relay.syncCatalog();
+  counterValue = 10;
+  relay.syncCatalog();
+  await counterBurstResult;
+  await new Promise((resolve) => setTimeout(resolve, 130));
+  const burstValues = catalogMessages.map((message) => message.counters?.[0]?.value).filter((value) => Number(value) >= 8);
+  assert.equal(burstValues.at(-1), 10);
+  assert.equal(burstValues.includes(9), false, 'bursty intermediate catalog state is coalesced');
+  assert.ok(burstValues.length <= 2, 'catalog bursts produce at most a leading and trailing update');
   assert.equal(relay.status().state, 'connected');
   assert.equal(relay.status().catalogSync.state, 'synced');
   assert.equal(relay.status().catalogSync.edition, 'free');

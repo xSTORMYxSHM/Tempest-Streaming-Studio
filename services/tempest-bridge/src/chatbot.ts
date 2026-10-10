@@ -4,12 +4,24 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
 import type { TempestNormalizedChatEvent, TempestNormalizedTwitchEvent, TempestSoundAlertDefinition } from '@tempest/contracts';
 import { describeTwitchOAuthError, type TwitchCredentialStore, type TwitchTokenSet } from './twitch-integration';
+import { boundedFetch } from './bounded-fetch';
+import { readBoundedJsonResponse } from './bounded-response';
+
+const maximumProviderResponseBytes = 2 * 1024 * 1024;
+
+async function readProviderJson<T>(response: Response): Promise<T> {
+  return readBoundedJsonResponse<T>(response, maximumProviderResponseBytes);
+}
+
+async function readOptionalProviderJson<T extends object>(response: Response): Promise<Partial<T>> {
+  return readProviderJson<T>(response).catch(() => ({}));
+}
 
 export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as const;
 export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
-export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'twitch-clip', 'local-weather', 'seattle-weather', 'radio-now-playing', 'counter'] as const;
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'twitch-clip', 'local-weather', 'seattle-weather', 'radio-now-playing', 'dice-roll', 'counter'] as const;
 export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
 
 export interface ChatbotCommand {
@@ -101,6 +113,12 @@ export interface ChatbotFirstChatShoutoutConfiguration {
   channels: string[];
 }
 
+export interface ChatbotViewerGroup {
+  id: string;
+  name: string;
+  logins: string[];
+}
+
 export interface ChatbotInteractionAccessConfiguration {
   mode: 'everyone' | 'assigned-creators';
   allowBroadcasterAndModerators: boolean;
@@ -143,19 +161,27 @@ export interface ChatbotNumericPollStatus {
   lastVoteAt?: string;
 }
 
+export interface ChatbotNumericPollVoteResult {
+  accepted: boolean;
+  duplicate: boolean;
+  code: 'accepted' | 'poll-inactive' | 'stale-poll' | 'invalid-option' | 'identity-required' | 'already-voted';
+  optionNumber?: number;
+  poll: ChatbotNumericPollStatus;
+}
+
 interface ChatbotNumericPollRuntime {
   id: string;
   state: 'active' | 'closed';
   question: string;
   options: Array<{ number: number; label: string; votes: number }>;
-  voters: Set<string>;
+  voters: Map<string, number>;
   startedAt: string;
   endedAt?: string;
   lastVoteAt?: string;
 }
 
 interface ChatbotConfiguration {
-  schemaVersion: 7;
+  schemaVersion: 8;
   displayName: string;
   prefix: string;
   commands: ChatbotCommand[];
@@ -163,6 +189,8 @@ interface ChatbotConfiguration {
   firstChatShoutouts: ChatbotFirstChatShoutoutConfiguration;
   interactionAccess: ChatbotInteractionAccessConfiguration;
   assignedCreatorIds: Record<string, string>;
+  viewerGroups: ChatbotViewerGroup[];
+  viewerGroupIds: Record<string, Record<string, string>>;
   autoMod: ChatbotAutoModConfiguration;
   autoMessages: ChatbotAutoMessageConfiguration;
   weatherProvider?: ChatbotWeatherProvider;
@@ -228,6 +256,7 @@ export interface ChatbotStatus {
     assignedCreators: number;
     resolvedCreators: number;
   };
+  viewerGroups: Array<ChatbotViewerGroup & { resolvedViewers: number }>;
   autoMod: ChatbotAutoModConfiguration & {
     deleteAuthorized: boolean;
     timeoutAuthorized: boolean;
@@ -268,6 +297,48 @@ export interface ChatbotDispatch {
   simulated: boolean;
 }
 
+export interface ChatbotDiceRollRequest {
+  expression: string;
+  reason: string;
+  rollerName: string;
+  simulated: boolean;
+}
+
+export interface ChatbotDiceRollResult {
+  expression: string;
+  total: number;
+  reason?: string;
+}
+
+export interface ChatbotPublicCounter {
+  id: string;
+  command: string;
+  trigger: string;
+  label: string;
+  value: number;
+}
+
+export interface ChatbotPublicCommand {
+  trigger: string;
+  aliases: string[];
+  permission: ChatbotPermission;
+  allowSharedChat: boolean;
+}
+
+export interface ChatbotPublicSchedule {
+  title?: string;
+  startTime: string;
+}
+
+export interface ChatbotPublicStream {
+  live: boolean;
+  title: string;
+  category?: string;
+  startedAt?: string;
+  viewerCount?: number;
+  checkedAt: string;
+}
+
 export interface ChatbotInteractionAccessDecision {
   allowed: boolean;
   code: 'allowed' | 'identity-required' | 'not-assigned' | 'not-allowed' | 'blocked' | 'staff-only' | 'verification-unavailable';
@@ -278,11 +349,15 @@ export interface TwitchChatbotOptions {
   dataDirectory: string;
   credentialStore?: TwitchCredentialStore;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   onEvent?: (event: TempestNormalizedChatEvent) => void | Promise<void>;
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
   createTwitchClip?: (input: { title?: string; duration: number }) => Promise<{ id: string; url: string; editUrl: string }>;
+  rollDice?: (request: ChatbotDiceRollRequest) => ChatbotDiceRollResult | Promise<ChatbotDiceRollResult>;
   sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
+  onPollChanged?: (poll: ChatbotNumericPollStatus) => void;
+  onCatalogChanged?: () => void;
 }
 
 const commandNamePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
@@ -410,6 +485,28 @@ function validateFirstChatShoutouts(value: unknown, fallback: ChatbotFirstChatSh
   return { enabled: typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled, channels };
 }
 
+function validateViewerGroups(value: unknown, fallback: ChatbotViewerGroup[] = []): ChatbotViewerGroup[] {
+  if (value === undefined) return fallback.map((group) => ({ ...group, logins: [...group.logins] }));
+  if (!Array.isArray(value)) throw new Error('Viewer Groups must be a list.');
+  if (value.length > 20) throw new Error('Viewer Groups supports up to 20 reusable groups.');
+  const groups = value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Viewer Group ${index + 1} is invalid.`);
+    const source = entry as { id?: unknown; name?: unknown; logins?: unknown };
+    const id = String(source.id || '').trim().toLowerCase();
+    const name = String(source.name || '').trim();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || id.length > 48) throw new Error(`Viewer Group ${index + 1} needs a lowercase ID of 48 characters or fewer.`);
+    if (!name || name.length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error(`Viewer Group ${index + 1} needs a safe name of 60 characters or fewer.`);
+    const rawLogins = Array.isArray(source.logins) ? source.logins : typeof source.logins === 'string' ? source.logins.split(/[\s,]+/) : [];
+    const logins = [...new Set(rawLogins.map((login) => String(login || '').trim().replace(/^@+/, '').toLowerCase()).filter(Boolean))];
+    if (!logins.length || logins.length > 50) throw new Error(`${name} must contain between 1 and 50 Twitch logins.`);
+    const invalid = logins.find((login) => !/^[a-z0-9_]{1,25}$/.test(login));
+    if (invalid) throw new Error(`@${invalid} is not a valid Twitch login.`);
+    return { id, name, logins };
+  });
+  if (new Set(groups.map((group) => group.id)).size !== groups.length) throw new Error('Viewer Group IDs must be unique.');
+  return groups;
+}
+
 function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionAccessConfiguration = { mode: 'everyone', allowBroadcasterAndModerators: true }): ChatbotInteractionAccessConfiguration {
   if (value === undefined) return { ...fallback };
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Interaction access settings are invalid.');
@@ -424,13 +521,15 @@ function validateInteractionAccess(value: unknown, fallback: ChatbotInteractionA
 function defaultConfiguration(): ChatbotConfiguration {
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     displayName: '',
     prefix: '!',
     raidAutomation: validateRaidAutomation(undefined),
     firstChatShoutouts: validateFirstChatShoutouts(undefined),
     interactionAccess: validateInteractionAccess(undefined),
     assignedCreatorIds: {},
+    viewerGroups: [],
+    viewerGroupIds: {},
     autoMod: validateAutoMod(undefined),
     autoMessages: validateAutoMessages(undefined),
     commands: [{
@@ -528,6 +627,20 @@ function defaultConfiguration(): ChatbotConfiguration {
       handler: 'stream-schedule',
       viewerCooldownMs: 30_000,
       globalCooldownMs: 15_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'roll',
+      name: 'roll',
+      aliases: ['dice'],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: true,
+      permission: 'everyone',
+      response: '',
+      handler: 'dice-roll',
+      viewerCooldownMs: 30_000,
+      globalCooldownMs: 5_000,
       createdAt: timestamp,
       updatedAt: timestamp
     }, {
@@ -693,6 +806,7 @@ export class TwitchChatbot {
   private lastGlobalUse = new Map<string, number>();
   private lastViewerUse = new Map<string, number>();
   private seenEventIds = new Map<string, number>();
+  private lastRuntimeStatePrunedAt = 0;
   private raidShoutoutQueue: Array<{ eventId: string; targetId: string; targetName: string }> = [];
   private raidShoutoutTimer?: NodeJS.Timeout;
   private raidShoutoutSending = false;
@@ -717,10 +831,11 @@ export class TwitchChatbot {
   private weatherCache?: { fetchedAt: number; temperature: number; temperatureUnit: string; shortForecast: string; windSpeed?: string; windDirection?: string; humidity?: number; precipitation?: number };
   private radioNowPlayingCache?: { fetchedAt: number; online: boolean; stationName: string; artist?: string; title?: string; text?: string; album?: string };
   private weatherForecastUrl?: string;
+  private inFlightProviderRequests = new Map<string, Promise<unknown>>();
   private readonly request: typeof fetch;
 
   constructor(private readonly options: TwitchChatbotOptions) {
-    this.request = options.fetchImplementation || fetch;
+    this.request = boundedFetch(options.fetchImplementation, options.requestTimeoutMs);
   }
 
   get configurationPath(): string {
@@ -753,7 +868,7 @@ export class TwitchChatbot {
           installedDefaults = true;
         }
       }
-      const legacyConfiguration = parsed.schemaVersion !== 7;
+      const legacyConfiguration = parsed.schemaVersion !== 8;
       const legacyProviderConfiguration = !parsed.schemaVersion || parsed.schemaVersion < 2;
       const weatherProvider = validateWeatherProvider(parsed.weatherProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'local-weather') ? legacySeattleProvider : undefined));
       let nowPlayingProvider = validateNowPlayingProvider(parsed.nowPlayingProvider ?? (legacyProviderConfiguration && commands.some((command) => command.handler === 'radio-now-playing') ? defaultStormHorizonProvider : undefined));
@@ -768,9 +883,22 @@ export class TwitchChatbot {
       const assignedCreatorIds = Object.fromEntries(Object.entries(parsed.assignedCreatorIds || {})
         .filter(([login, userId]) => firstChatShoutouts.channels.includes(login) && /^\d{1,30}$/.test(String(userId)))
         .map(([login, userId]) => [login, String(userId)]));
+      const viewerGroups = validateViewerGroups(parsed.viewerGroups);
+      const persistedViewerGroupIds = parsed.viewerGroupIds && typeof parsed.viewerGroupIds === 'object' && !Array.isArray(parsed.viewerGroupIds)
+        ? parsed.viewerGroupIds as Record<string, Record<string, unknown>>
+        : {};
+      const viewerGroupIds = Object.fromEntries(viewerGroups.map((group) => {
+        const persisted = persistedViewerGroupIds[group.id];
+        const ids = persisted && typeof persisted === 'object' && !Array.isArray(persisted)
+          ? Object.fromEntries(Object.entries(persisted)
+            .filter(([login, userId]) => group.logins.includes(login) && /^\d{1,30}$/.test(String(userId)))
+            .map(([login, userId]) => [login, String(userId)]))
+          : {};
+        return [group.id, ids];
+      }));
       const autoMod = validateAutoMod(parsed.autoMod);
       const autoMessages = validateAutoMessages(parsed.autoMessages);
-      this.configuration = { schemaVersion: 7, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, autoMod, autoMessages, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
+      this.configuration = { schemaVersion: 8, displayName, prefix, commands, raidAutomation, firstChatShoutouts, interactionAccess, assignedCreatorIds, viewerGroups, viewerGroupIds, autoMod, autoMessages, weatherProvider, nowPlayingProvider, updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() };
       if (installedDefaults || legacyConfiguration || migratedStormHorizonPlayer) await this.persist();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Could not read Chatbot settings: ${(error as Error).message}`);
@@ -857,6 +985,11 @@ export class TwitchChatbot {
         assignedCreators: this.configuration.firstChatShoutouts.channels.length,
         resolvedCreators: Object.keys(this.configuration.assignedCreatorIds).length
       },
+      viewerGroups: this.configuration.viewerGroups.map((group) => ({
+        ...group,
+        logins: [...group.logins],
+        resolvedViewers: Object.keys(this.configuration.viewerGroupIds[group.id] || {}).length
+      })),
       autoMod: {
         ...this.configuration.autoMod,
         deleteAuthorized: Boolean(this.tokens?.scopes.includes('moderator:manage:chat_messages')),
@@ -876,7 +1009,7 @@ export class TwitchChatbot {
           : undefined,
         lastSentAt: this.autoMessageLastSentAt
       },
-      poll: this.numericPollStatus(),
+      poll: this.pollStatus(),
       providers: {
         weather: this.configuration.weatherProvider ? { ...this.configuration.weatherProvider } : undefined,
         nowPlaying: this.configuration.nowPlayingProvider ? { ...this.configuration.nowPlayingProvider } : undefined,
@@ -887,7 +1020,7 @@ export class TwitchChatbot {
 
   async configure(input: unknown): Promise<ChatbotStatus> {
     if (!input || typeof input !== 'object') throw new Error('Chatbot configuration must be an object.');
-    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; autoMod?: unknown; autoMessages?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
+    const source = input as { prefix?: unknown; displayName?: unknown; raidAutomation?: unknown; firstChatShoutouts?: unknown; interactionAccess?: unknown; viewerGroups?: unknown; autoMod?: unknown; autoMessages?: unknown; weatherProvider?: unknown; nowPlayingProvider?: unknown };
     const prefix = String(source.prefix ?? this.configuration.prefix);
     if (prefix.length !== 1 || /\s/.test(prefix)) throw new Error('Chatbot prefix must be one non-space character.');
     const nextFirstChatShoutouts = Object.prototype.hasOwnProperty.call(source, 'firstChatShoutouts')
@@ -913,6 +1046,14 @@ export class TwitchChatbot {
     if (Object.prototype.hasOwnProperty.call(source, 'interactionAccess')) {
       this.configuration.interactionAccess = nextInteractionAccess;
     }
+    if (Object.prototype.hasOwnProperty.call(source, 'viewerGroups')) {
+      this.configuration.viewerGroups = validateViewerGroups(source.viewerGroups, this.configuration.viewerGroups);
+      this.configuration.viewerGroupIds = Object.fromEntries(this.configuration.viewerGroups.map((group) => {
+        const existing = this.configuration.viewerGroupIds[group.id] || {};
+        return [group.id, Object.fromEntries(Object.entries(existing).filter(([login]) => group.logins.includes(login)))];
+      }));
+      await this.refreshViewerGroupIds().catch(() => undefined);
+    }
     if (this.configuration.interactionAccess.mode === 'assigned-creators') {
       await this.refreshAssignedCreatorIds().catch(() => undefined);
     }
@@ -934,6 +1075,7 @@ export class TwitchChatbot {
       this.radioNowPlayingCache = undefined;
     }
     await this.persist();
+    this.options.onCatalogChanged?.();
     return this.status();
   }
 
@@ -945,6 +1087,7 @@ export class TwitchChatbot {
     if (conflict) throw new Error(`Command name or alias conflicts with !${conflict.name}.`);
     this.configuration.commands = [command, ...this.configuration.commands.filter((entry) => entry.id !== command.id)];
     await this.persist();
+    this.options.onCatalogChanged?.();
     return copyCommand(command);
   }
 
@@ -953,6 +1096,7 @@ export class TwitchChatbot {
     this.configuration.commands = this.configuration.commands.filter((command) => command.id !== id);
     if (this.configuration.commands.length === before) return false;
     await this.persist();
+    this.options.onCatalogChanged?.();
     return true;
   }
 
@@ -961,7 +1105,7 @@ export class TwitchChatbot {
     if (!this.options.credentialStore?.available) throw new Error('Secure operating-system credential storage is unavailable.');
     const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' ') });
     const response = await this.request('https://id.twitch.tv/oauth2/device', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string };
+    const result = await readProviderJson<{ device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number; message?: string }>(response);
     if (!response.ok || !result.device_code || !result.user_code || !result.verification_uri) throw new Error(describeTwitchOAuthError(result.message, `Chatbot authorization failed with ${response.status}.`));
     const intervalSeconds = Math.max(1, Number(result.interval) || 5);
     this.pendingDevice = { deviceCode: result.device_code, userCode: result.user_code, verificationUri: result.verification_uri, expiresAt: Date.now() + Math.max(60, Number(result.expires_in) || 1800) * 1000, intervalSeconds, nextPollAt: 0 };
@@ -984,7 +1128,7 @@ export class TwitchChatbot {
     pending.nextPollAt = Date.now() + pending.intervalSeconds * 1000;
     const body = new URLSearchParams({ client_id: this.clientId, scopes: chatbotScopes.join(' '), device_code: pending.deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response);
     if (!response.ok) {
       if (result.message === 'authorization_pending') return { pending: true, status: this.status(), retryAfterSeconds: pending.intervalSeconds };
       this.lastError = describeTwitchOAuthError(result.message, `Chatbot token exchange failed with ${response.status}.`);
@@ -1010,7 +1154,7 @@ export class TwitchChatbot {
       await this.refreshAuthorization();
       response = await this.request('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: `OAuth ${this.tokens.accessToken}` } });
     }
-    const result = await response.json() as { client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string };
+    const result = await readProviderJson<{ client_id?: string; login?: string; user_id?: string; scopes?: string[]; expires_in?: number; message?: string }>(response);
     if (!response.ok || !result.client_id || !result.login || !result.user_id) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token validation failed with ${response.status}.`));
     if (result.client_id !== this.clientId) throw new Error('Stored chatbot token belongs to a different Twitch client ID. Reconnect the bot account.');
     const scopes = Array.isArray(result.scopes) ? result.scopes : this.tokens.scopes;
@@ -1045,8 +1189,15 @@ export class TwitchChatbot {
   async connectChannel(channel: ChatbotChannelAuthorization | null): Promise<void> {
     const changed = this.channel?.channelId !== channel?.channelId || this.channel?.clientId !== channel?.clientId;
     this.channel = channel;
-    if (changed) await this.stopConnection();
+    if (changed) {
+      this.channelInfoCache = undefined;
+      this.streamCache = undefined;
+      this.scheduleCache = undefined;
+      this.inFlightProviderRequests.clear();
+      await this.stopConnection();
+    }
     await this.ensureConnection();
+    await this.refreshViewerGroupIds().catch(() => undefined);
   }
 
   async interactionGroupViewerIds(): Promise<string[]> {
@@ -1058,6 +1209,59 @@ export class TwitchChatbot {
     return [...new Set(Object.values(this.configuration.assignedCreatorIds).filter((id) => /^\d{1,30}$/.test(id)))];
   }
 
+  resolvedViewerGroupIds(groupId: string): string[] {
+    return [...new Set(Object.values(this.configuration.viewerGroupIds[groupId] || {}).filter((id) => /^\d{1,30}$/.test(id)))];
+  }
+
+  publicCounters(): ChatbotPublicCounter[] {
+    return this.configuration.commands
+      .filter((command) => command.enabled && command.handler === 'counter')
+      .slice(0, 12)
+      .map((command) => ({ id: command.id, command: command.name, trigger: `${this.configuration.prefix}${command.name}`, label: command.counterLabel || command.name, value: Number(command.counterValue || 0) }));
+  }
+
+  publicCommands(): ChatbotPublicCommand[] {
+    return this.configuration.commands
+      .filter((command) => command.enabled)
+      .slice(0, 40)
+      .map((command) => ({
+        trigger: `${this.configuration.prefix}${command.name}`,
+        aliases: command.aliases.slice(0, 5).map((alias) => `${this.configuration.prefix}${alias}`),
+        permission: command.permission,
+        allowSharedChat: command.allowSharedChat
+      }));
+  }
+
+  async publicSchedule(): Promise<ChatbotPublicSchedule | undefined> {
+    if (!this.channel || !this.tokens || !this.clientId) return undefined;
+    try {
+      const schedule = await this.loadStreamSchedule();
+      if (!schedule.startTime || !Number.isFinite(Date.parse(schedule.startTime))) return undefined;
+      return { ...(schedule.title ? { title: schedule.title } : {}), startTime: new Date(schedule.startTime).toISOString() };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async publicStream(): Promise<ChatbotPublicStream | undefined> {
+    if (!this.channel || !this.tokens || !this.clientId) return undefined;
+    try {
+      const [info, stream] = await Promise.all([this.loadChannelInfo(), this.loadStreamStatus()]);
+      const startedAt = stream.startedAt && Number.isFinite(Date.parse(stream.startedAt)) ? new Date(stream.startedAt).toISOString() : undefined;
+      const viewerCount = Number(stream.viewerCount);
+      return {
+        live: Boolean(startedAt),
+        title: info.title || `${this.channel.channelLogin}'s stream`,
+        ...(info.gameName ? { category: info.gameName } : {}),
+        ...(startedAt ? { startedAt } : {}),
+        ...(Number.isSafeInteger(viewerCount) && viewerCount >= 0 ? { viewerCount } : {}),
+        checkedAt: new Date().toISOString()
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   async adjustCounter(commandId: string, delta: number, source = 'viewer interaction'): Promise<{ commandId: string; label: string; value: number; delta: number }> {
     const command = this.configuration.commands.find((entry) => entry.id === commandId && entry.handler === 'counter');
     if (!command) throw new Error('The selected counter command is not available.');
@@ -1067,11 +1271,12 @@ export class TwitchChatbot {
     command.counterValue = value;
     command.updatedAt = new Date().toISOString();
     await this.persist();
+    this.options.onCatalogChanged?.();
     this.record({ command: command.name, state: 'accepted', message: `${command.counterLabel || command.name} adjusted by ${delta} from ${source}; new value ${value}.` });
     return { commandId: command.id, label: command.counterLabel || command.name, value, delta };
   }
 
-  async authorizeInteraction(event: TempestNormalizedTwitchEvent, alert?: Pick<TempestSoundAlertDefinition, 'accessMode' | 'allowedViewerIds' | 'blockedViewerIds'>): Promise<ChatbotInteractionAccessDecision> {
+  async authorizeInteraction(event: TempestNormalizedTwitchEvent, alert?: Pick<TempestSoundAlertDefinition, 'accessMode' | 'viewerGroupId' | 'allowedViewerIds' | 'blockedViewerIds'>): Promise<ChatbotInteractionAccessDecision> {
     const settings = this.configuration.interactionAccess;
     const roles = new Set(event.viewer?.roles || []);
     const viewerId = String(event.viewer?.id || '');
@@ -1096,6 +1301,15 @@ export class TwitchChatbot {
       return alert?.allowedViewerIds?.includes(viewerId)
         ? { allowed: true, code: 'allowed' }
         : { allowed: false, code: 'not-allowed', reason: 'This interaction is locked to selected viewers.' };
+    }
+    if (mode === 'viewer-group') {
+      const group = this.configuration.viewerGroups.find((entry) => entry.id === alert?.viewerGroupId);
+      if (!group) return { allowed: false, code: 'not-allowed', reason: 'This interaction is assigned to a viewer group that is no longer available.' };
+      try { await this.refreshViewerGroupIds(group.id); }
+      catch (error) { return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify ${group.name}: ${(error as Error).message}` }; }
+      return this.resolvedViewerGroupIds(group.id).includes(viewerId)
+        ? { allowed: true, code: 'allowed' }
+        : { allowed: false, code: 'not-allowed', reason: `This interaction is limited to ${group.name}.` };
     }
     try { await this.refreshAssignedCreatorIds(); }
     catch (error) { return { allowed: false, code: 'verification-unavailable', reason: `Studio could not verify the assigned-creator group: ${(error as Error).message}` }; }
@@ -1130,9 +1344,10 @@ export class TwitchChatbot {
     this.numericPoll = {
       id: randomUUID(), state: 'active', question,
       options: options.map((label, index) => ({ number: index + 1, label, votes: 0 })),
-      voters: new Set(), startedAt: new Date().toISOString()
+      voters: new Map(), startedAt: new Date().toISOString()
     };
     this.record({ state: 'accepted', message: `Numeric chat poll started: ${question}` });
+    this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
@@ -1141,6 +1356,7 @@ export class TwitchChatbot {
     this.numericPoll.state = 'closed';
     this.numericPoll.endedAt = new Date().toISOString();
     this.record({ state: 'accepted', message: `Chat poll ended with ${this.numericPoll.voters.size} vote${this.numericPoll.voters.size === 1 ? '' : 's'}.` });
+    this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
@@ -1148,13 +1364,13 @@ export class TwitchChatbot {
     const hadPoll = Boolean(this.numericPoll);
     this.numericPoll = undefined;
     if (hadPoll) this.record({ state: 'accepted', message: 'Chat poll cleared.' });
+    if (hadPoll) this.options.onPollChanged?.(this.pollStatus());
     return this.status();
   }
 
   async processChatEvent(event: TempestNormalizedChatEvent, simulated = false, bypassCooldown = false): Promise<{ matched: boolean; accepted: boolean; command?: ChatbotCommand; response?: string; reason?: string }> {
     if (!simulated) {
-      const cutoff = Date.now() - 10 * 60 * 1000;
-      for (const [id, seenAt] of this.seenEventIds) if (seenAt < cutoff) this.seenEventIds.delete(id);
+      this.pruneRuntimeState();
       if (this.seenEventIds.has(event.id)) {
         this.record({ state: 'ignored', message: `Duplicate chat event ${event.id} ignored.` });
         return { matched: false, accepted: false, reason: 'Duplicate EventSub delivery.' };
@@ -1197,7 +1413,13 @@ export class TwitchChatbot {
       this.autoMessageMessagesSinceLast += 1;
       this.autoMessageActivePlatforms.add(event.source === 'kick' ? 'kick' : 'twitch');
       await this.maybeSendAutoMessage();
-      this.recordNumericPollVote(event);
+      const pollVote = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
+      if (pollVote) this.recordNumericPollVote({
+        pollId: this.numericPoll?.id,
+        optionNumber: Number(pollVote[1]),
+        voterId: String(event.viewer?.id || event.viewer?.login || event.viewer?.displayName || ''),
+        source: event.source
+      });
     }
     const text = String(event.payload.text || '').trim();
     if (!text.startsWith(this.configuration.prefix)) return { matched: false, accepted: false };
@@ -1227,6 +1449,10 @@ export class TwitchChatbot {
     if (!simulated) this.lastGlobalUse.set(command.id, now);
     let responseTemplate: string;
     let counterValue: number | undefined;
+    let diceExpression = args[0] || '1d20';
+    let diceTotal = '';
+    let diceReason = args.slice(1).join(' ').trim().slice(0, 160);
+    let handlerError: string | undefined;
     if (command.handler === 'counter') {
       counterValue = Number(command.counterValue || 0) + 1;
       responseTemplate = command.response || '{counterLabel}: {counter}';
@@ -1234,6 +1460,25 @@ export class TwitchChatbot {
         command.counterValue = counterValue;
         command.updatedAt = new Date().toISOString();
         await this.persist();
+        this.options.onCatalogChanged?.();
+      }
+    } else if (command.handler === 'dice-roll') {
+      if (simulated) {
+        responseTemplate = command.response || '{user} would roll {dice} in the 3D Dice Browser Source{reason}.';
+      } else if (!this.options.rollDice) {
+        handlerError = '3D Dice is not connected to the chatbot.';
+        responseTemplate = `3D dice could not roll for {user}: ${handlerError}`;
+      } else {
+        try {
+          const roll = await this.options.rollDice({ expression: diceExpression, reason: diceReason, rollerName: viewerName, simulated: false });
+          diceExpression = roll.expression;
+          diceTotal = String(roll.total);
+          diceReason = String(roll.reason ?? diceReason).trim().slice(0, 160);
+          responseTemplate = command.response || '{user} rolled {dice}: {roll}{reason}';
+        } catch (error) {
+          handlerError = String((error as Error).message || 'The 3D Dice Browser Source could not finish the roll.').replace(/[\r\n\0]+/g, ' ').slice(0, 240);
+          responseTemplate = `3D dice could not roll for {user}: ${handlerError}`;
+        }
       }
     } else {
       responseTemplate = await this.resolveCommandResponse(command, event, args, simulated);
@@ -1243,10 +1488,13 @@ export class TwitchChatbot {
       .replaceAll('{bot}', this.status().botName)
       .replaceAll('{command}', `${this.configuration.prefix}${command.name}`)
       .replaceAll('{args}', args.join(' '))
+      .replaceAll('{dice}', diceExpression)
+      .replaceAll('{roll}', diceTotal)
+      .replaceAll('{reason}', diceReason ? ` · ${diceReason}` : '')
       .replaceAll('{counterLabel}', command.counterLabel || command.name)
       .replaceAll('{counter}', String(counterValue ?? command.counterValue ?? 0));
     try {
-      await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
+      if (!handlerError) await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
       if (response && !simulated) {
         const replyId = command.replyToViewer ? String(event.payload.messageId || '') : undefined;
         if (event.source === 'kick') {
@@ -1254,6 +1502,10 @@ export class TwitchChatbot {
           await this.options.sendPlatformMessage('kick', response, replyId);
         }
         else await this.sendMessage(response, replyId);
+      }
+      if (handlerError) {
+        this.record({ command: command.name, viewerName, ...activityContext, state: 'error', message: handlerError });
+        return { matched: true, accepted: false, command: copyCommand(command), response, reason: handlerError };
       }
       this.commandsTriggered += simulated ? 0 : 1;
       this.record({ command: command.name, viewerName, ...activityContext, state: 'accepted', message: simulated ? `Simulated !${command.name}.` : `Accepted !${command.name} from ${viewerName}.` });
@@ -1425,6 +1677,23 @@ export class TwitchChatbot {
     await this.stopConnection();
   }
 
+  private pruneRuntimeState(now = Date.now()): void {
+    const maximumEntries = 50_000;
+    if (now - this.lastRuntimeStatePrunedAt < 60_000 && this.seenEventIds.size <= maximumEntries && this.lastViewerUse.size <= maximumEntries && this.lastShoutoutByTarget.size <= maximumEntries) return;
+    const eventCutoff = now - 10 * 60_000;
+    const longLivedCutoff = now - 86_400_000;
+    for (const [id, seenAt] of this.seenEventIds) if (seenAt < eventCutoff) this.seenEventIds.delete(id);
+    for (const [key, usedAt] of this.lastViewerUse) if (usedAt < longLivedCutoff) this.lastViewerUse.delete(key);
+    for (const [targetId, usedAt] of this.lastShoutoutByTarget) if (usedAt < longLivedCutoff) this.lastShoutoutByTarget.delete(targetId);
+    const trim = (values: Map<string, number>) => {
+      while (values.size > maximumEntries) values.delete(values.keys().next().value as string);
+    };
+    trim(this.seenEventIds);
+    trim(this.lastViewerUse);
+    trim(this.lastShoutoutByTarget);
+    this.lastRuntimeStatePrunedAt = now;
+  }
+
   private block(command: ChatbotCommand, viewerName: string, reason: string, activityContext: Pick<ChatbotActivity, 'sharedChat' | 'sourceChannelLogin' | 'platform'> = {}) {
     this.record({ command: command.name, viewerName, ...activityContext, state: 'blocked', message: `${viewerName}: ${reason}` });
     return { matched: true, accepted: false, command: copyCommand(command), reason };
@@ -1493,14 +1762,14 @@ export class TwitchChatbot {
           body: JSON.stringify({ data: { user_id: viewerId, duration: settings.timeoutSeconds, reason: `Tempest AutoMod: ${violation.reason}` } })
         });
         if (response.status !== 200) {
-          const result = await response.json().catch(() => ({})) as { message?: string };
+          const result = await readOptionalProviderJson<{ message?: string }>(response);
           throw new Error(result.message || `Twitch timeout failed with ${response.status}.`);
         }
       } else {
         const query = new URLSearchParams({ broadcaster_id: this.channel.channelId, moderator_id: this.identity.userId, message_id: messageId });
         const response = await this.request(`https://api.twitch.tv/helix/moderation/chat?${query}`, { method: 'DELETE', headers: this.twitchHeaders() });
         if (response.status !== 204) {
-          const result = await response.json().catch(() => ({})) as { message?: string };
+          const result = await readOptionalProviderJson<{ message?: string }>(response);
           throw new Error(result.message || `Twitch message deletion failed with ${response.status}.`);
         }
       }
@@ -1523,7 +1792,7 @@ export class TwitchChatbot {
     this.activity = this.activity.slice(0, 100);
   }
 
-  private numericPollStatus(): ChatbotNumericPollStatus {
+  pollStatus(): ChatbotNumericPollStatus {
     const poll = this.numericPoll;
     if (!poll) return { state: 'idle', options: [], totalVotes: 0 };
     const totalVotes = poll.voters.size;
@@ -1534,20 +1803,23 @@ export class TwitchChatbot {
     };
   }
 
-  private recordNumericPollVote(event: TempestNormalizedChatEvent): void {
+  recordNumericPollVote(input: { pollId?: string; optionNumber: number; voterId: string; source: 'twitch' | 'kick' }): ChatbotNumericPollVoteResult {
     const poll = this.numericPoll;
-    if (!poll || poll.state !== 'active') return;
-    const match = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
-    if (!match) return;
-    const option = poll.options.find((entry) => entry.number === Number(match[1]));
-    if (!option) return;
-    const identity = String(event.viewer?.id || event.viewer?.login || event.viewer?.displayName || '').trim().toLocaleLowerCase();
-    if (!identity) return;
-    const voterKey = `${event.source}:${identity}`;
-    if (poll.voters.has(voterKey)) return;
-    poll.voters.add(voterKey);
+    if (!poll || poll.state !== 'active') return { accepted: false, duplicate: false, code: 'poll-inactive', poll: this.pollStatus() };
+    if (input.pollId && input.pollId !== poll.id) return { accepted: false, duplicate: false, code: 'stale-poll', poll: this.pollStatus() };
+    const option = poll.options.find((entry) => entry.number === input.optionNumber);
+    if (!option) return { accepted: false, duplicate: false, code: 'invalid-option', poll: this.pollStatus() };
+    const identity = String(input.voterId || '').trim().toLocaleLowerCase();
+    if (!identity) return { accepted: false, duplicate: false, code: 'identity-required', poll: this.pollStatus() };
+    const voterKey = `${input.source}:${identity}`;
+    const existingVote = poll.voters.get(voterKey);
+    if (existingVote !== undefined) return { accepted: false, duplicate: true, code: 'already-voted', optionNumber: existingVote, poll: this.pollStatus() };
+    poll.voters.set(voterKey, option.number);
     option.votes += 1;
     poll.lastVoteAt = new Date().toISOString();
+    const status = this.pollStatus();
+    this.options.onPollChanged?.(status);
+    return { accepted: true, duplicate: false, code: 'accepted', optionNumber: option.number, poll: status };
   }
 
   private resetAutoMessageWindow(): void {
@@ -1625,7 +1897,7 @@ export class TwitchChatbot {
       headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
       body: JSON.stringify({ broadcaster_id: this.channel.channelId, sender_id: this.identity.userId, message: message.slice(0, 500), ...(replyParentMessageId ? { reply_parent_message_id: replyParentMessageId } : {}) })
     });
-    const result = await response.json().catch(() => ({})) as { message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> };
+    const result = await readOptionalProviderJson<{ message?: string; data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }> }>(response);
     if (!response.ok || result.data?.[0]?.is_sent === false) throw new Error(result.data?.[0]?.drop_reason?.message || result.message || `Twitch chat send failed with ${response.status}.`);
   }
 
@@ -1682,7 +1954,7 @@ export class TwitchChatbot {
       const query = new URLSearchParams({ from_broadcaster_id: this.channel.channelId, to_broadcaster_id: entry.targetId, moderator_id: this.identity.userId });
       const response = await this.request(`https://api.twitch.tv/helix/chat/shoutouts?${query}`, { method: 'POST', headers: this.twitchHeaders() });
       if (response.status !== 204) {
-        const result = await response.json().catch(() => ({})) as { message?: string };
+        const result = await readOptionalProviderJson<{ message?: string }>(response);
         throw new Error(result.message || `Twitch shoutout failed with ${response.status}.`);
       }
       const now = Date.now();
@@ -1783,6 +2055,49 @@ export class TwitchChatbot {
     return { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId };
   }
 
+  private coalesceProviderRequest<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const existing = this.inFlightProviderRequests.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const pending = operation().finally(() => {
+      if (this.inFlightProviderRequests.get(key) === pending) this.inFlightProviderRequests.delete(key);
+    });
+    this.inFlightProviderRequests.set(key, pending);
+    return pending;
+  }
+
+  private async refreshViewerGroupIds(groupId?: string): Promise<void> {
+    const groups = groupId ? this.configuration.viewerGroups.filter((group) => group.id === groupId) : this.configuration.viewerGroups;
+    const missing = [...new Set(groups.flatMap((group) => group.logins.filter((login) => !this.configuration.viewerGroupIds[group.id]?.[login])))];
+    if (!missing.length) return;
+    const resolved = new Map<string, string>();
+    for (let index = 0; index < missing.length; index += 100) {
+      const query = new URLSearchParams();
+      for (const login of missing.slice(index, index + 100)) query.append('login', login);
+      const response = await this.request(`https://api.twitch.tv/helix/users?${query}`, { headers: this.twitchHeaders() });
+      const result = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string }>; message?: string }>(response);
+      if (!response.ok) throw new Error(result.message || `Twitch user lookup failed with ${response.status}.`);
+      for (const user of result.data || []) {
+        const login = String(user.login || '').toLowerCase();
+        const userId = String(user.id || '');
+        if (missing.includes(login) && /^\d{1,30}$/.test(userId)) resolved.set(login, userId);
+      }
+    }
+    let changed = false;
+    for (const group of groups) {
+      const ids = this.configuration.viewerGroupIds[group.id] ||= {};
+      for (const login of group.logins) {
+        const userId = resolved.get(login);
+        if (userId && ids[login] !== userId) {
+          ids[login] = userId;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return;
+    await this.persist();
+    this.options.onCatalogChanged?.();
+  }
+
   private async refreshAssignedCreatorIds(): Promise<void> {
     const channels = this.configuration.firstChatShoutouts.channels;
     const missing = channels.filter((login) => !this.configuration.assignedCreatorIds[login]);
@@ -1790,7 +2105,7 @@ export class TwitchChatbot {
     const query = new URLSearchParams();
     for (const login of missing) query.append('login', login);
     const response = await this.request(`https://api.twitch.tv/helix/users?${query}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string }>; message?: string };
+    const result = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string }>; message?: string }>(response);
     if (!response.ok) throw new Error(result.message || `Twitch user lookup failed with ${response.status}.`);
     for (const user of result.data || []) {
       const login = String(user.login || '').toLowerCase();
@@ -1803,38 +2118,53 @@ export class TwitchChatbot {
   private async loadStreamStatus(): Promise<NonNullable<TwitchChatbot['streamCache']>> {
     if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
-    const stream = result.data?.[0];
-    this.streamCache = { fetchedAt: Date.now(), startedAt: stream?.started_at, viewerCount: stream?.viewer_count };
-    return this.streamCache;
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`stream:${channelId}`, async () => {
+      if (this.streamCache && Date.now() - this.streamCache.fetchedAt < 30_000) return this.streamCache;
+      const response = await this.request(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
+      const result = await readOptionalProviderJson<{ data?: Array<{ started_at?: string; viewer_count?: number }>; message?: string }>(response);
+      if (!response.ok) throw new Error(result.message || `Twitch streams request failed with ${response.status}.`);
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the streams request.');
+      const stream = result.data?.[0];
+      this.streamCache = { fetchedAt: Date.now(), startedAt: stream?.started_at, viewerCount: stream?.viewer_count };
+      return this.streamCache;
+    });
   }
 
   private async loadChannelInfo(): Promise<NonNullable<TwitchChatbot['channelInfoCache']>> {
     if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as { data?: Array<{ title?: string; game_name?: string }>; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
-    const channel = result.data?.[0];
-    this.channelInfoCache = { fetchedAt: Date.now(), title: String(channel?.title || ''), gameName: String(channel?.game_name || '') };
-    return this.channelInfoCache;
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`channel:${channelId}`, async () => {
+      if (this.channelInfoCache && Date.now() - this.channelInfoCache.fetchedAt < 60_000) return this.channelInfoCache;
+      const response = await this.request(`https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(channelId)}`, { headers: this.twitchHeaders() });
+      const result = await readOptionalProviderJson<{ data?: Array<{ title?: string; game_name?: string }>; message?: string }>(response);
+      if (!response.ok) throw new Error(result.message || `Twitch channel request failed with ${response.status}.`);
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the channel request.');
+      const channel = result.data?.[0];
+      this.channelInfoCache = { fetchedAt: Date.now(), title: String(channel?.title || ''), gameName: String(channel?.game_name || '') };
+      return this.channelInfoCache;
+    });
   }
 
   private async loadStreamSchedule(): Promise<NonNullable<TwitchChatbot['scheduleCache']>> {
     if (this.scheduleCache && Date.now() - this.scheduleCache.fetchedAt < 5 * 60_000) return this.scheduleCache;
     if (!this.channel) throw new Error('The home channel is not connected.');
-    const response = await this.request(`https://api.twitch.tv/helix/schedule?broadcaster_id=${encodeURIComponent(this.channel.channelId)}&first=1`, { headers: this.twitchHeaders() });
-    if (response.status === 404) {
-      this.scheduleCache = { fetchedAt: Date.now() };
+    const channelId = this.channel.channelId;
+    return this.coalesceProviderRequest(`schedule:${channelId}`, async () => {
+      if (this.scheduleCache && Date.now() - this.scheduleCache.fetchedAt < 5 * 60_000) return this.scheduleCache;
+      const response = await this.request(`https://api.twitch.tv/helix/schedule?broadcaster_id=${encodeURIComponent(channelId)}&first=1`, { headers: this.twitchHeaders() });
+      if (this.channel?.channelId !== channelId) throw new Error('The connected Twitch channel changed during the schedule request.');
+      if (response.status === 404) {
+        this.scheduleCache = { fetchedAt: Date.now() };
+        return this.scheduleCache;
+      }
+      const result = await readOptionalProviderJson<{ data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string }>(response);
+      if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
+      const segment = result.data?.segments?.[0];
+      this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
       return this.scheduleCache;
-    }
-    const result = await response.json().catch(() => ({})) as { data?: { segments?: Array<{ title?: string; start_time?: string }> }; message?: string };
-    if (!response.ok) throw new Error(result.message || `Twitch schedule request failed with ${response.status}.`);
-    const segment = result.data?.segments?.[0];
-    this.scheduleCache = { fetchedAt: Date.now(), title: String(segment?.title || '') || undefined, startTime: String(segment?.start_time || '') || undefined };
-    return this.scheduleCache;
+    });
   }
 
   private async radioNowPlayingResponse(): Promise<string> {
@@ -1857,28 +2187,32 @@ export class TwitchChatbot {
     const provider = this.configuration.nowPlayingProvider;
     if (!provider) throw new Error('Now Playing is not configured.');
     if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
-    const response = await this.request(provider.apiUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
-      signal: AbortSignal.timeout(5_000)
+    return this.coalesceProviderRequest(`radio:${provider.apiUrl}`, async () => {
+      if (this.radioNowPlayingCache && Date.now() - this.radioNowPlayingCache.fetchedAt < 15_000) return this.radioNowPlayingCache;
+      const response = await this.request(provider.apiUrl, {
+        headers: { Accept: 'application/json', 'User-Agent': 'TempestStreamingStudio/1.0.1' },
+        signal: AbortSignal.timeout(5_000)
+      });
+      const result = await readOptionalProviderJson<{
+        is_online?: boolean;
+        station?: { name?: string };
+        now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
+      }>(response);
+      if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
+      if (this.configuration.nowPlayingProvider?.apiUrl !== provider.apiUrl) throw new Error('The Now Playing provider changed during the request.');
+      const song = result.now_playing?.song;
+      const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
+      this.radioNowPlayingCache = {
+        fetchedAt: Date.now(),
+        online: result.is_online === true,
+        stationName: value(result.station?.name) || provider.stationName,
+        artist: value(song?.artist),
+        title: value(song?.title),
+        text: value(song?.text),
+        album: value(song?.album)
+      };
+      return this.radioNowPlayingCache;
     });
-    const result = await response.json().catch(() => ({})) as {
-      is_online?: boolean;
-      station?: { name?: string };
-      now_playing?: { song?: { artist?: string; title?: string; text?: string; album?: string } };
-    };
-    if (!response.ok) throw new Error(`Now Playing request failed with ${response.status}.`);
-    const song = result.now_playing?.song;
-    const value = (input: unknown): string | undefined => typeof input === 'string' && input.trim() ? input.trim() : undefined;
-    this.radioNowPlayingCache = {
-      fetchedAt: Date.now(),
-      online: result.is_online === true,
-      stationName: value(result.station?.name) || provider.stationName,
-      artist: value(song?.artist),
-      title: value(song?.title),
-      text: value(song?.text),
-      album: value(song?.album)
-    };
-    return this.radioNowPlayingCache;
   }
 
   private async localWeatherResponse(): Promise<string> {
@@ -1911,36 +2245,44 @@ export class TwitchChatbot {
     if (!provider) throw new Error('Local weather is not configured.');
     const now = Date.now();
     if (this.weatherCache && now - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
-    try {
-      const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.1', Accept: 'application/geo+json' };
-      if (!this.weatherForecastUrl) {
-        const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
-        const point = await pointResponse.json() as { properties?: { forecastHourly?: string }; title?: string };
-        if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
-        this.weatherForecastUrl = point.properties.forecastHourly;
+    const providerKey = `${provider.latitude},${provider.longitude},${provider.timeZone}`;
+    return this.coalesceProviderRequest(`weather:${providerKey}`, async () => {
+      if (this.weatherCache && Date.now() - this.weatherCache.fetchedAt < 10 * 60 * 1000) return this.weatherCache;
+      try {
+        const headers = { 'User-Agent': 'TempestStreamingStudio/1.0.1', Accept: 'application/geo+json' };
+        let forecastUrl = this.weatherForecastUrl;
+        if (!forecastUrl) {
+          const pointResponse = await this.request(`https://api.weather.gov/points/${provider.latitude},${provider.longitude}`, { headers });
+          const point = await readProviderJson<{ properties?: { forecastHourly?: string }; title?: string }>(pointResponse);
+          if (!pointResponse.ok || !point.properties?.forecastHourly) throw new Error(point.title || `NWS point lookup failed with ${pointResponse.status}.`);
+          forecastUrl = point.properties.forecastHourly;
+        }
+        const forecastResponse = await this.request(forecastUrl, { headers });
+        const forecast = await readProviderJson<{
+          properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
+          title?: string;
+        }>(forecastResponse);
+        const period = forecast.properties?.periods?.[0];
+        if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
+        const current = this.configuration.weatherProvider;
+        if (!current || `${current.latitude},${current.longitude},${current.timeZone}` !== providerKey) throw new Error('The weather provider changed during the request.');
+        this.weatherForecastUrl = forecastUrl;
+        this.weatherCache = {
+          fetchedAt: Date.now(),
+          temperature: Number(period.temperature),
+          temperatureUnit: period.temperatureUnit,
+          shortForecast: period.shortForecast,
+          windSpeed: period.windSpeed,
+          windDirection: period.windDirection,
+          humidity: Number.isFinite(period.relativeHumidity?.value) ? Number(period.relativeHumidity?.value) : undefined,
+          precipitation: Number.isFinite(period.probabilityOfPrecipitation?.value) ? Number(period.probabilityOfPrecipitation?.value) : undefined
+        };
+        return this.weatherCache;
+      } catch (error) {
+        if (this.weatherCache && now - this.weatherCache.fetchedAt < 60 * 60 * 1000) return this.weatherCache;
+        throw error;
       }
-      const forecastResponse = await this.request(this.weatherForecastUrl, { headers });
-      const forecast = await forecastResponse.json() as {
-        properties?: { periods?: Array<{ temperature?: number; temperatureUnit?: string; shortForecast?: string; windSpeed?: string; windDirection?: string; relativeHumidity?: { value?: number | null }; probabilityOfPrecipitation?: { value?: number | null } }> };
-        title?: string;
-      };
-      const period = forecast.properties?.periods?.[0];
-      if (!forecastResponse.ok || !period || !Number.isFinite(period.temperature) || !period.temperatureUnit || !period.shortForecast) throw new Error(forecast.title || `NWS hourly forecast failed with ${forecastResponse.status}.`);
-      this.weatherCache = {
-        fetchedAt: now,
-        temperature: Number(period.temperature),
-        temperatureUnit: period.temperatureUnit,
-        shortForecast: period.shortForecast,
-        windSpeed: period.windSpeed,
-        windDirection: period.windDirection,
-        humidity: Number.isFinite(period.relativeHumidity?.value) ? Number(period.relativeHumidity?.value) : undefined,
-        precipitation: Number.isFinite(period.probabilityOfPrecipitation?.value) ? Number(period.probabilityOfPrecipitation?.value) : undefined
-      };
-      return this.weatherCache;
-    } catch (error) {
-      if (this.weatherCache && now - this.weatherCache.fetchedAt < 60 * 60 * 1000) return this.weatherCache;
-      throw error;
-    }
+    });
   }
 
   private async ensureConnection(): Promise<void> {
@@ -2097,7 +2439,7 @@ export class TwitchChatbot {
       headers: { Authorization: `Bearer ${this.tokens.accessToken}`, 'Client-Id': this.clientId, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, version: '1', condition, transport: { method: 'websocket', session_id: sessionId } })
     });
-    const result = await response.json().catch(() => ({})) as { message?: string; error?: string };
+    const result = await readOptionalProviderJson<{ message?: string; error?: string }>(response);
     if (response.status !== 202) throw new Error(result.message || result.error || `${type} EventSub subscription failed with ${response.status}.`);
   }
 
@@ -2133,10 +2475,10 @@ export class TwitchChatbot {
   private async loadSharedChatSession(): Promise<void> {
     if (!this.tokens || !this.channel) return;
     const response = await this.request(`https://api.twitch.tv/helix/shared_chat/session?broadcaster_id=${encodeURIComponent(this.channel.channelId)}`, { headers: this.twitchHeaders() });
-    const result = await response.json().catch(() => ({})) as {
+    const result = await readOptionalProviderJson<{
       data?: Array<{ session_id?: string; host_broadcaster_id?: string; participants?: Array<{ broadcaster_id?: string }> }>;
       message?: string;
-    };
+    }>(response);
     if (!response.ok) throw new Error(result.message || `Shared Chat session lookup failed with ${response.status}.`);
     const session = result.data?.[0];
     if (!session?.session_id) {
@@ -2149,7 +2491,7 @@ export class TwitchChatbot {
     const identities = new Map<string, { login: string; displayName: string }>();
     if (participantIds.length) {
       const usersResponse = await this.request(`https://api.twitch.tv/helix/users?${participantIds.map((id) => `id=${encodeURIComponent(id)}`).join('&')}`, { headers: this.twitchHeaders() });
-      const users = await usersResponse.json().catch(() => ({})) as { data?: Array<{ id?: string; login?: string; display_name?: string }> };
+      const users = await readOptionalProviderJson<{ data?: Array<{ id?: string; login?: string; display_name?: string }> }>(usersResponse);
       if (usersResponse.ok) for (const user of users.data || []) identities.set(String(user.id || ''), { login: String(user.login || ''), displayName: String(user.display_name || '') });
     }
     const participants = participantIds.map((userId) => ({ userId, login: identities.get(userId)?.login || '', displayName: identities.get(userId)?.displayName || '', host: userId === hostId }));
@@ -2199,7 +2541,7 @@ export class TwitchChatbot {
     this.oauthState = 'refreshing';
     const body = new URLSearchParams({ client_id: this.clientId, grant_type: 'refresh_token', refresh_token: this.tokens.refreshToken });
     const response = await this.request('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    const result = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string };
+    const result = await readProviderJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string[]; message?: string }>(response);
     if (!response.ok || !result.access_token || !result.refresh_token) throw new Error(describeTwitchOAuthError(result.message, `Chatbot token refresh failed with ${response.status}.`));
     this.tokens = { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + Math.max(1, Number(result.expires_in) || 14400) * 1000).toISOString(), scopes: Array.isArray(result.scope) ? result.scope : this.tokens.scopes };
     await this.options.credentialStore?.save(this.tokens);

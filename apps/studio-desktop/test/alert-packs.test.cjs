@@ -4,7 +4,7 @@ const { mkdtemp, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL, fileURLToPath } = require('node:url');
-const { buildTempestAlertPack, importTempestAlertPack } = require('../dist/alert-packs');
+const { buildTempestAlertPack, importTempestAlertPack, inspectTempestAlertPack } = require('../dist/alert-packs');
 
 test('round-trips portable alert packs without source paths and verifies embedded media', async () => {
   const sourceDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-alert-pack-source-'));
@@ -40,9 +40,12 @@ test('round-trips portable alert packs without source paths and verifies embedde
   assert.doesNotMatch(serialized, /file:/i);
   assert.doesNotMatch(serialized, /tempest-alert-pack-source/i);
   assert.doesNotMatch(serialized, /private-machine-time/);
+  assert.deepEqual(inspectTempestAlertPack(pack), { name: 'Mega Cheer Pack', containsCustomCode: true });
   const imported = await importTempestAlertPack(pack, destinationDirectory);
   assert.equal(imported.kind, 'twitch');
   assert.equal(imported.assetCount, 2);
+  assert.equal(imported.assets.length, 2);
+  assert.ok(imported.assets.every((asset) => asset.metadata.managed === true && asset.tags.includes('alert-pack')));
   assert.equal(imported.containsCustomCode, true);
   assert.match(fileURLToPath(imported.alert.audioUri), new RegExp(destinationDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.equal(imported.alert.visualUri, imported.alert.alertVariants[0].visualUri);

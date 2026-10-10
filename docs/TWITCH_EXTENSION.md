@@ -1,8 +1,10 @@
-# Tempest Streaming Studio Twitch Extension
+# Tempest Streaming Extension
 
 The viewer interface supports a Twitch **Video Component**, **Panel**, and **Mobile** surface. The Video Component stays beside the player during a stream; the Panel can be opened and tested while the channel is offline. Twitch's Local Test version paths map directly to:
 
-- `video_component.html` — viewer signal drawer
+- `video_component.html` — Video Component viewer signal drawer
+- `video_overlay.html` — Video - Fullscreen viewer path using the same responsive signal deck
+- `mobile.html` — Mobile viewer path using the same responsive signal deck
 - `panel.html` — offline-friendly channel panel
 - `config.html` — broadcaster/local test configuration
 - `https://localhost:8080/` — Local Test Base URI
@@ -15,11 +17,47 @@ Designs are stored as validated JSON in the Studio user-data directory. The loca
 
 For a public release, enable the Twitch Extension Configuration Service and allow the broadcaster configuration segment at version `1`. Each streamer then opens the Extension's **Configuration** page, designs their channel panel, and selects **Save Panel Appearance**. Twitch stores that appearance per channel while the Extension package remains universal.
 
+The viewer surfaces poll the hosted catalog only while visible. Each successful response supplies a channel-scoped ETag; subsequent requests use `If-None-Match`, and an unchanged `304` response avoids JSON parsing and DOM rendering. Studio coalesces event-driven catalog bursts over 100 milliseconds, while Current Stream, Now Playing, and schedule refreshes use a separate one-second trailing window and their existing provider caches.
+
 For the installed channel panel, set **Panel Viewer Path** to `panel.html` and **Panel Height** to `496`. The panel is designed for Twitch's narrow 318-pixel surface and scrolls its signal catalog internally.
+
+In Twitch Asset Hosting, set **Video - Component Viewer Path** to `video_component.html`, **Video - Fullscreen Viewer Path** to `video_overlay.html`, and **Mobile Path** to `mobile.html`. The build also contains `video_fullscreen.html` as a compatibility alias, but `video_overlay.html` is the canonical fullscreen path.
+
+## Polls
+
+When the streamer starts a numeric poll in **Live Desk**, the active question, numbered choices, and current totals are published to the Tempest Streaming Panel and Video Component. A viewer selects one option and, when needed, Twitch asks them to share identity. Studio records only one vote for that Twitch user across both the Extension and Twitch chat. Closing voting publishes final results; clearing the poll removes it from the Extension. Poll voting never opens a Bits purchase flow.
+
+## Viewer-placed interactions
+
+An enabled interaction whose Studio **Placement** setting is **Viewer chooses position** is labeled **Choose position** in the Panel and Video Component. Selecting it opens a full-surface crosshair; the viewer's click or tap becomes an `x`/`y` pair bounded from `0` through `1`. Tempest Signal validates the pair before relaying it, and Studio validates it again before applying the existing alert design and Broadcast landscape/portrait mapping. Fixed-position interactions ignore unsolicited placement data. Pressing Escape cancels without triggering an interaction.
+
+## 3D Dice
+
+When Studio's 3D Dice overlay is enabled, the Panel and Video Component publish d4, d6, d8, d10, d12, d20, 1–50, and d100 buttons plus a custom maximum from 2 through 100. The public service accepts only that bounded integer and constructs the safe 1–N request itself; it does not accept arbitrary dice expressions. The hosted service applies the viewer's access eligibility before relay, then Studio independently verifies access, local Browser Source readiness, busy state, and cooldown before starting Dice Box. One viewer roll locks every die option for that viewer for 30 seconds and the channel globally for 5 seconds. The settled result is produced only by the local physical Browser Source and is not stored by the hosted service.
+
+## Counters
+
+Up to 12 enabled Chatbot counter commands appear as read-only live cards with the streamer-defined label, total, and chat command. Chat increments, Studio adjustments, and counter-linked viewer interactions publish updated totals immediately. The Extension has no route that can alter a counter; it only reads the current aggregate catalog value. Disabling or deleting a counter command removes its card.
+
+## Stream goal
+
+When Studio's goal overlay is enabled, the active Twitch-native goal or Studio-managed goal appears as a compact read-only progress card in the Panel and Video Component. The title, goal type, current and target values, unit, color, and server-recomputed percentage update through the existing Studio relay. Local overlay previews are never published, and the Extension cannot change goal progress.
+
+## Now Playing
+
+When the Chatbot has an AzuraCast Now Playing provider, Studio publishes the station name, public track metadata, provider state, last-check time, and public listen-page URL to a read-only card. The relay refreshes it every 15 seconds only while connected, uses the Chatbot's existing 15-second provider cache, and omits the provider API URL and direct audio stream URL. The **Listen** button uses Twitch's Extension URL action. The Twitch developer-console configuration must allow the broadcaster's listen-page domain for Twitch to open it.
+
+## Schedule
+
+When the authorized Chatbot account can verify an upcoming Twitch schedule segment, its optional title and start time appear in a read-only **Up Next** card. The browser localizes the ISO timestamp for each viewer. Studio reuses its five-minute Twitch schedule cache, does not request a new scope, and publishes no card when Twitch returns no segment or schedule verification is unavailable. The Extension cannot edit the schedule.
+
+## Current Stream
+
+When the authorized Chatbot account can read the broadcaster's public Twitch state, the Panel and Video Component show live/offline status, title, category, stream start time, and Twitch's current viewer count. The browser derives the displayed uptime from the start timestamp. Studio reuses its 30-second stream-status and 60-second channel-information caches, so Extension viewers never make Helix calls and no new scope is required. The card is read-only.
 
 ## Run the Local Test
 
-The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, prepare the certificate once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio uses the authorized account's numeric channel ID and stores the secret with operating-system encryption.
+The recommended path is **Studio → Twitch Gateway → Single-channel Extension**. Authorize Twitch, select **Prepare HTTPS** once, paste the revealed Extension Secret into the masked field, and click **Start Local Panel**. Studio securely acquires and verifies the official mkcert helper, creates the trusted local certificate, and uses the authorized account's numeric channel ID while storing the secret with operating-system encryption. No separate certificate program or PowerShell step is required.
 
 The commands below remain available for asset-only development and diagnostics.
 
@@ -41,9 +79,9 @@ If Twitch's iframe rejects the certificate, explicitly add it to the current Win
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Trust
 ```
 
-The `-Trust` switch changes the current user's Windows certificate trust store. The generated PFX and certificate are local development artifacts under `.tempest-extension/` and are excluded from source control.
+The `-Trust` switch changes the current user's Windows certificate trust store. Studio pins mkcert 1.4.4 by its official Windows x64 SHA-256 digest and falls back to Windows certificate APIs when it cannot acquire that exact build. The generated PFX, downloaded helper, and isolated CA are local development artifacts excluded from source control, Studio backups, diagnostics, and release packages. Never copy or share `rootCA-key.pem`.
 
-Remove the local certificate and its trust entry when testing is complete:
+Select **Remove HTTPS** in Studio when testing is complete, or use the diagnostic command below. Removal also deletes the isolated CA private key and the downloaded helper:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/create-extension-certificate.ps1 -Untrust
@@ -77,8 +115,13 @@ The hosted EBS now:
 1. Verifies the Twitch JWT signature, expiry, `channel_id`, role, and opaque viewer identity.
 2. Resolves the signed channel to a broadcaster-paired PostgreSQL installation.
 3. Applies per-viewer and per-channel request limits and makes repeated request identifiers idempotent.
-4. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection.
-5. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
+4. Computes eligibility for the signed viewer, removes raw allow/block identity lists from the response, omits locked items configured as hidden, and rejects ineligible triggers before relay.
+5. Restricts buttons to the viewer-safe catalog published by that channel's Studio and forwards accepted signals over its authenticated outbound connection. Studio repeats the access decision before dispatch.
+6. Never exposes the local Tempest Bridge, relay credential, OAuth token, or local media to the Extension front end.
+
+When a visible interaction is restricted to named viewers or assigned creators, an anonymous viewer sees **Share Twitch Identity** instead of an inert locked button. Selecting it opens Twitch's native identity-sharing consent. The hosted service recalculates eligibility from the newly signed identity before accepting any trigger; a denied or hidden interaction does not become available merely because identity was shared.
+
+Studio also supports reusable streamer-named viewer groups. The streamer enters Twitch logins once, the connected Chatbot account resolves them to numeric Twitch IDs, and any interaction can select that group. Group names and login rosters remain local to Studio; the relay publishes only the resolved numeric eligibility list through the existing access-control schema, and viewer catalog responses still contain only the requesting viewer's eligibility.
 
 The public Extension Client ID belongs in front-end/EBS configuration. The shared secret belongs only in the EBS secret store. See [TWITCH_EBS.md](TWITCH_EBS.md) for deployment and Studio connection instructions.
 
@@ -87,8 +130,9 @@ The public Extension Client ID belongs in front-end/EBS configuration. The share
 Official builds embed `https://signal.tempestmainframe.com` automatically. The value is public and contains no credentials or path-specific token.
 
 ```powershell
-pnpm extension:build
-Compress-Archive -Path 'apps/twitch-extension/dist/*' -DestinationPath 'apps/twitch-extension/tempest-twitch-extension-hosted.zip' -Force
+pnpm run hosted:prepare
 ```
+
+This command rebuilds and tests the EBS and Extension, verifies the Railway Docker boundary, forces the official service origin with mock mode disabled, and writes `release/Tempest-Streaming-Extension-0.1.0-hosted.zip` plus `release/hosted-release-manifest.json`. The manifest records the exact upload file, source Studio version, file inventory, and SHA-256 digest. Generated release files remain outside Git.
 
 Set `TEMPEST_EXTENSION_EBS_URL` only to override the official endpoint for development or self-hosting; set `TEMPEST_EXTENSION_MOCK_MODE=1` for an explicit mock build. The generated `runtime-config.json` disables mock mode by default and is shared by every viewer. Add `https://signal.tempestmainframe.com` to Twitch's **Allowlist for URL Fetching Domains** before uploading the ZIP. Twitch supplies the hosted Extension CSP, so the packaged HTML does not define its own CSP meta tag.
