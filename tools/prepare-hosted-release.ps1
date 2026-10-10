@@ -26,22 +26,13 @@ try {
 
     Invoke-Checked pnpm ebs:build
     Invoke-Checked pnpm --filter '@tempest/twitch-ebs' test
-    Invoke-Checked pnpm extension:build
+    Invoke-Checked pnpm extensions:package
     Invoke-Checked pnpm --filter '@tempest/twitch-extension' test
+    Invoke-Checked pnpm --filter '@tempest/twitch-streaming-extension' test
+    Invoke-Checked pnpm hosted:verify
 
-    $extensionVersion = node -p "require('./apps/twitch-extension/package.json').version"
-    if ($LASTEXITCODE -ne 0) { throw 'Could not read the Extension version.' }
-    $releaseDirectory = Join-Path $workspace 'release'
-    $extensionOutput = Join-Path $workspace 'apps/twitch-extension/dist'
-    $archivePath = Join-Path $releaseDirectory "Tempest-Streaming-Extension-$extensionVersion-hosted.zip"
-    New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
-    if (Test-Path -LiteralPath $archivePath) {
-        Remove-Item -LiteralPath $archivePath -Force
-    }
-    Compress-Archive -Path (Join-Path $extensionOutput '*') -DestinationPath $archivePath -CompressionLevel Optimal
-    Invoke-Checked node tools/verify-hosted-release.mjs --archive $archivePath
-
-    Write-Host "Hosted Extension bundle: $archivePath"
+    Write-Host "Mainframe hosted bundle: $workspace\apps\twitch-extension\release-assets\tempest-mainframe-0.2.0.zip"
+    Write-Host "Streaming hosted bundle: $workspace\apps\twitch-bits-extension\release-assets\tempest-streaming-0.1.0.zip"
     Write-Host "Railway image source: $workspace\Dockerfile"
 } finally {
     [Environment]::SetEnvironmentVariable('TEMPEST_EXTENSION_EBS_URL', $previousEbsOrigin, 'Process')

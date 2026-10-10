@@ -4,27 +4,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extensionDirectory = path.join(workspace, 'apps', 'twitch-extension');
-const extensionOutput = path.join(extensionDirectory, 'dist');
 const officialEbsOrigin = 'https://signal.tempestmainframe.com';
 const archiveArgument = process.argv.indexOf('--archive');
 const archivePath = archiveArgument >= 0 ? path.resolve(process.argv[archiveArgument + 1] || '') : '';
 
-const requiredFiles = [
-  'alerts.json',
-  'assets/storm-horizon-sh.png',
-  'assets/tempest-mark.svg',
-  'config.html',
-  'config.js',
-  'interactions.json',
-  'mobile.html',
-  'panel.html',
-  'runtime-config.json',
-  'styles.css',
-  'video_component.html',
-  'video_fullscreen.html',
-  'video_overlay.html',
-  'viewer.js'
+const extensionDefinitions = [
+  {
+    id: 'mainframe', directory: path.join(workspace, 'apps', 'twitch-extension'),
+    required: ['alerts.json', 'assets/storm-horizon-sh.png', 'assets/tempest-mark.svg', 'config.html', 'config.js', 'interactions.json', 'panel.html', 'runtime-config.json', 'styles.css', 'video_component.html', 'viewer.js'],
+    forbidden: ['mobile.html', 'video_fullscreen.html', 'video_overlay.html', 'mock-catalog.json']
+  },
+  {
+    id: 'streaming', directory: path.join(workspace, 'apps', 'twitch-bits-extension'),
+    required: ['config.html', 'config.js', 'mobile.html', 'panel.html', 'runtime-config.json', 'styles.css', 'video_component.html', 'video_overlay.html', 'viewer.js'],
+    forbidden: ['mock-catalog.json']
+  }
 ];
 
 const walk = async (directory, prefix = '') => {
@@ -37,33 +31,37 @@ const walk = async (directory, prefix = '') => {
   return files;
 };
 
-for (const relativePath of requiredFiles) {
-  const file = path.join(extensionOutput, ...relativePath.split('/'));
-  if (!(await stat(file)).isFile()) throw new Error(`Hosted Extension file ${relativePath} is missing.`);
-}
-
-const files = await walk(extensionOutput);
-const forbiddenFiles = files.filter((file) => (
-  /(^|\/)(?:\.env|node_modules)(?:\/|$)/i.test(file)
-  || /\.(?:pfx|p12|pem|key|crt|cer|db|sqlite\d?|map|ts)$/i.test(file)
-));
-if (forbiddenFiles.length) throw new Error(`Hosted Extension contains forbidden files: ${forbiddenFiles.join(', ')}`);
-
-const runtime = JSON.parse(await readFile(path.join(extensionOutput, 'runtime-config.json'), 'utf8'));
-if (runtime.schemaVersion !== 1 || runtime.ebsBaseUrl !== officialEbsOrigin || runtime.mockMode !== false) {
-  throw new Error(`Hosted Extension runtime-config.json must target ${officialEbsOrigin} with mock mode disabled.`);
-}
-if (Object.keys(runtime).some((key) => /secret|token|password|credential/i.test(key))) {
-  throw new Error('Hosted Extension runtime-config.json contains a credential-shaped field.');
-}
-
-const browserCode = await Promise.all(['viewer.js', 'config.js'].map((file) => readFile(path.join(extensionOutput, file), 'utf8')));
-if (/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])/i.test(browserCode.join('\n'))) {
-  throw new Error('Hosted Extension browser code contains a localhost endpoint.');
-}
-const publicText = await Promise.all(files.filter((file) => /\.(?:html|js|css|json|svg)$/i.test(file)).map((file) => readFile(path.join(extensionOutput, ...file.split('/')), 'utf8')));
-if (/Tempest Mainframe \(Free\)|\bfree Extension\b/i.test(publicText.join('\n'))) {
-  throw new Error('Hosted Extension contains retired edition branding.');
+const extensions = [];
+for (const definition of extensionDefinitions) {
+  const output = path.join(definition.directory, 'dist');
+  for (const relativePath of definition.required) {
+    const file = path.join(output, ...relativePath.split('/'));
+    if (!(await stat(file)).isFile()) throw new Error(`${definition.id} hosted Extension file ${relativePath} is missing.`);
+  }
+  const files = await walk(output);
+  const forbiddenFiles = files.filter((file) => (
+    definition.forbidden.includes(file)
+    || /(^|\/)(?:\.env|node_modules)(?:\/|$)/i.test(file)
+    || /\.(?:pfx|p12|pem|key|crt|cer|db|sqlite\d?|map|ts)$/i.test(file)
+  ));
+  if (forbiddenFiles.length) throw new Error(`${definition.id} hosted Extension contains forbidden files: ${forbiddenFiles.join(', ')}`);
+  const runtime = JSON.parse(await readFile(path.join(output, 'runtime-config.json'), 'utf8'));
+  if (runtime.schemaVersion !== 1 || runtime.ebsBaseUrl !== officialEbsOrigin || runtime.mockMode !== false) {
+    throw new Error(`${definition.id} runtime-config.json must target ${officialEbsOrigin} with mock mode disabled.`);
+  }
+  if (Object.keys(runtime).some((key) => /secret|token|password|credential/i.test(key))) {
+    throw new Error(`${definition.id} runtime-config.json contains a credential-shaped field.`);
+  }
+  const browserCode = await Promise.all(['viewer.js', 'config.js'].map((file) => readFile(path.join(output, file), 'utf8')));
+  if (/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])/i.test(browserCode.join('\n'))) {
+    throw new Error(`${definition.id} browser code contains a localhost endpoint.`);
+  }
+  const publicText = await Promise.all(files.filter((file) => /\.(?:html|js|css|json|svg)$/i.test(file)).map((file) => readFile(path.join(output, ...file.split('/')), 'utf8')));
+  if (/Tempest Mainframe \(Free\)|\bfree Extension\b/i.test(publicText.join('\n'))) {
+    throw new Error(`${definition.id} contains retired edition branding.`);
+  }
+  const packageMetadata = JSON.parse(await readFile(path.join(definition.directory, 'package.json'), 'utf8'));
+  extensions.push({ id: definition.id, version: packageMetadata.version, files: files.sort() });
 }
 
 const dockerfiles = await Promise.all([
@@ -84,7 +82,6 @@ if (!(await stat(path.join(workspace, 'services', 'twitch-ebs', 'dist', 'cli.js'
   throw new Error('The hosted EBS build output is missing. Run pnpm ebs:build first.');
 }
 
-const extensionPackage = JSON.parse(await readFile(path.join(extensionDirectory, 'package.json'), 'utf8'));
 const studioPackage = JSON.parse(await readFile(path.join(workspace, 'package.json'), 'utf8'));
 const ebsPackage = JSON.parse(await readFile(path.join(workspace, 'services', 'twitch-ebs', 'package.json'), 'utf8'));
 if (JSON.stringify(ebsPackage.files) !== JSON.stringify(['dist'])) {
@@ -92,12 +89,12 @@ if (JSON.stringify(ebsPackage.files) !== JSON.stringify(['dist'])) {
 }
 const result = {
   schemaVersion: 1,
-  product: 'Tempest Streaming Extension',
-  extensionVersion: extensionPackage.version,
+  product: 'Tempest companion Extensions',
+  extensionVersion: extensions[0].version,
+  extensions,
   studioSourceVersion: studioPackage.version,
   ebsOrigin: officialEbsOrigin,
-  mockMode: false,
-  files: files.sort()
+  mockMode: false
 };
 
 if (archivePath) {
@@ -112,4 +109,4 @@ if (archivePath) {
   await writeFile(manifestPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 }
 
-console.log(`TEMPEST_HOSTED_RELEASE_VERIFIED extension=${result.extensionVersion} studio=${result.studioSourceVersion} files=${result.files.length}${result.archive ? ` archive=${result.archive.name} sha256=${result.archive.sha256}` : ''}`);
+console.log(`TEMPEST_HOSTED_RELEASE_VERIFIED ${extensions.map((entry) => `${entry.id}=${entry.version}:${entry.files.length}files`).join(' ')} studio=${result.studioSourceVersion}${result.archive ? ` archive=${result.archive.name} sha256=${result.archive.sha256}` : ''}`);

@@ -27,8 +27,8 @@ Publication remains blocked on Railway deployment of this source, live Twitch su
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` | 94,025 | `501004a797b820577264d0d42a63784c98e483ccb371570922765693423bcc9c` |
-| `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` | 11,776 | `6851b9f7e69a4f5a563d6a9a05938f484eefec1f384b6348178399ff0243d0fb` |
+| `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` | 94,025 | `d429b23c11e0b9a5fa85775fe3470c842821d9414263019796a4bd447a84bb35` |
+| `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` | 11,776 | `5f18c0eacc25892ffbef680090385b6b072cc3ba61318ba8c400470f989d18c3` |
 
 The generated machine-readable record is `release-assets/extension-package-manifest.json`. Rebuild and re-audit both ZIPs after any Extension source change; the hashes above identify only this candidate.
 
