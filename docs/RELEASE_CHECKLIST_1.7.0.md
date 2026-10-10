@@ -9,7 +9,7 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 - [x] Keep interaction authorization, state, rules, safety, layouts, alerts, polls, avatars, pets, and games owned by Studio.
 - [x] Keep Tempest Mainframe panel-only and Tempest Streaming video-overlay-first.
 - [x] Keep both companion Extensions free of Bits purchase and receipt handling.
-- [ ] Freeze 1.7.0 features after the release candidate is packaged; any code fix creates a new candidate and repeats affected gates.
+- [x] Freeze 1.7.0 features after the release candidate is packaged; any code fix creates a new candidate and repeats affected gates.
 
 ## Automated gates
 
@@ -21,7 +21,7 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 - [x] Public `https://signal.tempestmainframe.com/health` reports online before deployment.
 - [x] Build and verify the signed Studio installer and portable ZIP candidate.
 - [x] Run the packaged executable with a new isolated profile; it exited 0 and wrote data version 1.7.0.
-- [x] Record exact source commit `972e7af`, candidate artifact hashes, signatures, and test count in the release audit.
+- [x] Record merged release commit `74be080`, signed artifact content commit `972e7af`, candidate hashes, signatures, and test count in the release audit.
 
 ## Railway and database gates
 
@@ -31,11 +31,12 @@ Studio 1.7.0 remains a release candidate until every required manual gate passes
 - [x] Stage `TEMPEST_STREAMING_EXTENSION_CLIENT_ID` and `TEMPEST_STREAMING_EXTENSION_SECRETS` as Railway references to the existing listing credentials without revealing or copying secret values.
 - [ ] After the final candidate deploy and rollback window, remove the legacy `TEMPEST_BITS_EXTENSION_CLIENT_ID`, `TEMPEST_BITS_EXTENSION_SECRETS`, and obsolete paid-product mapping as a separately approved cleanup; keep `DATABASE_URL`, Mainframe secret, and allowed Twitch OAuth Client ID.
 - [x] Confirm Railway uses the root Dockerfile, one US West replica, the production custom domain on port 8080, restart-on-failure, and PostgreSQL.
-- [x] Stage `/health` as the Railway deployment healthcheck for the next deployment; the two variable aliases and healthcheck are three staged changes and must not be deployed separately from the final candidate.
-- [ ] Deploy the exact release-candidate source to Railway.
-- [ ] Confirm the deployed health endpoint, database initialization, Studio relay reconnection, and absence of restart loops after deployment.
+- [x] Stage `/health` as the Railway deployment healthcheck; the two variable aliases and healthcheck were deployed together with the final candidate.
+- [x] Deploy the exact merged release source `74be080` to Railway.
+- [x] Confirm Railway reports the deployment successful, EBS listens after database initialization, the public health endpoint returns HTTP 200/online, and no restart loop is present.
+- [ ] Confirm the signed Studio build reconnects its relay after the Railway deployment.
 - [ ] Disconnect Studio during a queued Extension action, reconnect it, and confirm exactly-once delivery or a safe rejection.
-- [ ] Confirm rollback to the prior Railway deployment remains available until the live rehearsal passes.
+- [x] Confirm prior successful Railway deployments remain available for rollback until the live rehearsal passes.
 
 ## Companion Extension gates
 

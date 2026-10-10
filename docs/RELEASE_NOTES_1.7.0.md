@@ -39,4 +39,4 @@ Tempest Streaming Studio 1.7.0 establishes one control and rendering foundation 
 - The hosted EBS continues to accept Studio 1.5's legacy Extension catalog and interaction envelopes. Studio 1.5 may switch between Mainframe and Streaming through its old edition selector; Studio 1.7 enables both companions at once.
 - Existing Stage Actor v1/v2 packs, legacy Extension edition data, saved layouts, and legacy Browser Source routes remain readable.
 
-Before publication, complete the remaining live Twitch surface rehearsal, Railway deployment, signed Windows packaging, clean upgrade, and sustained on-air soak gates in `docs/RELEASE_CHECKLIST_1.7.0.md`.
+Railway production now runs merged release commit `74be080` with the `/health` deployment check and backward-compatible Extension variable aliases. Before publishing the desktop updater, complete the remaining live Twitch surface rehearsal, Studio relay reconnection, clean upgrade, and sustained on-air soak gates in `docs/RELEASE_CHECKLIST_1.7.0.md`.

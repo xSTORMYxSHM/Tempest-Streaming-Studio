@@ -1,27 +1,28 @@
 # Tempest Streaming Studio 1.7.0 release audit
 
 Date: October 10, 2026  
-Status: release candidate preparation; not yet approved for public release
+Status: Railway release deployed; desktop updater publication remains gated
 
 ## Current result
 
-The exact 1.7.0 source commit `972e7af` passes the complete frozen workspace build/test gate, both Twitch companion packages pass production-asset verification, and a freshly rebuilt signed Windows candidate passes signature, fuse, and isolated-profile smoke verification. A prior development runtime rehearsal also confirmed protocol 1.0 communication with installed Tempest Broadcast 1.5.0 and the migrated Unified Stage scene.
+The merged 1.7.0 release source at `74be080` passes the complete frozen workspace build/test gate and Railway's production deployment. Both Twitch companion packages pass production-asset verification, and the signed Windows candidate built from release-content commit `972e7af` passes signature, fuse, and isolated-profile smoke verification. A prior development runtime rehearsal also confirmed protocol 1.0 communication with installed Tempest Broadcast 1.5.0 and the migrated Unified Stage scene.
 
-Publication remains blocked on Railway deployment of this source, live Twitch surface tests, clean-upgrade validation, and the final on-air soak. Passing automated tests does not waive those gates.
+Desktop updater publication remains blocked on live Twitch surface tests, Studio relay reconnection, clean-upgrade validation, and the final on-air soak. Passing automated tests and the Railway deployment do not waive those gates.
 
 ## Source and automated verification
 
-- Candidate commit: `972e7af` (`Package Mainframe as a panel-only extension`), including merge commit `dc6e349`.
+- Merged release commit: `74be080` (`Merge pull request #1 ... Release Tempest Streaming Studio 1.7.0`).
+- Signed artifact content commit: `972e7af` (`Package Mainframe as a panel-only extension`), including merge commit `dc6e349`.
 - Candidate state: clean working tree at artifact build time.
 - `pnpm install --frozen-lockfile`: passed.
 - `pnpm check`: passed (166 tests, 0 failures).
 - Package versions: Studio/services/contracts `1.7.0`; Mainframe `0.2.0`; Streaming `0.1.0`.
 - Extension package verification: passed.
 - Local built EBS CLI startup using `PORT=4808`: passed; `/health` returned online.
-- Public Signal health before deployment: online, three installations, no Studio relay connected at the time of inspection.
+- Public Signal health before and after deployment: HTTP 200 and online, with three installations and no Studio relay connected at the time of inspection.
 - Signed package verifier: passed (`TEMPEST_RELEASE_VERIFIED 1.7.0`, hardened fuse wire `010011001`, 16 valid timestamped signature records).
 - Packaged executable smoke test: passed with exit code 0 and a fresh isolated profile at data version 1.7.0.
-- Docker and Railway CLIs are not installed on this workstation, so an image build and CLI deployment were not claimed.
+- GitHub CI successfully built the Railway Docker image from the merged release source. The production deployment was performed through Railway because Docker and Railway CLIs are not installed on this workstation.
 
 ## Extension candidate artifacts
 
@@ -61,8 +62,9 @@ The canonical checksum and signature records are in `release/SHA256SUMS.txt` and
 - Mainframe and Streaming secrets are separate server environment variables. Built hosted assets contain only the public Signal origin and no Extension secret.
 - Companion manifests and per-item destinations are stored inside the existing versioned JSON catalog, so this release does not require a destructive database migration.
 - Studio now persists per-feature panel/overlay placement locally and publishes catalog changes immediately. Each action can target Mainframe, Streaming, both, or neither; Dice defaults to Streaming only.
-- Read-only Railway inspection confirmed Postgres online, one US West replica, automatic root Dockerfile detection, the production custom domain targeting port 8080, and restart-on-failure. `/health` is staged as the next deployment's healthcheck and has not been deployed separately.
-- The live deployment still uses the legacy `TEMPEST_BITS_EXTENSION_CLIENT_ID`, `TEMPEST_BITS_EXTENSION_SECRETS`, and paid-product mapping names. The new `TEMPEST_STREAMING_EXTENSION_CLIENT_ID` and `TEMPEST_STREAMING_EXTENSION_SECRETS` names are now staged as Railway references to those existing values, so no secret value was displayed or copied. Together with `/health`, Railway reports three staged changes; they have not been deployed. Retire the paid mapping and legacy aliases only after the rollback window closes.
+- Railway production is deployed from merged release commit `74be080` using the root Dockerfile, Postgres, one US West replica, the production custom domain on port 8080, restart-on-failure, and `/health` as the deployment healthcheck.
+- The deployment applied `TEMPEST_STREAMING_EXTENSION_CLIENT_ID` and `TEMPEST_STREAMING_EXTENSION_SECRETS` as references to the existing legacy values without displaying or copying secret material. The legacy `TEMPEST_BITS_EXTENSION_*` names and paid-product mapping remain in place for Studio 1.5 rollback compatibility and should be retired only after the rollback window closes.
+- Railway reported the deployment successful, the container logged that the EBS was listening on port 8080, and the public `/health` endpoint returned HTTP 200 with `status: online`. Prior successful deployments remain visible for rollback. Studio relay reconnection and the live queued-action rehearsal remain open gates.
 
 ### Studio 1.5 compatibility result
 
@@ -79,7 +81,7 @@ Studio 1.5 therefore remains supported after the Railway update. Its UI can sele
 
 ## Open release gates
 
-1. Inspect Railway variables privately, deploy the candidate, and verify health, migration, reconnect, and rollback.
-2. Upload and test both Twitch packages in Mainframe-only, Streaming-only, and both-active configurations.
+1. Reconnect the signed Studio build to Railway and complete the queued-action/reconnect rehearsal.
+2. Upload and test both Twitch packages in Mainframe-only, Streaming-only, and both-active configurations after Twitch review permits the hosted-file update.
 3. Complete clean 1.6.0 upgrade, backup/restore, accessibility/scaling, reconnect, audio-routing, and 30-minute soak gates.
-4. Record final deployment logs and approvals before publishing the updater.
+4. Record the final live rehearsal logs and approvals before publishing the updater.
