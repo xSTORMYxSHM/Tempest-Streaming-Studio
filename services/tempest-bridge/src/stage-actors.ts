@@ -164,7 +164,10 @@ export class TempestStageActorCatalog {
     response.statusCode = 200;
     response.setHeader('Content-Type', contentType);
     response.setHeader('Content-Length', details.size);
-    response.setHeader('Cache-Control', 'private, max-age=60');
+    // OBS Browser Source keeps an independent CEF cache. Actor packs can be rebuilt in
+    // place with the same manifest version, so stale atlases or masks must never survive
+    // a Studio/Browser Source restart.
+    response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     createReadStream(filePath).pipe(response);
     return true;

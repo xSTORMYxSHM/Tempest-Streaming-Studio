@@ -86,9 +86,11 @@ test('serves managed Stage Actor packs and resolves viewer animation states', as
   assert.match(stagePage, /applyActorMotion\(body\.object,body\.node,animationState\)/);
   assert.match(stagePage, /function drawRig/);
   assert.match(stagePage, /canvas\.className='actor-rig'/);
+  assert.match(stagePage, /tempest_session/);
 
   const media = await fetch(`${runtime.baseUrl}${actor.properties.actorAsset}`);
   assert.equal(media.status, 200);
+  assert.equal(media.headers.get('cache-control'), 'no-store');
   assert.equal(media.headers.get('content-type'), 'image/png');
   assert.equal((await media.arrayBuffer()).byteLength, 64);
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.2 — Unified Stage OBS compatibility hotfix
+
+Released 2026-10-10.
+
+- Fixed OBS/CEF compositing of the Interactive Stage inside the Unified Stage by isolating that child document on the alternate loopback host while keeping all traffic local to the streamer PC.
+- Prevented OBS from reusing stale Stage Actor atlases, palette masks, and motion-rig assets by applying one Browser Source session revision and serving actor files with no-store cache headers.
+- Verified transparent Unified Stage rendering with viewer avatars and a live poll visible together on a real Tempest Broadcast canvas.
+- Preserved protocol `1.0`, Tempest Broadcast 1.5.0 compatibility, existing Studio data, and the independently versioned Twitch companion Extensions.
+
 ## 1.7.1 — Transparent Unified Stage and Tempest2D alerts
 
 Released 2026-10-10.

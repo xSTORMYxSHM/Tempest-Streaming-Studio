@@ -50,7 +50,7 @@ const unifiedStagePage = String.raw`<!doctype html>
   const params=new URLSearchParams(location.search),orientation=params.get('orientation')==='vertical'?'vertical':'horizontal',debug=params.get('debug')==='1',root=document.getElementById('modules'),diagnostics=document.getElementById('diagnostics'),frames=new Map();
   if(debug)document.body.classList.add('debug');
   const definitions={
-    interactiveStage:{path:'/interactive-stage',query:{orientation},layer:20},
+    interactiveStage:{path:'/interactive-stage',query:{orientation},layer:20,host:'alternate'},
     twitchAlerts:{path:'/visual-alerts/twitch',query:{orientation},layer:80},
     interactionAlerts:{path:'/visual-alerts/interactions',query:{orientation,audio:'0'},layer:81},
     twitchExperiences:{path:'/twitch-experiences',layer:70,host:'alternate'},

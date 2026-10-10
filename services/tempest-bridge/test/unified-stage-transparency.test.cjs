@@ -28,4 +28,8 @@ test('keeps Unified Stage documents transparent when Chromium composites them as
     assert.match(document, /background\s*:\s*transparent/i, `${route} must explicitly retain a transparent canvas`);
     assert.doesNotMatch(document, /color-scheme\s*:\s*dark/i, `${route} must not force Chromium's iframe canvas opaque`);
   }
+
+  const unifiedDocument = await fetch(`${runtime.baseUrl}/unified-stage?orientation=horizontal`).then((response) => response.text());
+  assert.match(unifiedDocument, /interactiveStage:\{path:'\/interactive-stage',query:\{orientation\},layer:20,host:'alternate'\}/,
+    'the interactive avatar canvas must cross an origin boundary for OBS CEF transparent compositing');
 });

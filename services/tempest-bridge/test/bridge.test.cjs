@@ -566,6 +566,7 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.match(unifiedPage.headers.get('content-security-policy'), /frame-src 'self' http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\* about:/);
   assert.match(unifiedMarkup, /frame\.src='about:blank';frame\.remove\(\)/);
   assert.match(unifiedMarkup, /interactionAlerts:\{path:'\/visual-alerts\/interactions',query:\{orientation,audio:'0'\}/);
+  assert.match(unifiedMarkup, /interactiveStage:\{path:'\/interactive-stage',query:\{orientation\},layer:20,host:'alternate'\}/);
   assert.match(unifiedMarkup, /diceOverlay:\{path:'\/dice-overlay',layer:60,host:'alternate'\}/);
   assert.match(unifiedMarkup, /alternateHost=location\.hostname==='localhost'\?'127\.0\.0\.1':'localhost'/);
   const unifiedStatus = await fetch(`${runtime.baseUrl}/v1/unified-stage`, { headers }).then((response) => response.json());
