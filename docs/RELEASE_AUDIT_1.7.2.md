@@ -1,13 +1,15 @@
 # Tempest Streaming Studio 1.7.2 release audit
 
 Date: October 10, 2026
-Status: signed candidate verified; stable updater publication pending
+Status: public stable release published and updater feed verified
 
 ## Current result
 
 The 1.7.2 hotfix source is committed and pushed at `fa69082`. The frozen workspace build and 167-test suite pass with zero failures. The Windows installer and portable payload were built from that source, timestamp-signed with the Tempest publisher certificate, hardened with the expected Electron fuse wire, and verified without private credentials or development-only files.
 
 The packaged executable completed its hidden smoke test with exit code 0 using a fresh profile and isolated local Bridge port while Tempest Broadcast 1.5.0 remained open.
+
+GitHub published `v1.7.2` as the latest non-draft, non-prerelease release with all six expected assets. The public stable updater feed returned HTTP 200 and advertised version `1.7.2` with `Tempest-Streaming-Studio-Setup-1.7.2-x64.exe` as its installation path.
 
 ## Included fixes
 
@@ -33,4 +35,4 @@ The packaged executable completed its hidden smoke test with exit code 0 using a
 | `latest.yml` | 385 | `852f5663c03d94f4e4e6d51972f267ecaa9f52800f121006f7bea2b576a19f06` |
 | `Tempest-Streaming-Studio-1.7.2-x64.zip` | 168,994,095 | `1813452e2c6141035bd473688d43e04047878017bd04622ed0a453ddd0f556f5` |
 
-`release/SHA256SUMS.txt` and `release/release-manifest.json` contain the canonical checksum, signature, and package records prepared for the stable release.
+`release/SHA256SUMS.txt` and `release/release-manifest.json` contain the canonical checksum, signature, and package records uploaded with the stable release.

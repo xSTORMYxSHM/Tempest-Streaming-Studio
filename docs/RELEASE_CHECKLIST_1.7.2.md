@@ -21,6 +21,6 @@ Date: October 10, 2026
 ## Publication
 
 - [x] Commit and push the exact release source.
-- [ ] Publish stable GitHub release `v1.7.2` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
-- [ ] Confirm GitHub reports `v1.7.2` as the latest stable release.
-- [ ] Confirm the stable updater feed advertises 1.7.2 and its signed installer.
+- [x] Publish stable GitHub release `v1.7.2` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
+- [x] Confirm GitHub reports `v1.7.2` as the latest stable release.
+- [x] Confirm the stable updater feed advertises 1.7.2 and its signed installer.
