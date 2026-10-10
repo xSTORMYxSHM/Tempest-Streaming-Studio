@@ -16,12 +16,12 @@ Date: October 10, 2026
 - [x] Complete workspace build and 167-test suite passes.
 - [x] Unified Stage alpha regression passes.
 - [x] Tempest2D create, update, persistence, preview-routing, lease, and release tests pass.
-- [ ] Signed Windows packaging and release verification pass.
-- [ ] Packaged executable starts with an isolated profile.
+- [x] Signed Windows packaging and release verification pass.
+- [x] Packaged executable starts with an isolated profile.
 
 ## Publication
 
-- [ ] Commit and push the exact release source.
+- [x] Commit and push the exact release source.
 - [ ] Publish stable GitHub release `v1.7.1` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
 - [ ] Confirm GitHub reports `v1.7.1` as the latest stable release.
 - [ ] Confirm the installed 1.7.0 updater discovers 1.7.1.
