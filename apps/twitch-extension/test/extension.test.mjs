@@ -64,6 +64,8 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(panel, /id="featuredGrid"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
+  assert.match(panel, /data-signal-filter="closet"/);
+  assert.match(panel, /id="closetGrid"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(viewerScript, /kind === 'interaction'/);
   assert.match(viewerScript, /kind === 'sound-alert'/);
@@ -75,5 +77,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /configuration\.broadcaster/);
   assert.match(viewerScript, /requestIdShare/);
   assert.match(viewerScript, /identity_required/);
+  assert.match(viewerScript, /\/v1\/extension\/avatar\/equip/);
+  assert.match(viewerScript, /LOCKED · CHANNEL POINT REWARD/);
   assert.doesNotMatch(viewerScript, /class="alert-glyph"/);
 });

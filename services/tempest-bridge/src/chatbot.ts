@@ -9,7 +9,7 @@ export const chatbotRequiredScopes = ['user:read:chat', 'user:write:chat'] as co
 export const chatbotScopes = [...chatbotRequiredScopes, 'moderator:manage:shoutouts', 'moderator:manage:chat_messages', 'moderator:manage:banned_users'] as const;
 export const chatbotPermissions = ['everyone', 'subscriber', 'moderator', 'broadcaster'] as const;
 export type ChatbotPermission = typeof chatbotPermissions[number];
-export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'local-weather', 'seattle-weather', 'radio-now-playing', 'counter'] as const;
+export const chatbotResponseHandlers = ['command-directory', 'stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'twitch-clip', 'local-weather', 'seattle-weather', 'radio-now-playing', 'counter'] as const;
 export type ChatbotResponseHandler = typeof chatbotResponseHandlers[number];
 
 export interface ChatbotCommand {
@@ -280,6 +280,7 @@ export interface TwitchChatbotOptions {
   fetchImplementation?: typeof fetch;
   onEvent?: (event: TempestNormalizedChatEvent) => void | Promise<void>;
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
+  createTwitchClip?: (input: { title?: string; duration: number }) => Promise<{ id: string; url: string; editUrl: string }>;
   sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
 }
@@ -443,6 +444,20 @@ function defaultConfiguration(): ChatbotConfiguration {
       response: 'Studio chatbot online, {user}.',
       viewerCooldownMs: 15_000,
       globalCooldownMs: 3_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, {
+      id: 'clip',
+      name: 'clip',
+      aliases: [],
+      enabled: true,
+      replyToViewer: false,
+      allowSharedChat: false,
+      permission: 'everyone',
+      response: '',
+      handler: 'twitch-clip',
+      viewerCooldownMs: 60_000,
+      globalCooldownMs: 60_000,
       createdAt: timestamp,
       updatedAt: timestamp
     }, {
@@ -1221,7 +1236,7 @@ export class TwitchChatbot {
         await this.persist();
       }
     } else {
-      responseTemplate = await this.resolveCommandResponse(command, event);
+      responseTemplate = await this.resolveCommandResponse(command, event, args, simulated);
     }
     const response = responseTemplate
       .replaceAll('{user}', viewerName)
@@ -1682,13 +1697,25 @@ export class TwitchChatbot {
     }
   }
 
-  private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedChatEvent): Promise<string> {
+  private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedChatEvent, args: string[] = [], simulated = false): Promise<string> {
     switch (command.handler) {
       case 'command-directory': return this.commandDirectoryResponse(event);
       case 'stream-uptime': return event.source === 'kick' ? 'Stream uptime is currently available on Twitch only.' : this.streamUptimeResponse();
       case 'channel-title': return event.source === 'kick' ? 'The title command is currently available on Twitch only.' : this.channelTitleResponse();
       case 'channel-game': return event.source === 'kick' ? 'The category command is currently available on Twitch only.' : this.channelGameResponse();
       case 'stream-schedule': return event.source === 'kick' ? 'The schedule command is currently available on Twitch only.' : this.streamScheduleResponse();
+      case 'twitch-clip': {
+        if (event.source === 'kick') return 'Clip creation is currently available from Twitch chat only.';
+        if (simulated) return 'Clip command test passed. A live command would create a 30-second Twitch clip.';
+        if (!this.options.createTwitchClip) return 'Clip creation is not available until the broadcaster reconnects Twitch in Studio.';
+        const requestedTitle = args.join(' ').trim().slice(0, 100);
+        try {
+          const clip = await this.options.createTwitchClip({ ...(requestedTitle ? { title: requestedTitle } : {}), duration: 30 });
+          return `Clip created by {user}: ${clip.url}`;
+        } catch (error) {
+          return `Could not create that clip: ${(error as Error).message}`.slice(0, 500);
+        }
+      }
       case 'local-weather':
       case 'seattle-weather': return this.localWeatherResponse();
       case 'radio-now-playing': return this.radioNowPlayingResponse();
@@ -1701,7 +1728,7 @@ export class TwitchChatbot {
     const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
     const roles = event.viewer?.roles || [];
     const names = this.configuration.commands
-      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles) && !(event.source === 'kick' && ['stream-uptime', 'channel-title', 'channel-game', 'stream-schedule'].includes(command.handler || '')))
+      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles) && !(event.source === 'kick' && ['stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'twitch-clip'].includes(command.handler || '')))
       .map((command) => `${this.configuration.prefix}${command.name}`);
     return `Available commands: ${names.join(' · ')}`.slice(0, 500);
   }

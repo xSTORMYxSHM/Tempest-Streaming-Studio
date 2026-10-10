@@ -1,10 +1,11 @@
 {
-  "name": "@tempest/twitch-bits-extension",
+  "name": "@tempest/twitch-streaming-extension",
   "version": "0.1.0",
   "private": true,
-  "description": "Bits-enabled Twitch Overlay, Component, Panel, and Mobile extension for Tempest Streaming Studio.",
+  "description": "Free Twitch Video Overlay companion extension for Tempest Streaming Studio.",
   "scripts": {
     "build": "node tools/build.mjs",
+    "package:hosted": "pnpm build && powershell -NoProfile -ExecutionPolicy Bypass -File tools/package-hosted.ps1",
     "start": "node server.mjs",
     "test": "node --check src/viewer.js && node --check src/config.js && node --test test/*.test.mjs"
   }

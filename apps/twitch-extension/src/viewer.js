@@ -4,7 +4,7 @@
   const storageKey = 'tempest-extension-configuration-v1';
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING STUDIO', eyebrow: 'VIEWER CONTROL NODE', title: 'Signal deck', accent: '#54F2EB', background: '#05090E', surface: '#09131B', text: '#ECF9FF', muted: '#79919D', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 10, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
   const cooldowns = new Map();
-  const state = { auth: null, alerts: [], configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], closet: { items: [], equipped: null, identityRequired: false }, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -94,11 +94,15 @@
     const featured = state.filter === 'performances' ? [] : state.alerts.filter((alert) => alert.kind === 'interaction' && matchesQuery(alert));
     const performances = state.filter === 'events' ? [] : state.alerts.filter((alert) => alert.kind === 'sound-alert' && matchesQuery(alert));
     const visibleCount = featured.length + performances.length;
-    $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
+    const closetMode = state.filter === 'closet';
+    const closetItems = state.closet.items.filter((item) => !query || `${item.name} ${item.value || ''} ${item.effect}`.toLowerCase().includes(query));
+    const ownedCount = state.closet.items.filter((item) => item.owned).length;
+    $('#alertCount').textContent = closetMode ? `${ownedCount} OWNED` : `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
-    $('#featuredRegion').hidden = featured.length === 0;
-    $('#performanceRegion').hidden = performances.length === 0;
-    $('#emptyState').hidden = visibleCount !== 0;
+    $('#featuredRegion').hidden = closetMode || featured.length === 0;
+    $('#performanceRegion').hidden = closetMode || performances.length === 0;
+    $('#closetRegion').hidden = !closetMode;
+    $('#emptyState').hidden = closetMode || visibleCount !== 0;
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
@@ -109,6 +113,16 @@
       const wait = remaining(alert.id);
       return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait ? 'disabled' : ''}>
         <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
+      </button>`;
+    }).join('');
+    const effectLabels = { 'primary-color': 'JACKET COLOR', 'secondary-color': 'WISP COLOR', accessory: 'ACCESSORY', title: 'TITLE' };
+    $('#closetIdentity').hidden = !state.closet.identityRequired;
+    $('#closetGrid').hidden = state.closet.identityRequired;
+    $('#closetEmpty').hidden = state.closet.identityRequired || closetItems.length !== 0;
+    $('#closetGrid').innerHTML = closetItems.map((item) => {
+      const color = /^#[0-9a-f]{6}$/i.test(String(item.value || '')) ? item.value : '#54F2EB';
+      return `<button class="closet-card ${item.equipped ? 'equipped' : ''} ${item.owned ? '' : 'locked'}" type="button" data-closet-redeem="${escapeHtml(item.id)}" style="--cosmetic:${escapeHtml(color)}" ${state.busy || !item.owned || item.equipped ? 'disabled' : ''}>
+        <i>${item.effect.includes('color') ? '' : escapeHtml(item.effect === 'accessory' ? 'ACC' : 'TTL')}</i><span><strong>${escapeHtml(item.name)}</strong><small>${item.equipped ? 'EQUIPPED' : item.owned ? `${escapeHtml(effectLabels[item.effect] || 'COSMETIC')} · EQUIP` : 'LOCKED · CHANNEL POINT REWARD'}</small></span>
       </button>`;
     }).join('');
   }
@@ -135,6 +149,53 @@
     state.alerts = body.items;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
     render();
+  }
+
+  async function refreshAvatarCloset() {
+    const configuration = state.configuration;
+    if (configuration.mockMode) {
+      state.closet = { identityRequired: false, equipped: { primaryColor: '#54F2EB', secondaryColor: '#B99CFF', accessories: [] }, items: [
+        { id: 'mock-cyan-jacket', name: 'Cyan Jacket', effect: 'primary-color', value: '#54F2EB', owned: true, equipped: true },
+        { id: 'mock-violet-wisp', name: 'Violet Wisp', effect: 'secondary-color', value: '#B99CFF', owned: true, equipped: false },
+        { id: 'mock-storm-crown', name: 'Storm Crown', effect: 'accessory', value: 'Storm Crown', owned: false, equipped: false }
+      ] };
+      render();
+      return;
+    }
+    if (!configuration.ebsBaseUrl || !state.auth?.token) return;
+    const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/avatar`, { headers: { 'X-Extension-JWT': state.auth.token }, cache: 'no-store' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (body.code === 'identity_required') { state.closet = { items: [], equipped: null, identityRequired: true }; render(); return; }
+      throw new Error(body.error || `Avatar closet unavailable (${response.status}).`);
+    }
+    state.closet = { items: Array.isArray(body.items) ? body.items : [], equipped: body.equipped || null, identityRequired: false };
+    render();
+  }
+
+  async function equipAvatarCosmetic(redeemId) {
+    if (state.busy || !redeemId) return;
+    const configuration = state.configuration;
+    if (configuration.mockMode) {
+      state.closet.items = state.closet.items.map((item) => ({ ...item, equipped: item.id === redeemId ? true : item.effect === state.closet.items.find((entry) => entry.id === redeemId)?.effect ? false : item.equipped }));
+      render(); toast('Avatar look equipped in local preview.'); return;
+    }
+    state.busy = true; render();
+    try {
+      const requestId = crypto.randomUUID();
+      const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/avatar/equip`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId }, body: JSON.stringify({ requestId, redeemId })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body.error || `Avatar cosmetic rejected (${response.status}).`); error.code = body.code; throw error;
+      }
+      toast('Avatar cosmetic equipped on stream.');
+      await refreshAvatarCloset();
+    } catch (error) {
+      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) window.Twitch.ext.actions.requestIdShare();
+      toast(error.message, true);
+    } finally { state.busy = false; render(); }
   }
 
   let toastTimer;
@@ -233,11 +294,17 @@
     };
     $('#featuredGrid').addEventListener('click', triggerFromClick);
     $('#alertGrid').addEventListener('click', triggerFromClick);
+    $('#closetGrid').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-closet-redeem]');
+      if (button) void equipAvatarCosmetic(button.dataset.closetRedeem);
+    });
+    $('#shareIdentityButton').addEventListener('click', () => window.Twitch?.ext?.actions?.requestIdShare?.());
     document.querySelector('.signal-filters').addEventListener('click', (event) => {
       const button = event.target.closest('[data-signal-filter]');
       if (!button) return;
       state.filter = button.dataset.signalFilter;
       render();
+      if (state.filter === 'closet') void refreshAvatarCloset().catch((error) => toast(error.message, true));
     });
     $('#collapseButton').addEventListener('click', () => {
       state.collapsed = !state.collapsed;
@@ -249,6 +316,9 @@
     setInterval(() => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     }, 15000);
+    setInterval(() => {
+      if (!document.hidden && state.filter === 'closet') void refreshAvatarCloset().catch(() => {});
+    }, 30000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     });
@@ -270,6 +340,7 @@
       ...(await response.json()).map((entry) => ({ ...entry, kind: 'sound-alert' }))
     ];
     state.alerts = configuration.mockMode ? bundledAlerts : [];
+    if (configuration.mockMode) await refreshAvatarCloset();
     render();
     await refreshHostedCatalog().catch((error) => {
       if (!configuration.mockMode && state.auth?.token) { setConnection('PAIRING REQUIRED', false); toast(error.message, true); }

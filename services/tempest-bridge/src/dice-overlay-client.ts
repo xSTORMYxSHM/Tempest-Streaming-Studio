@@ -247,6 +247,12 @@ async function getBox() {
 async function apply(next) {
   settings = { ...settings, ...next };
   document.documentElement.style.setProperty('--dice-scale', String(Math.max(.6, Math.min(1.4, Number(settings.scalePercent || 100) / 100))));
+  if (!boxPromise) {
+    activeDiceTheme = settings.diceTheme || 'default';
+    configuredSignature = '';
+    await reportClient('ready');
+    return;
+  }
   const diceBox = await getBox();
   await configureBox(diceBox);
 }

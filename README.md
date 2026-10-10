@@ -1,6 +1,8 @@
 # Tempest Streaming Studio
 
-Current development version: **1.5.0 release candidate** (not published)
+The active development sequence is documented in [the Interactive Development Roadmap](docs/INTERACTIVE_DEVELOPMENT_ROADMAP.md), including the 1.7.0 release gate and the Interactive Stage vertical slice. Studio 1.6.0 remains the live bridge/release line while this work is developed separately.
+
+Current development version: **1.7.0 development build** (not published)
 
 Tempest Streaming Studio is the interaction hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed actions across Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Creative rendering, shared asset libraries, and live production stay inside their focused applications.
 Tempest Streaming Studio is the interaction and orchestration hub for connected streaming tools. It turns viewer interactions and operator commands into safe, timed workflows across Tempest 2D, Warudo, Tempest Broadcast, Quartic Pulse, Data Horizon, and future Tempest-aware applications. Studio also manages application registrations and shared assets, while creative rendering and live production stay inside focused applications.
@@ -8,7 +10,7 @@ Tempest Streaming Studio is the interaction and orchestration hub for connected 
 ## Workspace
 
 - `apps/studio-desktop` — Electron management interface.
-- `apps/twitch-extension` — Video Component, Mobile viewer interface, configuration view, and local HTTPS test server.
+- `apps/twitch-extension` — Tempest Mainframe's panel-only viewer hub, configuration view, and local HTTPS test server.
 - `services/tempest-bridge` — local authenticated API, interaction workflows, cooldowns, safety leases, application discovery, commands, and events.
 - `services/twitch-ebs` — public Twitch JWT boundary, request rate/replay protection, and channel-bound Studio relay.
 - `services/warudo-adapter` — local Bridge adapters for Warudo blueprint cues and direct Tempest 2D controls.
@@ -16,8 +18,7 @@ Tempest Streaming Studio is the interaction and orchestration hub for connected 
 - `examples` — manifests showing how current and future Tempest applications register.
 - `docs` — architecture and integration guidance.
 
-The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Warudo and compatible broadcast reactions are optional per alert. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript. Each alert can keep a global placement plus named overrides that automatically follow Broadcast’s active scene. Grid/safe-edge snapping, exact center controls, arrow-key nudging, and a silent **Show on Canvas** mode make it possible to arrange an unsaved design against the real Broadcast scene.
-The **Interaction Alerts** page includes starter viewer performances and can create additional custom interactions. Its cards mirror Twitch Alerts, including a canvas-aware drag-and-resize designer; Tempest 2D, Warudo, and compatible broadcast reactions are optional per alert. A Tempest 2D action can select an expression, motion, or Live2D parameter directly. The **Twitch Alerts** page keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, and isolated custom HTML/CSS/JavaScript.
+The **Alerts** workspace unifies Twitch channel events and viewer-triggered interactions behind one ordered queue, one readiness dashboard, and adjacent editor tabs. The **Viewer Interactions** editor includes starter performances and custom interactions; Tempest 2D, Warudo, and compatible broadcast reactions are optional per alert. The **Twitch Events** editor keeps sound and visuals together for follows, subscriptions, gift subs, Bits, raids, rewards, and custom normalized event presets. Both designers control position, size, media/text layers, animation, templates, typography, timing, TTS, isolated custom HTML/CSS/JavaScript, and global or scene-specific placement. Grid and safe-edge snapping, exact center controls, arrow-key nudging, and a silent **Show on Canvas** mode make it possible to arrange an unsaved design against the real Broadcast scene.
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 

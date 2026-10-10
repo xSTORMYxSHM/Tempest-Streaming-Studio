@@ -20,6 +20,8 @@ async function main(): Promise<void> {
   const pfxPath = String(process.env.TEMPEST_EBS_TLS_PFX || '').trim();
   const databaseUrl = String(process.env.DATABASE_URL || '').trim();
   const allowedTwitchClientIds = list(process.env.TEMPEST_EBS_TWITCH_CLIENT_IDS);
+  const streamingClientId = String(process.env.TEMPEST_STREAMING_EXTENSION_CLIENT_ID || '').trim();
+  const streamingSecrets = list(process.env.TEMPEST_STREAMING_EXTENSION_SECRETS || process.env.TEMPEST_STREAMING_EXTENSION_SECRET);
   const bitsClientId = String(process.env.TEMPEST_BITS_EXTENSION_CLIENT_ID || '').trim();
   const bitsSecrets = list(process.env.TEMPEST_BITS_EXTENSION_SECRETS || process.env.TEMPEST_BITS_EXTENSION_SECRET);
   const configuredBitsProducts = bitsProducts(process.env.TEMPEST_BITS_PRODUCT_ACTIONS);
@@ -40,6 +42,7 @@ async function main(): Promise<void> {
     allowedActions: databaseUrl ? [] : list(process.env.TEMPEST_EBS_ALLOWED_ACTIONS),
     allowedOrigins: list(process.env.TEMPEST_EBS_ALLOWED_ORIGINS),
     allowAnonymous: process.env.TEMPEST_EBS_ALLOW_ANONYMOUS === '1',
+    streamingExtension: streamingSecrets.length ? { clientId: streamingClientId || undefined, secrets: streamingSecrets } : undefined,
     bitsExtension: bitsConfigured ? { clientId: bitsClientId, secrets: bitsSecrets, products: configuredBitsProducts } : undefined,
     discordOAuth: process.env.TEMPEST_DISCORD_CLIENT_ID && process.env.TEMPEST_DISCORD_CLIENT_SECRET ? {
       clientId: process.env.TEMPEST_DISCORD_CLIENT_ID,

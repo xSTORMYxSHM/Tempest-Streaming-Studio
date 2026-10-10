@@ -175,6 +175,7 @@ export class TempestDiscordVoiceOverlay {
   private previewing = false;
   private connection = { connected: false, channelId: '', channelName: '', guildName: '', error: '' };
   private readonly documentPath: string;
+  private persistQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly dataDirectory: string) { this.documentPath = path.join(dataDirectory, 'discord-voice-overlay.json'); }
 
@@ -439,11 +440,15 @@ export class TempestDiscordVoiceOverlay {
   private broadcast(event: string, payload: unknown): void { for (const client of this.clients) this.write(client, event, payload); }
   private write(response: ServerResponse, event: string, payload: unknown): void { if (!response.destroyed) response.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`); }
 
-  private async persist(): Promise<void> {
-    await mkdir(this.dataDirectory, { recursive: true });
-    const temporaryPath = `${this.documentPath}.tmp`;
-    const document: DiscordVoiceDocument = { schemaVersion: 1, settings: this.settings, profiles: [...this.profiles.values()] };
-    await writeFile(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-    await rename(temporaryPath, this.documentPath);
+  private persist(): Promise<void> {
+    const document: DiscordVoiceDocument = structuredClone({ schemaVersion: 1, settings: this.settings, profiles: [...this.profiles.values()] });
+    const operation = this.persistQueue.then(async () => {
+      await mkdir(this.dataDirectory, { recursive: true });
+      const temporaryPath = `${this.documentPath}.tmp`;
+      await writeFile(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+      await rename(temporaryPath, this.documentPath);
+    });
+    this.persistQueue = operation.catch(() => undefined);
+    return operation;
   }
 }

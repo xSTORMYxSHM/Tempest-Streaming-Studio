@@ -2,11 +2,39 @@ import type { ExtensionRelayOptions } from '@tempest/bridge';
 
 export const OFFICIAL_HOSTED_EBS_URL = 'https://signal.tempestmainframe.com';
 export type TwitchExtensionEdition = 'free' | 'bits';
+export type TwitchExtensionCompanion = 'mainframe' | 'streaming';
+
+export interface TwitchExtensionCompanionSettings {
+  schemaVersion: 1;
+  mainframe: boolean;
+  streaming: boolean;
+}
+
+export const defaultTwitchExtensionCompanions = (): TwitchExtensionCompanionSettings => ({
+  schemaVersion: 1,
+  mainframe: true,
+  streaming: true
+});
 
 export function validateTwitchExtensionEdition(value: unknown): TwitchExtensionEdition {
   if (value === undefined || value === null || value === '' || value === 'free') return 'free';
   if (value === 'bits') return 'bits';
   throw new Error('Choose either Tempest Mainframe (Free) or Tempest Streaming (Bits).');
+}
+
+export function validateTwitchExtensionCompanions(value: unknown): TwitchExtensionCompanionSettings {
+  if (value === undefined || value === null || value === '') return defaultTwitchExtensionCompanions();
+  if (value === 'free') return { schemaVersion: 1, mainframe: true, streaming: false };
+  if (value === 'bits') return { schemaVersion: 1, mainframe: false, streaming: true };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Twitch Extension companion settings are invalid.');
+  const source = value as { mainframe?: unknown; streaming?: unknown };
+  if (typeof source.mainframe !== 'boolean' || typeof source.streaming !== 'boolean') throw new Error('Choose which Twitch companion Extensions this channel uses.');
+  if (!source.mainframe && !source.streaming) throw new Error('Keep at least one Twitch companion Extension enabled.');
+  return { schemaVersion: 1, mainframe: source.mainframe, streaming: source.streaming };
+}
+
+export function legacyEditionForCompanions(companions: TwitchExtensionCompanionSettings): TwitchExtensionEdition {
+  return companions.streaming && !companions.mainframe ? 'bits' : 'free';
 }
 
 export interface HostedExtensionCredentials {
@@ -21,6 +49,8 @@ export interface HostedExtensionCredentials {
 
 export interface HostedExtensionStatus {
   paired: boolean;
+  companions: TwitchExtensionCompanionSettings;
+  /** @deprecated Compatibility hint for pre-1.5.1 EBS deployments. */
   extensionEdition: TwitchExtensionEdition;
   defaultEbsBaseUrl: string;
   ebsBaseUrl?: string;
@@ -74,15 +104,17 @@ export function describeHostedExtensionPairingFailure(status: number, result: { 
   return error || `Hosted Extension pairing failed with ${status}.`;
 }
 
-export function hostedExtensionRelayOptions(credentials: HostedExtensionCredentials, extensionEdition: TwitchExtensionEdition = 'free'): ExtensionRelayOptions {
+export function hostedExtensionRelayOptions(credentials: HostedExtensionCredentials, companionValue: TwitchExtensionCompanionSettings | TwitchExtensionEdition = defaultTwitchExtensionCompanions()): ExtensionRelayOptions {
   const url = new URL(credentials.ebsBaseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.pathname = '/v1/studio';
+  const companions = validateTwitchExtensionCompanions(companionValue);
   return {
     url: url.href,
     token: credentials.relayToken,
     channelId: credentials.channelId,
-    extensionEdition: validateTwitchExtensionEdition(extensionEdition),
+    companions,
+    extensionEdition: legacyEditionForCompanions(companions),
     allowUnauthorizedLocalTls: false
   };
 }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { OFFICIAL_TWITCH_CLIENT_ID, TwitchIntegrationGateway, describeTwitchOAuthError, normalizeTwitchEventSubNotification } = require('../dist/twitch-integration');
+const { OFFICIAL_TWITCH_CLIENT_ID, TwitchIntegrationGateway, defaultTwitchScopes, describeTwitchOAuthError, normalizeTwitchEventSubNotification, normalizeTwitchPrediction } = require('../dist/twitch-integration');
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -55,7 +55,7 @@ test('migrates an empty 1.0.0 Twitch configuration to the official application',
   assert.equal(JSON.parse(await readFile(configurationPath, 'utf8')).clientId, OFFICIAL_TWITCH_CLIENT_ID);
 });
 
-test('normalizes raid, Hype Train, and goal EventSub notifications', () => {
+test('normalizes raid, Hype Train, goal, and Channel Point EventSub notifications', () => {
   const raid = normalizeTwitchEventSubNotification('channel.raid', { to_broadcaster_user_id: 'channel-1', from_broadcaster_user_id: 'raider-1', from_broadcaster_user_name: 'Raid Leader', viewers: 42 }, 'raid-message', '2026-08-28T00:00:00Z');
   assert.equal(raid.topic, 'viewer.raid.received');
   assert.equal(raid.payload.viewers, 42);
@@ -66,6 +66,78 @@ test('normalizes raid, Hype Train, and goal EventSub notifications', () => {
   const goal = normalizeTwitchEventSubNotification('channel.goal.progress', { broadcaster_user_id: 'channel-1', id: 'goal-1', type: 'subscription', description: 'Signal Goal', current_amount: 72, target_amount: 100 }, 'goal-message', '2026-08-28T00:00:02Z');
   assert.equal(goal.topic, 'channel.goal.updated');
   assert.equal(goal.payload.currentAmount, 72);
+  const redemption = normalizeTwitchEventSubNotification('channel.channel_points_custom_reward_redemption.add', { broadcaster_user_id: 'channel-1', id: 'redemption-1', user_id: 'viewer-1', user_name: 'Nova', user_input: 'please', reward: { id: 'reward-purple', title: 'Purple Wisp', cost: 2500 } }, 'redemption-message', '2026-08-28T00:00:03Z');
+  assert.equal(redemption.topic, 'viewer.reward.redeemed');
+  assert.equal(redemption.viewer.id, 'viewer-1');
+  assert.equal(redemption.payload.rewardId, 'reward-purple');
+  assert.equal(redemption.payload.rewardTitle, 'Purple Wisp');
+  assert.equal(redemption.payload.rewardCost, 2500);
+});
+
+test('normalizes Twitch Prediction totals and lifecycle fields', () => {
+  const prediction = normalizeTwitchPrediction({
+    id: 'prediction-1', title: 'Will the crew survive?', status: 'locked', prediction_window: 120,
+    outcomes: [{ id: 'yes', title: 'Yes', users: 8, channel_points: 4200 }, { id: 'no', title: 'No', users: 3, channel_points: 900 }],
+    created_at: '2026-10-10T01:00:00Z', locked_at: '2026-10-10T01:02:00Z'
+  });
+  assert.equal(prediction.status, 'LOCKED');
+  assert.equal(prediction.outcomes[0].channelPoints, 4200);
+  assert.equal(prediction.predictionWindow, 120);
+  assert.equal(prediction.lockedAt, '2026-10-10T01:02:00Z');
+});
+
+test('creates, locks, and resolves official Twitch Channel Point Predictions', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-twitch-predictions-'));
+  const scopes = [...defaultTwitchScopes];
+  const credentials = memoryCredentialStore({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresAt: new Date(Date.now() + 3600000).toISOString(), scopes });
+  const requests = [];
+  const prediction = (status, winningOutcomeId) => ({
+    id: 'prediction-1', broadcaster_id: 'user-1', title: 'Will the crew survive?', status, prediction_window: 120,
+    outcomes: [{ id: 'yes', title: 'Yes', users: 8, channel_points: 4200 }, { id: 'no', title: 'No', users: 3, channel_points: 900 }],
+    winning_outcome_id: winningOutcomeId
+  });
+  const responses = [
+    jsonResponse({ client_id: OFFICIAL_TWITCH_CLIENT_ID, login: 'tempeststreamer', user_id: 'user-1', scopes, expires_in: 3600 }),
+    jsonResponse({ data: [prediction('ACTIVE')] }, 200),
+    jsonResponse({ data: [prediction('LOCKED')] }, 200),
+    jsonResponse({ data: [prediction('RESOLVED', 'yes')] }, 200)
+  ];
+  const gateway = new TwitchIntegrationGateway({ dataDirectory, credentialStore: credentials, fetchImplementation: async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    return responses.shift();
+  } });
+  await gateway.initialize();
+  const created = await gateway.createPrediction({ title: 'Will the crew survive?', outcomes: ['Yes', 'No'], predictionWindow: 120 });
+  assert.equal(created.predictions.current.status, 'ACTIVE');
+  assert.equal(JSON.parse(requests[1].init.body).prediction_window, 120);
+  const locked = await gateway.endPrediction({ status: 'LOCKED' });
+  assert.equal(locked.predictions.current.status, 'LOCKED');
+  const resolved = await gateway.endPrediction({ status: 'RESOLVED', winningOutcomeId: 'yes' });
+  assert.equal(resolved.predictions.current.winningOutcomeId, 'yes');
+  assert.equal(JSON.parse(requests[3].init.body).winning_outcome_id, 'yes');
+  assert.equal(requests[1].init.headers.Authorization, 'Bearer access-1');
+});
+
+test('creates a titled live Twitch clip without exposing its edit URL', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-twitch-clips-'));
+  const scopes = [...defaultTwitchScopes];
+  const credentials = memoryCredentialStore({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresAt: new Date(Date.now() + 3600000).toISOString(), scopes });
+  const requests = [];
+  const responses = [
+    jsonResponse({ client_id: OFFICIAL_TWITCH_CLIENT_ID, login: 'tempeststreamer', user_id: 'user-1', scopes, expires_in: 3600 }),
+    jsonResponse({ data: [{ id: 'GreatClip', edit_url: 'https://clips.twitch.tv/GreatClip/edit' }] }, 202)
+  ];
+  const gateway = new TwitchIntegrationGateway({ dataDirectory, credentialStore: credentials, fetchImplementation: async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    return responses.shift();
+  } });
+  await gateway.initialize();
+  const clip = await gateway.createClip({ title: 'That boss fight', duration: 30 });
+  assert.equal(clip.url, 'https://clips.twitch.tv/GreatClip');
+  assert.equal(clip.editUrl, 'https://clips.twitch.tv/GreatClip/edit');
+  assert.match(requests[1].url, /broadcaster_id=user-1/);
+  assert.match(requests[1].url, /title=That\+boss\+fight/);
+  assert.match(requests[1].url, /duration=30/);
 });
 
 test('clears stale OAuth errors and credentials when the Twitch client ID changes', async () => {

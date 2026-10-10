@@ -3,54 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: https://*.giphy.com https://cdn.discordapp.com https://media.discordapp.net; media-src 'self' file:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' file: data: http://127.0.0.1:* https://*.giphy.com https://cdn.discordapp.com https://media.discordapp.net; media-src 'self' file:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'" />
     <title>Tempest Streaming Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="streamer-privacy">
     <div class="shell">
-      <aside class="rail">
+      <aside class="rail operator-rail">
         <div class="rail-brand">
           <div class="brand-mark"><img src="assets/storm-horizon-sh.png" alt="Storm Horizon Media" /></div>
-          <div class="brand-copy"><p>TEMPEST STREAMING</p><strong>STUDIO</strong></div>
+          <div class="brand-copy"><p>TEMPEST</p><strong>STUDIO</strong></div>
         </div>
-        <nav aria-label="Studio sections">
-          <p class="nav-group">START</p>
-          <button class="nav-button active" data-section="overview">Studio Home</button>
-          <p class="nav-group">ON AIR</p>
-          <button class="nav-button nav-live-button" data-section="streamtogether">Stream Together</button>
-          <button class="nav-button nav-live-button" data-section="chatbot">Live Desk</button>
-          <button class="nav-button nav-live-button" data-section="dice">3D Dice</button>
-          <button class="nav-button nav-live-button" data-section="simulcast">Go Live</button>
-          <p class="nav-group">CREATE</p>
-          <button class="nav-button" data-section="visualalerts">Twitch Alerts</button>
-          <button class="nav-button" data-section="soundalerts">Viewer Interactions</button>
-          <button class="nav-button" data-section="chatoverlay">Chat Overlay</button>
-          <button class="nav-button" data-section="discordvoice">Discord Guests</button>
-          <button class="nav-button" data-section="extensiondesigner">Twitch Panel</button>
-          <details id="setupNavigation" class="nav-setup-drawer">
-            <summary><span>SETUP + CONNECTIONS</span><i aria-hidden="true">›</i></summary>
-            <button class="nav-button" data-section="twitch">Twitch Account</button>
-            <button class="nav-button" data-section="kick">Kick Account</button>
-            <button class="nav-button" data-section="dualformat">Twitch Dual Format</button>
-            <button class="nav-button" data-section="api">Avatar Apps</button>
-          </details>
-          <p class="nav-group">STUDIO</p>
-          <button class="nav-button" data-section="settings">Settings</button>
-          <button class="nav-button" data-section="events" data-advanced>Activity &amp; Diagnostics</button>
+        <nav aria-label="Studio workspaces">
+          <button class="nav-button active" data-nav-group="home" data-section="overview"><span class="nav-glyph" aria-hidden="true">⌂</span><span>Home</span></button>
+          <button class="nav-button" data-nav-group="live" data-section="chatbot"><span class="nav-glyph live" aria-hidden="true">●</span><span>Live</span></button>
+          <button class="nav-button" data-nav-group="interact" data-section="world"><span class="nav-glyph" aria-hidden="true">✦</span><span>Interact</span></button>
+          <button class="nav-button" data-nav-group="overlays" data-section="alerts"><span class="nav-glyph" aria-hidden="true">▱</span><span>Overlays</span></button>
+          <button class="nav-button" data-nav-group="extensions" data-section="twitch"><span class="nav-glyph text" aria-hidden="true">EXT</span><span>Extensions</span></button>
+          <button class="nav-button" data-nav-group="connect" data-section="twitch"><span class="nav-glyph" aria-hidden="true">↔</span><span>Connect</span></button>
+          <button class="nav-button" data-nav-group="settings" data-section="settings"><span class="nav-glyph" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
         <div class="safety-control">
           <span>STREAM SAFETY</span><strong id="railSafetyState">CHECKING</strong>
-          <button id="emergencyStopButton" class="emergency-button">Stop All Effects</button>
+          <button id="emergencyStopButton" class="emergency-button" title="Stop all active effects">STOP</button>
         </div>
         <div class="rail-status"><i id="bridgeLight"></i><div><span>STUDIO STATUS</span><strong id="bridgeRailStatus">STARTING</strong></div></div>
       </aside>
 
       <main>
         <header class="topbar">
+          <div class="topbar-brand"><img src="assets/storm-horizon-sh.png" alt="" /><div><span>TEMPEST STREAMING STUDIO</span><strong>OPERATOR DECK</strong></div></div>
           <div class="topbar-context"><p id="sectionKicker">START HERE</p><span aria-hidden="true">/</span><h1 id="sectionTitle">Studio Home</h1></div>
           <div class="topbar-actions"><button id="privacyModeButton" class="privacy-mode-button" type="button" aria-pressed="true" title="Mask streamer-sensitive information throughout Studio">PRIVATE INFO HIDDEN</button><span class="protocol-badge">BUILD 1.0.1</span><span id="safetyBadge" class="status-badge" data-advanced>CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button" data-advanced>Refresh Data</button></div>
         </header>
+        <nav id="workspaceTabs" class="workspace-tabs" aria-label="Current workspace tools"></nav>
 
         <section id="overviewSection" class="page active">
           <div class="hero-panel live-hero">
@@ -58,7 +44,7 @@
               <p class="eyebrow">WELCOME TO TEMPEST STREAMING STUDIO</p>
               <h2>Your stream systems.<br /><span>One control center.</span></h2>
               <p>Connect your accounts, create alerts and overlays, test everything, and get your stream ready from one place.</p>
-              <div class="hero-actions"><button class="primary-button" data-go="chatbot">Open Live Desk</button><button class="secondary-button" data-go="streamtogether">Stream Together</button><button class="secondary-button" data-go="simulcast">Go Live</button><button class="secondary-button" data-go="dice">Roll Dice</button><button id="openOnboardingWizard" class="text-button">Review Setup</button></div>
+              <div class="hero-actions"><button class="primary-button" data-go="chatbot">Open Chatbot</button><button class="secondary-button" data-go="streamtogether">Stream Together</button><button class="secondary-button" data-go="simulcast">Go Live</button><button class="secondary-button" data-go="dice">Roll Dice</button><button id="openOnboardingWizard" class="text-button">Review Setup</button></div>
             </div>
             <div id="heroCore" class="bridge-orbit" aria-hidden="true"><div>HOME</div><i></i><i></i><i></i></div>
           </div>
@@ -71,11 +57,11 @@
           <div class="home-menu-heading"><div><p class="eyebrow">LIVE UTILITIES</p><h3>Controls for the current stream</h3></div><p>Chat, polls, production status, and audience tools stay one click away.</p></div>
           <div class="home-menu-grid home-live-grid">
             <button class="home-menu-card home-live-card" data-go="streamtogether"><b>TWITCH CALL</b><strong>Stream Together</strong><span>Open Backstage camera, microphone, guests, and call controls.</span><i>OPEN STREAM TOGETHER →</i></button>
-            <button class="home-menu-card home-live-card" data-go="chatbot"><b>LIVE DESK</b><strong>Unified Chat + Polls</strong><span>Monitor Twitch, Kick, collaborator communities, and active voting.</span><i>OPEN LIVE DESK →</i></button>
+            <button class="home-menu-card home-live-card" data-go="chatbot"><b>CHATBOT</b><strong>Chat + Audience Tools</strong><span>Run live chat, polls, commands, moderation, and automation.</span><i>OPEN CHATBOT →</i></button>
             <button class="home-menu-card home-live-card" data-go="simulcast"><b>OUTPUT CONTROL</b><strong>Go Live</strong><span>Run preflight and monitor Twitch, Kick, upload headroom, and recording.</span><i>OPEN GO LIVE →</i></button>
             <button class="home-menu-card home-live-card" data-go="dice"><b>ON-STREAM TOOL</b><strong>3D Dice</strong><span>Roll physical Dice Box dice for the streamer or chat.</span><i>ROLL ON STREAM →</i></button>
-            <button class="home-menu-card" data-go="soundalerts"><b>AUDIENCE</b><strong>Viewer Interactions</strong><span>Trigger, preview, and manage viewer-controlled stream moments.</span><i>OPEN INTERACTIONS →</i></button>
-            <button class="home-menu-card" data-go="visualalerts"><b>CHANNEL EVENTS</b><strong>Twitch Alerts</strong><span>Preview and manage follows, subscriptions, Bits, raids, and rewards.</span><i>OPEN ALERTS →</i></button>
+            <button class="home-menu-card" data-go="alerts"><b>ALERT ENGINE</b><strong>Unified Alerts</strong><span>Manage Twitch events and viewer-triggered moments through one queue and workspace.</span><i>OPEN ALERTS →</i></button>
+            <button class="home-menu-card" data-go="interactivestage"><b>ON-SCREEN WORLD</b><strong>Interactive Stage</strong><span>Place, move, test, and safely clear persistent viewer-facing objects.</span><i>OPEN STAGE →</i></button>
           </div>
           <details class="home-tool-drawer">
             <summary><span><b>CREATE + CUSTOMIZE</b><strong>Overlays, guests, and channel presentation</strong></span><i aria-hidden="true">›</i></summary>
@@ -118,8 +104,46 @@
           <div id="alertHistoryList" class="alert-history-list empty-state">No alert playback has been recorded yet.</div>
         </section>
 
+        <section id="alertsSection" class="page">
+          <div class="alert-workspace-tabs" role="tablist" aria-label="Alert workspace">
+            <button class="active" data-go="alerts" role="tab" aria-selected="true">Overview</button>
+            <button data-go="visualalerts" role="tab" aria-selected="false">Twitch Events</button>
+            <button data-go="soundalerts" role="tab" aria-selected="false">Viewer Interactions</button>
+          </div>
+          <div class="page-toolbar alert-overview-toolbar"><div><p class="eyebrow">ONE ENGINE · TWO AUDIO LANES</p><h2>Unified Alerts</h2><p>Build, route, test, and monitor every Twitch event and viewer-triggered alert from one workspace. All alerts share one ordered playback queue.</p></div><span id="unifiedAlertStateBadge" class="status-badge">CHECKING</span></div>
+          <div class="metric-grid unified-alert-metrics">
+            <article><span>ALL ALERTS</span><strong id="unifiedAlertTotalCount">0</strong><small>Twitch events + viewer interactions</small></article>
+            <article><span>ENABLED</span><strong id="unifiedAlertEnabledCount">0</strong><small>Ready to be triggered</small></article>
+            <article><span>MEDIA READY</span><strong id="unifiedAlertMediaCount">0</strong><small>With sound or visual assigned</small></article>
+            <article><span>IN QUEUE</span><strong id="unifiedAlertQueueCount">0</strong><small>Playing + waiting</small></article>
+          </div>
+          <div class="unified-alert-layout">
+            <article class="panel unified-alert-queue-panel">
+              <div class="panel-header"><div><span>SHARED FIFO PLAYBACK</span><h3>Alert Queue</h3></div><strong id="unifiedAlertQueueBadge" class="state-chip">IDLE</strong></div>
+              <div id="unifiedAlertNow" class="unified-alert-now empty-state">No alert is playing.</div>
+              <div class="unified-alert-waiting-heading"><span>UP NEXT</span><button id="clearUnifiedAlertQueue" class="text-button" data-alert-queue-clear="true" disabled>Clear waiting</button></div>
+              <div id="unifiedAlertWaiting" class="unified-alert-waiting empty-state">The queue is empty.</div>
+            </article>
+            <article class="panel unified-alert-sources-panel">
+              <div class="panel-header"><div><span>BROADCAST OUTPUTS</span><h3>Browser Source lanes</h3></div><strong id="unifiedAlertSourceCount" class="state-chip">0 CONNECTED</strong></div>
+              <p class="unified-alert-routing-note">Both lanes use the same queue and design system. They stay separate so viewer-interaction music can be excluded from a recording or VOD track without muting Twitch follows, subs, Bits, raids, or rewards.</p>
+              <div id="unifiedTwitchAlertSource" class="unified-alert-source-card"><span>TWITCH EVENTS · LIVE + VOD</span><strong>Preparing source…</strong></div>
+              <div id="unifiedInteractionAlertSource" class="unified-alert-source-card interaction"><span>VIEWER INTERACTIONS · LIVE ROUTE</span><strong>Preparing source…</strong></div>
+            </article>
+          </div>
+          <div class="unified-alert-catalogs">
+            <button data-go="visualalerts"><span>TWITCH EVENTS</span><strong id="unifiedTwitchCatalogSummary">0 alert types</strong><small>Follows, subscriptions, Bits, raids, rewards, variants, and stream experiences.</small><i>OPEN TWITCH ALERTS →</i></button>
+            <button data-go="soundalerts"><span>VIEWER INTERACTIONS</span><strong id="unifiedInteractionCatalogSummary">0 interactions</strong><small>Jumpscares, sounds, GIFs, screen effects, counters, avatars, and community actions.</small><i>OPEN VIEWER INTERACTIONS →</i></button>
+          </div>
+        </section>
+
         <section id="soundalertsSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build free or Bits-enabled stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions from one reusable catalog.</p></div><div class="page-toolbar-actions"><span class="status-badge">FREE + BITS READY</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
+          <div class="alert-workspace-tabs" role="tablist" aria-label="Alert workspace">
+            <button data-go="alerts" role="tab" aria-selected="false">Overview</button>
+            <button data-go="visualalerts" role="tab" aria-selected="false">Twitch Events</button>
+            <button class="active" data-go="soundalerts" role="tab" aria-selected="true">Viewer Interactions</button>
+          </div>
+          <div class="page-toolbar"><div><p class="eyebrow">VIEWER INTERACTION CATALOG</p><h2>Viewer Interactions</h2><p>Build free stickers, GIFs, jumpscares, sounds, screen effects, counters, and community actions from one reusable catalog.</p></div><div class="page-toolbar-actions"><span class="status-badge">FREE ACTIONS</span><button data-import-alert-pack="interaction" class="secondary-button">Import Pack</button><button id="newInteractionAlertButton" class="primary-button">New Interaction</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>INTERACTIONS</span><strong id="soundAlertCount">0</strong><small>Blueprint-compatible performances</small></article>
             <article><span>ENABLED</span><strong id="soundAlertEnabledCount">0</strong><small>Available to viewer requests</small></article>
@@ -131,7 +155,7 @@
           <details class="setup-guidance">
             <summary><span><b>SETUP &amp; ROUTING</b><strong>Broadcast, VOD, Warudo, and portable packs</strong></span><em>Show details</em></summary>
             <div class="setup-guidance-body">
-              <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Add this as its own Browser Source using the active base-canvas dimensions shown in Guided Setup, with <strong>Control audio via OBS</strong>. Keep it on the live audio track, but remove it from the recording/VOD track used for YouTube when interaction music may be claimed.</div>
+              <div class="sound-alert-note"><strong>VOD-safe routing:</strong> Interaction visuals are already in Unified Stage. Add only the optional audio-only lane with <strong>Control audio via OBS</strong> when interaction music must be kept off the recording/VOD track.</div>
               <div class="sound-alert-note"><strong>Interaction route:</strong> Every request resolves the saved audio, visual, and canvas design. Warudo performance routing appears only on alerts where you enable it.</div>
               <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export any complete alert—including its sound, GIF/video, canvas design, and custom code—as one shareable file. Imported media is verified and copied into Studio-managed storage.</div>
               <div id="soundAlertBroadcastInventory" class="sound-alert-note"><strong>Broadcast executor:</strong> Waiting for its live OBS source inventory.</div>
@@ -231,6 +255,11 @@
         </section>
 
         <section id="visualalertsSection" class="page">
+          <div class="alert-workspace-tabs" role="tablist" aria-label="Alert workspace">
+            <button data-go="alerts" role="tab" aria-selected="false">Overview</button>
+            <button class="active" data-go="visualalerts" role="tab" aria-selected="true">Twitch Events</button>
+            <button data-go="soundalerts" role="tab" aria-selected="false">Viewer Interactions</button>
+          </div>
           <div class="page-toolbar"><div><p class="eyebrow">TWITCH CHANNEL EVENTS</p><h2>Twitch Alerts</h2><p>Design the complete sound-and-visual response for follows, subscriptions, gift subs, Bits, raids, and channel-point rewards.</p></div><div class="page-toolbar-actions"><span id="visualAlertStateBadge" class="status-badge">CHECKING</span><button data-import-alert-pack="twitch" class="secondary-button">Import Alert Pack</button><button id="newTwitchAlertButton" class="primary-button">New Twitch Alert</button></div></div>
           <div class="metric-grid sound-alert-metrics">
             <article><span>ALERT TYPES</span><strong id="twitchAlertCount">0</strong><small>Normalized Twitch event presets</small></article>
@@ -243,7 +272,7 @@
           <details class="setup-guidance">
             <summary><span><b>SETUP &amp; SHARING</b><strong>Broadcast routing and portable alert packs</strong></span><em>Show details</em></summary>
             <div class="setup-guidance-body">
-              <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add this as a separate Browser Source using the active base-canvas dimensions shown in Guided Setup and enable <strong>Control audio via OBS</strong>. Keep this source on both the live and recording/VOD tracks so follows, subscriptions, Bits, raids, and reward alerts remain in uploaded videos.</div>
+              <div class="sound-alert-note"><strong>Unified setup:</strong> Twitch Alerts render through Unified Stage and remain on the normal live and recording/VOD route. Do not add the legacy Twitch Alert URL as a second active source.</div>
               <div class="sound-alert-note alert-pack-note"><strong>Portable Alert Packs:</strong> Export a base Twitch alert together with every variant, rule, sound, visual, and custom design. Packs never contain Twitch authorization or the original computer's file paths.</div>
             </div>
           </details>
@@ -312,8 +341,289 @@
           </article>
         </section>
 
+        <section id="worldSection" class="page">
+          <div class="page-toolbar"><div><p class="eyebrow">VIEWER-DRIVEN STREAM WORLD</p><h2>Interactive World</h2><p>Run crowd avatars, the community pet, Viewer Attack–style battles, and local gaze effects through one safety-controlled Stage.</p></div><span id="worldStateBadge" class="status-badge">CHECKING</span></div>
+          <div class="metric-grid world-metrics">
+            <article><span>CROWD</span><strong id="worldCrowdMetric">0</strong><small>Persistent viewer profiles</small></article>
+            <article><span>COMMUNITY PET</span><strong id="worldPetMetric">OFF</strong><small id="worldPetMetricNote">Not on Stage</small></article>
+            <article><span>BATTLE</span><strong id="worldBattleMetric">IDLE</strong><small id="worldBattleMetricNote">No active session</small></article>
+            <article><span>EYE TRACKING</span><strong id="worldGazeMetric">OFF</strong><small id="worldGazeMetricNote">Local adapter disabled</small></article>
+          </div>
+          <article class="panel stage-actor-panel">
+            <div class="panel-header"><div><span>NATIVE AVATAR PACKS</span><h3>Stage Actor Pack Builder</h3><p>Build an avatar from one transparent row-based PNG atlas. Every cell is the same size, every animation owns one row, and blank cells stay transparent.</p></div><div class="stage-actor-header-actions"><span id="stageActorPackBadge" class="state-chip">0 PACKS</span><button type="button" class="secondary-button" data-stage-actor-library="true">Import Avatar Library</button><button type="button" class="secondary-button" data-stage-actor-import="true">Import Tempest Pack</button></div></div>
+            <div class="stage-actor-builder-grid">
+              <form id="stageActorPackForm" class="stage-actor-pack-form">
+                <div class="stage-actor-metadata">
+                  <label>Build mode<select id="stageActorBuildMode"><option value="atlas">Row atlas · universal</option><option value="strips">Animation strips · legacy</option></select></label>
+                  <label id="stageActorTemplateSelector" hidden>Body template<select id="stageActorTemplateId"><option value="humanoid-wisp-v1">Humanoid Wisp v1 · 20 parts</option></select></label>
+                </div>
+                <div id="stageActorAtlasFields" class="stage-actor-template-fields">
+                  <div><strong>ONE PNG AVATAR ATLAS</strong><span>Variable cell size and 1–32 rows · one animation per row · blank rows are allowed</span></div>
+                  <button type="button" class="secondary-button" data-stage-actor-atlas="true">Choose Avatar PNG</button>
+                  <span id="stageActorAtlasTexture">Required · no file chosen</span>
+                  <div class="stage-actor-strip-list" aria-label="Atlas animation rows">
+                    <div class="stage-actor-strip-row required"><strong>IDLE</strong><label>Row<input id="stageActorAtlasIdleRow" type="number" min="0" max="31" value="0" /></label><label>Frames<input id="stageActorAtlasIdleFrames" type="number" min="1" max="120" value="2" /></label><label>FPS<input id="stageActorAtlasIdleFps" type="number" min="1" max="60" value="4" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>WALK</strong><label>Row<input id="stageActorAtlasWalkRow" type="number" min="0" max="31" value="1" /></label><label>Frames<input id="stageActorAtlasWalkFrames" type="number" min="1" max="120" value="7" /></label><label>FPS<input id="stageActorAtlasWalkFps" type="number" min="1" max="60" value="9" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>SIT</strong><label>Row<input id="stageActorAtlasSitRow" type="number" min="0" max="31" value="2" /></label><label>Frames<input id="stageActorAtlasSitFrames" type="number" min="1" max="120" value="3" /></label><label>FPS<input id="stageActorAtlasSitFps" type="number" min="1" max="60" value="6" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>STAND</strong><label>Row<input id="stageActorAtlasStandRow" type="number" min="0" max="31" value="3" /></label><label>Frames<input id="stageActorAtlasStandFrames" type="number" min="1" max="120" value="3" /></label><label>FPS<input id="stageActorAtlasStandFps" type="number" min="1" max="60" value="6" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>JUMP</strong><label>Row<input id="stageActorAtlasJumpRow" type="number" min="0" max="31" value="4" /></label><label>Frames<input id="stageActorAtlasJumpFrames" type="number" min="1" max="120" value="2" /></label><label>FPS<input id="stageActorAtlasJumpFps" type="number" min="1" max="60" value="8" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>ACTION</strong><label>Row<input id="stageActorAtlasAttackRow" type="number" min="0" max="31" value="5" /></label><label>Frames<input id="stageActorAtlasAttackFrames" type="number" min="1" max="120" value="6" /></label><label>FPS<input id="stageActorAtlasAttackFps" type="number" min="1" max="60" value="12" /></label></div>
+                    <div class="stage-actor-strip-row"><strong>CUSTOM 2</strong><label>Row<input id="stageActorAtlasCustom2Row" type="number" min="0" max="31" value="6" /></label><label>Frames<input id="stageActorAtlasCustom2Frames" type="number" min="1" max="120" value="6" /></label><label>FPS<input id="stageActorAtlasCustom2Fps" type="number" min="1" max="60" value="12" /></label></div>
+                  </div>
+                </div>
+                <div id="stageActorTemplateFields" class="stage-actor-template-fields" hidden>
+                  <div><strong>PAINT ONE TEXTURE</strong><span>2048×2560 PNG · 20 fixed 512×512 cells · animation and joint placement are inherited</span></div>
+                  <button type="button" class="secondary-button" data-stage-actor-texture="true">Choose Template Texture</button>
+                  <span id="stageActorTemplateTexture">Required · no file chosen</span>
+                </div>
+                <div class="stage-actor-metadata">
+                  <label>Pack name<input id="stageActorName" maxlength="80" placeholder="Storm Sprite" required /></label>
+                  <label>Creator<input id="stageActorCreator" maxlength="80" placeholder="Creator name" /></label>
+                  <label>License<input id="stageActorLicense" maxlength="80" placeholder="Personal, CC0, custom…" /></label>
+                  <label id="stageActorFrameSizeField">Cell size<div class="stage-actor-size"><input id="stageActorFrameWidth" type="number" min="8" max="2048" value="128" aria-label="Frame width" /><span>×</span><input id="stageActorFrameHeight" type="number" min="8" max="2048" value="128" aria-label="Frame height" /></div></label>
+                  <label>Stage scale<input id="stageActorScale" type="number" min="0.1" max="8" step="0.1" value="1" /></label>
+                </div>
+                <div id="stageActorStripFields" class="stage-actor-strip-list" aria-label="Animation strips" hidden>
+                  <div class="stage-actor-strip-row required"><strong>IDLE</strong><button type="button" class="secondary-button" data-stage-actor-strip="idle">Choose PNG</button><span id="stageActorStripIdle">Required · no file chosen</span><label>Frames<input id="stageActorIdleFrames" type="number" min="1" max="120" value="4" /></label><label>FPS<input id="stageActorIdleFps" type="number" min="1" max="60" value="8" /></label></div>
+                  <div class="stage-actor-strip-row"><strong>WALK</strong><button type="button" class="secondary-button" data-stage-actor-strip="walk">Choose PNG</button><span id="stageActorStripWalk">Optional</span><label>Frames<input id="stageActorWalkFrames" type="number" min="1" max="120" value="6" /></label><label>FPS<input id="stageActorWalkFps" type="number" min="1" max="60" value="12" /></label></div>
+                  <div class="stage-actor-strip-row"><strong>JUMP</strong><button type="button" class="secondary-button" data-stage-actor-strip="jump">Choose PNG</button><span id="stageActorStripJump">Optional</span><label>Frames<input id="stageActorJumpFrames" type="number" min="1" max="120" value="6" /></label><label>FPS<input id="stageActorJumpFps" type="number" min="1" max="60" value="14" /></label></div>
+                  <div class="stage-actor-strip-row"><strong>ATTACK</strong><button type="button" class="secondary-button" data-stage-actor-strip="attack">Choose PNG</button><span id="stageActorStripAttack">Optional</span><label>Frames<input id="stageActorAttackFrames" type="number" min="1" max="120" value="8" /></label><label>FPS<input id="stageActorAttackFps" type="number" min="1" max="60" value="16" /></label></div>
+                  <div class="stage-actor-strip-row"><strong>CELEBRATE</strong><button type="button" class="secondary-button" data-stage-actor-strip="celebrate">Choose PNG</button><span id="stageActorStripCelebrate">Optional</span><label>Frames<input id="stageActorCelebrateFrames" type="number" min="1" max="120" value="8" /></label><label>FPS<input id="stageActorCelebrateFps" type="number" min="1" max="60" value="14" /></label></div>
+                </div>
+                <div class="stage-actor-builder-actions"><p id="stageActorBuildHelp">Use one transparent PNG grid. Cell size and row count may vary; only mapped rows are rendered.</p><button class="primary-button" type="submit">Create Managed Pack</button></div>
+              </form>
+              <div><div class="stage-actor-library-heading"><strong>INSTALLED PACKS</strong><small>Stored locally; no custom code</small></div><div id="stageActorPackLibrary" class="stage-actor-pack-library empty-state">No native avatar packs yet.</div></div>
+            </div>
+          </article>
+          <div class="world-dashboard-grid">
+            <article class="panel world-card world-crowd-card">
+              <div class="panel-header"><div><span>STREAM AVATARS–STYLE CROWD</span><h3>Viewer presence</h3><p>Every avatar is tied to a platform-scoped ID, bounded by the crowd limit, and rendered through Interactive Stage.</p></div><span id="worldCrowdBadge" class="state-chip">0 / 30</span></div>
+              <form id="worldViewerForm" class="world-inline-form">
+                <label>Platform<select id="worldViewerPlatform"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="studio">Studio test</option></select></label>
+                <label>Viewer name<input id="worldViewerName" maxlength="80" placeholder="Viewer name" required /></label>
+                <label>Avatar color<input id="worldViewerAccent" type="color" value="#54f2eb" /></label>
+                <label>Actor pack<select id="worldViewerActorPack"><option value="">Generated placeholder</option></select></label>
+                <button class="primary-button" type="submit">Add Avatar</button>
+              </form>
+              <div class="world-card-actions"><button data-world-demo-crowd="true" class="secondary-button">Spawn Demo Crowd</button><button data-world-clear-crowd="true" class="secondary-button danger-outline">Clear Crowd</button></div>
+              <details class="world-presence-settings"><summary>Avatar size and automatic chat presence</summary><form id="worldPresenceForm" class="world-safety-grid"><label class="toggle-label"><input id="worldPresenceEnabled" type="checkbox" checked /><span>Auto-add active chatters</span></label><label>Viewer avatar size<input id="worldAvatarSize" type="range" min="50" max="200" step="5" value="100" /><small id="worldAvatarSizeValue">100%</small></label><label>Messages to join<input id="worldPresenceMessages" type="number" min="1" max="20" value="1" /></label><label>Inactive after (minutes)<input id="worldPresenceInactive" type="number" min="1" max="10080" value="20" /></label><label>Leave Stage after (minutes)<input id="worldPresenceRemove" type="number" min="1" max="43200" value="45" /></label><button class="secondary-button" type="submit">Save Crowd Settings</button></form></details>
+              <div id="worldViewerList" class="world-list empty-state">No viewer avatars are active.</div>
+            </article>
+
+            <article class="panel world-card world-redeems-card">
+              <div class="panel-header"><div><span>CHANNEL POINT AVATAR CLOSET</span><h3>Avatar redeems</h3><p>Map a Twitch reward ID or exact reward title to a temporary avatar look or animation. The list is saved locally; applied looks reset with the stream session.</p></div><span id="worldAvatarRedeemBadge" class="state-chip">0 REDEEMS</span></div>
+              <form id="worldAvatarRedeemForm" class="world-redeem-form">
+                <label>Redeem name<input id="worldAvatarRedeemName" maxlength="80" placeholder="Purple Wisp" required /></label>
+                <label>Match by<select id="worldAvatarRedeemMatchType"><option value="title">Exact reward title</option><option value="id">Twitch reward ID</option></select></label>
+                <label>Reward match<input id="worldAvatarRedeemMatch" maxlength="300" placeholder="Purple Wisp" required /></label>
+                <label>Avatar effect<select id="worldAvatarRedeemEffect"><option value="primary-color">Primary / jacket color</option><option value="secondary-color">Secondary / wisp color</option><option value="accessory">Add accessory</option><option value="title">Set avatar title</option><option value="emote">Play emote</option><option value="celebrate">Celebrate</option></select></label>
+                <label>Effect value<input id="worldAvatarRedeemValue" maxlength="80" placeholder="#B99CFF" /></label>
+                <label>Keep for<select id="worldAvatarRedeemPersistence"><option value="session">This stream</option><option value="profile">Saved viewer profile</option></select></label>
+                <button class="primary-button" type="submit">Add Redeem</button>
+              </form>
+              <p class="sound-alert-note"><strong>Choose the lifetime:</strong> stream rewards reset cleanly; profile rewards permanently equip the cosmetic for that Twitch viewer. Emotes and celebrations always return to idle automatically.</p>
+              <div id="worldAvatarRedeemList" class="compact-list empty-state">No avatar Channel Point redeems configured.</div>
+              <div class="world-card-actions"><button type="button" data-world-avatar-redeem-reset="true" class="secondary-button danger-outline">Reset Stream Rewards</button><small id="worldAvatarRedeemSessionNote">No temporary avatar rewards are active.</small></div>
+            </article>
+
+            <article class="panel world-card world-pet-card">
+              <div class="panel-header"><div><span>PERSISTENT COMMUNITY CHARACTER</span><h3>Screen pet</h3><p>Viewers can feed, pet, play with, wake, or annoy the channel pet. Mood and progression persist between streams.</p></div><span id="worldPetBadge" class="state-chip">OFF STAGE</span></div>
+              <form id="worldPetForm" class="world-pet-form">
+                <label>Pet name<input id="worldPetName" maxlength="40" value="Nimbus" /></label>
+                <label>Accessory<input id="worldPetAccessory" maxlength="60" placeholder="Optional accessory" /></label>
+                <label class="toggle-label"><input id="worldPetEnabled" type="checkbox" /><span>Show pet on Stage</span></label>
+                <button class="secondary-button" type="submit">Save Pet</button>
+              </form>
+              <div class="world-pet-vitals"><span>MOOD <b id="worldPetMood">0</b></span><span>ENERGY <b id="worldPetEnergy">0</b></span><span>HUNGER <b id="worldPetHunger">0</b></span><span>LEVEL <b id="worldPetLevel">1</b></span></div>
+              <div class="world-action-grid"><button data-world-pet-action="feed">Feed</button><button data-world-pet-action="pet">Pet</button><button data-world-pet-action="play">Play</button><button data-world-pet-action="annoy">Annoy</button><button data-world-pet-action="wake">Wake</button><button data-world-pet-action="sleep">Sleep</button></div>
+            </article>
+
+            <article class="panel world-card world-battle-card">
+              <div class="panel-header"><div><span>VIEWER ATTACK + BDUEL–STYLE GAMES</span><h3>Battle control</h3><p>Start an opt-in duel or cooperative boss encounter using the active crowd. Health, shields, cooldowns, results, and cleanup are Studio-owned.</p></div><span id="worldBattleBadge" class="state-chip">IDLE</span></div>
+              <div class="world-battle-launch"><label>Mode<select id="worldBattleMode"><option value="duel">Viewer duel</option><option value="boss">Co-op boss</option><option value="dice">Dice duel</option><option value="reaction">Reaction rounds</option></select></label><label>Boss name<input id="worldBossName" maxlength="80" value="Tempest Titan" /></label><label class="toggle-label"><input id="worldBattleInviteOnly" type="checkbox" /><span>Require !accept</span></label><button id="worldStartBattle" class="primary-button">Start Game</button></div>
+              <div id="worldBattleDisplay" class="world-list empty-state">Add crowd avatars, then start a duel or boss encounter.</div>
+              <div class="world-action-grid"><button data-world-battle-action="attack">Attack</button><button data-world-battle-action="heal">Heal</button><button data-world-battle-action="shield">Shield</button><button id="worldEndBattle" class="danger-outline">End Battle</button></div>
+            </article>
+
+            <article class="panel world-card world-gaze-card">
+              <div class="panel-header"><div><span>LOCAL SENSOR ADAPTER</span><h3>Eye tracking</h3><p>A replaceable local adapter accepts normalized gaze samples. Raw coordinates stay in memory and disappear from Stage when the signal stops.</p></div><span id="worldGazeBadge" class="state-chip">DISABLED</span></div>
+              <form id="worldGazeForm" class="world-gaze-form">
+                <label class="toggle-label"><input id="worldGazeEnabled" type="checkbox" /><span>Enable local gaze input</span></label>
+                <label>Adapter<select id="worldGazeAdapter"><option value="generic-local">Generic local adapter</option><option value="tgi-sidecar">Tobii Game Integration sidecar</option><option value="simulator">Studio simulator</option></select></label>
+                <label>Effect<select id="worldGazeEffect"><option value="cursor">Ghost cursor</option><option value="trail">Gaze trail</option><option value="heat">Heat field</option><option value="target">Battle target</option></select></label>
+                <button class="secondary-button" type="submit">Save Gaze Setup</button>
+              </form>
+              <div class="world-card-actions"><button type="button" class="secondary-button" data-tobii-adapter="connect">Connect Tobii</button><button type="button" class="secondary-button" data-tobii-adapter="disconnect">Disconnect</button></div><p id="worldTobiiStatus" class="sound-alert-note"><strong>Tobii:</strong> Checking the approved local adapter…</p>
+              <div class="world-gaze-simulator"><label>X<input id="worldGazeX" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label>Y<input id="worldGazeY" type="range" min="0" max="1" step="0.01" value="0.5" /></label><button id="worldSimulateGaze" class="primary-button">Send Test Gaze</button></div>
+              <details class="world-presence-settings"><summary>Calibration</summary><div class="world-safety-grid"><label>X offset<input id="worldGazeOffsetX" type="number" min="-1" max="1" step="0.01" value="0" /></label><label>Y offset<input id="worldGazeOffsetY" type="number" min="-1" max="1" step="0.01" value="0" /></label><label>X scale<input id="worldGazeScaleX" type="number" min="0.25" max="4" step="0.01" value="1" /></label><label>Y scale<input id="worldGazeScaleY" type="number" min="0.25" max="4" step="0.01" value="1" /></label></div></details>
+              <p class="sound-alert-note"><strong>Privacy:</strong> Studio persists adapter settings and aggregate status only. Raw gaze samples are never written to disk.</p>
+            </article>
+          </div>
+
+          <article class="panel world-composer-panel">
+            <div class="panel-header"><div><span>NO-CODE AUTOMATION</span><h3>Interaction Composer</h3><p>Connect a chat command, Twitch component action, or operator button to an alert, Stage message, avatar move, pet action, viewer attack, or game.</p></div><span id="interactionComposerBadge" class="state-chip">0 RECIPES</span></div>
+            <form id="interactionComposerForm" class="world-safety-grid"><label>Recipe ID<input id="interactionRecipeId" maxlength="64" placeholder="chat-celebrate" required /></label><label>Name<input id="interactionRecipeName" maxlength="80" placeholder="Chat Celebrate" required /></label><label>Trigger<select id="interactionRecipeTriggerType"><option value="chat-command">Chat command</option><option value="extension-action">Extension action</option><option value="operator">Operator button</option></select></label><label>Trigger value<input id="interactionRecipeTriggerValue" maxlength="80" value="!celebrate" required /></label><label>Action<select id="interactionRecipeActionType"><option value="stage-message">Stage message</option><option value="alert">Unified alert</option><option value="viewer-state">Viewer avatar state</option><option value="viewer-attack">Viewer attack</option><option value="pet-action">Pet action</option><option value="battle-start">Start game</option></select></label><label>Action value<input id="interactionRecipeActionValue" maxlength="120" placeholder="Message, alert ID, state, or action" /></label><label>Cooldown (seconds)<input id="interactionRecipeCooldown" type="number" min="0" max="3600" value="5" /></label><button class="primary-button" type="submit">Save Recipe</button></form>
+            <div id="interactionComposerList" class="compact-list empty-state">No interaction recipes yet.</div>
+          </article>
+
+          <article class="panel world-safety-panel">
+            <div class="panel-header"><div><span>CHAOS BUDGET + ACCESSIBILITY</span><h3>Shared interaction safety</h3><p>One policy limits crowd size, Stage pressure, attack frequency, jumpscares, motion, flashing, and audio across both Twitch companions.</p></div><span id="worldSafetyBadge" class="state-chip">ACTIVE</span></div>
+            <form id="worldSafetyForm" class="world-safety-grid">
+              <label>Maximum crowd<input id="worldMaximumCrowd" type="number" min="1" max="100" value="30" /></label>
+              <label>Maximum Stage objects<input id="worldMaximumObjects" type="number" min="5" max="200" value="60" /></label>
+              <label>Concurrent effects<input id="worldMaximumEffects" type="number" min="1" max="30" value="8" /></label>
+              <label>Attack cooldown (seconds)<input id="worldAttackCooldown" type="number" min="0.25" max="300" step="0.25" value="1.5" /></label>
+              <label>Volume ceiling<input id="worldVolumeCeiling" type="number" min="0" max="100" value="80" /><small>percent</small></label>
+              <label class="toggle-label"><input id="worldInteractionsEnabled" type="checkbox" checked /><span>Allow viewer interactions</span></label>
+              <label class="toggle-label"><input id="worldAllowJumpscares" type="checkbox" checked /><span>Allow jumpscares</span></label>
+              <label class="toggle-label"><input id="worldReducedMotion" type="checkbox" /><span>Reduced motion</span></label>
+              <label class="toggle-label"><input id="worldReducedFlashing" type="checkbox" checked /><span>Reduced flashing</span></label>
+              <button class="primary-button" type="submit">Save Safety Policy</button>
+            </form>
+          </article>
+          <dialog id="worldViewerLookDialog"><form id="worldViewerLookForm"><div class="dialog-header"><div><span>VIEWER AVATAR CLOSET</span><h2 id="worldViewerLookTitle">Customize Avatar</h2></div><button type="button" data-dialog-close="worldViewerLookDialog">×</button></div><input id="worldViewerLookKey" type="hidden" /><div class="form-row avatar-color-row"><label><span id="worldViewerPrimaryLabel">Primary color</span><select id="worldViewerPrimaryColor"></select></label><label><span id="worldViewerSecondaryLabel">Secondary color</span><select id="worldViewerSecondaryColor"></select></label></div><div class="avatar-color-preview" aria-label="Selected avatar colors"><i id="worldViewerPrimarySwatch"></i><i id="worldViewerSecondarySwatch"></i><span id="worldViewerColorCombination">Color combination</span></div><label>Avatar title<input id="worldViewerLookTitleInput" maxlength="80" placeholder="Optional title" /></label><label>Accessories<input id="worldViewerLookAccessories" maxlength="140" placeholder="Comma-separated, up to 4" /></label><label>Effect glyphs<input id="worldViewerLookGlyphs" maxlength="80" placeholder="Comma-separated, up to 6" /></label><p id="worldViewerLookHelp" class="dialog-help">Choose the two material colors independently. The original shading and animation stay intact.</p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close="worldViewerLookDialog">Cancel</button><button type="submit" class="primary-button">Apply Look</button></div></form></dialog>
+          <dialog id="stageActorEditDialog"><form id="stageActorEditForm"><div class="dialog-header"><div><span>MANAGED AVATAR PACK</span><h2>Edit Stage Actor</h2></div><button type="button" data-dialog-close="stageActorEditDialog">×</button></div><input id="stageActorEditId" type="hidden" /><div class="form-row"><label>Name<input id="stageActorEditName" maxlength="80" required /></label><label>Version<input id="stageActorEditVersion" maxlength="40" required /></label></div><div class="form-row"><label>Creator<input id="stageActorEditCreator" maxlength="80" /></label><label>Stage scale<input id="stageActorEditScale" type="number" min="0.1" max="5" step="0.05" /></label></div><label>License<input id="stageActorEditLicense" maxlength="120" /></label><label>Description<textarea id="stageActorEditDescription" maxlength="500" rows="4"></textarea></label><p class="dialog-help">Animation strips stay intact. New packs automatically use the first idle frame as their library thumbnail.</p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close="stageActorEditDialog">Cancel</button><button type="submit" class="primary-button">Save Pack</button></div></form></dialog>
+        </section>
+
+        <section id="interactivestageSection" class="page">
+          <div class="stage-workspace-tabs" role="tablist" aria-label="Interactive Stage workspace">
+            <button class="active" type="button" data-stage-tab="overview" role="tab" aria-selected="true">Overview</button>
+            <button type="button" data-stage-tab="layout" role="tab" aria-selected="false">Layout</button>
+            <button type="button" data-stage-tab="objects" role="tab" aria-selected="false">Objects</button>
+            <button type="button" data-stage-tab="safety" role="tab" aria-selected="false">Safety</button>
+          </div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED INTERACTION CANVAS</p><h2>Interactive Stage</h2><p>The shared on-stream world for avatars, pets, attacks, battles, meters, and effects. This first vertical slice proves safe placement, reconnect state, expiry, and cleanup.</p></div><span id="interactiveStageBadge" class="status-badge">CHECKING</span></div>
+          <div data-stage-panel="overview">
+            <article class="panel chat-overlay-settings-panel">
+              <div class="panel-header"><div><span>ONE VISUAL BROWSER SOURCE</span><h3>Unified Stage</h3><p>Run active Tempest visuals through one canvas. Turning a module off removes its renderer, event connection, media, animation loop, and WebGL context instead of merely hiding it.</p></div><span id="unifiedStageBadge" class="status-badge">CHECKING</span></div>
+              <div class="setup-url-list">
+                <div><span>HORIZONTAL UNIFIED STAGE</span><code id="unifiedStageUrl" data-sensitive>Loading…</code><button class="copy-button" data-copy-text="" data-copy-label="Unified Stage URL" aria-label="Copy Unified Stage URL" title="Copy Unified Stage URL">COPY</button></div>
+                <div><span>INTERACTION AUDIO · OPTIONAL VOD LANE</span><code id="unifiedStageAudioUrl" data-sensitive>Loading…</code><button class="copy-button" data-copy-text="" data-copy-label="Interaction audio URL" aria-label="Copy Interaction audio URL" title="Copy Interaction audio URL">COPY</button></div>
+              </div>
+              <div class="chat-overlay-settings">
+                <label class="toggle-label"><input id="unifiedStageEnabled" type="checkbox" checked /><span>Enable Unified Stage</span></label>
+                <label class="toggle-label"><input data-unified-module="interactiveStage" type="checkbox" checked /><span>Avatars, pets, battles + world</span></label>
+                <label class="toggle-label"><input data-unified-module="twitchAlerts" type="checkbox" checked /><span>Twitch alerts</span></label>
+                <label class="toggle-label"><input data-unified-module="interactionAlerts" type="checkbox" checked /><span>Interaction alert visuals</span></label>
+                <label class="toggle-label"><input data-unified-module="twitchExperiences" type="checkbox" checked /><span>Twitch experiences</span></label>
+                <label class="toggle-label"><input data-unified-module="chatOverlay" type="checkbox" checked /><span>Chat overlay</span></label>
+                <label class="toggle-label"><input data-unified-module="emoteWall" type="checkbox" checked /><span>Emote wall</span></label>
+                <label class="toggle-label"><input data-unified-module="diceOverlay" type="checkbox" checked /><span>3D dice · sleeps until rolled</span></label>
+                <label class="toggle-label"><input data-unified-module="discordVoice" type="checkbox" checked /><span>Discord guests</span></label>
+                <label class="toggle-label"><input data-unified-module="pollOverlay" type="checkbox" checked /><span>Poll overlay</span></label>
+              </div>
+              <div class="chat-overlay-actions"><button id="saveUnifiedStageSettings" class="primary-button" type="button">Save Unified Stage</button></div>
+              <div id="unifiedStageLifecycleStatus" class="sound-alert-note"><strong>Strict off:</strong> Disabled modules are not loaded. After adding Unified Stage to Broadcast, remove or disable the old individual visual sources so they do not continue using GPU in parallel.</div>
+            </article>
+            <div class="metric-grid">
+              <article><span>ACTIVE OBJECTS</span><strong id="interactiveStageObjectCount">0</strong><small>Currently rendered</small></article>
+              <article><span>BROWSER SOURCES</span><strong id="interactiveStageClientCount">0</strong><small>Connected canvases</small></article>
+              <article><span>STATE REVISION</span><strong id="interactiveStageRevision">0</strong><small>Reconnect-safe snapshot</small></article>
+              <article><span>SCHEMA</span><strong id="interactiveStageSchema">1</strong><small>Versioned object contract</small></article>
+            </div>
+            <article class="panel">
+              <div class="panel-header"><div><span>OBS BROWSER SOURCES</span><h3>Horizontal and vertical canvases</h3><p>Add the matching loopback URL to each transparent canvas. Both sources receive the same objects with independent placement overrides.</p></div></div>
+              <div class="setup-url-list">
+                <div><span>HORIZONTAL STAGE</span><code id="interactiveStageHorizontalUrl" data-sensitive>Loading…</code><button class="copy-button" data-copy-text="" data-copy-label="Horizontal Stage URL" aria-label="Copy Horizontal Stage URL" title="Copy Horizontal Stage URL">COPY</button></div>
+                <div><span>VERTICAL STAGE</span><code id="interactiveStageVerticalUrl" data-sensitive>Loading…</code><button class="copy-button" data-copy-text="" data-copy-label="Vertical Stage URL" aria-label="Copy Vertical Stage URL" title="Copy Vertical Stage URL">COPY</button></div>
+              </div>
+              <div class="chat-overlay-actions"><button data-stage-preview="true" class="primary-button">Spawn Test Object</button><button data-stage-go="layout" class="secondary-button">Open Layout</button></div>
+            </article>
+          </div>
+          <div data-stage-panel="layout" hidden>
+            <article class="panel stage-layout-panel">
+              <div class="panel-header"><div><span>LAYOUT PROFILE</span><h3>Drag objects into place</h3><p>Positions are normalized, so the layout scales with the active canvas. Portrait overrides stay independent from the horizontal position.</p></div><label class="stage-orientation-control">Canvas<select id="interactiveStageOrientation"><option value="horizontal">Horizontal · 16:9</option><option value="vertical">Portrait · 9:16</option></select></label></div>
+              <div class="stage-layout-grid">
+                <div><div id="interactiveStageLayoutCanvas" class="stage-layout-canvas horizontal" aria-label="Interactive Stage layout canvas"><div class="stage-safe-outline">SAFE AREA</div></div><p class="stage-layout-help">Select and drag an object. The exact normalized position is saved when you release it.</p></div>
+                <form id="interactiveStageSelectionForm" class="stage-selection-form">
+                  <div><span>SELECTED OBJECT</span><strong id="interactiveStageSelectedName">None</strong><small id="interactiveStageSelectedId">Select an object on the canvas.</small></div>
+                  <label>Label<input id="interactiveStageSelectedLabel" maxlength="120" disabled /></label>
+                  <label>Glyph<input id="interactiveStageSelectedGlyph" maxlength="24" disabled /></label>
+                  <label>State<input id="interactiveStageSelectedState" maxlength="64" value="idle" disabled /></label>
+                  <label>Accent<input id="interactiveStageSelectedAccent" type="color" value="#54f2eb" disabled /></label>
+                  <div class="stage-placement-fields"><label>X<input id="interactiveStageSelectedX" type="number" min="0" max="1" step="0.01" disabled /></label><label>Y<input id="interactiveStageSelectedY" type="number" min="0" max="1" step="0.01" disabled /></label><label>Scale<input id="interactiveStageSelectedScale" type="number" min="0.05" max="5" step="0.05" disabled /></label><label>Layer<input id="interactiveStageSelectedLayer" type="number" min="-100" max="100" step="1" disabled /></label></div>
+                  <div class="chat-overlay-actions"><button id="saveInteractiveStageSelection" type="submit" class="primary-button" disabled>Save Object</button><button data-stage-dismiss-selected="true" type="button" class="secondary-button danger-outline" disabled>Dismiss</button></div>
+                </form>
+              </div>
+            </article>
+            <article class="panel stage-world-panel">
+              <div class="panel-header"><div><span>2D AVATAR WORLD</span><h3>Floor, wandering + platforms</h3><p>The bottom of the canvas is a physical floor. Add normalized ledges to turn the same browser source into a lightweight platform map for viewer avatars.</p></div><span class="state-chip installed">SAME STAGE URL</span></div>
+              <form id="interactiveStageWorldForm" class="stage-world-form">
+                <label class="toggle-label"><input id="interactiveStageWorldEnabled" type="checkbox" checked /><span>Show world geometry</span></label>
+                <label class="toggle-label"><input id="interactiveStageWanderEnabled" type="checkbox" checked /><span>Avatars wander</span></label>
+                <label class="toggle-label"><input id="interactiveStageJumpEnabled" type="checkbox" checked /><span>Avatars jump</span></label>
+                <label>Floor height<input id="interactiveStageFloorY" type="number" min="0.5" max="0.98" step="0.01" value="0.92" /><small>0 is top; 1 is bottom.</small></label>
+                <label>Walk speed<input id="interactiveStageWorldSpeed" type="number" min="0.005" max="0.2" step="0.005" value="0.045" /></label>
+                <label>Gravity<input id="interactiveStageWorldGravity" type="number" min="0.1" max="3" step="0.05" value="1.2" /></label>
+                <label>Jump strength<input id="interactiveStageJumpStrength" type="number" min="0.05" max="1.2" step="0.01" value="0.58" /></label>
+                <button class="primary-button" type="submit">Save World Physics</button>
+              </form>
+              <div class="stage-platform-workbench">
+                <form id="interactiveStagePlatformForm" class="stage-platform-form">
+                  <label>Name<input id="interactiveStagePlatformName" maxlength="80" value="Center ledge" /></label>
+                  <label>X<input id="interactiveStagePlatformX" type="number" min="0" max="1" step="0.01" value="0.4" /></label>
+                  <label>Y<input id="interactiveStagePlatformY" type="number" min="0.05" max="0.98" step="0.01" value="0.72" /></label>
+                  <label>Width<input id="interactiveStagePlatformWidth" type="number" min="0.03" max="1" step="0.01" value="0.2" /></label>
+                  <label>Height<input id="interactiveStagePlatformHeight" type="number" min="0.005" max="1" step="0.005" value="0.025" /></label>
+                  <label>Collision<select id="interactiveStagePlatformCollision"><option value="one-way">One-way ledge</option><option value="solid">Solid block / wall</option></select></label>
+                  <label>Color<input id="interactiveStagePlatformColor" type="color" value="#54f2eb" /></label>
+                  <button class="primary-button" type="submit">Add / Replace Platform</button>
+                </form>
+                <div class="chat-overlay-actions"><button type="button" class="secondary-button" data-stage-starter-map="true">Load Starter Map</button><button type="button" class="secondary-button danger-outline" data-stage-platform-clear="true">Clear Platforms</button></div>
+                <div id="interactiveStagePlatformList" class="compact-list empty-state">No platforms configured. Avatars will use the canvas floor.</div>
+              </div>
+              <div class="stage-platform-workbench">
+                <div class="panel-header"><div><span>GAMEPLAY OBJECTS</span><h3>Add interactables</h3><p>Place safe, code-free objects viewers can use or encounter. Pickups and treasure respawn after 12 seconds in the Browser Source.</p></div><span class="state-chip">USE / !INTERACT</span></div>
+                <form id="interactiveStageInteractableForm" class="stage-interactable-form">
+                  <label>Name<input id="interactiveStageInteractableName" maxlength="80" value="Star pickup" /></label>
+                  <label>Type<select id="interactiveStageInteractableKind"><option value="pickup">Pickup</option><option value="treasure">Treasure</option><option value="switch">Switch</option><option value="pressure-plate">Pressure plate</option><option value="door">Linked door</option><option value="push-block">Push block</option><option value="checkpoint">Checkpoint</option><option value="hazard">Hazard</option><option value="toy">Toy / bounce</option><option value="pet-station">Pet station</option></select></label>
+                  <label>Glyph<input id="interactiveStageInteractableGlyph" maxlength="8" value="STAR" /></label>
+                  <label>Link ID<input id="interactiveStageInteractableLink" maxlength="64" placeholder="gate-a" /></label>
+                  <label>X<input id="interactiveStageInteractableX" type="number" min="0" max="1" step="0.01" value="0.2" /></label>
+                  <label>Y<input id="interactiveStageInteractableY" type="number" min="0" max="1" step="0.01" value="0.82" /></label>
+                  <label>Width<input id="interactiveStageInteractableWidth" type="number" min="0.015" max="0.5" step="0.005" value="0.05" /></label>
+                  <label>Height<input id="interactiveStageInteractableHeight" type="number" min="0.015" max="0.5" step="0.005" value="0.07" /></label>
+                  <label>Color<input id="interactiveStageInteractableColor" type="color" value="#ffbd59" /></label>
+                  <button class="primary-button" type="submit">Add / Replace Object</button>
+                </form>
+                <div class="chat-overlay-actions"><button type="button" class="secondary-button" data-stage-starter-gameplay="true">Load Gameplay Set</button><button type="button" class="secondary-button danger-outline" data-stage-interactable-clear="true">Clear Gameplay Objects</button></div>
+                <div id="interactiveStageInteractableList" class="compact-list empty-state">No gameplay objects configured.</div>
+              </div>
+            </article>
+          </div>
+          <div data-stage-panel="objects" hidden>
+            <article class="panel stage-create-panel">
+              <div class="panel-header"><div><span>OBJECT WORKBENCH</span><h3>Create a bounded Stage object</h3><p>Studio accepts only validated properties—never viewer-supplied code, URLs, or local paths.</p></div></div>
+              <form id="interactiveStageCreateForm" class="stage-create-form">
+                <label>Kind<select id="interactiveStageCreateKind"><option value="text">Text</option><option value="sprite">Sprite placeholder</option><option value="avatar">Avatar placeholder</option><option value="pet">Pet placeholder</option><option value="effect">Effect</option><option value="meter">Meter</option><option value="game-object">Game object</option></select></label>
+                <label>Label<input id="interactiveStageCreateLabel" maxlength="120" value="New Stage Object" required /></label>
+                <label>Glyph<input id="interactiveStageCreateGlyph" maxlength="24" value="STAGE" /></label>
+                <label>Accent<input id="interactiveStageCreateAccent" type="color" value="#54f2eb" /></label>
+                <label>X<input id="interactiveStageCreateX" type="number" min="0" max="1" step="0.01" value="0.5" /></label>
+                <label>Y<input id="interactiveStageCreateY" type="number" min="0" max="1" step="0.01" value="0.5" /></label>
+                <label>Scale<input id="interactiveStageCreateScale" type="number" min="0.05" max="5" step="0.05" value="1" /></label>
+                <label>Layer<input id="interactiveStageCreateLayer" type="number" min="-100" max="100" step="1" value="0" /></label>
+                <label>Lifetime<input id="interactiveStageCreateLifetime" type="number" min="0" max="86400" step="1" value="30" /><small>Seconds; 0 keeps the operator object until dismissed.</small></label>
+                <div class="stage-create-actions"><button type="submit" class="primary-button">Create Object</button><button data-stage-preview="true" type="button" class="secondary-button">Quick Test</button></div>
+              </form>
+            </article>
+            <article class="panel"><div class="panel-header"><div><span>AUTHORITATIVE STATE</span><h3>Active objects</h3></div></div><div id="interactiveStageObjectList" class="compact-list empty-state">No Stage objects are active.</div></article>
+          </div>
+          <div data-stage-panel="safety" hidden>
+            <div class="metric-grid">
+              <article><span>INTERACTIONS</span><strong id="interactiveStageSafetyState">CHECKING</strong><small>Global Studio safety state</small></article>
+              <article><span>ACTIVE OBJECTS</span><strong id="interactiveStageSafetyCount">0</strong><small>Removed by Emergency Stop</small></article>
+              <article><span>REMOTE CODE</span><strong>BLOCKED</strong><small>No viewer HTML, URLs, or paths</small></article>
+              <article><span>RECONNECT</span><strong>SNAPSHOT</strong><small>No trigger replay</small></article>
+            </div>
+            <article class="panel"><div class="panel-header"><div><span>PROTECTED ZONES + COLLISION</span><h3>Keep graphics clear</h3><p>Reserve a normalized screen rectangle for face-cams, captions, or game UI. Stage objects are moved to the nearest safe position and avatars avoid each other.</p></div></div><form id="interactiveStageZoneForm" class="world-safety-grid"><label>Zone name<input id="interactiveStageZoneName" maxlength="80" value="Face cam" /></label><label>X<input id="interactiveStageZoneX" type="number" min="0" max="1" step="0.01" value="0.72" /></label><label>Y<input id="interactiveStageZoneY" type="number" min="0" max="1" step="0.01" value="0.62" /></label><label>Width<input id="interactiveStageZoneWidth" type="number" min="0.01" max="1" step="0.01" value="0.26" /></label><label>Height<input id="interactiveStageZoneHeight" type="number" min="0.01" max="1" step="0.01" value="0.34" /></label><label class="toggle-label"><input id="interactiveStageCollision" type="checkbox" checked /><span>Avoid avatar collisions</span></label><button class="primary-button" type="submit">Save Protected Zone</button><button type="button" class="secondary-button" data-stage-zone-clear="true">Clear Zones</button></form><div id="interactiveStageZoneList" class="compact-list empty-state">No protected zones configured.</div></article>
+            <article class="panel"><div class="panel-header"><div><span>OPERATOR RECOVERY</span><h3>Clear Stage state</h3><p>This dismisses every active Stage object. The global Stop All Effects control also stops alert workflows and disarms viewer interactions.</p></div></div><div class="chat-overlay-actions"><button data-stage-clear="true" class="secondary-button danger-outline">Clear Stage Objects</button></div></article>
+            <div class="sound-alert-note"><strong>Safety:</strong> Stop All Effects clears every Stage object immediately. Browser Source reconnection restores the current snapshot without replaying completed triggers.</div>
+          </div>
+        </section>
+
         <section id="chatoverlaySection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat + Emotes</h2><p>Render normalized Twitch chat and canvas-wide emote effects through independent local Browser Sources.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
+          <div class="page-toolbar"><div><p class="eyebrow">STUDIO-OWNED STREAM CHAT</p><h2>Chat + Emotes</h2><p>Render normalized Twitch chat and canvas-wide emote effects through Unified Stage, with individual URLs retained only for legacy or special per-scene routing.</p></div><span id="chatOverlayStateBadge" class="status-badge">CHECKING</span></div>
           <div class="metric-grid">
             <article><span>BROWSER SOURCES</span><strong id="chatOverlayClientCount">0</strong><small>Connected Broadcast canvases</small></article>
             <article><span>VISIBLE MESSAGES</span><strong id="chatOverlayMessageCount">0</strong><small>Current overlay buffer</small></article>
@@ -321,7 +631,7 @@
             <article><span>TWITCH CHAT</span><strong id="chatOverlayTwitchState">OFFLINE</strong><small>Chatbot EventSub intake</small></article>
           </div>
           <div id="chatOverlayBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local chat overlay address…</div>
-          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add the URL above as a transparent Browser Source matching the active base-canvas dimensions shown in Guided Setup. Remove or hide the Botrix chat source after this local source is confirmed.</div>
+          <div class="sound-alert-note"><strong>Unified setup:</strong> Enable Chat Overlay in Interactive Stage → Unified Stage. The URL above is a legacy individual source; do not keep both active.</div>
           <article class="panel chat-overlay-settings-panel">
             <div class="panel-header"><div><span>OVERLAY DESIGN</span><h3>Message stack</h3></div><span class="state-chip installed">LOCAL HTML</span></div>
             <div class="chat-overlay-settings">
@@ -337,7 +647,7 @@
           <article class="panel chat-overlay-monitor"><div class="panel-header"><div><span>LOCAL BUFFER</span><h3>Recent overlay messages</h3></div></div><div id="chatOverlayMessages" class="compact-list empty-state">No chat messages are visible.</div></article>
           <div class="visual-section-heading emote-wall-heading"><div><span>CHAT EMOTE OVERLAY</span><h3>Emote Wall</h3><p>Make each Twitch emote used in chat bounce independently around the full stream canvas.</p></div><span id="emoteWallStateBadge" class="status-badge">CHECKING</span></div>
           <div id="emoteWallBrowserStatus" class="sound-alert-note"><strong>Browser Source:</strong> Loading the local Emote Wall address…</div>
-          <div class="sound-alert-note"><strong>One-time Broadcast setup:</strong> Add the URL above as a separate transparent Browser Source matching the active base-canvas dimensions. Keep it independent from Chat Overlay so either effect can be hidden per scene.</div>
+          <div class="sound-alert-note"><strong>Unified setup:</strong> Enable Emote Wall in Interactive Stage → Unified Stage. The URL above remains available only for an intentional per-scene split.</div>
           <article class="panel chat-overlay-settings-panel emote-wall-panel">
             <div class="panel-header"><div><span>EMOTE PHYSICS</span><h3>Wall behavior</h3></div><div class="emote-wall-status-chips"><span id="emoteWallPyramidStatus" class="state-chip installed">PYRAMIDS ON</span><span id="emoteWallActiveCount" class="state-chip installed">0 ACTIVE</span></div></div>
             <div class="chat-overlay-settings">
@@ -416,7 +726,7 @@
         <section id="twitchSection" class="page">
           <div class="page-toolbar"><div><p class="eyebrow">TWITCH PLATFORM</p><h2>Twitch</h2><p>Manage your Twitch account, viewer tools, Stream Together call and collaboration chat, plus horizontal and mobile output from one platform home.</p></div><span id="twitchOwnerBadge" class="status-badge" data-advanced>STUDIO OWNED</span></div>
           <div class="platform-tool-grid" aria-label="Twitch tools">
-            <button class="platform-tool-card" data-go="visualalerts"><span>ALERTS</span><strong>Twitch Alerts</strong><small>Follows, subscriptions, Bits, raids, rewards, and experiences.</small></button>
+            <button class="platform-tool-card" data-go="alerts"><span>ALERTS</span><strong>Unified Alerts</strong><small>Twitch events and viewer interactions share one queue and workspace.</small></button>
             <button class="platform-tool-card" data-go="extensiondesigner"><span>VIEWER PANEL</span><strong>Twitch Panel</strong><small>Pair and style the channel-specific viewer interaction panel.</small></button>
             <button class="platform-tool-card" data-go="dualformat"><span>STREAM OUTPUT</span><strong>Dual Format</strong><small>Horizontal desktop delivery and mobile-first vertical video.</small></button>
             <button class="platform-tool-card" data-go="streamtogether"><span>STREAM TOGETHER</span><strong>Backstage Call</strong><small>Open Twitch camera, microphone, guests, and call controls in Studio.</small></button>
@@ -451,16 +761,22 @@
             </div>
           </article>
           <article class="panel twitch-local-panel">
-            <div class="panel-header"><div><span>VIEWER EXTENSION</span><h3>Choose the Extension used on this channel</h3><p>Studio publishes signals only to the selected edition. Change this whenever you replace the active Extension in Twitch.</p></div><span id="twitchExtensionEditionBadge" class="status-badge">FREE</span></div>
-            <div class="extension-edition-options" role="radiogroup" aria-label="Twitch Extension edition">
-              <label><input type="radio" name="twitchExtensionEdition" value="free" checked /><span><b>TEMPEST MAINFRAME</b><strong>Free</strong><small>Viewer interactions with no Bits products or transaction flow.</small></span></label>
-              <label><input type="radio" name="twitchExtensionEdition" value="bits" /><span><b>TEMPEST STREAMING</b><strong>Bits enabled</strong><small>Twitch-verified Bits products mapped to approved Studio interactions.</small></span></label>
+            <div class="panel-header"><div><span>TWITCH COMPANIONS</span><h3>Choose either Extension or use both together</h3><p>Studio publishes one safe channel catalog to Tempest Signal. Mainframe provides the detailed panel hub; Streaming provides compact controls over the video. Neither surface uses Bits.</p></div><span id="twitchExtensionEditionBadge" class="status-badge">BOTH ENABLED</span></div>
+            <div class="extension-edition-options" role="group" aria-label="Twitch companion Extensions">
+              <label><input id="twitchCompanionMainframe" type="checkbox" name="twitchExtensionCompanion" value="mainframe" checked /><span><b>CHANNEL PANEL</b><strong>Tempest Mainframe</strong><small>Viewer hub, catalog, loadouts, progress, history, accessibility, and deeper controls.</small><em id="twitchCompanionMainframeState">ENABLED LOCALLY</em></span></label>
+              <label><input id="twitchCompanionStreaming" type="checkbox" name="twitchExtensionCompanion" value="streaming" checked /><span><b>VIDEO OVERLAY</b><strong>Tempest Streaming</strong><small>Free live quick actions, targeting, battles, polls, and on-screen context.</small><em id="twitchCompanionStreamingState">ENABLED LOCALLY</em></span></label>
             </div>
-            <p id="twitchExtensionEditionMessage" class="extension-edition-message">Tempest Mainframe (Free) is active.</p>
-            <div class="panel-header hosted-extension-connect-header"><div><span>CHANNEL PAIRING</span><h3>Connect your selected Twitch Extension</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT CONNECTED</span></div>
+            <p id="twitchExtensionEditionMessage" class="extension-edition-message">Both companion Extensions are enabled locally. Pair Tempest Signal once to publish their shared Studio configuration.</p>
+            <section class="extension-feature-placement" aria-labelledby="extensionFeaturePlacementTitle">
+              <div class="extension-feature-placement-header"><div><span>FEATURE PLACEMENT</span><h4 id="extensionFeaturePlacementTitle">Choose where viewers find each feature</h4><p>Panel controls appear in Tempest Mainframe. Overlay controls appear in Tempest Streaming. Turn both off to hide a feature from Twitch without disabling it inside Studio.</p></div><button id="resetExtensionFeaturePlacement" class="secondary-button" type="button">Restore Defaults</button></div>
+              <div class="extension-feature-placement-labels" aria-hidden="true"><span>FEATURE</span><span>MAINFRAME PANEL</span><span>STREAMING OVERLAY</span></div>
+              <div id="extensionFeaturePlacementList" class="extension-feature-placement-list empty-state">Loading Extension features…</div>
+              <p id="extensionFeaturePlacementStatus" class="extension-edition-message">Feature placement is saved locally and published through Tempest Signal.</p>
+            </section>
+            <div class="panel-header hosted-extension-connect-header"><div><span>CHANNEL PAIRING</span><h3>Connect the companion Extensions</h3></div><span id="hostedExtensionBadge" class="status-badge offline">NOT CONNECTED</span></div>
             <div class="local-extension-grid">
               <div class="twitch-form-stack">
-                <div class="sound-alert-note"><strong>No developer setup required.</strong><br />Studio securely connects your public Twitch panel automatically.</div>
+                <div class="sound-alert-note"><strong>No developer setup required.</strong><br />Studio securely connects the public Twitch companion Extensions automatically.</div>
                 <div class="twitch-setup-actions"><button id="pairHostedExtension" class="primary-button">Connect My Channel</button><button id="switchHostedExtensionToOfficialTwitch" class="secondary-button" hidden>Use Official Twitch Sign-In</button><button id="revokeHostedExtension" class="secondary-button danger-outline">Disconnect</button></div>
               </div>
               <div class="twitch-auth-summary" data-advanced>
@@ -550,7 +866,7 @@
           </article>
 
           <div class="platform-tool-grid" aria-label="Kick tools">
-            <button class="platform-tool-card" data-go="chatbot"><span>LIVE CHAT</span><strong>Live Desk</strong><small>Monitor Kick beside Twitch and keep replies on their originating platform.</small></button>
+            <button class="platform-tool-card" data-go="chatbot"><span>LIVE CHAT</span><strong>Chatbot</strong><small>Monitor Kick beside Twitch and keep replies on their originating platform.</small></button>
             <button class="platform-tool-card" data-go="simulcast"><span>PRODUCTION</span><strong>Go Live</strong><small>Run preflight and monitor independent Twitch and Kick destination health.</small></button>
           </div>
         </section>
@@ -566,14 +882,22 @@
           </article>
           <div class="stream-together-boundary-grid">
             <article><span>CALL</span><strong>Stream Together</strong><p>Twitch Backstage lives in its own persistent Studio call window.</p></article>
-            <article><span>CHAT + POLLS</span><strong>Live Desk</strong><p>Unified Chat combines Twitch, Stream Together collaboration messages, and Kick while polls continue independently.</p><button class="secondary-button" data-go="chatbot" type="button">Open Live Desk</button></article>
+            <article><span>CHAT + POLLS</span><strong>Chatbot</strong><p>Unified Chat combines Twitch, Stream Together collaboration messages, and Kick while polls continue independently.</p><button class="secondary-button" data-go="chatbot" type="button">Open Chatbot</button></article>
             <article><span>VIDEO + OUTPUT</span><strong>Tempest Broadcast</strong><p>Guest Browser Sources, canvases, audio routing, and final output stay in Broadcast.</p><button class="secondary-button" data-go="simulcast" type="button">Open Go Live</button></article>
           </div>
         </section>
 
         <section id="chatbotSection" class="page">
-          <div class="page-toolbar"><div><p class="eyebrow">ON-AIR CHAT + AUDIENCE</p><h2>Live Desk</h2><p>Monitor Twitch and Kick chat, run active polls, and keep frequently used audience controls together while the Stream Together call runs independently.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
-          <div class="metric-grid five-up chatbot-metrics" data-advanced>
+          <div class="page-toolbar"><div><p class="eyebrow">CHATBOT + LIVE AUDIENCE</p><h2>Chatbot</h2><p>Run live chat, polls, commands, moderation, and audience automation from one primary workspace.</p></div><span id="chatbotOverallBadge" class="status-badge offline">NOT CONNECTED</span></div>
+          <div class="chatbot-feature-tabs" role="tablist" aria-label="Chatbot tools">
+            <button class="active" type="button" role="tab" aria-selected="true" data-chatbot-tab="chat">Live Chat</button>
+            <button type="button" role="tab" aria-selected="false" data-chatbot-tab="polls">Polls</button>
+            <button type="button" role="tab" aria-selected="false" data-chatbot-tab="commands">Commands</button>
+            <button type="button" role="tab" aria-selected="false" data-chatbot-tab="automation">Automation</button>
+            <button type="button" role="tab" aria-selected="false" data-chatbot-tab="moderation">Moderation</button>
+            <button type="button" role="tab" aria-selected="false" data-chatbot-tab="setup">Setup</button>
+          </div>
+          <div class="metric-grid five-up chatbot-metrics" data-chatbot-panel="chat">
             <article><span>BOT IDENTITY</span><strong id="chatbotIdentityMetric">CHAT BOT</strong><small>Separate encrypted Twitch authorization</small></article>
             <article><span>EVENTSUB</span><strong id="chatbotEventSubMetric">DISCONNECTED</strong><small>Live channel.chat.message intake</small></article>
             <article><span>CHAT OUTPUT</span><strong id="chatbotChatMetric">DISCONNECTED</strong><small>Replies through Twitch Helix</small></article>
@@ -581,7 +905,7 @@
             <article><span>TRIGGERS</span><strong id="chatbotTriggerCount">0</strong><small id="chatbotLastMessage">No messages received</small></article>
           </div>
 
-          <article class="panel shared-chat-panel">
+          <article class="panel shared-chat-panel" data-chatbot-panel="chat">
             <div class="panel-header"><div><span>UNIFIED CHAT</span><h3>Twitch + Kick Live Chat</h3><p>One operator feed for Twitch, Stream Together collaboration messages, and Kick—independent of the call window.</p></div><div class="page-toolbar-actions"><span id="sharedChatBadge" class="status-badge offline">NOT CONNECTED</span><button id="clearSharedChatMessages" class="secondary-button" type="button">Clear View</button></div></div>
             <div class="shared-chat-layout">
               <aside class="shared-chat-session">
@@ -601,24 +925,37 @@
             </div>
           </article>
 
-          <form id="chatbotPollForm" class="panel chatbot-provider-panel chatbot-poll-panel">
+          <form id="chatbotPollForm" class="panel chatbot-provider-panel chatbot-poll-panel" data-chatbot-panel="polls" hidden>
             <div class="panel-header"><div><span>CHAT POLL</span><h3>One numbered vote per chatter</h3><p>Start a Studio poll, then each Twitch or Kick account can vote once by sending only the option number in chat.</p></div><span id="chatbotPollBadge" class="status-badge offline">IDLE</span></div>
             <div class="chatbot-poll-grid">
               <section class="chatbot-poll-card chatbot-poll-setup-card"><div class="chatbot-poll-card-heading"><span>POLL SETUP</span><strong>Question + numbered choices</strong></div><div class="chatbot-poll-fields"><label>Question<input id="chatbotPollQuestion" maxlength="160" placeholder="What should we play next?" /></label><label>Numbered options<textarea id="chatbotPollOptions" rows="6" maxlength="809" placeholder="1 option per line">Option 1&#10;Option 2</textarea></label></div><small>Enter 2–10 options. Studio assigns numbers in order and accepts messages containing only that number.</small></section>
               <section class="chatbot-poll-card chatbot-poll-results-card"><div class="chatbot-poll-card-heading"><span>LIVE RESULTS</span><strong>One vote per account</strong></div><div id="chatbotPollResults" class="chatbot-poll-results empty-state">No poll is active.</div><p id="chatbotPollStatus" class="chatbot-poll-status">Start a poll when chat is ready.</p></section>
             </div>
+            <div class="chatbot-poll-overlay-source"><div><span>ON-STREAM POLL</span><strong>Included in Unified Stage</strong><small>Enable Poll Overlay in Unified Stage. It appears automatically when a poll starts, updates live, shows final results, and hides when cleared.</small></div><code id="chatbotPollOverlayUrl">Starting Studio…</code><button id="copyChatbotPollOverlayUrl" class="secondary-button" type="button">Copy Unified Stage URL</button></div>
             <div class="chatbot-poll-actions"><button id="clearChatbotPoll" class="secondary-button" type="button">Clear Poll</button><button id="stopChatbotPoll" class="secondary-button danger-outline" type="button">End Voting</button><button id="startChatbotPoll" class="primary-button" type="submit">Start Poll</button></div>
           </form>
 
-          <details id="liveDeskSetupDrawer" class="live-desk-setup-drawer">
-            <summary><span><b>SETUP + AUTOMATION</b><strong>Bot account, commands, moderation, messages, and providers</strong><small>These controls normally stay out of the way while you are live.</small></span><span id="liveDeskSetupBadge" class="status-badge offline">SETUP REQUIRED</span><i aria-hidden="true">›</i></summary>
-            <div class="live-desk-setup-content">
-          <article class="panel chatbot-account-guide">
-            <div class="chatbot-account-guide-icon" aria-hidden="true">02</div>
-            <div><span>SECOND TWITCH ACCOUNT REQUIRED</span><h3>Your chatbot signs in as a separate Twitch user</h3><p>Keep your broadcaster connected in Twitch Setup. For chat listening and replies, create or sign into a secondary Twitch account, then authorize that account below. The username Twitch returns is always shown beside any custom bot name.</p></div>
+          <article class="panel chatbot-provider-panel chatbot-poll-panel twitch-prediction-panel" data-chatbot-panel="polls" hidden>
+            <div class="panel-header"><div><span>CHANNEL POINT PREDICTION</span><h3>Viewer wagers managed by Twitch</h3><p>Open an official Twitch Prediction, close wagering, then select the winning outcome. Twitch holds the Channel Points and distributes the winnings.</p></div><span id="twitchPredictionBadge" class="status-badge offline">SETUP REQUIRED</span></div>
+            <div class="chatbot-poll-grid">
+              <form id="twitchPredictionForm" class="chatbot-poll-card chatbot-poll-setup-card">
+                <div class="chatbot-poll-card-heading"><span>PREDICTION SETUP</span><strong>Question + wager outcomes</strong></div>
+                <div class="chatbot-poll-fields"><label>Prediction title<input id="twitchPredictionTitle" maxlength="45" placeholder="Will we win the next match?" /></label><label>Outcomes<textarea id="twitchPredictionOutcomes" rows="6" maxlength="259" placeholder="One outcome per line">Yes&#10;No</textarea></label><label>Wagering time<select id="twitchPredictionWindow"><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1800">30 minutes</option></select></label></div>
+                <small>Enter 2–10 unique outcomes. Predictions are available only to eligible Twitch Affiliate and Partner channels.</small>
+                <div class="chatbot-poll-actions"><button id="startTwitchPrediction" class="primary-button" type="submit">Start Prediction</button></div>
+              </form>
+              <section class="chatbot-poll-card chatbot-poll-results-card"><div class="chatbot-poll-card-heading"><span>TWITCH WAGER</span><strong id="twitchPredictionTitleLive">No active prediction</strong></div><div id="twitchPredictionResults" class="chatbot-poll-results empty-state">Refresh after connecting Twitch.</div><p id="twitchPredictionStatus" class="chatbot-poll-status">Reconnect Twitch once to grant Prediction management permission.</p><div class="chatbot-poll-actions"><button id="refreshTwitchPrediction" class="secondary-button" type="button">Refresh</button><button id="cancelTwitchPrediction" class="secondary-button danger-outline" type="button">Cancel + Refund</button><button id="lockTwitchPrediction" class="secondary-button" type="button">Lock Wagers</button></div></section>
+            </div>
+            <div class="chatbot-poll-overlay-source"><div><span>TWITCH-OWNED CURRENCY</span><strong>No custom balance or Railway wallet</strong><small>Viewers wager from Twitch chat. Twitch owns the point balance, enforces eligibility, refunds canceled Predictions, and pays winners after resolution.</small></div></div>
           </article>
 
-          <article class="panel chatbot-identity-panel">
+          <article class="panel chatbot-account-guide chatbot-setup-intro" data-chatbot-panel="setup" hidden>
+            <div class="chatbot-account-guide-icon" aria-hidden="true">02</div>
+            <div><span>SECOND TWITCH ACCOUNT REQUIRED</span><h3>Your chatbot signs in as a separate Twitch user</h3><p>Keep your broadcaster connected in Twitch Setup. For chat listening and replies, create or sign into a secondary Twitch account, then authorize that account below. The username Twitch returns is always shown beside any custom bot name.</p></div>
+            <span id="liveDeskSetupBadge" class="status-badge offline">SETUP REQUIRED</span>
+          </article>
+
+          <article class="panel chatbot-identity-panel" data-chatbot-panel="setup" hidden>
             <div class="panel-header"><div><span>BOT IDENTITY</span><h3 id="chatbotIdentityTitle" data-sensitive>Connect a bot account</h3></div><span id="chatbotAccountBadge" class="status-badge offline" data-sensitive>NOT AUTHORIZED</span></div>
             <div class="chatbot-identity-grid">
               <div class="chatbot-identity-copy"><p>The Twitch Gateway remains authorized as your broadcaster. This second authorization lets the bot account listen and reply under its own Twitch username.</p><label class="chatbot-name-control">Bot display name <span>OPTIONAL</span><div><input id="chatbotDisplayName" data-sensitive maxlength="40" placeholder="Use the Twitch username automatically" /><button id="saveChatbotIdentity" class="secondary-button" type="button">Save Name</button></div><small>This is a Studio label. Leave it blank to use the verified Twitch username.</small></label><div class="scope-list"><code>user:read:chat</code><code>user:write:chat</code><code>moderator:manage:shoutouts</code><code>moderator:manage:chat_messages</code><code>moderator:manage:banned_users</code></div><div class="twitch-setup-actions"><button id="connectChatbotButton" class="primary-button">Connect Bot Account</button><button id="validateChatbotButton" class="secondary-button">Validate Bot Token</button><button id="disconnectChatbotButton" class="secondary-button danger-outline">Disconnect Bot</button></div></div>
@@ -626,7 +963,7 @@
             </div>
           </article>
 
-          <form id="chatbotAutoMessagesForm" class="panel chatbot-provider-panel chatbot-auto-message-panel" data-advanced>
+          <form id="chatbotAutoMessagesForm" class="panel chatbot-provider-panel chatbot-auto-message-panel" data-chatbot-panel="automation" hidden>
             <div class="panel-header"><div><span>CHAT ENGAGEMENT</span><h3>Rotating Auto Messages</h3><p>Post reminders, links, or community prompts when either the time interval or chat-message threshold is reached.</p></div><span id="chatbotAutoMessagesBadge" class="status-badge offline">OFF</span></div>
             <label class="toggle-label automod-master"><input id="chatbotAutoMessagesEnabled" type="checkbox" /> Enable rotating Auto Messages</label>
             <div class="chatbot-auto-message-grid">
@@ -636,7 +973,7 @@
             <div class="dialog-actions"><button class="primary-button" type="submit">Save Auto Messages</button></div>
           </form>
 
-          <form id="chatbotAutoModForm" class="panel chatbot-provider-panel chatbot-automod-panel" data-advanced>
+          <form id="chatbotAutoModForm" class="panel chatbot-provider-panel chatbot-automod-panel" data-chatbot-panel="moderation" hidden>
             <div class="panel-header"><div><span>CHAT MODERATION</span><h3>AutoMod + link protection</h3><p>Check home-channel messages before commands run. Twitch Stream Together messages are left to their source channel's moderators.</p></div><span id="chatbotAutoModBadge" class="status-badge offline">OFF</span></div>
             <label class="toggle-label automod-master"><input id="chatbotAutoModEnabled" type="checkbox" /> Enable Studio AutoMod</label>
             <div class="chatbot-automod-grid">
@@ -647,7 +984,7 @@
             <div class="dialog-actions"><button class="primary-button" type="submit">Save AutoMod</button></div>
           </form>
 
-          <form id="chatbotRaidAutomationForm" class="panel chatbot-provider-panel chatbot-raid-panel" data-advanced>
+          <form id="chatbotRaidAutomationForm" class="panel chatbot-provider-panel chatbot-raid-panel" data-chatbot-panel="automation" hidden>
             <div class="panel-header"><div><span>RAID AUTOMATION</span><h3>Welcome + shout out incoming raiders</h3><p>Every received raid can post a custom welcome through the bot and enter Twitch's official shoutout queue.</p></div><span id="chatbotRaidBadge" class="status-badge offline">SETUP REQUIRED</span></div>
             <div class="chatbot-raid-grid">
               <fieldset><legend><label class="toggle-label"><input id="chatbotRaidWelcomeEnabled" type="checkbox" /> Post a welcome message</label></legend><label>Welcome message<textarea id="chatbotRaidWelcomeMessage" rows="3" maxlength="500" placeholder="Welcome {raider} and your {viewers} raiders!"></textarea></label><small>Variables: <code>{raider}</code>, <code>{viewers}</code>, <code>{channel}</code>, and <code>{bot}</code>.</small></fieldset>
@@ -657,7 +994,7 @@
             <p id="chatbotRaidTestResult" class="chatbot-raid-result">Previewing does not post to Twitch.</p>
           </form>
 
-          <form id="chatbotFirstChatShoutoutForm" class="panel chatbot-provider-panel chatbot-first-chat-panel" data-advanced>
+          <form id="chatbotFirstChatShoutoutForm" class="panel chatbot-provider-panel chatbot-first-chat-panel" data-chatbot-panel="automation" hidden>
             <div class="panel-header"><div><span>ASSIGNED CREATORS</span><h3>Shoutouts + interaction access</h3><p>Maintain one public creator list for first-chat shoutouts and optional Twitch-panel access control.</p></div><span id="chatbotFirstChatBadge" class="status-badge offline">OPEN ACCESS</span></div>
             <div class="chatbot-first-chat-grid">
               <fieldset><legend><label class="toggle-label"><input id="chatbotFirstChatEnabled" type="checkbox" /> Enable assigned first-chat shoutouts</label></legend><label>Assigned Twitch channel logins<textarea id="chatbotFirstChatChannels" rows="5" maxlength="1400" placeholder="creator_one&#10;creator_two&#10;creator_three"></textarea></label><small>Enter one Twitch login per line, with or without <code>@</code>. Up to 50 channels. This public creator list remains readable while Privacy Shield is active.</small></fieldset>
@@ -666,7 +1003,7 @@
             <div class="dialog-actions"><button class="primary-button" type="submit">Save Assigned Creators</button></div>
           </form>
 
-          <form id="chatbotProvidersForm" class="panel chatbot-provider-panel" data-advanced>
+          <form id="chatbotProvidersForm" class="panel chatbot-provider-panel" data-chatbot-panel="automation" hidden>
             <div class="panel-header"><div><span>OPTIONAL RESPONSE PROVIDERS</span><h3>Local weather + now playing</h3><p>These stay hidden from command choices until configured. No API key is required for NWS or public AzuraCast metadata.</p></div><button class="primary-button" type="submit">Save Providers</button></div>
             <div class="chatbot-provider-grid">
               <fieldset><legend><label class="toggle-label"><input id="weatherProviderEnabled" type="checkbox" /> Local weather (United States)</label></legend><label>Location name<input id="weatherLocationName" data-sensitive maxlength="80" placeholder="Portland" /></label><div class="form-row"><label>Latitude<input id="weatherLatitude" data-sensitive type="number" min="-90" max="90" step="0.0001" placeholder="45.5152" /></label><label>Longitude<input id="weatherLongitude" data-sensitive type="number" min="-180" max="180" step="0.0001" placeholder="-122.6784" /></label></div><label>IANA time zone<input id="weatherTimeZone" data-sensitive maxlength="80" placeholder="America/Los_Angeles" /></label><small>Uses the U.S. National Weather Service. Enter coordinates within NWS coverage.</small></fieldset>
@@ -674,20 +1011,20 @@
             </div>
           </form>
 
-          <div class="chatbot-workspace">
+          <div class="chatbot-workspace" data-chatbot-panel="commands" hidden>
             <article class="panel chatbot-editor-panel">
               <div class="panel-header"><div><span>COMMAND EDITOR</span><h3 id="chatbotEditorTitle">Create a command</h3></div><button id="resetChatbotCommand" class="text-button">New command</button></div>
               <form id="chatbotCommandForm" class="chatbot-command-form">
                 <input id="chatbotCommandId" type="hidden" />
                 <div class="form-row"><label>Command name<div class="prefixed-input"><span id="chatbotPrefixLabel">!</span><input id="chatbotCommandName" required maxlength="32" placeholder="blackhole" /></div></label><label>Permission<select id="chatbotCommandPermission"><option value="everyone">Everyone</option><option value="subscriber">Subscribers</option><option value="moderator">Moderators</option><option value="broadcaster">Broadcaster only</option></select></label></div>
                 <label>Aliases<input id="chatbotCommandAliases" maxlength="240" placeholder="bh, gravity" /><small>Comma-separated; the command prefix is added automatically.</small></label>
-                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="counter">Custom counter (+1)</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option></select></label>
+                <label>Response source<select id="chatbotCommandHandler"><option value="">Custom chat response</option><option value="counter">Custom counter (+1)</option><option value="command-directory">Enabled command directory</option><option value="stream-uptime">Current stream uptime</option><option value="channel-title">Current Twitch title</option><option value="channel-game">Current Twitch category</option><option value="stream-schedule">Next scheduled stream</option><option value="twitch-clip">Create a Twitch clip</option></select></label>
                 <div id="chatbotCounterFields" class="form-row" hidden><label>Counter label<input id="chatbotCounterLabel" maxlength="80" placeholder="Deaths" /></label><label>Current value<input id="chatbotCounterValue" type="number" min="-1000000000" max="1000000000" step="1" value="0" /></label></div>
                 <label>Chat response<textarea id="chatbotCommandResponse" rows="3" maxlength="500" placeholder="Gravitational anomaly detected, {user}."></textarea><small>Variables: {bot}, {user}, {command}, {args}, {counterLabel}, and {counter}. Counter responses may be left blank.</small></label>
-                <label data-advanced>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
-                <div class="form-row" data-advanced><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
+                <label>Studio automation<select id="chatbotCommandWorkflow"><option value="">No automation — chat response only</option></select></label>
+                <div class="form-row"><label>Viewer cooldown (seconds)<input id="chatbotViewerCooldown" type="number" min="0" max="86400" value="15" /></label><label>Global cooldown (seconds)<input id="chatbotGlobalCooldown" type="number" min="0" max="86400" value="3" /></label></div>
                 <div class="command-toggle-row"><label class="toggle-label"><input id="chatbotCommandEnabled" type="checkbox" checked /> Command enabled</label><label class="toggle-label"><input id="chatbotReplyToViewer" type="checkbox" /> Reply directly to viewer</label><label class="toggle-label"><input id="chatbotAllowSharedChat" type="checkbox" checked /> Allow from Stream Together Chat</label></div>
-                <small data-advanced>Stream Together Chat commands can be invoked by viewers arriving through a collaborator's Twitch channel. Command permissions are still evaluated in your home channel.</small>
+                <small>Stream Together Chat commands can be invoked by viewers arriving through a collaborator's Twitch channel. Command permissions are still evaluated in your home channel.</small>
                 <div class="dialog-actions"><button id="deleteChatbotCommand" type="button" class="secondary-button danger-outline" disabled>Delete</button><button type="submit" class="primary-button">Save Command</button></div>
               </form>
             </article>
@@ -698,12 +1035,10 @@
             </article>
           </div>
 
-          <div class="overview-grid chatbot-lower-grid" data-advanced>
+          <div class="overview-grid chatbot-lower-grid" data-chatbot-panel="commands" hidden>
             <article class="panel"><div class="panel-header"><div><span>COMMAND SIMULATOR</span><h3>Test without sending to Twitch</h3></div></div><div class="chatbot-tester"><div class="form-row"><label>Viewer role<select id="chatbotTestRole"><option value="everyone">Viewer</option><option value="subscriber">Subscriber</option><option value="moderator">Moderator</option><option value="broadcaster">Broadcaster</option></select></label><label>Message origin<select id="chatbotTestOrigin"><option value="home">Home channel</option><option value="shared">Stream Together collaborator</option></select></label><label>Viewer name<input id="chatbotTestViewer" value="StudioTester" maxlength="40" /></label></div><label>Chat message<input id="chatbotTestMessage" value="!studio" maxlength="500" /></label><button id="testChatbotCommand" class="primary-button">Simulate Message</button><p id="chatbotTestResult">The simulator runs origin, permissions, and routing but does not post a Twitch reply.</p></div></article>
             <article class="panel"><div class="panel-header"><div><span>CHATBOT ACTIVITY</span><h3>Recent command decisions</h3></div></div><div id="chatbotActivity" class="compact-list empty-state">No chatbot activity recorded.</div></article>
           </div>
-            </div>
-          </details>
         </section>
 
         <section id="dualformatSection" class="page">

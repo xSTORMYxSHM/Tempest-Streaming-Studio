@@ -1,6 +1,6 @@
 {
   "name": "@tempest/studio-desktop",
-  "version": "1.5.0",
+  "version": "1.7.0",
   "author": "Storm Horizon Media",
   "private": true,
   "description": "Desktop streaming control plane for Tempest Streaming Studio.",
@@ -49,6 +49,11 @@
     ],
     "afterPack": "tools/after-pack-fuses.cjs",
     "extraResources": [
+      {
+        "from": "assets/stage-actors",
+        "to": "stage-actors",
+        "filter": ["**/*"]
+      },
       {
         "from": "../twitch-extension/dist",
         "to": "twitch-extension",
