@@ -1,13 +1,15 @@
 # Tempest Streaming Studio 1.7.1 release audit
 
 Date: October 10, 2026
-Status: signed candidate verified; stable updater publication pending
+Status: public stable release published and updater feed verified
 
 ## Current result
 
 The 1.7.1 patch source is committed and pushed at `2505932`. The frozen workspace build and 167-test suite pass with zero failures. The Windows installer and portable payload were built from that source, timestamp-signed with the Tempest publisher certificate, hardened with the expected Electron fuse wire, and verified without private credentials or development-only files.
 
 The packaged executable completed its hidden smoke test with exit code 0 using a fresh profile and isolated local Bridge port while the installed 1.7.0 application remained open.
+
+GitHub published `v1.7.1` as the latest non-draft, non-prerelease release with all six expected assets. The public stable updater feed returned HTTP 200 and advertised version `1.7.1` with `Tempest-Streaming-Studio-Setup-1.7.1-x64.exe` as its installation path.
 
 ## Included fixes
 
