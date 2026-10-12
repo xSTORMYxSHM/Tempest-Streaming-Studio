@@ -30,10 +30,10 @@ test('Interactive World drives crowd avatars, pet, battles, gaze, safety, and pe
   ]) assert.equal((await first.request('/v1/interactive-world/viewers', viewer)).status, 201);
 
   floorStage = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers: first.headers }).then((response) => response.json());
-  assert.equal(floorStage.worldMap.enabled, true);
+  assert.equal(floorStage.worldMap.enabled, false);
   assert.equal((await first.request('/v1/interactive-stage/layout', { worldMap: { enabled: false } })).status, 200);
   floorStage = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers: first.headers }).then((response) => response.json());
-  assert.equal(floorStage.worldMap.enabled, true);
+  assert.equal(floorStage.worldMap.enabled, false);
 
   let world = await fetch(`${runtime.baseUrl}/v1/interactive-world`, { headers: first.headers }).then((response) => response.json());
   assert.equal(world.activeViewers, 2);
@@ -115,10 +115,12 @@ test('Interactive World drives crowd avatars, pet, battles, gaze, safety, and pe
   assert.equal(world.gaze.connected, false);
   let restoredStage = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers: second.headers }).then((response) => response.json());
   assert.equal(restoredStage.activeCount, 0);
+  assert.equal(restoredStage.worldMap.enabled, false);
   await second.request('/v1/safety/arm', {});
   restoredStage = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers: second.headers }).then((response) => response.json());
   assert.ok(restoredStage.objects.some((object) => object.kind === 'avatar'));
   assert.ok(restoredStage.objects.some((object) => object.kind === 'pet'));
+  assert.equal(restoredStage.worldMap.enabled, false);
 });
 
 test('Interactive roadmap systems cover automatic presence, cosmetics, protected zones, recipes, invitations, and adapter diagnostics', async (context) => {

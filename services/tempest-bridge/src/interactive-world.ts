@@ -149,7 +149,6 @@ export class TempestInteractiveWorld {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       await this.persist();
     }
-    if (this.stateValue.safety.interactionsEnabled && this.stateValue.viewers.some((viewer) => viewer.onStage !== false)) await this.stage.ensureAvatarFloor();
     this.syncPersistentStage();
     this.sweepTimer = setInterval(() => { void this.sweepPresence(); }, 30_000);
     this.sweepTimer.unref?.();
@@ -485,7 +484,6 @@ export class TempestInteractiveWorld {
       if (this.stateValue.viewers.length >= this.stateValue.safety.maximumCrowd) throw new Error(`The crowd limit of ${this.stateValue.safety.maximumCrowd} is active.`);
       this.stateValue.viewers.push(profile);
     }
-    await this.stage.ensureAvatarFloor();
     this.renderViewer(profile);
     await this.touch();
     return clone(profile);

@@ -302,7 +302,6 @@ export class TempestInteractiveStage {
     if (source.collisionAvoidance !== undefined) this.collisionAvoidance = source.collisionAvoidance === true;
     if (source.worldMap !== undefined) {
       this.worldMap = this.validateWorldMap(source.worldMap, this.worldMap);
-      if ([...this.objects.values()].some((object) => object.kind === 'avatar')) this.worldMap.enabled = true;
       const validIds = new Set(this.worldMap.interactables.map((item) => item.id));
       this.worldState.objects = Object.fromEntries(Object.entries(this.worldState.objects).filter(([id]) => validIds.has(id)));
     }
@@ -321,12 +320,6 @@ export class TempestInteractiveStage {
       worldState: clone(this.worldState)
     });
     return { protectedZones: this.protectedZones.map(clone), collisionAvoidance: this.collisionAvoidance, worldMap: clone(this.worldMap) };
-  }
-
-  async ensureAvatarFloor(): Promise<boolean> {
-    if (this.worldMap.enabled) return false;
-    await this.configureLayout({ worldMap: { enabled: true } });
-    return true;
   }
 
   async worldEvent(input: unknown): Promise<InteractiveStageWorldRuntimeState> {
