@@ -144,6 +144,7 @@
   let alertDesignHistoryIndex = -1;
   let alertDesignHistoryLocked = false;
   let discordCanvasDrag = null;
+  let discordCanvasSelectedId = '';
   let discordSettingsDirty = false;
   let twitchExperienceSettingsDirty = false;
   const discordProfileDrafts = new Map();
@@ -2491,8 +2492,41 @@
     return `<div class="discord-media-slot ${uri ? 'assigned' : 'fallback'}">${discordImagePreview(previewUri, participant.displayName, 'discord-media-thumb')}<div><span>${title}</span><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong></div><button data-discord-image-id="${escapeHtml(participant.id)}" data-discord-image-kind="${kind}">${uri ? 'Replace' : 'Assign'}</button></div>`;
   }
 
-  function discordCanvasPosition(participant, index, total) {
+  function discordAutomaticCanvasPosition(layout, index, total) {
+    const count = Math.max(1, total);
+    const spread = (minimum, maximum) => count === 1 ? (minimum + maximum) / 2 : minimum + index / (count - 1) * (maximum - minimum);
+    if (layout === 'bottom-left') return { x: spread(10, 46), y: 82 };
+    if (layout === 'bottom-right') return { x: spread(54, 90), y: 82 };
+    if (layout === 'top-center') return { x: spread(12, 88), y: 18 };
+    if (layout === 'vertical-left') return { x: 12, y: spread(16, 84) };
+    if (layout === 'vertical') return { x: 88, y: spread(16, 84) };
+    if (layout === 'grid') {
+      const columns = Math.max(1, Math.ceil(Math.sqrt(count * 16 / 9)));
+      const rows = Math.ceil(count / columns);
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      return { x: (column + 1) / (Math.min(columns, count) + 1) * 100, y: 86 - (rows - 1 - row) * Math.min(22, 64 / Math.max(1, rows - 1)) };
+    }
+    if (layout === 'corners') {
+      const slots = [[12, 18], [88, 18], [12, 82], [88, 82], [50, 18], [50, 82], [12, 50], [88, 50]];
+      if (count <= slots.length) return { x: slots[index][0], y: slots[index][1] };
+      const phase = index / count * 4;
+      if (phase < 1) return { x: 10 + 80 * phase, y: 14 };
+      if (phase < 2) return { x: 90, y: 14 + 72 * (phase - 1) };
+      if (phase < 3) return { x: 90 - 80 * (phase - 2), y: 86 };
+      return { x: 10, y: 86 - 72 * (phase - 3) };
+    }
+    if (layout === 'arc') {
+      const x = 10 + (index + 1) / (count + 1) * 80;
+      const normalized = (x - 50) / 40;
+      return { x, y: 82 - (1 - normalized * normalized) * 18 };
+    }
+    return { x: (index + 1) / (count + 1) * 100, y: 82 };
+  }
+
+  function discordCanvasPosition(participant, index, total, layout = 'manual') {
     const profile = discordProfileFor(participant.id);
+    if (layout !== 'manual') return discordAutomaticCanvasPosition(layout, index, total);
     return {
       x: Number.isFinite(Number(profile.positionX)) ? Number(profile.positionX) : ((index + 1) / (total + 1)) * 100,
       y: Number.isFinite(Number(profile.positionY)) ? Number(profile.positionY) : 82
@@ -2557,22 +2591,30 @@
     const canvas = activeCanvasProfile();
     const canvasPreview = $('#discordVoiceCanvasPreview');
     const canvasGuests = guests.filter((participant) => discordProfileFor(participant.id).visible !== false && !(hideSelf && participant.self) && !(hideBots && participant.bot));
+    if (discordCanvasSelectedId && !canvasGuests.some((participant) => participant.id === discordCanvasSelectedId)) discordCanvasSelectedId = '';
     canvasPreview.style.aspectRatio = `${canvas.baseWidth} / ${canvas.baseHeight}`;
     canvasPreview.classList.toggle('manual', selectedLayout === 'manual');
-    canvasPreview.innerHTML = canvasGuests.length ? canvasGuests.map((participant) => {
+    canvasPreview.innerHTML = `<div id="discordCanvasGuideX" class="design-snap-guide vertical" aria-hidden="true"></div><div id="discordCanvasGuideY" class="design-snap-guide horizontal" aria-hidden="true"></div>${canvasGuests.length ? canvasGuests.map((participant) => {
       const profile = discordProfileFor(participant.id);
-      return `<button type="button" class="discord-canvas-person ${participant.self ? 'self' : ''}" data-discord-canvas-id="${escapeHtml(participant.id)}" title="${selectedLayout === 'manual' ? 'Drag to place' : 'Choose Manual canvas placement to drag'}">${discordImagePreview(discordProfileImage(participant, profile), profile.displayName || participant.displayName, 'discord-canvas-avatar')}<strong>${escapeHtml(profile.displayName || participant.displayName)}</strong></button>`;
-    }).join('') : '<div class="discord-canvas-empty">Add or preview a guest to place profiles.</div>';
+      return `<button type="button" class="discord-canvas-person ${participant.self ? 'self' : ''} ${participant.id === discordCanvasSelectedId ? 'selected' : ''}" data-discord-canvas-id="${escapeHtml(participant.id)}" title="${selectedLayout === 'manual' ? 'Drag to place · arrow keys nudge' : 'Choose Manual canvas placement to drag'}">${discordImagePreview(discordProfileImage(participant, profile), profile.displayName || participant.displayName, 'discord-canvas-avatar')}<strong>${escapeHtml(profile.displayName || participant.displayName)}</strong></button>`;
+    }).join('') : '<div class="discord-canvas-empty">Add or preview a guest to place profiles.</div>'}`;
     canvasGuests.forEach((participant, index) => {
       const person = document.querySelector(`[data-discord-canvas-id="${CSS.escape(participant.id)}"]`);
       const profile = discordProfileFor(participant.id);
-      const position = discordCanvasPosition(participant, index, canvasGuests.length);
+      const position = discordCanvasPosition(participant, index, canvasGuests.length, selectedLayout);
       person?.style.setProperty('left', `${position.x}%`);
       person?.style.setProperty('top', `${position.y}%`);
       person?.style.setProperty('--participant-accent', profile.accent || configuration.speakingAccent || '#54f2eb');
     });
     $('#discordCanvasProfile').textContent = `${canvas.baseWidth} × ${canvas.baseHeight}`;
-    $('#discordCanvasHelp').textContent = selectedLayout === 'manual' ? 'Drag any profile to place it. The new X/Y position saves when you release it.' : 'Automatic layouts preview their default row. Select Manual canvas placement to drag profiles.';
+    $('#discordCanvasHelp').textContent = selectedLayout === 'manual' ? 'Drag to place with edge and center snapping. Arrow keys nudge 1%; hold Shift for 5%. Positions save after each move.' : 'This automatic arrangement is shown on the real canvas. Select Manual canvas placement for per-person positions.';
+    const selectedGuest = canvasGuests.find((participant) => participant.id === discordCanvasSelectedId);
+    const selectedPosition = selectedGuest ? discordCanvasPosition(selectedGuest, canvasGuests.indexOf(selectedGuest), canvasGuests.length, 'manual') : null;
+    $('#discordVoiceSnap').disabled = selectedLayout !== 'manual';
+    document.querySelectorAll('[data-discord-canvas-align]').forEach((button) => { button.disabled = selectedLayout !== 'manual' || !selectedGuest; });
+    $('#discordCanvasReadout').textContent = selectedGuest && selectedPosition
+      ? `${selectedGuest.displayName} · X ${selectedPosition.x.toFixed(1)}% · Y ${selectedPosition.y.toFixed(1)}%`
+      : selectedLayout === 'manual' ? 'Select a profile to align or nudge it.' : 'Automatic arrangement preview';
     if (useStoredSettings && overlay) {
       $('#discordVoiceEnabled').checked = configuration.enabled !== false;
       $('#discordVoiceLayout').value = configuration.layout || 'horizontal';
@@ -6372,20 +6414,67 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  function discordCanvasPlacementLimits(element) {
+    const canvas = $('#discordVoiceCanvasPreview');
+    const bounds = canvas.getBoundingClientRect();
+    const personBounds = element.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return { minimumX: 0, maximumX: 100, minimumY: 0, maximumY: 100 };
+    const halfWidth = Math.min(50, personBounds.width / bounds.width * 50);
+    const halfHeight = Math.min(50, personBounds.height / bounds.height * 50);
+    return { minimumX: halfWidth, maximumX: 100 - halfWidth, minimumY: halfHeight, maximumY: 100 - halfHeight };
+  }
+
+  function snapDiscordCanvasCoordinate(value, minimum, maximum) {
+    const clamped = Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : 50));
+    const step = Number($('#discordVoiceSnap').value) || 0;
+    if (!step) return clamped;
+    let snapped = Math.round(clamped / step) * step;
+    const magneticThreshold = Math.max(1.25, step * 0.55);
+    for (const target of [minimum, 50, maximum]) {
+      if (Math.abs(clamped - target) <= magneticThreshold) {
+        snapped = target;
+        break;
+      }
+    }
+    return Math.min(maximum, Math.max(minimum, snapped));
+  }
+
+  function updateDiscordCanvasGuides(x, y) {
+    $('#discordCanvasGuideX')?.classList.toggle('visible', Math.abs(x - 50) < 0.05);
+    $('#discordCanvasGuideY')?.classList.toggle('visible', Math.abs(y - 50) < 0.05);
+  }
+
+  function writeDiscordCanvasPosition(userId, element, x, y, { snap = false } = {}) {
+    const limits = discordCanvasPlacementLimits(element);
+    const nextX = snap ? snapDiscordCanvasCoordinate(x, limits.minimumX, limits.maximumX) : Math.min(limits.maximumX, Math.max(limits.minimumX, x));
+    const nextY = snap ? snapDiscordCanvasCoordinate(y, limits.minimumY, limits.maximumY) : Math.min(limits.maximumY, Math.max(limits.minimumY, y));
+    element.style.left = `${nextX}%`;
+    element.style.top = `${nextY}%`;
+    const selector = CSS.escape(userId);
+    const xInput = document.querySelector(`[data-discord-profile-x="${selector}"]`);
+    const yInput = document.querySelector(`[data-discord-profile-y="${selector}"]`);
+    if (xInput) xInput.value = nextX.toFixed(1);
+    if (yInput) yInput.value = nextY.toFixed(1);
+    discordProfileDrafts.set(userId, { ...(discordProfileDrafts.get(userId) || {}), positionX: nextX.toFixed(1), positionY: nextY.toFixed(1) });
+    const guest = (state.discordVoice?.guests || []).find((entry) => entry.id === userId);
+    $('#discordCanvasReadout').textContent = `${guest?.displayName || 'Selected profile'} · X ${nextX.toFixed(1)}% · Y ${nextY.toFixed(1)}%`;
+    updateDiscordCanvasGuides(nextX, nextY);
+    return { x: nextX, y: nextY };
+  }
+
+  function selectDiscordCanvasPerson(userId, element) {
+    discordCanvasSelectedId = userId;
+    $('#discordVoiceCanvasPreview').querySelectorAll('[data-discord-canvas-id]').forEach((person) => person.classList.toggle('selected', person === element));
+    document.querySelectorAll('[data-discord-canvas-align]').forEach((button) => { button.disabled = false; });
+  }
+
   function updateDiscordCanvasDrag(event) {
     if (!discordCanvasDrag) return;
     const canvas = $('#discordVoiceCanvasPreview');
     const bounds = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
-    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100));
-    discordCanvasDrag.element.style.left = `${x}%`;
-    discordCanvasDrag.element.style.top = `${y}%`;
-    const selector = CSS.escape(discordCanvasDrag.userId);
-    const xInput = document.querySelector(`[data-discord-profile-x="${selector}"]`);
-    const yInput = document.querySelector(`[data-discord-profile-y="${selector}"]`);
-    if (xInput) xInput.value = x.toFixed(1);
-    if (yInput) yInput.value = y.toFixed(1);
-    discordProfileDrafts.set(discordCanvasDrag.userId, { ...(discordProfileDrafts.get(discordCanvasDrag.userId) || {}), positionX: x.toFixed(1), positionY: y.toFixed(1) });
+    const x = ((event.clientX - bounds.left) / bounds.width) * 100;
+    const y = ((event.clientY - bounds.top) / bounds.height) * 100;
+    writeDiscordCanvasPosition(discordCanvasDrag.userId, discordCanvasDrag.element, x, y, { snap: true });
   }
 
   function beginDiscordCanvasDrag(event) {
@@ -6396,6 +6485,7 @@
       return;
     }
     event.preventDefault();
+    selectDiscordCanvasPerson(person.dataset.discordCanvasId, person);
     discordCanvasDrag = { pointerId: event.pointerId, userId: person.dataset.discordCanvasId, element: person };
     person.setPointerCapture?.(event.pointerId);
     person.classList.add('dragging');
@@ -6412,6 +6502,44 @@
     const { userId, element } = discordCanvasDrag;
     discordCanvasDrag = null;
     element.classList.remove('dragging');
+    updateDiscordCanvasGuides(-1, -1);
+    void saveDiscordVoiceProfile(userId, { quiet: true });
+  }
+
+  function alignDiscordCanvasPerson(alignment) {
+    if ($('#discordVoiceLayout').value !== 'manual' || !discordCanvasSelectedId) return;
+    const element = document.querySelector(`[data-discord-canvas-id="${CSS.escape(discordCanvasSelectedId)}"]`);
+    if (!element) return;
+    const limits = discordCanvasPlacementLimits(element);
+    const current = discordProfileFor(discordCanvasSelectedId);
+    let x = Number.isFinite(Number(current.positionX)) ? Number(current.positionX) : 50;
+    let y = Number.isFinite(Number(current.positionY)) ? Number(current.positionY) : 82;
+    if (alignment === 'left') x = limits.minimumX;
+    if (alignment === 'center-x' || alignment === 'center') x = 50;
+    if (alignment === 'right') x = limits.maximumX;
+    if (alignment === 'top') y = limits.minimumY;
+    if (alignment === 'center-y' || alignment === 'center') y = 50;
+    if (alignment === 'bottom') y = limits.maximumY;
+    writeDiscordCanvasPosition(discordCanvasSelectedId, element, x, y);
+    void saveDiscordVoiceProfile(discordCanvasSelectedId, { quiet: true });
+  }
+
+  function nudgeDiscordCanvasPerson(event) {
+    if ($('#discordVoiceLayout').value !== 'manual' || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    const element = event.target.closest('[data-discord-canvas-id]');
+    if (!element) return;
+    event.preventDefault();
+    const userId = element.dataset.discordCanvasId;
+    selectDiscordCanvasPerson(userId, element);
+    const profile = discordProfileFor(userId);
+    const amount = event.shiftKey ? 5 : 1;
+    let x = Number.isFinite(Number(profile.positionX)) ? Number(profile.positionX) : Number.parseFloat(element.style.left) || 50;
+    let y = Number.isFinite(Number(profile.positionY)) ? Number(profile.positionY) : Number.parseFloat(element.style.top) || 82;
+    if (event.key === 'ArrowLeft') x -= amount;
+    if (event.key === 'ArrowRight') x += amount;
+    if (event.key === 'ArrowUp') y -= amount;
+    if (event.key === 'ArrowDown') y += amount;
+    writeDiscordCanvasPosition(userId, element, x, y);
     void saveDiscordVoiceProfile(userId, { quiet: true });
   }
 
@@ -6857,6 +6985,7 @@
     if (button.dataset.discordProfileReset) return resetDiscordVoiceProfile(button.dataset.discordProfileReset);
     if (button.dataset.discordProfileForget) return forgetDiscordVoiceProfile(button.dataset.discordProfileForget);
     if (button.dataset.discordImageId) return assignDiscordVoiceImage(button.dataset.discordImageId, button.dataset.discordImageKind);
+    if (button.dataset.discordCanvasAlign) return alignDiscordCanvasPerson(button.dataset.discordCanvasAlign);
     if (button.dataset.twitchVisualToggle) {
       const alert = state.twitchVisualAlerts.alerts.find((entry) => entry.id === button.dataset.twitchVisualToggle);
       if (alert) return updateTwitchVisualAlert(alert.id, { enabled: !alert.enabled }, `${alert.name} ${alert.enabled ? 'disabled' : 'enabled'}.`);
@@ -6951,6 +7080,7 @@
     $('#discordVoiceCanvasPreview').addEventListener('pointermove', moveDiscordCanvasDrag);
     $('#discordVoiceCanvasPreview').addEventListener('pointerup', endDiscordCanvasDrag);
     $('#discordVoiceCanvasPreview').addEventListener('pointercancel', endDiscordCanvasDrag);
+    $('#discordVoiceCanvasPreview').addEventListener('keydown', nudgeDiscordCanvasPerson);
     $('#forgetDiscordVoice').addEventListener('click', forgetDiscordVoice);
     $('#discordGuestUserId').addEventListener('keydown', (event) => { if (event.key === 'Enter') addDiscordVoiceProfile(); });
     $('#previewDualFormatButton').addEventListener('click', () => { void previewDualFormat(); });

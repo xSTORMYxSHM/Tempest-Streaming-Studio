@@ -66,7 +66,14 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /editingDiscordProfile/);
   assert.match(renderer, /discordVoiceLayout'\)\.value !== 'manual/);
   assert.match(html, /Manual canvas placement/);
+  assert.match(html, /Canvas perimeter/);
+  assert.match(html, /Lower arc/);
+  assert.match(html, /id="discordVoiceSnap"/);
+  assert.match(html, /data-discord-canvas-align="center"/);
   assert.match(html, /id="discordVoiceCanvasPreview"/);
+  assert.match(renderer, /function snapDiscordCanvasCoordinate/);
+  assert.match(renderer, /function nudgeDiscordCanvasPerson/);
+  assert.match(renderer, /function discordAutomaticCanvasPosition/);
   assert.match(html, /Add by User ID/);
   assert.match(html, /SAVED GUEST LIBRARY/);
   assert.match(renderer, /savedGuestCount/);

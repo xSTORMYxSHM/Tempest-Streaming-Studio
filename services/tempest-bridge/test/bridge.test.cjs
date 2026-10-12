@@ -972,6 +972,9 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.match(discordHtml, /Tempest Discord Voice Overlay/);
   assert.match(discordHtml, /const cards=new Map\(\)/);
   assert.match(discordHtml, /image\.dataset\.source!==src/);
+  assert.match(discordHtml, /function autoPosition\(index,total,layout\)/);
+  assert.match(discordHtml, /#stage\.bottom-left/);
+  assert.match(discordHtml, /#stage\.corners/);
   assert.doesNotMatch(discordHtml, /stage\.innerHTML/);
   const discordScript = discordHtml.match(/<script>\(\(\)=>\{([\s\S]+)\}\)\(\);<\/script>/)?.[1];
   assert.ok(discordScript);
@@ -979,6 +982,11 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   const discordSettings = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, layout: 'manual', avatarSize: 144, gap: 18, showNames: true, showStatusIcons: true, hideSelf: false, hideBots: true, inactiveOpacity: 0.65, speakingScale: 1.12, speakingAccent: '#aa55ff', transitionMs: 160 }) });
   assert.equal(discordSettings.status, 200);
   assert.equal((await discordSettings.json()).settings.speakingAccent, '#AA55FF');
+  for (const layout of ['horizontal', 'bottom-left', 'bottom-right', 'top-center', 'vertical-left', 'vertical', 'grid', 'corners', 'arc', 'manual']) {
+    const response = await fetch(`${runtime.baseUrl}/v1/discord-voice/settings`, { method: 'POST', headers, body: JSON.stringify({ layout }) });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).settings.layout, layout);
+  }
   const discordState = await fetch(`${runtime.baseUrl}/v1/discord-voice/state`, { method: 'POST', headers, body: JSON.stringify({ connected: true, channelId: 'voice-1', channelName: 'Creator Lounge', guildName: 'Test Server', participants: [{ id: 'user-1', username: 'guest', displayName: 'Guest', bot: false, self: false, mute: false, deaf: false, speaking: false }] }) });
   assert.equal(discordState.status, 200);
   const rememberedState = await discordState.json();
