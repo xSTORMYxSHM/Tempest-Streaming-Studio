@@ -159,6 +159,7 @@
   let interactiveStageOrientation = 'horizontal';
   let interactiveStageSelectedId = '';
   let interactiveStageDrag = null;
+  let interactiveStagePlacementSaveTimer = null;
   const stageActorDraftStrips = new Map();
   let stageActorDraftTexture = null;
   let stageActorDraftAtlas = null;
@@ -550,6 +551,7 @@
     selectionInputs.forEach((input) => { input.disabled = !selected; });
     $('#interactiveStageSelectedName').textContent = selected ? String(selected.properties?.label || selected.id) : 'None';
     $('#interactiveStageSelectedId').textContent = selected ? `${selected.kind} · ${selected.id}` : 'Select an object on the canvas.';
+    document.querySelectorAll('[data-stage-align]').forEach((button) => { button.disabled = !selected; });
     if (selected && !selectionForm.contains(document.activeElement) && !interactiveStageDrag) {
       const placement = interactiveStageOrientation === 'vertical' ? selected.scenePlacements?.vertical || selected.placement : selected.placement;
       $('#interactiveStageSelectedLabel').value = String(selected.properties?.label || selected.properties?.text || selected.id);
@@ -561,6 +563,10 @@
       $('#interactiveStageSelectedScale').value = String(Number(placement?.scale || 1));
       $('#interactiveStageSelectedLayer').value = String(Number(placement?.layer || 0));
     }
+    const selectedPlacement = selected ? (interactiveStageOrientation === 'vertical' ? selected.scenePlacements?.vertical || selected.placement : selected.placement) : null;
+    $('#interactiveStagePlacementReadout').textContent = selectedPlacement
+      ? `${selected.properties?.label || selected.id} · X ${(Number(selectedPlacement.x || 0) * 100).toFixed(1)}% · Y ${(Number(selectedPlacement.y || 0) * 100).toFixed(1)}%`
+      : 'Select an object to align or nudge it.';
 
     const list = $('#interactiveStageObjectList');
     list.classList.toggle('empty-state', !objects.length);
@@ -1287,6 +1293,8 @@
   function beginInteractiveStageDrag(event) {
     const objectNode = event.target.closest('.stage-layout-object');
     if (!objectNode) return;
+    clearTimeout(interactiveStagePlacementSaveTimer);
+    interactiveStagePlacementSaveTimer = null;
     event.preventDefault();
     interactiveStageSelectedId = objectNode.dataset.stageSelect;
     const canvas = $('#interactiveStageLayoutCanvas');
@@ -1311,14 +1319,74 @@
     objectNode.classList.add('dragging');
   }
 
+  function interactiveStagePlacementLimits(node) {
+    const canvasBounds = $('#interactiveStageLayoutCanvas').getBoundingClientRect();
+    const nodeBounds = node.getBoundingClientRect();
+    if (!canvasBounds.width || !canvasBounds.height) return { minimumX: 0.07, maximumX: 0.93, minimumY: 0.07, maximumY: 0.93 };
+    const halfWidth = Math.min(0.5, nodeBounds.width / canvasBounds.width / 2);
+    const halfHeight = Math.min(0.5, nodeBounds.height / canvasBounds.height / 2);
+    return {
+      minimumX: Math.max(0.07, halfWidth), maximumX: Math.min(0.93, 1 - halfWidth),
+      minimumY: Math.max(0.07, halfHeight), maximumY: Math.min(0.93, 1 - halfHeight)
+    };
+  }
+
+  function snapInteractiveStageCoordinate(value, minimum, maximum) {
+    const clamped = Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : 0.5));
+    const step = (Number($('#interactiveStageSnap').value) || 0) / 100;
+    if (!step) return clamped;
+    let snapped = Math.round(clamped / step) * step;
+    const magneticThreshold = Math.max(0.0125, step * 0.55);
+    for (const target of [minimum, 0.5, maximum]) {
+      if (Math.abs(clamped - target) <= magneticThreshold) {
+        snapped = target;
+        break;
+      }
+    }
+    return Math.min(maximum, Math.max(minimum, snapped));
+  }
+
+  function updateInteractiveStageGuides(x, y) {
+    $('#interactiveStageGuideX')?.classList.toggle('visible', Math.abs(x - 0.5) < 0.0005);
+    $('#interactiveStageGuideY')?.classList.toggle('visible', Math.abs(y - 0.5) < 0.0005);
+  }
+
+  function writeInteractiveStageCanvasPosition(id, node, x, y, { snap = false } = {}) {
+    const limits = interactiveStagePlacementLimits(node);
+    const nextX = snap ? snapInteractiveStageCoordinate(x, limits.minimumX, limits.maximumX) : Math.min(limits.maximumX, Math.max(limits.minimumX, x));
+    const nextY = snap ? snapInteractiveStageCoordinate(y, limits.minimumY, limits.maximumY) : Math.min(limits.maximumY, Math.max(limits.minimumY, y));
+    node.style.left = `${nextX * 100}%`;
+    node.style.top = `${nextY * 100}%`;
+    $('#interactiveStageSelectedX').value = nextX.toFixed(3);
+    $('#interactiveStageSelectedY').value = nextY.toFixed(3);
+    const object = state.interactiveStage?.objects?.find((entry) => entry.id === id);
+    $('#interactiveStagePlacementReadout').textContent = `${object?.properties?.label || id} · X ${(nextX * 100).toFixed(1)}% · Y ${(nextY * 100).toFixed(1)}%`;
+    updateInteractiveStageGuides(nextX, nextY);
+    return { x: nextX, y: nextY };
+  }
+
+  function scheduleInteractiveStagePlacementSave(id) {
+    clearTimeout(interactiveStagePlacementSaveTimer);
+    const orientation = interactiveStageOrientation;
+    const object = state.interactiveStage?.objects?.find((entry) => entry.id === id);
+    if (!object) return;
+    const placement = stagePlacementFromSelection();
+    if (orientation === 'vertical') object.scenePlacements = { ...(object.scenePlacements || {}), vertical: placement };
+    else object.placement = placement;
+    interactiveStagePlacementSaveTimer = setTimeout(async () => {
+      interactiveStagePlacementSaveTimer = null;
+      try {
+        const patch = orientation === 'vertical' ? { scenePlacements: { ...(object.scenePlacements || {}), vertical: placement } } : { placement };
+        await updateInteractiveStageObject(id, patch);
+      } catch (error) { toast(error.message, true); await refreshInteractiveStage().catch(() => {}); }
+    }, 140);
+  }
+
   function moveInteractiveStageDrag(event) {
     if (!interactiveStageDrag || interactiveStageDrag.pointerId !== event.pointerId) return;
-    const x = Math.max(0, Math.min(1, (event.clientX - interactiveStageDrag.bounds.left) / interactiveStageDrag.bounds.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - interactiveStageDrag.bounds.top) / interactiveStageDrag.bounds.height));
-    interactiveStageDrag.node.style.left = `${x * 100}%`;
-    interactiveStageDrag.node.style.top = `${y * 100}%`;
-    $('#interactiveStageSelectedX').value = x.toFixed(3);
-    $('#interactiveStageSelectedY').value = y.toFixed(3);
+    const x = (event.clientX - interactiveStageDrag.bounds.left) / interactiveStageDrag.bounds.width;
+    const y = (event.clientY - interactiveStageDrag.bounds.top) / interactiveStageDrag.bounds.height;
+    writeInteractiveStageCanvasPosition(interactiveStageDrag.id, interactiveStageDrag.node, x, y, { snap: true });
   }
 
   async function endInteractiveStageDrag(event) {
@@ -1326,6 +1394,7 @@
     const drag = interactiveStageDrag;
     interactiveStageDrag = null;
     drag.node.classList.remove('dragging');
+    updateInteractiveStageGuides(-1, -1);
     const object = state.interactiveStage?.objects?.find((entry) => entry.id === drag.id);
     if (!object) return;
     const placement = stagePlacementFromSelection();
@@ -1337,6 +1406,45 @@
       }
       toast(`${object.properties?.label || object.id} moved.`);
     } catch (error) { toast(error.message, true); await refreshInteractiveStage().catch(() => {}); }
+  }
+
+  function alignInteractiveStageObject(alignment) {
+    if (!interactiveStageSelectedId) return;
+    const node = document.querySelector(`[data-stage-select="${CSS.escape(interactiveStageSelectedId)}"]`);
+    if (!node) return;
+    const limits = interactiveStagePlacementLimits(node);
+    let x = Number($('#interactiveStageSelectedX').value);
+    let y = Number($('#interactiveStageSelectedY').value);
+    if (alignment === 'left') x = limits.minimumX;
+    if (alignment === 'center-x' || alignment === 'center') x = 0.5;
+    if (alignment === 'right') x = limits.maximumX;
+    if (alignment === 'top') y = limits.minimumY;
+    if (alignment === 'center-y' || alignment === 'center') y = 0.5;
+    if (alignment === 'bottom') y = limits.maximumY;
+    writeInteractiveStageCanvasPosition(interactiveStageSelectedId, node, x, y);
+    scheduleInteractiveStagePlacementSave(interactiveStageSelectedId);
+    node.focus();
+  }
+
+  function nudgeInteractiveStageObject(event) {
+    const movement = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    const node = event.target.closest?.('.stage-layout-object');
+    if (!movement || !node) return;
+    event.preventDefault();
+    interactiveStageSelectedId = node.dataset.stageSelect;
+    const object = state.interactiveStage?.objects?.find((entry) => entry.id === interactiveStageSelectedId);
+    if (!object) return;
+    const placement = interactiveStageOrientation === 'vertical' ? object.scenePlacements?.vertical || object.placement : object.placement;
+    $('#interactiveStageSelectedX').value = Number(placement?.x || 0).toFixed(3);
+    $('#interactiveStageSelectedY').value = Number(placement?.y || 0).toFixed(3);
+    $('#interactiveStageSelectedScale').value = String(Number(placement?.scale || 1));
+    $('#interactiveStageSelectedLayer').value = String(Number(placement?.layer || 0));
+    node.parentElement.querySelectorAll('.stage-layout-object').forEach((entry) => entry.classList.toggle('selected', entry === node));
+    const step = (event.shiftKey ? 5 : 1) / 100;
+    const x = Number.parseFloat(node.style.left) / 100;
+    const y = Number.parseFloat(node.style.top) / 100;
+    writeInteractiveStageCanvasPosition(interactiveStageSelectedId, node, x + movement[0] * step, y + movement[1] * step);
+    scheduleInteractiveStagePlacementSave(interactiveStageSelectedId);
   }
 
   async function previewInteractiveStage() {
@@ -6873,6 +6981,7 @@
     if (button.dataset.chatbotTab) return switchChatbotTab(button.dataset.chatbotTab);
     if (button.dataset.twitchPredictionWinner) return endTwitchPrediction('RESOLVED', button.dataset.twitchPredictionWinner);
     if (button.dataset.stageEdit) return selectInteractiveStageObject(button.dataset.stageEdit, true);
+    if (button.dataset.stageAlign) return alignInteractiveStageObject(button.dataset.stageAlign);
     if (button.dataset.stageSelect) return selectInteractiveStageObject(button.dataset.stageSelect);
     if (button.dataset.stageDismissSelected) return dismissInteractiveStageObject(interactiveStageSelectedId);
     if (button.dataset.stageDismiss) return dismissInteractiveStageObject(button.dataset.stageDismiss);
@@ -7040,6 +7149,7 @@
     $('#interactiveStageLayoutCanvas').addEventListener('pointermove', moveInteractiveStageDrag);
     $('#interactiveStageLayoutCanvas').addEventListener('pointerup', (event) => { void endInteractiveStageDrag(event); });
     $('#interactiveStageLayoutCanvas').addEventListener('pointercancel', (event) => { void endInteractiveStageDrag(event); });
+    $('#interactiveStageLayoutCanvas').addEventListener('keydown', nudgeInteractiveStageObject);
     $('#diceRollForm').addEventListener('submit', rollDiceOnStream);
     $('#saveDiceOverlaySettings').addEventListener('click', saveDiceOverlaySettings);
     $('#clearDiceOverlay').addEventListener('click', clearDiceOverlay);

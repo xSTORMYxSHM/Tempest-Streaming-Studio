@@ -74,6 +74,11 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /function snapDiscordCanvasCoordinate/);
   assert.match(renderer, /function nudgeDiscordCanvasPerson/);
   assert.match(renderer, /function discordAutomaticCanvasPosition/);
+  assert.match(html, /id="interactiveStageSnap"/);
+  assert.match(html, /data-stage-align="center"/);
+  assert.match(renderer, /function snapInteractiveStageCoordinate/);
+  assert.match(renderer, /function nudgeInteractiveStageObject/);
+  assert.match(renderer, /function alignInteractiveStageObject/);
   assert.match(html, /Add by User ID/);
   assert.match(html, /SAVED GUEST LIBRARY/);
   assert.match(renderer, /savedGuestCount/);
