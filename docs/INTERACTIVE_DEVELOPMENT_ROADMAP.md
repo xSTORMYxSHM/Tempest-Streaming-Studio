@@ -2,8 +2,8 @@
 
 Status: working development map  
 Kickoff: September 29, 2026  
-Current live bridge line: 1.7.2
-Current development line: 1.7.2
+Current live bridge line: 1.7.3
+Current development line: 1.7.3
 
 Monetization scope: no Bits products, purchases, receipts, or paid Extension actions are part of this roadmap. Both Twitch companion Extensions are free interaction surfaces.
 

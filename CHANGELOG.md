@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.3 — Precision canvas controls and persistent avatar-floor state
+
+Released 2026-10-11.
+
+- Kept the viewer-avatar floor disabled when the streamer turns it off, including Stage initialization and later viewer joins.
+- Expanded Discord Guests with bottom, top, side, grid, perimeter, arc, and manual arrangements plus selectable guests, configurable snapping, safe-edge/center alignment, exact position readouts, and keyboard nudging.
+- Added matching snapping, safe-edge/center alignment, live position readouts, and keyboard nudging to the Interactive Stage layout editor while preserving independent horizontal and portrait placements.
+- Preserved protocol `1.0`, Tempest Broadcast 1.5.0 compatibility, existing Studio data, dormant paid Extension code, and the independently versioned free Twitch companion Extensions.
+
 ## 1.7.2 — Unified Stage OBS compatibility hotfix
 
 Released 2026-10-10.
