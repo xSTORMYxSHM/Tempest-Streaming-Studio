@@ -325,6 +325,7 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(html, /Save Warudo Receiver/);
   assert.match(html, /Warudo_Data\\StreamingAssets\\Playground\\TempestPerformanceNode\.cs/);
   assert.match(html, /Browse local files/);
+  assert.match(html, /Tempest Streaming Studio<\/code>/);
   assert.match(html, /VTube Studio/);
   assert.match(renderer, /authorizeVTubeStudio/);
   assert.match(renderer, /vtubeStudioHotkeyOptions/);

@@ -32,7 +32,7 @@ The Twitch Extension/Panel is a universal Extension whose appearance is configur
 
 Open **Apps + Connections → Avatar Controllers** to connect an optional avatar app.
 
-- **Warudo:** select **Save Warudo Receiver**. In Steam, right-click **Warudo → Manage → Browse local files**, then save or copy `TempestPerformanceNode.cs` to `Warudo_Data\StreamingAssets\Playground\TempestPerformanceNode.cs`. Restart Warudo, add **Tempest Performance Cue** to the blueprint, and connect its Activate and Release flows. The installer always carries this receiver with Studio.
+- **Warudo:** select **Save Warudo Receiver**. In Steam, right-click **Warudo → Manage → Browse local files**, then save or copy `TempestPerformanceNode.cs` to `Warudo_Data\StreamingAssets\Playground\TempestPerformanceNode.cs`. Restart Warudo, then add **Tempest Streaming Studio → Tempest Performance Cue** from the blueprint node palette and connect its Activate and Release flows. The Playground receiver does not appear under **External Integrations**. The installer always carries the receiver with Studio.
 - **VTube Studio:** enable **Allow Plugin API access** in VTube Studio, then select **Authorize in VTube Studio** in Tempest and approve the one-time prompt. No separate plugin file is required because the installed Tempest Studio application is the VTube Studio plugin client. The authorization token is stored with Windows encryption. After authorization, assign a loaded-model hotkey on each Interaction Alert that should control the Live2D avatar.
 
 VTube Studio hotkey timing and auto-deactivation remain configured in VTube Studio. Refresh the hotkey list after changing models or adding hotkeys.
