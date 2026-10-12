@@ -3145,7 +3145,7 @@
   async function saveWarudoReceiver() {
     try {
       const result = await window.tempestStudio.saveWarudoReceiver();
-      if (result) toast('Warudo receiver saved. Copy it into the Warudo Playground folder.');
+      if (result) toast('Warudo receiver saved. Place it in Warudo_Data\\StreamingAssets\\Playground, then restart Warudo.');
     } catch (error) { toast(error.message, true); }
   }
 

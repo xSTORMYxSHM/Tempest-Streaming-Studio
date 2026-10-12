@@ -1199,7 +1199,7 @@
           <div class="avatar-controller-grid">
             <article class="panel avatar-controller-card">
               <div class="panel-header"><div><span>3D AVATARS</span><h3>Warudo</h3></div><span id="warudoOverallBadge" class="status-badge offline">CHECKING</span></div>
-              <p>Uses the included Tempest Playground receiver. Save it anywhere, then copy it into Warudo's Playground folder.</p>
+              <p>Uses the included Tempest Playground receiver. In Steam, right-click Warudo → Manage → Browse local files, then place the file at <code>Warudo_Data\StreamingAssets\Playground\TempestPerformanceNode.cs</code>.</p>
               <div class="controller-card-meta"><span>SETUP</span><strong>Bundled receiver file</strong><span>LAST CUE</span><strong id="warudoLastCue">None yet</strong></div>
               <button id="saveWarudoReceiver" class="primary-button" type="button">Save Warudo Receiver</button>
             </article>
@@ -1248,7 +1248,7 @@
             <div class="panel-header"><div><span>ONE-TIME BLUEPRINT SETUP</span><h3>Receive Studio events in your scene</h3></div><span class="state-chip installed">PLAYGROUND NODE</span></div>
             <ol class="setup-steps">
               <li><b>1</b><div><strong>Open your interaction blueprint</strong><p>In Warudo, open the blueprint that already contains your dance or reaction branches.</p></div></li>
-              <li><b>2</b><div><strong>Add “Tempest Performance Cue”</strong><p>Copy the supplied C# file to Warudo's Playground folder, then add <code>Tempest Performance Cue</code> from the node palette.</p></div></li>
+              <li><b>2</b><div><strong>Install “Tempest Performance Cue”</strong><p>In Steam, right-click Warudo → Manage → Browse local files. Save or copy the supplied file to <code>Warudo_Data\StreamingAssets\Playground\TempestPerformanceNode.cs</code>, restart Warudo, then add <code>Tempest Performance Cue</code> from the node palette.</p></div></li>
               <li><b>3</b><div><strong>Connect and test both flows</strong><p>Use an exact cue, comma-separated cues, or a trailing wildcard such as <code>sound-alert.*</code>. Connect Activate to the performance and Release to the restore animation, then press <b>Test Activate</b> and <b>Test Release</b> on the node.</p></div></li>
             </ol>
             <div class="setup-note"><strong>Then test the full route:</strong> open Interaction Alerts and press Test Interaction. A connected socket plus a responding animation confirms the complete Studio → Warudo path.</div>

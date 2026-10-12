@@ -323,6 +323,8 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /updateTwitchVariant\(target\.alertId, target\.variantId, \{ visualUri: imported\.uri \}/);
   assert.match(html, /Connect your avatar app/);
   assert.match(html, /Save Warudo Receiver/);
+  assert.match(html, /Warudo_Data\\StreamingAssets\\Playground\\TempestPerformanceNode\.cs/);
+  assert.match(html, /Browse local files/);
   assert.match(html, /VTube Studio/);
   assert.match(renderer, /authorizeVTubeStudio/);
   assert.match(renderer, /vtubeStudioHotkeyOptions/);
