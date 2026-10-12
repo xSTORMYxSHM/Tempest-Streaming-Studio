@@ -16,12 +16,12 @@ Date: October 11, 2026
 - [x] Complete workspace build and 167-test suite passes.
 - [x] Avatar-floor persistence regressions pass.
 - [x] Discord and Interactive Stage canvas-control regressions pass.
-- [ ] Signed Windows packaging and release verification pass.
-- [ ] Packaged executable starts with an isolated profile.
+- [x] Signed Windows packaging and release verification pass.
+- [x] Packaged executable starts with an isolated profile.
 
 ## Publication
 
-- [ ] Commit and push the exact release source.
+- [x] Commit and push the exact release source.
 - [ ] Publish stable GitHub release `v1.7.3` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
 - [ ] Confirm GitHub reports `v1.7.3` as the latest stable release.
 - [ ] Confirm the stable updater feed advertises 1.7.3 and its signed installer.
