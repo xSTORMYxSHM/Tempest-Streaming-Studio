@@ -50,6 +50,11 @@ function bearerToken(request: IncomingMessage): string {
   return authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
 }
 
+function pairingPollToken(request: IncomingMessage): string {
+  const header = request.headers['x-tempest-pairing-token'];
+  return String(Array.isArray(header) ? header[0] : header || bearerToken(request)).trim();
+}
+
 function constantTimeEqual(left: string, right: string): boolean {
   const leftHash = Buffer.from(hash(left));
   const rightHash = Buffer.from(hash(right));
@@ -400,7 +405,7 @@ export async function startDiscordControlPlane(options: DiscordControlPlaneOptio
       }
       const pairingMatch = requestUrl.pathname.match(/^\/v1\/discord\/studio\/pairings\/([0-9a-f-]{36})$/i);
       if (request.method === 'GET' && pairingMatch) {
-        const result = await store.pollPairing(pairingMatch[1], bearerToken(request));
+        const result = await store.pollPairing(pairingMatch[1], pairingPollToken(request));
         if (!result) sendJson(response, 401, { error: 'Discord pairing is invalid or expired.' });
         else if (result.state === 'pending') sendJson(response, 200, { schemaVersion: 1, state: 'pending', expiresAt: result.expiresAt });
         else sendJson(response, 200, { schemaVersion: 1, state: 'complete', bindingId: result.binding.id, guildId: result.binding.guildId, studioAlias: result.binding.studioAlias, relayToken: result.relayToken, relayPath: '/v1/discord/studio' });
