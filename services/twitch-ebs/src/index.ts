@@ -7,6 +7,7 @@ import { TempestNormalizedTwitchEvent } from '@tempest/contracts';
 import { WebSocket, WebSocketServer } from 'ws';
 import { decodeTwitchSecrets, TwitchExtensionClaims, verifyTwitchBitsTransactionReceipt, verifyTwitchExtensionJwt } from './jwt';
 import { boundedFetch, readBoundedJsonResponse } from './bounded-fetch';
+import { DiscordControlPlane, startDiscordControlPlane } from './discord-control-plane';
 import {
   BitsDeliveryRecord,
   BitsReservationRecord,
@@ -100,6 +101,13 @@ export interface StartTwitchEbsOptions {
     clientSecret: string;
     redirectUri?: string;
     exchange?: (body: URLSearchParams) => Promise<Response>;
+  };
+  discordCompanion?: {
+    applicationId: string;
+    workerToken: string;
+    databaseUrl: string;
+    databaseSsl?: boolean;
+    installUrl?: string;
   };
   tls?: {
     pfx: Buffer;
@@ -655,6 +663,9 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
   let lastResultsPrunedAt = 0;
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: maximumStudioWebSocketPayloadBytes });
   const socketInstallations = new WeakMap<WebSocket, TwitchEbsInstallation>();
+  const discordControlPlane: DiscordControlPlane | undefined = options.discordCompanion
+    ? await startDiscordControlPlane({ ...options.discordCompanion, logger })
+    : undefined;
 
   const expireResults = (now = Date.now()): void => {
     if (now - lastResultsPrunedAt < 60_000 && results.size <= maximumCachedResults) return;
@@ -855,6 +866,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     const origin = originHeader && validOrigin(originHeader, allowedOrigins) ? originHeader : undefined;
     try {
       if (originHeader && !origin) throw new HttpError(403, 'Request origin is not permitted.');
+      if (discordControlPlane && await discordControlPlane.handleHttp(request, response, requestUrl)) return;
       if (request.method === 'OPTIONS') {
         response.statusCode = 204;
         response.setHeader('Access-Control-Allow-Origin', origin || 'null');
@@ -866,7 +878,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
         return response.end();
       }
       if (request.method === 'GET' && requestUrl.pathname === '/health') {
-        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', installations: await installationStore.countActive(), studioConnections: studioSockets.size, discordOAuth: options.discordOAuth ? 'configured' : 'disabled' }, origin);
+        return sendJson(response, 200, { service: 'tempest-twitch-ebs', status: 'online', installations: await installationStore.countActive(), studioConnections: studioSockets.size, discordOAuth: options.discordOAuth ? 'configured' : 'disabled', discordCompanion: discordControlPlane?.health() || 'disabled' }, origin);
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/discord/oauth/exchange') {
         if (!options.discordOAuth) throw new HttpError(503, 'Discord authorization is not configured on this service.');
@@ -1203,6 +1215,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
     void (async () => {
       try {
         const requestUrl = new URL(request.url || '/', `${options.tls ? 'https' : 'http'}://${request.headers.host || 'localhost'}`);
+        if (discordControlPlane && await discordControlPlane.handleUpgrade(request, socket, head, requestUrl)) return;
         const channelId = String(request.headers['x-tempest-channel-id'] || '');
         const installation = await installationStore.findActiveByRelayTokenHash(relayTokenHash(bearerToken(request)));
         if (requestUrl.pathname !== '/v1/studio' || !installation || (channelId && channelId !== installation.channelId)) throw new Error('Unauthorized');
@@ -1277,6 +1290,7 @@ export async function startTwitchEbs(options: StartTwitchEbsOptions): Promise<Tw
       pending.clear();
       for (const socket of studioSockets.values()) socket.close(1001, 'EBS shutting down');
       await new Promise<void>((resolve) => webSockets.close(() => resolve()));
+      await discordControlPlane?.close();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       await installationStore.close();
     }

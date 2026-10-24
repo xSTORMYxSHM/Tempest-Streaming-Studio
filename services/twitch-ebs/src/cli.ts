@@ -49,6 +49,13 @@ async function main(): Promise<void> {
       clientSecret: process.env.TEMPEST_DISCORD_CLIENT_SECRET,
       redirectUri: process.env.TEMPEST_DISCORD_REDIRECT_URI
     } : undefined,
+    discordCompanion: databaseUrl && process.env.TEMPEST_DISCORD_BOT_APPLICATION_ID && process.env.TEMPEST_DISCORD_WORKER_TOKEN ? {
+      applicationId: process.env.TEMPEST_DISCORD_BOT_APPLICATION_ID,
+      workerToken: process.env.TEMPEST_DISCORD_WORKER_TOKEN,
+      databaseUrl,
+      databaseSsl: process.env.TEMPEST_DATABASE_SSL === '1',
+      installUrl: process.env.TEMPEST_DISCORD_BOT_INSTALL_URL
+    } : undefined,
     tls: pfxPath ? {
       pfx: await readFile(pfxPath),
       passphrase: process.env.TEMPEST_EBS_TLS_PASSWORD
