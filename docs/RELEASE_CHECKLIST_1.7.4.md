@@ -15,13 +15,13 @@ Date: October 23, 2026
 - [x] Frozen dependency installation passes.
 - [x] Complete workspace build and test suite passes (173 tests).
 - [x] Twitch Mainframe and Streaming production packages pass verification.
-- [ ] Signed Windows packaging and release verification pass.
-- [ ] Packaged executable starts with an isolated profile.
+- [x] Signed Windows packaging and release verification pass.
+- [x] Packaged executable starts with an isolated profile on Bridge port `48775`.
 
 ## Publication
 
-- [ ] Commit and push the exact release source.
-- [ ] Publish stable GitHub release `v1.7.4` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
-- [ ] Attach both independently versioned Twitch upload ZIPs and reviewer guides.
-- [ ] Confirm GitHub reports `v1.7.4` as the latest stable release.
-- [ ] Confirm the stable updater feed advertises 1.7.4 and its signed installer.
+- [x] Commit and push the exact release source (`48b2730`).
+- [x] Publish stable GitHub release `v1.7.4` with installer, blockmap, updater metadata, portable ZIP, checksums, and release manifest.
+- [x] Attach both independently versioned Twitch upload ZIPs and reviewer guides.
+- [x] Confirm GitHub reports `v1.7.4` as the latest stable release.
+- [x] Confirm the stable updater feed advertises 1.7.4 and its signed installer.
