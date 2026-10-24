@@ -28,6 +28,7 @@
         return;
       }
     } catch { /* Local source previews use browser configuration. */ }
+    $('#developerTools').hidden = false;
     try {
       const configuration = JSON.parse(localStorage.getItem(storageKey) || '{}');
       $('#ebsBaseUrl').value = configuration.ebsBaseUrl || '';

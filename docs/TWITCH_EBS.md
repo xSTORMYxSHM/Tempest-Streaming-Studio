@@ -99,8 +99,8 @@ pnpm extensions:package
 
 This produces and verifies:
 
-- `apps/twitch-extension/release-assets/tempest-mainframe-0.2.0.zip` for the panel-only Tempest Mainframe listing.
-- `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.0.zip` for the Tempest Streaming Video Overlay listing. The legacy folder name is retained only for source-path compatibility.
+- `apps/twitch-extension/release-assets/tempest-mainframe-0.2.1.zip` for the panel-only Tempest Mainframe listing.
+- `apps/twitch-bits-extension/release-assets/tempest-streaming-0.1.1.zip` for the Tempest Streaming Video Overlay listing. The legacy folder name is retained only for source-path compatibility.
 - `release-assets/extension-package-manifest.json` with sizes and SHA-256 hashes for both packages.
 
 Upload each ZIP to its matching Twitch listing's **Files** tab and move that version to Hosted Test. Each built `runtime-config.json` contains only the public EBS origin and locks mock mode off. Neither package contains an Extension secret or paid Bits flow.

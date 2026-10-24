@@ -39,7 +39,7 @@ interface AvatarSessionOverride {
 }
 
 const defaultPresence = (): InteractivePresencePolicy => ({
-  enabled: true,
+  enabled: false,
   avatarScale: 1,
   minimumMessages: 1,
   messageWindowMs: 10 * 60_000,

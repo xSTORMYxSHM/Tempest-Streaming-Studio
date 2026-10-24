@@ -101,6 +101,8 @@ const emotePyramidStyle = String.raw`<style>
 
 const emotePyramidScript = String.raw`<script>(()=>{const wall=document.getElementById('wall');let active;function celebrate(item){if(!item?.url)return;active?.remove();const scene=document.createElement('section');scene.className='pyramid-celebration';scene.innerHTML='<i class="pyramid-aura"></i><div class="pyramid-stack"></div><div class="pyramid-title">EMOTE PYRAMID<small></small></div>';const stack=scene.querySelector('.pyramid-stack');for(const count of [1,2,3,2,1]){const row=document.createElement('div');row.className='pyramid-row';for(let index=0;index<count;index+=1){const image=document.createElement('img');image.alt='';image.draggable=false;image.referrerPolicy='no-referrer';image.src=item.url;row.append(image)}stack.append(row)}const names=(item.viewerNames||[]).slice(0,4);scene.querySelector('.pyramid-title small').textContent=names.length?'BUILT BY '+names.join(' + ').toUpperCase():'CHAT COMBO COMPLETE';wall.append(scene);active=scene;setTimeout(()=>{if(active===scene)active=undefined;scene.remove()},5000)}window.tempestPyramid=celebrate;window.tempestPyramidClear=()=>{active?.remove();active=undefined}})();</script>`;
 
+const emoteWallHealthScript = String.raw`<script>(()=>{const heartbeat=()=>{if(parent!==window)parent.postMessage({type:'tempest.module.heartbeat',module:'emoteWall'},'*')};heartbeat();const timer=setInterval(heartbeat,1500);addEventListener('pagehide',()=>clearInterval(timer),{once:true})})();</script>`;
+
 function integer(value: unknown, name: string, minimum: number, maximum: number): number {
   const number = Number(value);
   if (!Number.isInteger(number) || number < minimum || number > maximum) throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
@@ -220,7 +222,7 @@ export class TempestEmoteWall {
     return emoteWallPage
       .replace('</head>', `${emotePyramidStyle}</head>`)
       .replace("events.addEventListener('clear',clear);", "events.addEventListener('pyramid',event=>window.tempestPyramid?.(JSON.parse(event.data)));events.addEventListener('clear',()=>{clear();window.tempestPyramidClear?.()});")
-      .replace('</body>', `${emotePyramidScript}</body>`);
+      .replace('</body>', `${emotePyramidScript}${emoteWallHealthScript}</body>`);
   }
 
   connect(response: ServerResponse): void {

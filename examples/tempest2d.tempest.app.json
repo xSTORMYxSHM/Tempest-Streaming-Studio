@@ -4,7 +4,7 @@
   "name": "Tempest 2D",
   "version": "0.21.0",
   "apiVersion": "1.0",
-  "description": "In-house Live2D renderer adapter for expressions, motions, and parameter controls.",
+  "description": "Native Inochi2D renderer adapter for expressions, motions, and parameter controls.",
   "state": "development",
   "capabilities": {
     "provides": [

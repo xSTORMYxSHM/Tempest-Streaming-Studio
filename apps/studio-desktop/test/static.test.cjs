@@ -118,6 +118,16 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.doesNotMatch(html, /class="nav-button[^>]*>\s*<span>\d+/);
   assert.match(html, /class="rail operator-rail"/);
   assert.match(html, /id="workspaceTabs"/);
+  assert.match(html, /id="openToolFinder"/);
+  assert.match(html, /id="toolFinderDialog"/);
+  assert.match(html, /id="toolFinderSearch"/);
+  assert.match(renderer, /const toolFinderCatalog/);
+  assert.match(renderer, /function renderToolFinder/);
+  assert.match(renderer, /title: 'Chat Polls'/);
+  assert.match(renderer, /switchChatbotTab\(button\.dataset\.toolView\)/);
+  assert.match(renderer, /switchInteractiveStageTab\(button\.dataset\.toolView\)/);
+  assert.match(renderer, /event\.key\.toLowerCase\(\) === 'k'/);
+  assert.match(styles, /\.tool-finder-result/);
   assert.match(html, /data-nav-group="live" data-section="chatbot"/);
   assert.match(html, /data-nav-group="interact" data-section="world"/);
   assert.match(html, /data-nav-group="extensions" data-section="twitch"/);
@@ -360,6 +370,10 @@ test('renderer includes orchestration and management sections with a restrictive
   assert.match(renderer, /tempest2dActionFromInput/);
   assert.match(html, /id="newInteractionTempest2DEnabled"/);
   assert.match(html, /id="newTwitchTempest2DEnabled"/);
+  assert.match(renderer, /data-alert-stormframe-audiolink-enabled/);
+  assert.match(renderer, /data-twitch-stormframe-audiolink-enabled/);
+  assert.match(html, /id="newInteractionStormframeAudioLinkEnabled"/);
+  assert.match(html, /id="newTwitchStormframeAudioLinkEnabled"/);
   assert.match(renderer, /advancedInterfaceMode'\)\.addEventListener\('change', saveInterfaceMode\)/);
   assert.match(renderer, /INTERACTION ALERT DESIGNER/);
   assert.match(html, /Place and resize the alert/);

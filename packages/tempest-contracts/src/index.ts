@@ -1,5 +1,5 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '1.7.3';
+export const TEMPEST_STUDIO_VERSION = '1.7.4';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 
@@ -263,6 +263,7 @@ export interface TempestSoundAlertDefinition {
   vtubeStudioHotkey?: string;
   tempest2dEnabled?: boolean;
   tempest2dAction?: string;
+  stormframeAudioLinkEnabled?: boolean;
   cue: string;
   durationMs: number;
   viewerCooldownMs: number;
@@ -318,6 +319,7 @@ export interface TempestTwitchVisualAlertDefinition {
   enabled: boolean;
   tempest2dEnabled?: boolean;
   tempest2dAction?: string;
+  stormframeAudioLinkEnabled?: boolean;
   durationMs: number;
   audioUri?: string;
   volume: number;

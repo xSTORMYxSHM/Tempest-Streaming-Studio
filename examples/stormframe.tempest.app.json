@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tempestmainframe.stormframe",
+  "name": "Stormframe",
+  "version": "0.32.0",
+  "apiVersion": "1.0",
+  "description": "Tempest's native 3D, VRM, tracking, stage, and avatar performance application.",
+  "state": "installed",
+  "capabilities": {
+    "provides": [
+      "avatar.expression.apply",
+      "avatar.performance.apply",
+      "avatar.reaction.apply",
+      "avatar.parameter.apply",
+      "avatar.audio.play",
+      "avatar.status"
+    ],
+    "consumes": [
+      "performance.cues",
+      "tempest.profile"
+    ]
+  },
+  "assetTypes": {
+    "reads": [
+      "tempest.profile",
+      "tempest.scene"
+    ],
+    "writes": [
+      "tempest.scene"
+    ]
+  },
+  "launch": {
+    "executable": "../../../Stormframe/Builds/Windows/Stormframe.exe",
+    "workingDirectory": "../../../Stormframe/Builds/Windows"
+  },
+  "health": {
+    "mode": "process"
+  }
+}

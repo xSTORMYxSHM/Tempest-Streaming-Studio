@@ -14,4 +14,4 @@ Applications must continue functioning when the Bridge is unavailable. Cross-app
 
 For temporary effects, save or stack the application's prior local state when activation begins and associate it with the workflow run ID. A matching release restores that state. Applications should also apply their own conservative expiry timer from the supplied lease so a Bridge crash cannot leave an effect permanently active.
 
-The import-ready examples describe Quartic Pulse, Data Horizon, Tempest Broadcast, and the Warudo adapter. Development applications intentionally omit launch descriptors until they produce a stable executable or adapter entry point.
+The import-ready examples describe Quartic Pulse, Data Horizon, Tempest Broadcast, Stormframe, and the Warudo adapter. Stormframe also self-registers after its authenticated Bridge connection succeeds, advertises its avatar and AudioLink capabilities, and publishes `avatar.status` so Studio can retain its current readiness. Development applications intentionally omit launch descriptors until they produce a stable executable or adapter entry point.

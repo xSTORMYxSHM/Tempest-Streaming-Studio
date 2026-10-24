@@ -114,7 +114,7 @@ interface PendingAudioTest {
 
 const defaultSettings: TempestDiceOverlaySettings = {
   schemaVersion: 1,
-  enabled: true,
+  enabled: false,
   theme: 'stormglass',
   diceTheme: 'default',
   themeColor: '#2e91ad',
@@ -266,7 +266,10 @@ export class TempestDiceOverlay {
 
   async initialize(): Promise<void> {
     await this.refreshThemes();
-    try { this.settings = validateSettings({ ...defaultSettings, ...JSON.parse(await readFile(this.documentPath, 'utf8')) }, this.themes()); }
+    try {
+      const saved = JSON.parse(await readFile(this.documentPath, 'utf8')) as Partial<TempestDiceOverlaySettings>;
+      this.settings = validateSettings({ ...defaultSettings, ...saved, ...(saved.updatedAt ? {} : { enabled: defaultSettings.enabled }) }, this.themes());
+    }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && error instanceof SyntaxError) throw error; }
     await this.persist();
   }

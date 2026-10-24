@@ -125,6 +125,15 @@ export const soundAlertPerformanceWorkflow: TempestWorkflowDefinition = {
       lease: { durationMs: 60000, durationInput: 'durationMs', fadeOutMs: 500 }
     },
     {
+      id: 'stormframe-audiolink-audio',
+      name: 'Stormframe AudioLink alert audio',
+      target: 'com.tempestmainframe.stormframe',
+      capability: 'avatar.audio.play',
+      arguments: { source: 'interaction-alert' },
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'stormframeAudioLinkEnabled', equals: true, ifMissing: false }
+    },
+    {
       id: 'broadcast-performance',
       name: 'Broadcast performance reaction',
       target: 'com.tempestmainframe.tempest-broadcast',
@@ -168,6 +177,15 @@ export const twitchAlertReactionWorkflow: TempestWorkflowDefinition = {
   concurrencyGroup: 'twitch-alert-reaction',
   maximumConcurrent: 8,
   actions: [
+    {
+      id: 'stormframe-audiolink-audio',
+      name: 'Stormframe AudioLink alert audio',
+      target: 'com.tempestmainframe.stormframe',
+      capability: 'avatar.audio.play',
+      arguments: { source: 'twitch-alert' },
+      forwardInteractionPayload: true,
+      whenPayload: { field: 'stormframeAudioLinkEnabled', equals: true, ifMissing: false }
+    },
     {
       id: 'tempest2d-expression',
       name: 'Tempest 2D event expression',

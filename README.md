@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current stable version: **1.7.3**
+Current stable version: **1.7.4**
 
 The continuing development sequence is documented in [the Interactive Development Roadmap](docs/INTERACTIVE_DEVELOPMENT_ROADMAP.md).
 

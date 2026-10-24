@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.4 — Safer interactive defaults and faster navigation
+
+Released 2026-10-23.
+
+- Added a global **Find a tool** launcher with `Ctrl+K`, direct navigation to nested Chatbot and Interactive Stage tabs, and clearer workspace labels.
+- Made automatic viewer avatars, the stream pet, and 3D Dice opt-in for new or untouched configurations and removed them from both Twitch companion destinations until the streamer enables placement.
+- Filtered destinationless viewer actions before publishing the hosted catalog so one intentionally hidden feature cannot reject otherwise valid Extension data.
+- Hardened Unified Stage against Emote Wall renderer failure with a validated heartbeat, hidden startup, and isolated renderer recovery instead of leaving a full-canvas grey surface.
+- Added optional Stormframe AudioLink routing to Twitch Alerts and Viewer Interactions while keeping Stormframe and avatar applications optional.
+- Expanded the Twitch configuration pages and reviewer guidance for Tempest Mainframe `0.2.1` and Tempest Streaming `0.1.1`, while keeping reviewer documents outside the Twitch Asset Hosting ZIPs.
+- Preserved protocol `1.0`, Tempest Broadcast 1.5.0 compatibility, saved streamer choices, and the local Browser Source security boundary.
+
 ## 1.7.3 — Precision canvas controls and persistent avatar-floor state
 
 Released 2026-10-11.

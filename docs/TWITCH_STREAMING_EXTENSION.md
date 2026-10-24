@@ -52,9 +52,13 @@ Tempest Mainframe keeps its existing `/v1/extension/*` routes. Both paths share 
 
 Use `video_overlay.html` as the Tempest Streaming viewer surface. Compatibility assets remain buildable for local testing and migration, but the Twitch listing split is Mainframe as a panel-only hub and Streaming as the in-player overlay. The Twitch overlay is a viewer interaction layer over Twitch video; Studio's `/interactive-stage` Browser Source remains responsible for elements that must appear in the encoded stream, recordings, and other platforms.
 
+Use `config.html` as the broadcaster configuration path and select Twitch's Extension Configuration Service. The page stores only three public presentation preferences in the broadcaster segment (schema version `1`): overlay deck position, initial collapsed/open state, and action-count visibility. Studio remains authoritative for the action catalog, access, cooldowns, placement, themes, pairing, and broadcast routing. Never store credentials or private channel data in Twitch configuration segments because every Extension view can receive them.
+
 Add `https://signal.tempestmainframe.com` to the Extension allowlist for URL fetching. Use the public legal URLs:
 
 - `https://tempestmainframe.com/legal#privacy`
 - `https://tempestmainframe.com/legal#terms`
 
 Before submission, verify Mainframe-only, Streaming-only, and both-active states on a real channel. Confirm that disabled companions receive a machine-readable `EXTENSION_COMPANION_INACTIVE` response and that a destination-specific action never appears in the other companion's catalog.
+
+The Twitch Asset Hosting ZIP must contain only files required to run the Extension. Keep the reviewer README and PDF beside the archive for submission notes or reviewer correspondence; `tools/verify-extension-packages.mjs` rejects Markdown, PDF, text, and README files if they enter `dist` or the hosted ZIP.

@@ -1,1 +1,78 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tempest Streaming Configuration</title><link rel="stylesheet" href="styles.css"><script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script></head><body><main class="config-card"><span class="eyebrow">TEMPEST STREAMING STUDIO</span><h1>Companion configuration</h1><p id="configState" class="status">WAITING FOR TWITCH</p><p id="configDetail">Authorizing this Extension…</p><ol><li>Pair the channel with Tempest Signal from Studio.</li><li>Enable the Tempest Streaming companion card.</li><li>Publish free live actions, access rules, cooldowns, and placement from Studio.</li><li>Test the Video Overlay surface before submission.</li></ol><p><a href="https://tempestmainframe.com/legal#privacy" target="_blank" rel="noreferrer">Privacy policy</a> · <a href="https://tempestmainframe.com/legal#terms" target="_blank" rel="noreferrer">Terms of service</a></p></main><script src="config.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tempest Streaming Configuration</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+</head>
+<body>
+  <main class="config-card">
+    <span class="eyebrow">TEMPEST STREAMING STUDIO</span>
+    <h1>Video Overlay quick start</h1>
+    <p class="config-summary">Tempest Streaming gives viewers free, streamer-selected controls over the Twitch video. Actions can launch on-stream effects, join interactive avatars, vote in polls, or place an effect at a chosen point on the video.</p>
+
+    <div class="config-status">
+      <span id="configState" class="status">WAITING FOR TWITCH</span>
+      <p id="configDetail">Authorizing this Extension…</p>
+    </div>
+
+    <form id="quickPreferences" class="config-section config-form">
+      <span class="eyebrow">TWITCH QUICK PREFERENCES</span>
+      <h2>Basic overlay presentation</h2>
+      <p>These display choices are saved by Twitch. Studio remains the source for actions, permissions, cooldowns, placement, and broadcast routing.</p>
+      <div class="config-fields">
+        <label>
+          <span>Deck position</span>
+          <select id="overlayDock" name="overlayDock">
+            <option value="left">Top left</option>
+            <option value="right">Top right</option>
+          </select>
+        </label>
+        <label>
+          <span>Starting view</span>
+          <select id="overlayStart" name="overlayStart">
+            <option value="collapsed">Collapsed — viewer opens ACTIONS</option>
+            <option value="expanded">Open — actions visible immediately</option>
+          </select>
+        </label>
+        <label class="config-check">
+          <input id="showActionCount" name="showActionCount" type="checkbox" checked>
+          <span>Show the available-action count</span>
+        </label>
+      </div>
+      <div class="config-save-row">
+        <button id="saveQuickPreferences" type="submit">Save Twitch Preferences</button>
+        <span id="configSaveState" role="status">USING SAFE DEFAULTS</span>
+      </div>
+    </form>
+
+    <section class="config-section">
+      <span class="eyebrow">BROADCASTER SETUP</span>
+      <h2>Connect it once in Studio</h2>
+      <ol>
+        <li>Open <strong>Tempest Streaming Studio</strong>, then go to <strong>Twitch → Companion Extensions</strong>.</li>
+        <li>Pair the channel with <strong>Tempest Signal</strong> and enable the <strong>Tempest Streaming · Video Overlay</strong> companion.</li>
+        <li>Choose which features appear in Streaming and save. Studio publishes the action list, access rules, cooldowns, and placement settings automatically.</li>
+        <li>Keep Studio online and keep its <strong>Unified Stage</strong> Browser Source active in the broadcast scene so accepted effects appear in the encoded stream.</li>
+      </ol>
+    </section>
+
+    <section class="config-section">
+      <span class="eyebrow">REVIEWER + VIEWER TEST</span>
+      <h2>Verify an action in under two minutes</h2>
+      <ol>
+        <li>Open the live channel and reveal the Extension over the Twitch video.</li>
+        <li>Select <strong>ACTIONS</strong>. The header should change from <strong>CONNECTING</strong> to <strong>STUDIO ONLINE</strong>.</li>
+        <li>Select any available action. If a targeting grid appears, click or tap the desired point on the video.</li>
+        <li>Confirm the accepted message in the Extension and the resulting effect in the stream video. A locked or cooling-down action explains why it is unavailable.</li>
+      </ol>
+      <p class="config-note"><strong>Expected offline state:</strong> If Studio is not connected, the Extension shows <strong>STUDIO OFFLINE</strong> and asks the creator to open Studio. No additional viewer account or credentials are required; Twitch authorization supplies viewer identity.</p>
+    </section>
+
+    <p class="config-links"><a href="https://tempestmainframe.com/legal#privacy" target="_blank" rel="noreferrer">Privacy policy</a> · <a href="https://tempestmainframe.com/legal#terms" target="_blank" rel="noreferrer">Terms of service</a></p>
+  </main>
+  <script src="config.js"></script>
+</body>
+</html>

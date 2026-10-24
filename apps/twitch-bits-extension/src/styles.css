@@ -68,7 +68,29 @@ body[data-surface="mobile"] .shell { width:100%; padding:8px; }
 body[data-surface="mobile"] .grid { grid-template-columns:1fr; }
 .config-card { width:min(620px,calc(100% - 28px)); margin:28px auto; padding:22px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
 .config-card h1 { margin:4px 0 10px; }
+.config-card h2 { margin:5px 0 8px; font-size:17px; }
 .config-card p,.config-card li { color:var(--muted); line-height:1.55; }
+.config-summary { margin:0 0 16px; font-size:14px; }
+.config-status { margin:0 0 14px; padding:12px 14px; border:1px solid color-mix(in srgb,var(--cyan) 34%,transparent); border-radius:11px; background:color-mix(in srgb,var(--cyan) 7%,transparent); }
+.config-status p { margin:6px 0 0; }
+.config-section { margin-top:12px; padding:15px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.018); }
+.config-section ol { margin:10px 0 0; padding-left:21px; }
+.config-section li+li { margin-top:8px; }
+.config-note { margin:13px 0 0; padding:10px 12px; border-left:2px solid var(--cyan); background:rgba(84,242,235,.045); }
+.config-links { margin:16px 0 0; }
+.config-card a { color:var(--cyan); }
+.config-form>p { margin:0 0 12px; }
+.config-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.config-fields label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:700; }
+.config-fields select { width:100%; min-height:40px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--ink); color:var(--text); }
+.config-fields .config-check { display:flex; grid-column:1/-1; align-items:center; gap:9px; min-height:38px; }
+.config-check input { width:17px; height:17px; accent-color:var(--cyan); }
+.config-save-row { display:flex; align-items:center; gap:12px; margin-top:13px; }
+.config-save-row button { min-height:40px; padding:9px 13px; border:1px solid var(--cyan); border-radius:8px; background:var(--cyan); color:var(--ink); font-weight:900; cursor:pointer; }
+.config-save-row button:disabled { cursor:wait; opacity:.6; }
+.config-save-row span { color:var(--muted); font-size:10px; font-weight:800; letter-spacing:.08em; }
+body[data-surface="overlay"].overlay-dock-right .shell { justify-content:flex-end; }
+body.hide-action-count #productCount { display:none; }
 body.panel-layout-list .grid { grid-template-columns:1fr; }
 body.panel-density-compact .content { padding:10px; }
 body.panel-density-compact .grid { gap:6px; }
@@ -78,5 +100,6 @@ body:not(.panel-uppercase) .eyebrow,body:not(.panel-uppercase) .count,body:not(.
 body[data-preset="minimal"] .deck { box-shadow:none; }
 body[data-preset="neon"] .deck { box-shadow:0 0 30px color-mix(in srgb,var(--cyan) 24%,transparent),0 18px 60px rgba(0,0,0,.5); }
 body[data-preset="soft"] .deck,body[data-preset="soft"] .product { border-color:color-mix(in srgb,var(--text) 16%,transparent); }
+@media (max-width:540px) { .config-fields { grid-template-columns:1fr; } }
 @media (max-width:390px) { .grid { grid-template-columns:1fr; } .shell { padding:8px; } }
 @media (prefers-reduced-motion:no-preference) { .product { transition:border-color .15s,transform .15s; } }

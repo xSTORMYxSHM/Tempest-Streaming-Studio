@@ -31,8 +31,8 @@ try {
     Invoke-Checked pnpm --filter '@tempest/twitch-streaming-extension' test
     Invoke-Checked pnpm hosted:verify
 
-    Write-Host "Mainframe hosted bundle: $workspace\apps\twitch-extension\release-assets\tempest-mainframe-0.2.0.zip"
-    Write-Host "Streaming hosted bundle: $workspace\apps\twitch-bits-extension\release-assets\tempest-streaming-0.1.0.zip"
+    Write-Host "Mainframe hosted bundle: $workspace\apps\twitch-extension\release-assets\tempest-mainframe-0.2.1.zip"
+    Write-Host "Streaming hosted bundle: $workspace\apps\twitch-bits-extension\release-assets\tempest-streaming-0.1.1.zip"
     Write-Host "Railway image source: $workspace\Dockerfile"
 } finally {
     [Environment]::SetEnvironmentVariable('TEMPEST_EXTENSION_EBS_URL', $previousEbsOrigin, 'Process')

@@ -21,9 +21,9 @@ for (const relativePath of packageFiles) {
 }
 
 const extensionPackage = JSON.parse(await readFile(path.join(workspace, 'apps/twitch-extension/package.json'), 'utf8'));
-if (extensionPackage.version !== '0.2.0') throw new Error(`apps/twitch-extension/package.json is ${extensionPackage.version}; expected its independent public version 0.2.0.`);
+if (extensionPackage.version !== '0.2.1') throw new Error(`apps/twitch-extension/package.json is ${extensionPackage.version}; expected its independent public version 0.2.1.`);
 const streamingExtensionPackage = JSON.parse(await readFile(path.join(workspace, 'apps/twitch-bits-extension/package.json'), 'utf8'));
-if (streamingExtensionPackage.version !== '0.1.0') throw new Error(`apps/twitch-bits-extension/package.json is ${streamingExtensionPackage.version}; expected its independent public version 0.1.0.`);
+if (streamingExtensionPackage.version !== '0.1.1') throw new Error(`apps/twitch-bits-extension/package.json is ${streamingExtensionPackage.version}; expected its independent public version 0.1.1.`);
 
 for (const relativePath of ['LICENSE', 'TRADEMARKS.md', 'CHANGELOG.md', 'docs/INSTALLATION.md', 'docs/PRIVACY.md', 'docs/THIRD_PARTY_NOTICES.md']) {
   if (!(await stat(path.join(workspace, relativePath))).isFile()) throw new Error(`${relativePath} is missing.`);

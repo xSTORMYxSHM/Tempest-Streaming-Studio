@@ -2,7 +2,8 @@
   'use strict';
 
   const defaultPanelDesign = { schemaVersion: 1, preset: 'tempest', brandName: 'TEMPEST STREAMING', eyebrow: 'LIVE CONTROL NODE', title: 'Shape the stream', accent: '#54F2EB', background: '#04080D', surface: '#07121B', text: '#EDFAFF', muted: '#89A3AD', font: 'inter', cardLayout: 'grid', density: 'comfortable', cornerRadius: 14, showLogo: true, showStatus: true, showSearch: true, showFilters: true, showPattern: true, uppercaseLabels: true };
-  const state = { auth: null, config: null, actions: [], busyAction: '', placementAction: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay' };
+  const defaultTwitchPreferences = { schemaVersion: 1, dock: 'left', startExpanded: false, showActionCount: true };
+  const state = { auth: null, config: null, actions: [], busyAction: '', placementAction: '', studioConnected: false, expanded: document.body.dataset.surface !== 'overlay', twitchPreferences: defaultTwitchPreferences };
   let catalogEtag = '';
   let catalogRefreshPromise = null;
   let catalogRefreshPending = false;
@@ -10,6 +11,31 @@
   const localMockRequested = ['127.0.0.1', 'localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('mock') === '1';
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+
+  function normalizeTwitchPreferences(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      ...defaultTwitchPreferences,
+      dock: source.dock === 'right' ? 'right' : 'left',
+      startExpanded: source.startExpanded === true,
+      showActionCount: source.showActionCount !== false
+    };
+  }
+
+  function applyTwitchPreferences(value) {
+    const preferences = normalizeTwitchPreferences(value);
+    state.twitchPreferences = preferences;
+    document.body.classList.toggle('overlay-dock-right', preferences.dock === 'right');
+    document.body.classList.toggle('hide-action-count', !preferences.showActionCount);
+    if (document.body.dataset.surface === 'overlay') state.expanded = preferences.startExpanded;
+    render();
+  }
+
+  function readTwitchPreferences() {
+    const content = window.Twitch?.ext?.configuration?.broadcaster?.content;
+    if (!content) return defaultTwitchPreferences;
+    try { return normalizeTwitchPreferences(JSON.parse(content)); } catch { return defaultTwitchPreferences; }
+  }
 
   function normalizePanelDesign(value) {
     const source = value && typeof value === 'object' ? value : {};
@@ -139,7 +165,8 @@
   }
 
   async function loadMockCatalog() {
-    state.actions = await fetch('mock-catalog.json', { cache: 'no-store' }).then((response) => response.json());
+    const catalog = await fetch('mock-catalog.json', { cache: 'no-store' }).then((response) => response.json());
+    state.actions = Array.isArray(catalog) ? catalog.filter((action) => action.destinations?.includes('streaming')) : [];
     state.studioConnected = true;
     setStatus('SAFE PREVIEW', true);
     $('#viewerState').textContent = 'Preview actions do not send anything to Studio';
@@ -236,6 +263,7 @@
 
   function bindTwitch() {
     if (!window.Twitch?.ext) return void loadMockCatalog();
+    window.Twitch.ext.configuration.onChanged(() => applyTwitchPreferences(readTwitchPreferences()));
     window.Twitch.ext.onAuthorized((auth) => {
       state.auth = auth;
       catalogEtag = '';

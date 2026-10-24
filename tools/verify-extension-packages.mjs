@@ -11,7 +11,7 @@ const packages = [
     id: 'mainframe',
     directory: 'apps/twitch-extension',
     archivePrefix: 'tempest-mainframe',
-    expectedVersion: '0.2.0',
+    expectedVersion: '0.2.1',
     required: ['alerts.json', 'config.html', 'config.js', 'interactions.json', 'panel.html', 'runtime-config.json', 'styles.css', 'video_component.html', 'viewer.js'],
     forbidden: ['mobile.html', 'video_overlay.html', 'mock-catalog.json']
   },
@@ -19,13 +19,14 @@ const packages = [
     id: 'streaming',
     directory: 'apps/twitch-bits-extension',
     archivePrefix: 'tempest-streaming',
-    expectedVersion: '0.1.0',
+    expectedVersion: '0.1.1',
     required: ['config.html', 'config.js', 'mobile.html', 'panel.html', 'runtime-config.json', 'styles.css', 'video_component.html', 'video_overlay.html', 'viewer.js'],
     forbidden: ['mock-catalog.json']
   }
 ];
 
 const records = [];
+const isReviewerOnlyDocument = (name) => /(?:^|\/)(?:readme(?:\.[^/]*)?|[^/]+\.(?:md|pdf|txt))$/i.test(name);
 for (const definition of packages) {
   const appDirectory = path.join(workspace, definition.directory);
   const packageJson = JSON.parse(await readFile(path.join(appDirectory, 'package.json'), 'utf8'));
@@ -43,7 +44,10 @@ for (const definition of packages) {
   for (const forbidden of definition.forbidden) {
     if (distNames.includes(forbidden)) throw new Error(`${definition.id} production dist contains forbidden asset ${forbidden}.`);
   }
-  const unexpected = distNames.filter((name) => /(?:\.map$|^\.env|\.pem$|\.p(?:12|fx)$|\.key$)/i.test(name));
+  const unexpected = distNames.filter((name) => (
+    /(?:\.map$|^\.env|\.pem$|\.p(?:12|fx)$|\.key$)/i.test(name)
+    || isReviewerOnlyDocument(name)
+  ));
   if (unexpected.length) throw new Error(`${definition.id} production dist contains forbidden files: ${unexpected.join(', ')}.`);
 
   const runtimeConfig = JSON.parse(await readFile(path.join(distDirectory, 'runtime-config.json'), 'utf8'));
@@ -72,6 +76,7 @@ for (const definition of packages) {
   const forbiddenArchiveEntries = archiveNames.filter((name) => (
     definition.forbidden.includes(name)
     || /(?:\.map$|^\.env|\.pem$|\.p(?:12|fx)$|\.key$)/i.test(name)
+    || isReviewerOnlyDocument(name)
   ));
   if (forbiddenArchiveEntries.length) throw new Error(`${archiveName} contains forbidden files: ${forbiddenArchiveEntries.join(', ')}.`);
 

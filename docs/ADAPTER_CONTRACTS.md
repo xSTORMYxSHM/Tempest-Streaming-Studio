@@ -30,6 +30,7 @@ Required capabilities for the bundled Black Hole Event:
 - `broadcast.audio.play` — play the named one-shot cue on the requested bus. This action has no release phase.
 - `broadcast.visual.show` — show the named source in Broadcast's current scene and restart it when it is controllable media.
 - `broadcast.visual.hide` — hide the visual source for the same workflow action when its lease ends.
+- `broadcast.spout.ensure` — idempotently create or update a named Spout2 Capture source in the current Broadcast scene for a local Tempest renderer such as Stormframe.
 - `broadcast.status` — publish adapter/OBS readiness and output state.
 - `broadcast.dual-format.configure` — while off air, enable or disable Enhanced Broadcasting and select a supported vertical additional canvas.
 - `broadcast.dual-format.preview` — focus the native vertical preview without starting an output.

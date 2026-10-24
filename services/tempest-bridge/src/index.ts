@@ -102,6 +102,7 @@ interface BridgeClient {
   version?: string;
   capabilities: string[];
   status?: Record<string, unknown>;
+  statusTopic?: string;
   statusReportedAt?: string;
   connectedAt: string;
   lastSeenAt: string;
@@ -117,17 +118,17 @@ const simulcastConfigureCapability = 'broadcast.simulcast.configure';
 const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
 
 const interactiveWorldCatalog = [
-  { id: 'tempest.avatar.join', name: 'Join the Crowd', durationMs: 4_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'JOIN', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
-  { id: 'tempest.avatar.left', name: 'Move Avatar Left', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'LEFT', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.right', name: 'Move Avatar Right', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'RGT', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.jump', name: 'Make My Avatar Jump', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'JUMP', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.drop', name: 'Drop Through Platform', durationMs: 1_000, cooldownMs: 750, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'DROP', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.interact', name: 'Interact Nearby', durationMs: 1_000, cooldownMs: 1_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'USE', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.emote', name: 'Avatar Emote', durationMs: 1_500, cooldownMs: 2_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'EMO', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.avatar.unstuck', name: 'Respawn My Avatar', durationMs: 1_000, cooldownMs: 10_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF667A', glyph: 'RST', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.pet.feed', name: 'Feed the Pet', durationMs: 3_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'FEED', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
-  { id: 'tempest.pet.play', name: 'Play With Pet', durationMs: 5_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF9F43', glyph: 'PET', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
-  { id: 'tempest.pet.pet', name: 'Pet the Pet', durationMs: 3_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'LOVE', kind: 'interaction' as const, destinations: ['mainframe', 'streaming'] as const },
+  { id: 'tempest.avatar.join', name: 'Join the Crowd', durationMs: 4_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'JOIN', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.left', name: 'Move Avatar Left', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'LEFT', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.right', name: 'Move Avatar Right', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'RGT', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.jump', name: 'Make My Avatar Jump', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'JUMP', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.drop', name: 'Drop Through Platform', durationMs: 1_000, cooldownMs: 750, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'DROP', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.interact', name: 'Interact Nearby', durationMs: 1_000, cooldownMs: 1_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'USE', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.emote', name: 'Avatar Emote', durationMs: 1_500, cooldownMs: 2_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'EMO', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.avatar.unstuck', name: 'Respawn My Avatar', durationMs: 1_000, cooldownMs: 10_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF667A', glyph: 'RST', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.pet.feed', name: 'Feed the Pet', durationMs: 3_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'FEED', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.pet.play', name: 'Play With Pet', durationMs: 5_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF9F43', glyph: 'PET', kind: 'interaction' as const, destinations: [] as const },
+  { id: 'tempest.pet.pet', name: 'Pet the Pet', durationMs: 3_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'LOVE', kind: 'interaction' as const, destinations: [] as const },
   { id: 'tempest.viewer-attack', name: 'Viewer Attack', durationMs: 2_000, cooldownMs: 3_000, category: 'screen-effect' as const, placementMode: 'viewer' as const, accent: '#FF667A', glyph: 'HIT', kind: 'interaction' as const, destinations: ['streaming'] as const },
   { id: 'tempest.battle.attack', name: 'Battle Attack', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'ATK', kind: 'interaction' as const, destinations: ['streaming'] as const }
 ].map((item) => ({
@@ -160,7 +161,7 @@ const diceExtensionCatalogItem = {
   category: 'community' as const, placementMode: 'fixed' as const,
   access: { mode: 'everyone' as const, allowedViewerIds: [], blockedViewerIds: [], hideWhenLocked: false },
   accent: '#8BEAFF', glyph: 'D20', kind: 'interaction' as const,
-  destinations: ['streaming'] as const
+  destinations: [] as const
 };
 
 const interactiveWorldActionIds = new Set([
@@ -788,6 +789,9 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         eventType: 'twitch-alert',
         tempest2dEnabled: Boolean(alert.tempest2dEnabled),
         tempest2dAction: alert.tempest2dAction,
+        stormframeAudioLinkEnabled: Boolean(alert.stormframeAudioLinkEnabled && alert.audioUri),
+        stormframeAudioUri: alert.audioUri,
+        stormframeAudioVolume: alert.volume,
         durationMs: alert.durationMs,
         circuit: 'alerts',
         accent: alert.accent,
@@ -1045,6 +1049,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       version: client.version,
       capabilities: client.capabilities,
       status: client.status,
+      statusTopic: client.statusTopic,
+      statusReportedAt: client.statusReportedAt,
       connectedAt: client.connectedAt,
       lastSeenAt: client.lastSeenAt,
       subscriptions: [...client.subscriptions]
@@ -2489,8 +2495,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         } else if (message.kind === 'heartbeat') {
           sendSocket(socket, createBridgeMessage({ kind: 'response', source: 'tempest.bridge', target: client.applicationId, correlationId: message.id, payload: { alive: true } }));
         } else if (message.kind === 'publish' || message.kind === 'command' || message.kind === 'response') {
-          if (message.kind === 'publish' && message.topic === 'broadcast.status' && message.payload && typeof message.payload === 'object') {
+          const publishedCapabilityStatus = message.kind === 'publish'
+            && typeof message.topic === 'string'
+            && message.topic.endsWith('.status')
+            && client.capabilities.includes(message.topic);
+          if (publishedCapabilityStatus && message.payload && typeof message.payload === 'object') {
             client.status = message.payload as Record<string, unknown>;
+            client.statusTopic = message.topic;
             client.statusReportedAt = new Date().toISOString();
           }
           for (const recipient of clients.values()) {
@@ -2590,7 +2601,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           accent: '#A66BFF',
           glyph: preset.glyph,
           kind: 'interaction' as const,
-          destinations: extensionFeatures.destinations(preset.id, ['mainframe'])
+          destinations: extensionFeatures.destinations(diceExtensionCatalogItem.id, diceExtensionCatalogItem.destinations)
         }));
         return [
           ...interactiveWorldCatalog.map((item) => ({
@@ -2603,7 +2614,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           },
           ...alerts,
           ...legacyDiceItems
-        ];
+        ].filter((item) => item.destinations.length > 0);
       },
       poll: () => {
         const poll = chatbot.pollStatus();

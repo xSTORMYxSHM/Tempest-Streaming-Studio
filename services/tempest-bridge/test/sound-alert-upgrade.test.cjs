@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { mkdtemp, writeFile } = require('node:fs/promises');
+const { pathToFileURL } = require('node:url');
 const os = require('node:os');
 const path = require('node:path');
 const { bundledSoundAlerts, TempestSoundAlertCatalog } = require('../dist/sound-alerts');
@@ -39,4 +40,28 @@ test('persists a reusable viewer-group assignment on an interaction', async () =
   await restored.initialize();
   assert.equal(restored.find('sound-alert.hype-pulse').viewerGroupId, 'campaign-players');
   await assert.rejects(catalog.update('sound-alert.hype-pulse', { viewerGroupId: 'INVALID GROUP' }), /viewerGroupId/);
+});
+
+test('persists the Stormframe AudioLink choice and prepares its local audio command payload', async () => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-sound-alert-stormframe-'));
+  const audioPath = path.join(dataDirectory, 'reactive-alert.mp3');
+  await writeFile(audioPath, Buffer.from([0x49, 0x44, 0x33]));
+  const catalog = new TempestSoundAlertCatalog(dataDirectory);
+  await catalog.initialize();
+  const audioUri = pathToFileURL(audioPath).href;
+  const alert = await catalog.update('sound-alert.hype-pulse', {
+    audioUri,
+    volume: 0.42,
+    stormframeAudioLinkEnabled: true
+  });
+  assert.equal(alert.stormframeAudioLinkEnabled, true);
+
+  const prepared = catalog.prepare(alert.id, { source: 'studio.operator', bypassCooldown: true });
+  assert.equal(prepared.payload.stormframeAudioLinkEnabled, true);
+  assert.equal(prepared.payload.stormframeAudioUri, audioUri);
+  assert.equal(prepared.payload.stormframeAudioVolume, 0.42);
+
+  const restored = new TempestSoundAlertCatalog(dataDirectory);
+  await restored.initialize();
+  assert.equal(restored.find(alert.id).stormframeAudioLinkEnabled, true);
 });

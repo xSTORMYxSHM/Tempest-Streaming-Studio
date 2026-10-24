@@ -45,6 +45,8 @@ test('records the Dice Box physical result after the on-stream dice settle', asy
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
+  assert.equal(overlay.status('local').settings.enabled, false);
+  await overlay.update({ enabled: true });
   const client = connectedClient(overlay);
   const init = latestEvent(client, 'init');
   overlay.reportClient({ clientId: init.clientId, state: 'ready', theme: 'default', renderer: 'offscreen' });
@@ -117,6 +119,7 @@ test('tracks renderer readiness, verifies sound, and fails promptly when the aut
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-health-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
+  await overlay.update({ enabled: true });
   const client = connectedClient(overlay);
   const init = latestEvent(client, 'init');
   overlay.reportClient({ clientId: init.clientId, state: 'degraded', theme: 'default', renderer: 'onscreen', error: 'Custom theme unavailable.' });
@@ -141,6 +144,7 @@ test('keeps rolls and audio controls working through the OBS polling fallback', 
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-poll-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
+  await overlay.update({ enabled: true });
   const registered = overlay.poll({});
   assert.equal(registered.events[0].type, 'init');
   overlay.reportClient({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' });
@@ -165,6 +169,7 @@ test('ends a pending roll immediately when the Browser Source reports a failure'
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-failure-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
+  await overlay.update({ enabled: true });
   const client = connectedClient(overlay);
   const rolling = overlay.roll({ expression: '1d20' });
   const rejected = assert.rejects(rolling, /OBS Dice Box callback failed/);
@@ -180,7 +185,7 @@ test('persists presentation settings separately from physical roll history', asy
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tempest-studio-dice-settings-'));
   const overlay = new TempestDiceOverlay(directory);
   await overlay.initialize();
-  await overlay.update({ theme: 'brass', diceTheme: 'wooden', durationMs: 7000, scalePercent: 115, soundEnabled: true });
+  await overlay.update({ enabled: true, theme: 'brass', diceTheme: 'wooden', durationMs: 7000, scalePercent: 115, soundEnabled: true });
   const client = connectedClient(overlay);
   const rolling = overlay.roll({ expression: '1d6' });
   const request = latestEvent(client, 'roll-request');

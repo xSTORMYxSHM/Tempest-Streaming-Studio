@@ -29,39 +29,39 @@
       { section: 'overview', label: 'Overview' }
     ],
     live: [
-      { section: 'chatbot', label: 'Chatbot' },
-      { section: 'streamtogether', label: 'Guests' },
+      { section: 'chatbot', label: 'Live Chat' },
+      { section: 'streamtogether', label: 'Stream Together' },
       { section: 'simulcast', label: 'Go Live' },
       { section: 'dice', label: '3D Dice' },
-      { section: 'alerts', label: 'Action Queue' }
+      { section: 'alerts', label: 'Alert Queue' }
     ],
     interact: [
-      { section: 'world', label: 'World' },
-      { section: 'interactivestage', label: 'Stage' },
-      { section: 'soundalerts', label: 'Viewer Actions' },
-      { section: 'dice', label: 'Games' },
-      { section: 'chatbot', label: 'Polls' }
+      { section: 'world', label: 'Interactive World' },
+      { section: 'interactivestage', label: 'Stage Layout' },
+      { section: 'soundalerts', label: 'Viewer Interactions' },
+      { section: 'dice', label: '3D Dice' },
+      { section: 'chatbot', label: 'Chat Polls' }
     ],
     overlays: [
       { section: 'alerts', label: 'Unified Alerts' },
-      { section: 'visualalerts', label: 'Twitch Events' },
-      { section: 'chatoverlay', label: 'Chat' },
-      { section: 'discordvoice', label: 'Guests' },
+      { section: 'visualalerts', label: 'Twitch Alerts' },
+      { section: 'chatoverlay', label: 'Chat Overlay' },
+      { section: 'discordvoice', label: 'Discord Guests' },
       { section: 'assets', label: 'Media Library' }
     ],
     extensions: [
-      { section: 'twitch', label: 'Companions' },
-      { section: 'extensiondesigner', label: 'Panel Design' },
+      { section: 'twitch', label: 'Twitch Extensions' },
+      { section: 'extensiondesigner', label: 'Panel Designer' },
       { section: 'dualformat', label: 'Dual Format' }
     ],
     connect: [
-      { section: 'twitch', label: 'Twitch' },
-      { section: 'kick', label: 'Kick' },
+      { section: 'twitch', label: 'Twitch Account' },
+      { section: 'kick', label: 'Kick Account' },
       { section: 'streamtogether', label: 'Stream Together' },
       { section: 'api', label: 'Avatar Apps' }
     ],
     settings: [
-      { section: 'settings', label: 'Settings' },
+      { section: 'settings', label: 'Studio Settings' },
       { section: 'events', label: 'Diagnostics', advanced: true }
     ]
   };
@@ -74,11 +74,45 @@
     kick: 'connect', api: 'connect',
     settings: 'settings', events: 'settings'
   };
+  const workspaceNames = {
+    home: 'Home', live: 'Live', interact: 'Interact', overlays: 'Overlays', extensions: 'Extensions', connect: 'Connect', settings: 'Settings'
+  };
+  const toolFinderCatalog = [
+    { section: 'overview', group: 'home', description: 'Studio status, setup progress, and shortcuts.', keywords: 'start dashboard home' },
+    { section: 'chatbot', group: 'live', view: 'chat', title: 'Live Chat', description: 'Read and send Twitch + Kick chat from one workspace.', keywords: 'audience bot messages unified chat' },
+    { section: 'chatbot', group: 'live', view: 'polls', title: 'Chat Polls', description: 'Start a number poll and count each chatter once.', keywords: 'audience vote voting survey' },
+    { section: 'chatbot', group: 'live', view: 'commands', title: 'Chat Commands', description: 'Create and edit the commands viewers use in chat.', keywords: 'bot custom command response tempest' },
+    { section: 'chatbot', group: 'live', view: 'automation', title: 'Chat Automation', description: 'Schedule automatic messages by time or chat activity.', keywords: 'timer repeating message interval' },
+    { section: 'chatbot', group: 'live', view: 'moderation', title: 'Chat Moderation', description: 'Review and configure live moderation controls.', keywords: 'mods safety blocked users' },
+    { section: 'chatbot', group: 'live', view: 'setup', title: 'Chatbot Setup', description: 'Connect the bot account and configure chat delivery.', keywords: 'oauth account authorization connection' },
+    { section: 'streamtogether', group: 'live', description: 'Twitch collaboration call, guests, camera, and microphone.', keywords: 'backstage guest star call collab' },
+    { section: 'simulcast', group: 'live', description: 'Preflight and monitor Twitch, Kick, recording, and upload health.', keywords: 'output go live stream broadcast multistream' },
+    { section: 'dice', group: 'live', description: 'Roll and configure on-stream 3D dice.', keywords: 'games dicebox d20 roll' },
+    { section: 'alerts', group: 'overlays', description: 'Unified alert queue, health, and browser-source status.', keywords: 'action queue playback audio' },
+    { section: 'world', group: 'interact', description: 'Viewer avatars, stream pet, battles, and gaze effects.', keywords: 'crowd pets avatars game viewers' },
+    { section: 'interactivestage', group: 'interact', view: 'overview', title: 'Interactive Stage', description: 'Review Stage status, Browser Sources, and enabled modules.', keywords: 'canvas overlay source' },
+    { section: 'interactivestage', group: 'interact', view: 'layout', title: 'Stage Layout', description: 'Arrange persistent objects and modules on the stream canvas.', keywords: 'canvas placement move position' },
+    { section: 'interactivestage', group: 'interact', view: 'objects', title: 'Stage Objects', description: 'Create and manage persistent on-stream objects.', keywords: 'canvas actor item object' },
+    { section: 'interactivestage', group: 'interact', view: 'safety', title: 'Stage Safety', description: 'Set Stage modules, limits, and emergency behavior.', keywords: 'canvas modules clear limits' },
+    { section: 'soundalerts', group: 'interact', description: 'Create viewer-triggered sounds, GIFs, stickers, and effects.', keywords: 'jumpscare interaction gif sound redeem' },
+    { section: 'visualalerts', group: 'overlays', description: 'Design follow, sub, cheer, raid, and other Twitch event alerts.', keywords: 'events follow subscription bits raid hype' },
+    { section: 'chatoverlay', group: 'overlays', description: 'Control on-stream chat messages, emotes, and Emote Wall.', keywords: 'popup chat bttv ffz 7tv pyramid' },
+    { section: 'discordvoice', group: 'overlays', description: 'Place Discord voice guests on the broadcast canvas.', keywords: 'call speaking avatar voice images' },
+    { section: 'assets', group: 'overlays', description: 'Import, organize, preview, and reuse local alert media.', keywords: 'library sounds images video files' },
+    { section: 'twitch', group: 'extensions', description: 'Connect Twitch and manage companion Extension routing.', keywords: 'account oauth mainframe streaming extension' },
+    { section: 'extensiondesigner', group: 'extensions', description: 'Choose the Twitch panel theme and viewer-facing modules.', keywords: 'panel design colors modules channel' },
+    { section: 'dualformat', group: 'extensions', description: 'Prepare Twitch horizontal and mobile-first vertical output.', keywords: 'vertical mobile enhanced broadcast' },
+    { section: 'kick', group: 'connect', description: 'Connect Kick chat, ingest, and stream credentials.', keywords: 'account multistream platform' },
+    { section: 'api', group: 'connect', description: 'Connect Warudo, VTube Studio, Stormframe, and avatar apps.', keywords: 'vtuber live2d avatar integrations' },
+    { section: 'settings', group: 'settings', description: 'Interface mode, privacy, updates, backup, and support.', keywords: 'preferences advanced update privacy backup' },
+    { section: 'events', group: 'settings', description: 'Technical event log, alert history, and diagnostics.', keywords: 'errors logs troubleshoot activity', advanced: true }
+  ];
   let activeWorkspaceGroup = 'home';
   const targetNames = {
     'com.tempestmainframe.warudo': 'Warudo',
     'com.tempestmainframe.vtube-studio': 'VTube Studio',
     'com.tempestmainframe.tempest-broadcast': 'Tempest Broadcast',
+    'com.tempestmainframe.stormframe': 'Stormframe',
     'com.tempestmainframe.quartic-pulse': 'Quartic Pulse',
     'com.tempestmainframe.data-horizon': 'Data Horizon'
   };
@@ -385,6 +419,53 @@
     }
   }
 
+  function filteredToolFinderItems(query = '') {
+    const advancedMode = readOnboardingPreferences().advancedMode === true;
+    const words = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return toolFinderCatalog.filter((item) => {
+      if (item.advanced && !advancedMode) return false;
+      const definition = sections[item.section];
+      const haystack = `${item.title || definition.title} ${definition.kicker} ${workspaceNames[item.group]} ${item.description} ${item.keywords}`.toLowerCase();
+      return words.every((word) => haystack.includes(word));
+    });
+  }
+
+  function renderToolFinder(query = '') {
+    const results = $('#toolFinderResults');
+    const items = filteredToolFinderItems(query);
+    results.classList.toggle('empty-state', items.length === 0);
+    results.innerHTML = items.length ? items.map((item, index) => {
+      const definition = sections[item.section];
+      return `<button type="button" role="option" aria-selected="${index === 0}" class="tool-finder-result${index === 0 ? ' selected' : ''}" data-tool-section="${escapeHtml(item.section)}" data-tool-group="${escapeHtml(item.group)}" data-tool-view="${escapeHtml(item.view || '')}"><span>${escapeHtml(workspaceNames[item.group])}</span><strong>${escapeHtml(item.title || definition.title)}</strong><small>${escapeHtml(item.description)}</small><i aria-hidden="true">→</i></button>`;
+    }).join('') : '<p>No matching Studio tool. Try a broader word such as “chat,” “alert,” or “Twitch.”</p>';
+  }
+
+  function openToolFinder() {
+    const dialog = $('#toolFinderDialog');
+    const search = $('#toolFinderSearch');
+    search.value = '';
+    renderToolFinder();
+    dialog.showModal();
+    requestAnimationFrame(() => search.focus());
+  }
+
+  function moveToolFinderSelection(direction) {
+    const results = [...document.querySelectorAll('.tool-finder-result')];
+    if (!results.length) return;
+    const selected = Math.max(0, results.findIndex((item) => item.classList.contains('selected')));
+    const next = (selected + direction + results.length) % results.length;
+    results.forEach((item, index) => {
+      item.classList.toggle('selected', index === next);
+      item.setAttribute('aria-selected', String(index === next));
+    });
+    results[next].scrollIntoView({ block: 'nearest' });
+  }
+
+  function openSelectedToolFinderResult() {
+    const selected = document.querySelector('.tool-finder-result.selected') || document.querySelector('.tool-finder-result');
+    if (selected) selected.click();
+  }
+
   function showSection(name, requestedGroup) {
     if (name === 'events' && readOnboardingPreferences().advancedMode !== true) name = 'overview';
     const definition = sections[name] || sections.overview;
@@ -427,6 +508,7 @@
     if (alert.warudoEnabled) routes.push('WARUDO');
     if (alert.vtubeStudioEnabled) routes.push('VTUBE STUDIO');
     if (alert.tempest2dEnabled) routes.push('TEMPEST 2D');
+    if (alert.stormframeAudioLinkEnabled) routes.push('STORMFRAME AUDIOLINK');
     return routes.length ? `${routes.join(' + ')} + OVERLAY` : 'OVERLAY';
   }
 
@@ -913,7 +995,7 @@
       $('#worldReducedFlashing').checked = safety.reducedFlashing !== false;
     }
     if (!$('#worldPresenceForm').contains(document.activeElement)) {
-      $('#worldPresenceEnabled').checked = presence.enabled !== false;
+      $('#worldPresenceEnabled').checked = presence.enabled === true;
       $('#worldAvatarSize').value = String(Math.round(Number(presence.avatarScale || 1) * 100));
       $('#worldAvatarSizeValue').textContent = `${$('#worldAvatarSize').value}%`;
       $('#worldPresenceMessages').value = String(presence.minimumMessages || 1);
@@ -2330,6 +2412,7 @@
         <label>Expression name<input data-alert-tempest2d-action="${escapeHtml(alert.id)}" maxlength="128" placeholder="Happy" value="${escapeHtml(tempest2dActionInputValue(alert.tempest2dAction))}" /></label>
         <small>Use the exact imported expression name. It resets at maximum runtime. Advanced controls may use <code>motion:</code> or <code>parameter:</code>.</small>
       </div>
+      <label class="interaction-integration-toggle compact"><input data-alert-stormframe-audiolink-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.stormframeAudioLinkEnabled ? 'checked' : ''} /><span><strong>Play through Stormframe AudioLink</strong><small>Play this MP3, WAV, or OGG inside Stormframe so reactive avatar materials respond.</small></span></label>
       <details class="interaction-routing-details"><summary>Request + Broadcast routing</summary><div class="alert-settings-groups">
         <div class="alert-settings-group"><span>REQUEST</span><div class="sound-alert-settings">
           <label>Interaction type <select data-alert-category="${escapeHtml(alert.id)}">${soundAlertOptions(['sticker', 'gif', 'jumpscare', 'screen-effect', 'sound', 'counter', 'community', 'other'], alert.interactionCategory || 'other')}</select></label>
@@ -2513,6 +2596,7 @@
         <label>Expression name<input data-twitch-tempest2d-action="${escapeHtml(alert.id)}" maxlength="128" placeholder="Surprised" value="${escapeHtml(tempest2dActionInputValue(alert.tempest2dAction))}" /></label>
         <small>Use the exact imported expression name. It resets at maximum runtime. Advanced controls may use <code>motion:</code> or <code>parameter:</code>.</small>
       </div>
+      <label class="interaction-integration-toggle compact"><input data-twitch-stormframe-audiolink-enabled="${escapeHtml(alert.id)}" type="checkbox" ${alert.stormframeAudioLinkEnabled ? 'checked' : ''} /><span><strong>Play through Stormframe AudioLink</strong><small>Play this MP3, WAV, or OGG inside Stormframe so reactive avatar materials respond.</small></span></label>
       <div class="twitch-variant-summary"><span>VARIANTS</span><strong>${(alert.alertVariants || []).filter((variant) => variant.enabled).length} active · ${(alert.alertVariants || []).length} total</strong><small>Amount, tier, tenure, raid size, or reward rules</small></div>
       <div class="sound-alert-actions twitch-alert-actions"><button data-twitch-visual-save="${escapeHtml(alert.id)}">Save Alert</button><button data-twitch-alert-design="${escapeHtml(alert.id)}">Customize Design</button><button data-export-twitch-alert-pack="${escapeHtml(alert.id)}">Export Pack</button>${variantConditionChoices(alert.topic).length ? `<button data-twitch-alert-variants="${escapeHtml(alert.id)}">Manage Variants${(alert.alertVariants || []).length ? ` (${(alert.alertVariants || []).length})` : ''}</button>` : '<button disabled title="This event has no amount, tier, tenure, raid-size, or reward field">Variants unavailable</button>'}<button data-twitch-alert-audio="${escapeHtml(alert.id)}">Assign Sound</button><button data-twitch-visual-file="${escapeHtml(alert.id)}">Assign Visual</button><button data-giphy-alert-target="twitch|${escapeHtml(alert.id)}">GIPHY Visual</button><button data-twitch-visual-toggle="${escapeHtml(alert.id)}">${alert.enabled ? 'Disable' : 'Enable'}</button><button class="primary-button" data-twitch-visual-preview="${escapeHtml(alert.id)}">Preview Base Alert</button></div>
     </article>`).join('') : 'No Twitch Alert presets are configured.';
@@ -4473,7 +4557,7 @@
   function renderDiceOverlay({ settings = false } = {}) {
     const status = state.diceOverlay;
     if (!status) return;
-    const enabled = status.settings?.enabled !== false;
+    const enabled = status.settings?.enabled === true;
     const clients = Number(status.connectedClients || 0);
     const authority = status.clients?.find((client) => client.authority) || status.clients?.[0];
     const engineState = authority?.state || (clients ? 'connecting' : 'disconnected');
@@ -4595,7 +4679,7 @@
         shadowTransparency: Number($('#diceShadowTransparency').value)
       } });
       state.diceOverlay.settings = result.settings;
-      await syncUnifiedModule('diceOverlay', result.settings.enabled !== false);
+      await syncUnifiedModule('diceOverlay', result.settings.enabled === true);
       renderDiceOverlay({ settings: true });
       toast('3D Dice appearance and physics saved.');
     } catch (error) { toast(error.message, true); }
@@ -5072,6 +5156,7 @@
         vtubeStudioHotkey: $('#newInteractionVTubeStudioHotkey').value,
         tempest2dEnabled: $('#newInteractionTempest2DEnabled').checked,
         tempest2dAction: tempest2dActionFromInput($('#newInteractionTempest2DAction').value),
+        stormframeAudioLinkEnabled: $('#newInteractionStormframeAudioLinkEnabled').checked,
         durationMs: Math.round(Number($('#newInteractionAlertDuration').value) * 1000),
         visualDurationMs: Math.round(Number($('#newInteractionVisualDuration').value) * 1000),
         volume: Number($('#newInteractionVolume').value) / 100,
@@ -5177,6 +5262,7 @@
         ...(topic === 'viewer.subscription.started' ? { variant: $('#newTwitchAlertVariant').value } : {}),
         tempest2dEnabled: $('#newTwitchTempest2DEnabled').checked,
         tempest2dAction: tempest2dActionFromInput($('#newTwitchTempest2DAction').value),
+        stormframeAudioLinkEnabled: $('#newTwitchStormframeAudioLinkEnabled').checked,
         durationMs: Math.round(Number($('#newTwitchAlertDuration').value) * 1000),
         volume: Number($('#newTwitchAlertVolume').value) / 100,
         accent: $('#newTwitchAlertAccent').value
@@ -5401,7 +5487,8 @@
     const accent = document.querySelector(`[data-twitch-visual-accent="${selectorId}"]`).value;
     const tempest2dEnabled = document.querySelector(`[data-twitch-tempest2d-enabled="${selectorId}"]`).checked;
     const tempest2dAction = tempest2dActionFromInput(document.querySelector(`[data-twitch-tempest2d-action="${selectorId}"]`).value);
-    await updateTwitchVisualAlert(id, { durationMs: Math.round(durationSeconds * 1000), volume: volumePercent / 100, accent, tempest2dEnabled, tempest2dAction }, 'Twitch Alert sound, visual, timing, styling, and Tempest 2D expression saved.');
+    const stormframeAudioLinkEnabled = document.querySelector(`[data-twitch-stormframe-audiolink-enabled="${selectorId}"]`).checked;
+    await updateTwitchVisualAlert(id, { durationMs: Math.round(durationSeconds * 1000), volume: volumePercent / 100, accent, tempest2dEnabled, tempest2dAction, stormframeAudioLinkEnabled }, 'Twitch Alert sound, visual, timing, avatar, and AudioLink settings saved.');
   }
 
   function defaultTwitchDesign() {
@@ -6834,6 +6921,7 @@
     const vtubeStudioHotkey = document.querySelector(`[data-alert-vtube-studio-hotkey="${selectorId}"]`).value;
     const tempest2dEnabled = document.querySelector(`[data-alert-tempest2d-enabled="${selectorId}"]`).checked;
     const tempest2dAction = tempest2dActionFromInput(document.querySelector(`[data-alert-tempest2d-action="${selectorId}"]`).value);
+    const stormframeAudioLinkEnabled = document.querySelector(`[data-alert-stormframe-audiolink-enabled="${selectorId}"]`).checked;
     const durationSeconds = Number(document.querySelector(`[data-alert-duration="${selectorId}"]`).value);
     const viewerSeconds = Number(document.querySelector(`[data-alert-viewer-cooldown="${selectorId}"]`).value);
     const globalSeconds = Number(document.querySelector(`[data-alert-global-cooldown="${selectorId}"]`).value);
@@ -6860,6 +6948,7 @@
       vtubeStudioHotkey,
       tempest2dEnabled,
       tempest2dAction,
+      stormframeAudioLinkEnabled,
       durationMs: Math.round(durationSeconds * 1000),
       viewerCooldownMs: Math.round(viewerSeconds * 1000),
       globalCooldownMs: Math.round(globalSeconds * 1000),
@@ -6880,7 +6969,7 @@
       broadcastCircuit,
       broadcastEffectStrength,
       accent
-    }, 'Interaction Alert sound, visual, timing, and reaction settings saved.');
+    }, 'Interaction Alert sound, visual, timing, reaction, and AudioLink settings saved.');
   }
 
   async function saveVisualAlertSettings(id) {
@@ -6956,6 +7045,13 @@
   async function handleAction(event) {
     const button = event.target.closest('button');
     if (!button) return;
+    if (button.dataset.toolSection) {
+      $('#toolFinderDialog').close();
+      showSection(button.dataset.toolSection, button.dataset.toolGroup);
+      if (button.dataset.toolSection === 'chatbot' && button.dataset.toolView) switchChatbotTab(button.dataset.toolView);
+      if (button.dataset.toolSection === 'interactivestage' && button.dataset.toolView) switchInteractiveStageTab(button.dataset.toolView);
+      return;
+    }
     if (button.dataset.copyText) return copyToClipboard(button.dataset.copyText, button);
     if (button.dataset.worldDemoCrowd) return spawnWorldDemoCrowd();
     if (button.dataset.worldClearCrowd) return clearWorldCrowd();
@@ -7109,6 +7205,24 @@
   }
 
   function bindEvents() {
+    $('#openToolFinder').addEventListener('click', openToolFinder);
+    $('#toolFinderSearch').addEventListener('input', (event) => renderToolFinder(event.currentTarget.value));
+    $('#toolFinderSearch').addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveToolFinderSelection(event.key === 'ArrowDown' ? 1 : -1);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        openSelectedToolFinderResult();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if ($('#toolFinderDialog').open) $('#toolFinderDialog').close();
+        else openToolFinder();
+      }
+    });
     $('#privacyModeButton').addEventListener('click', togglePrivacyMode);
     $('#savePrivacySettings').addEventListener('click', savePrivacyControls);
     $('#refreshButton').addEventListener('click', () => refresh());

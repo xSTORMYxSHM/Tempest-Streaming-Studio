@@ -327,6 +327,15 @@ test('carries a Twitch-signed alert through the real Studio relay and Bridge gat
   assert.equal(twitchStatus.acceptedEvents, 1);
   assert.equal(twitchStatus.connections.extensionRelay, 'connected');
 
+  const enableDice = await fetch(`${bridge.baseUrl}/v1/dice-overlay/settings`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify({ enabled: true })
+  });
+  assert.equal(enableDice.status, 200);
+  const publishDice = await fetch(`${bridge.baseUrl}/v1/extension-features/${encodeURIComponent('tempest.dice.roll')}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token }, body: JSON.stringify({ destinations: ['mainframe'] })
+  });
+  assert.equal(publishDice.status, 200);
+
   const diceCatalogDeadline = Date.now() + 3000;
   let diceCatalog;
   while (Date.now() < diceCatalogDeadline) {

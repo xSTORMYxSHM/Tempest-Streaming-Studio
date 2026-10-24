@@ -321,8 +321,10 @@ function validate(input: TempestTwitchVisualAlertDefinition): TempestTwitchVisua
   const tempest2dEnabled = input.tempest2dEnabled === undefined ? false : input.tempest2dEnabled;
   if (typeof tempest2dEnabled !== 'boolean') throw new Error('tempest2dEnabled must be boolean.');
   const tempest2dAction = validateTempest2DAction(input.tempest2dAction);
+  const stormframeAudioLinkEnabled = input.stormframeAudioLinkEnabled === undefined ? false : input.stormframeAudioLinkEnabled;
+  if (typeof stormframeAudioLinkEnabled !== 'boolean') throw new Error('stormframeAudioLinkEnabled must be boolean.');
   if (!/^#[0-9a-f]{6}$/i.test(input.accent)) throw new Error('accent must be a six-digit hex color.');
-  return { ...input, name: input.name.trim(), tempest2dEnabled, tempest2dAction, durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design), alertVariants: validateAlertVariants(input.alertVariants) };
+  return { ...input, name: input.name.trim(), tempest2dEnabled, tempest2dAction, stormframeAudioLinkEnabled, durationMs, audioUri: validateAudioUri(input.audioUri), volume, visualUri: validateVisualUri(input.visualUri), accent: input.accent.toUpperCase(), design: validateTwitchAlertDesign(input.design), alertVariants: validateAlertVariants(input.alertVariants) };
 }
 
 function eventSignature(alert: Pick<TempestTwitchVisualAlertDefinition, 'topic' | 'variant'>): string {
@@ -384,13 +386,14 @@ export class TempestTwitchVisualAlertCatalog {
     if (index < 0) throw new Error(`Twitch Visual Alert ${id} was not found.`);
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Twitch Visual Alert changes must be an object.');
     const source = patch as Record<string, unknown>;
-    const allowed = new Set(['enabled', 'tempest2dEnabled', 'tempest2dAction', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design', 'alertVariants']);
+    const allowed = new Set(['enabled', 'tempest2dEnabled', 'tempest2dAction', 'stormframeAudioLinkEnabled', 'durationMs', 'audioUri', 'volume', 'visualUri', 'accent', 'design', 'alertVariants']);
     for (const key of Object.keys(source)) if (!allowed.has(key)) throw new Error(`${key} cannot be changed through the Twitch Visual Alert catalog.`);
     const updated = validate({
       ...this.alerts[index],
       ...(source.enabled === undefined ? {} : { enabled: source.enabled as boolean }),
       ...(source.tempest2dEnabled === undefined ? {} : { tempest2dEnabled: source.tempest2dEnabled as boolean }),
       ...(source.tempest2dAction === undefined ? {} : { tempest2dAction: validateTempest2DAction(source.tempest2dAction) }),
+      ...(source.stormframeAudioLinkEnabled === undefined ? {} : { stormframeAudioLinkEnabled: source.stormframeAudioLinkEnabled as boolean }),
       ...(source.durationMs === undefined ? {} : { durationMs: Number(source.durationMs) }),
       ...(Object.hasOwn(source, 'audioUri') ? { audioUri: validateAudioUri(source.audioUri) } : {}),
       ...(source.volume === undefined ? {} : { volume: Number(source.volume) }),
@@ -422,6 +425,7 @@ export class TempestTwitchVisualAlertCatalog {
       enabled: source.enabled === undefined ? true : Boolean(source.enabled),
       tempest2dEnabled: source.tempest2dEnabled === undefined ? false : source.tempest2dEnabled as boolean,
       tempest2dAction: validateTempest2DAction(source.tempest2dAction),
+      stormframeAudioLinkEnabled: source.stormframeAudioLinkEnabled === undefined ? false : source.stormframeAudioLinkEnabled as boolean,
       durationMs: source.durationMs === undefined ? 6000 : Number(source.durationMs),
       audioUri: validateAudioUri(source.audioUri),
       volume: source.volume === undefined ? 0.8 : Number(source.volume),

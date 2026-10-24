@@ -35,6 +35,7 @@ test('uses the free Streaming companion catalog and action route without purchas
   assert.match(script, /controller\.abort\(\)/);
   assert.match(script, /!document\.hidden && state\.auth/);
   assert.match(script, /state\.auth\?\.token !== authToken/);
+  assert.match(script, /action\.destinations\?\.includes\('streaming'\)/);
   assert.doesNotMatch(script, /bits\.|transactionReceipt|reservationToken|useBits|getProducts/);
   assert.doesNotMatch(script, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });
@@ -46,7 +47,7 @@ test('ships the Interactive World fallback catalog with stable free action IDs',
     assert.ok(byId.has(id), `${id} should be present`);
     assert.equal(byId.get(id).kind, 'interaction');
   }
-  assert.deepEqual(byId.get('tempest.avatar.join').destinations, ['mainframe', 'streaming']);
+  assert.deepEqual(byId.get('tempest.avatar.join').destinations, []);
   assert.equal(byId.get('tempest.viewer-attack').placementMode, 'viewer');
   assert.deepEqual(byId.get('tempest.viewer-attack').destinations, ['streaming']);
 });
@@ -68,6 +69,32 @@ test('uses the live legal page and contains no paid-action language', async () =
   assert.match(html, /https:\/\/tempestmainframe\.com\/legal#privacy/);
   assert.match(html, /https:\/\/tempestmainframe\.com\/legal#terms/);
   assert.doesNotMatch(html, /\b(?:bits|buy|purchase|donate|cheer|spend|cost)\b/i);
+});
+
+test('gives broadcasters and reviewers a complete in-extension test path', async () => {
+  const html = await read('config.html');
+  assert.match(html, /Video Overlay quick start/);
+  assert.match(html, /Twitch → Companion Extensions/);
+  assert.match(html, /Unified Stage/);
+  assert.match(html, /Verify an action in under two minutes/);
+  assert.match(html, /STUDIO ONLINE/);
+  assert.match(html, /Expected offline state/);
+  assert.match(html, /No additional viewer account or credentials are required/);
+});
+
+test('offers safe Twitch-hosted presentation preferences without duplicating Studio controls', async () => {
+  const html = await read('config.html');
+  const configScript = await read('config.js');
+  const viewerScript = await read('viewer.js');
+  assert.match(html, /Twitch quick preferences/i);
+  assert.match(html, /Deck position/);
+  assert.match(html, /Starting view/);
+  assert.match(configScript, /configuration\.set\('broadcaster', '1'/);
+  assert.match(configScript, /showActionCount/);
+  assert.match(viewerScript, /configuration\.onChanged/);
+  assert.match(viewerScript, /overlay-dock-right/);
+  assert.match(viewerScript, /hide-action-count/);
+  assert.doesNotMatch(configScript, /secret|stream key|credential/i);
 });
 
 test('generates a public runtime configuration without credentials', async () => {

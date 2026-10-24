@@ -17,10 +17,17 @@ test('ships the exact Twitch local-test entry paths', async () => {
   assert.match(panel, /panel-body/);
   assert.match(panel, /id="panelBrandName"/);
   assert.match(configuration, /config\.js/);
+  assert.match(configuration, /id="developerTools"[^>]*hidden/);
   assert.match(configuration, /Local mock mode/);
+  assert.match(configuration, /Build the viewer signal deck/);
+  assert.match(configuration, /Verify the panel in under two minutes/);
+  assert.match(configuration, /Expected offline state/);
+  assert.match(configuration, /TEMPEST MAINFRAME/);
   assert.match(configuration, /SAVE PANEL APPEARANCE/);
   assert.match(configuration, /id="configPanelShowCurrentStream"/);
   assert.match(configuration, /id="configPanelShowPerformances"/);
+  const configurationScript = await readFile(path.join(appDirectory, 'dist', 'config.js'), 'utf8');
+  assert.match(configurationScript, /developerTools'\)\.hidden = false/);
   for (const forbiddenSurface of ['video_overlay.html', 'video_fullscreen.html', 'mobile.html']) {
     await assert.rejects(readFile(path.join(appDirectory, 'dist', forbiddenSurface), 'utf8'), /ENOENT/);
   }

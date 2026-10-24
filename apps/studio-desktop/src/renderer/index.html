@@ -33,7 +33,7 @@
       <main>
         <header class="topbar">
           <div class="topbar-brand"><img src="assets/storm-horizon-sh.png" alt="" /><div><span>TEMPEST STREAMING STUDIO</span><strong>OPERATOR DECK</strong></div></div>
-          <div class="topbar-context"><p id="sectionKicker">START HERE</p><span aria-hidden="true">/</span><h1 id="sectionTitle">Studio Home</h1></div>
+          <div class="topbar-context"><p id="sectionKicker">START HERE</p><span aria-hidden="true">/</span><h1 id="sectionTitle">Studio Home</h1><button id="openToolFinder" class="tool-finder-button" type="button" aria-haspopup="dialog"><span aria-hidden="true">⌕</span> Find a tool <kbd>Ctrl K</kbd></button></div>
           <div class="topbar-actions"><button id="privacyModeButton" class="privacy-mode-button" type="button" aria-pressed="true" title="Mask streamer-sensitive information throughout Studio">PRIVATE INFO HIDDEN</button><span class="protocol-badge">BUILD 1.0.1</span><span id="safetyBadge" class="status-badge" data-advanced>CHECKING</span><span id="protocolBadge" class="protocol-badge">API 1.0</span><button id="refreshButton" class="secondary-button" data-advanced>Refresh Data</button></div>
         </header>
         <nav id="workspaceTabs" class="workspace-tabs" aria-label="Current workspace tools"></nav>
@@ -269,7 +269,7 @@
               <label class="toggle-label"><input id="diceShowReason" type="checkbox" checked /><span>Show the roll reason</span></label>
               <label class="toggle-label"><input id="diceSoundEnabled" type="checkbox" /><span>Play a dice impact sound in the Browser Source</span></label>
               <div class="dice-theme-import"><button id="testDiceAudio" class="secondary-button" type="button">Test Dice Sound</button><small id="diceAudioStatus">Sound has not been verified in the Browser Source.</small></div>
-              <label class="toggle-label"><input id="diceOverlayEnabled" type="checkbox" checked /><span>Enable 3D Dice rolls</span></label>
+              <label class="toggle-label"><input id="diceOverlayEnabled" type="checkbox" /><span>Enable 3D Dice rolls</span></label>
             </div>
             <details class="dice-physics-panel"><summary>Advanced physics and lighting</summary><p>These are bounded to OBS-safe ranges. Resetting returns Dice Box defaults.</p>
               <div class="dice-physics-grid">
@@ -437,7 +437,7 @@
                 <button class="primary-button" type="submit">Add Avatar</button>
               </form>
               <div class="world-card-actions"><button data-world-demo-crowd="true" class="secondary-button">Spawn Demo Crowd</button><button data-world-clear-crowd="true" class="secondary-button danger-outline">Clear Crowd</button></div>
-              <details class="world-presence-settings"><summary>Avatar size and automatic chat presence</summary><form id="worldPresenceForm" class="world-safety-grid"><label class="toggle-label"><input id="worldPresenceEnabled" type="checkbox" checked /><span>Auto-add active chatters</span></label><label>Viewer avatar size<input id="worldAvatarSize" type="range" min="50" max="200" step="5" value="100" /><small id="worldAvatarSizeValue">100%</small></label><label>Messages to join<input id="worldPresenceMessages" type="number" min="1" max="20" value="1" /></label><label>Inactive after (minutes)<input id="worldPresenceInactive" type="number" min="1" max="10080" value="20" /></label><label>Leave Stage after (minutes)<input id="worldPresenceRemove" type="number" min="1" max="43200" value="45" /></label><button class="secondary-button" type="submit">Save Crowd Settings</button></form></details>
+              <details class="world-presence-settings"><summary>Avatar size and automatic chat presence</summary><form id="worldPresenceForm" class="world-safety-grid"><label class="toggle-label"><input id="worldPresenceEnabled" type="checkbox" /><span>Auto-add active chatters</span></label><label>Viewer avatar size<input id="worldAvatarSize" type="range" min="50" max="200" step="5" value="100" /><small id="worldAvatarSizeValue">100%</small></label><label>Messages to join<input id="worldPresenceMessages" type="number" min="1" max="20" value="1" /></label><label>Inactive after (minutes)<input id="worldPresenceInactive" type="number" min="1" max="10080" value="20" /></label><label>Leave Stage after (minutes)<input id="worldPresenceRemove" type="number" min="1" max="43200" value="45" /></label><button class="secondary-button" type="submit">Save Crowd Settings</button></form></details>
               <div id="worldViewerList" class="world-list empty-state">No viewer avatars are active.</div>
             </article>
 
@@ -539,7 +539,7 @@
                 <label class="toggle-label"><input data-unified-module="twitchExperiences" type="checkbox" checked /><span>Twitch experiences</span></label>
                 <label class="toggle-label"><input data-unified-module="chatOverlay" type="checkbox" checked /><span>Chat overlay</span></label>
                 <label class="toggle-label"><input data-unified-module="emoteWall" type="checkbox" checked /><span>Emote wall</span></label>
-                <label class="toggle-label"><input data-unified-module="diceOverlay" type="checkbox" checked /><span>3D dice · sleeps until rolled</span></label>
+                <label class="toggle-label"><input data-unified-module="diceOverlay" type="checkbox" /><span>3D dice · opt in before use</span></label>
                 <label class="toggle-label"><input data-unified-module="discordVoice" type="checkbox" checked /><span>Discord guests</span></label>
                 <label class="toggle-label"><input data-unified-module="pollOverlay" type="checkbox" checked /><span>Poll overlay</span></label>
               </div>
@@ -1271,6 +1271,18 @@
       </main>
     </div>
 
+    <dialog id="toolFinderDialog" class="tool-finder-dialog">
+      <div class="tool-finder-shell">
+        <header class="tool-finder-header">
+          <div><span>STUDIO NAVIGATION</span><h2>Find a tool</h2><p>Search every live control, overlay, platform connection, and setup page.</p></div>
+          <button type="button" data-close-dialog aria-label="Close tool finder">×</button>
+        </header>
+        <label class="tool-finder-search"><span aria-hidden="true">⌕</span><input id="toolFinderSearch" type="search" autocomplete="off" placeholder="Try alerts, polls, Kick, dice, chat overlay…" aria-label="Search Studio tools" /><kbd>Esc</kbd></label>
+        <div id="toolFinderResults" class="tool-finder-results" role="listbox" aria-label="Studio tools"></div>
+        <footer><span>Type to filter</span><span><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>Enter</kbd> open</span></footer>
+      </div>
+    </dialog>
+
     <dialog id="onboardingDialog" class="onboarding-dialog">
       <div class="onboarding-shell">
         <aside class="onboarding-rail">
@@ -1319,6 +1331,7 @@
           <label>Expression name<input id="newInteractionTempest2DAction" maxlength="128" placeholder="Happy" /></label>
           <small>Use the exact expression name from the imported model. It resets at maximum runtime.</small>
         </div>
+        <label class="interaction-integration-toggle"><input id="newInteractionStormframeAudioLinkEnabled" type="checkbox" /><span><strong>Play through Stormframe AudioLink</strong><small>After an MP3, WAV, or OGG is assigned, play it inside Stormframe so reactive avatar materials respond.</small></span></label>
         <div class="form-row alert-create-fields"><label>Visual length (seconds)<input id="newInteractionVisualDuration" type="number" min="1" max="60" value="6" required /></label><label>Volume (%)<input id="newInteractionVolume" type="number" min="0" max="100" value="80" required /></label></div>
         <div class="form-row alert-create-fields" data-advanced><label>Viewer cooldown (seconds)<input id="newInteractionViewerCooldown" type="number" min="0" max="86400" value="60" required /></label><label>Global cooldown (seconds)<input id="newInteractionGlobalCooldown" type="number" min="0" max="86400" value="10" required /></label></div>
         <label data-advanced>Accent color<input id="newInteractionAccent" type="color" value="#54f2eb" /></label>
@@ -1338,6 +1351,7 @@
           <label>Expression name<input id="newTwitchTempest2DAction" maxlength="128" placeholder="Surprised" /></label>
           <small>Use the exact expression name from the imported model. It resets at maximum runtime.</small>
         </div>
+        <label class="interaction-integration-toggle"><input id="newTwitchStormframeAudioLinkEnabled" type="checkbox" /><span><strong>Play through Stormframe AudioLink</strong><small>After an MP3, WAV, or OGG is assigned, play it inside Stormframe so reactive avatar materials respond.</small></span></label>
         <label data-advanced>Accent color<input id="newTwitchAlertAccent" type="color" value="#54f2eb" /></label>
         <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog>Cancel</button><button type="submit" class="primary-button">Create Twitch Alert</button></div>
       </form>

@@ -97,10 +97,11 @@ test('serves bundled Dice Box physics locally and accepts only authenticated rol
   const initialDice = await initialStatus.json();
   assert.ok(initialDice.themes.some((candidate) => candidate.id === 'gemstoneMarble'));
   assert.ok(initialDice.themes.some((candidate) => candidate.id === 'auroraDice' && candidate.custom === true));
+  assert.equal(initialDice.settings.enabled, false);
   assert.equal(initialDice.settings.gravity, 1);
   assert.equal(initialDice.readyClients, 1);
   const settingsResponse = await fetch(`${runtime.baseUrl}/v1/dice-overlay/settings`, {
-    method: 'POST', headers, body: JSON.stringify({ diceTheme: 'auroraDice', themeColor: '#44ccff', gravity: 1.2, restitution: 0.35 })
+    method: 'POST', headers, body: JSON.stringify({ enabled: true, diceTheme: 'auroraDice', themeColor: '#44ccff', gravity: 1.2, restitution: 0.35 })
   });
   assert.equal(settingsResponse.status, 200);
   const updatedSettings = (await settingsResponse.json()).settings;

@@ -52,7 +52,7 @@ test('routes each viewer feature to Mainframe, Streaming, both, or neither', asy
 
   const initial = await fetch(`${runtime.baseUrl}/v1/extension-features`, { headers }).then((response) => response.json());
   const dice = initial.features.find((feature) => feature.id === 'tempest.dice.roll');
-  assert.deepEqual(dice.destinations, ['streaming']);
+  assert.deepEqual(dice.destinations, []);
   assert.equal(dice.customized, false);
 
   const moved = await fetch(`${runtime.baseUrl}/v1/extension-features/${encodeURIComponent(dice.id)}`, {
@@ -68,8 +68,8 @@ test('routes each viewer feature to Mainframe, Streaming, both, or neither', asy
   assert.deepEqual((await hidden.json()).feature.destinations, []);
 
   const restored = await fetch(`${runtime.baseUrl}/v1/extension-features/reset`, { method: 'POST', headers, body: '{}' }).then((response) => response.json());
-  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.dice.roll').destinations, ['streaming']);
-  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.pet.play').destinations, ['mainframe', 'streaming']);
+  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.dice.roll').destinations, []);
+  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.pet.play').destinations, []);
 });
 
 test('persists applications and assets behind authenticated routes', async (context) => {
@@ -150,6 +150,8 @@ test('starts Tempest Streaming Extension dice on the physical Browser Source and
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
   context.after(() => runtime.close());
   const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+  const enabled = await fetch(`${runtime.baseUrl}/v1/dice-overlay/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true }) });
+  assert.equal(enabled.status, 200);
   const registered = await fetch(`${runtime.baseUrl}/dice-overlay/poll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((response) => response.json());
   await fetch(`${runtime.baseUrl}/dice-overlay/client-status`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: registered.clientId, state: 'ready', theme: 'default', renderer: 'onscreen' })
@@ -204,6 +206,67 @@ test('accepts authenticated WebSocket clients and sends a welcome envelope', asy
   assert.equal(welcome.protocolVersion, '1.0');
 });
 
+test('routes one alert sound to Broadcast and Stormframe AudioLink with the same run', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-stormframe-audiolink-test-'));
+  const audioPath = path.join(dataDirectory, 'reactive-alert.mp3');
+  await writeFile(audioPath, Buffer.from([0x49, 0x44, 0x33]));
+  const audioUri = pathToFileURL(audioPath).href;
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const headers = { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token };
+
+  const connect = async (applicationId, capabilities) => {
+    const socket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
+    context.after(() => socket.close());
+    await new Promise((resolve, reject) => {
+      socket.once('open', resolve);
+      socket.once('error', reject);
+    });
+    socket.send(JSON.stringify(createBridgeMessage({
+      kind: 'hello', source: applicationId,
+      payload: { applicationId, version: '1.0.0', capabilities }
+    })));
+    return socket;
+  };
+  const stormframe = await connect('com.tempestmainframe.stormframe', ['avatar.audio.play']);
+  const broadcast = await connect('com.tempestmainframe.tempest-broadcast', [
+    'broadcast.reaction.trigger', 'broadcast.reaction.clear', 'broadcast.audio.play',
+    'broadcast.interaction.show', 'broadcast.interaction.clear'
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const configured = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}`, {
+    method: 'POST', headers, body: JSON.stringify({
+      audioUri, volume: 0.42, broadcastAudioSource: 'Alert Sound', stormframeAudioLinkEnabled: true
+    })
+  });
+  assert.equal(configured.status, 200);
+  const arm = await fetch(`${runtime.baseUrl}/v1/safety/arm`, { method: 'POST', headers, body: '{}' });
+  assert.equal(arm.status, 200);
+
+  const nextCommand = (socket, topic) => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${topic} was not delivered.`)), 1000);
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.kind !== 'command' || message.topic !== topic) return;
+      clearTimeout(timeout);
+      resolve(message);
+    });
+  });
+  const stormframeCommand = nextCommand(stormframe, 'avatar.audio.play');
+  const broadcastCommand = nextCommand(broadcast, 'broadcast.audio.play');
+  const triggered = await fetch(`${runtime.baseUrl}/v1/sound-alerts/${encodeURIComponent('sound-alert.hype-pulse')}/trigger`, {
+    method: 'POST', headers, body: JSON.stringify({ source: 'studio.operator', eventId: 'stormframe-audiolink-1', bypassCooldown: true })
+  });
+  assert.equal(triggered.status, 202);
+  const [stormframeMessage, broadcastMessage] = await Promise.all([stormframeCommand, broadcastCommand]);
+  assert.equal(stormframeMessage.correlationId, broadcastMessage.correlationId);
+  assert.equal(stormframeMessage.payload.arguments.stormframeAudioUri, audioUri);
+  assert.equal(stormframeMessage.payload.arguments.stormframeAudioVolume, 0.42);
+  assert.equal(stormframeMessage.payload.arguments.name, 'Hype Pulse');
+  assert.equal(broadcastMessage.payload.arguments.broadcastAudioSource, 'Alert Sound');
+});
+
 test('reports adapter identity, capabilities, and published health on the connections route', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-adapter-health-test-'));
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
@@ -248,6 +311,40 @@ test('reports adapter identity, capabilities, and published health on the connec
   const dualFormat = await fetch(`${runtime.baseUrl}/v1/broadcast/dual-format`, { headers }).then((response) => response.json());
   assert.equal(dualFormat.state, 'update-required');
   assert.equal(dualFormat.ready, false);
+});
+
+test('retains Stormframe avatar readiness published through its advertised status capability', async (context) => {
+  const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-stormframe-status-test-'));
+  const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
+  context.after(() => runtime.close());
+  const socket = new WebSocket(`${runtime.baseUrl.replace('http', 'ws')}/v1/socket?token=${runtime.token}`);
+  context.after(() => socket.close());
+  await new Promise((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+  socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'hello', source: 'com.tempestmainframe.stormframe',
+    payload: {
+      applicationId: 'com.tempestmainframe.stormframe', version: '0.32.0',
+      capabilities: ['avatar.audio.play', 'avatar.status']
+    }
+  })));
+  socket.send(JSON.stringify(createBridgeMessage({
+    kind: 'publish', source: 'com.tempestmainframe.stormframe', topic: 'avatar.status',
+    payload: { ready: true, status: 'online', character: 'Test Avatar', mediaTransport: 'spout', mediaActive: true }
+  })));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const body = await fetch(`${runtime.baseUrl}/v1/connections`, { headers: { 'X-Tempest-Token': runtime.token } }).then((response) => response.json());
+  const connection = body.connections.find((entry) => entry.applicationId === 'com.tempestmainframe.stormframe');
+  assert.ok(connection);
+  assert.equal(connection.version, '0.32.0');
+  assert.equal(connection.statusTopic, 'avatar.status');
+  assert.equal(connection.status.ready, true);
+  assert.equal(connection.status.character, 'Test Avatar');
+  assert.equal(connection.status.mediaActive, true);
+  assert.match(connection.statusReportedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
 test('guards and dispatches production Twitch Dual Format controls', async (context) => {
@@ -571,10 +668,10 @@ test('owns the primary Sound Alert catalog, configuration, playback, and emergen
   assert.match(unifiedMarkup, /alternateHost=location\.hostname==='localhost'\?'127\.0\.0\.1':'localhost'/);
   const unifiedStatus = await fetch(`${runtime.baseUrl}/v1/unified-stage`, { headers }).then((response) => response.json());
   assert.equal(unifiedStatus.settings.enabled, true);
-  assert.equal(unifiedStatus.settings.modules.diceOverlay, true);
+  assert.equal(unifiedStatus.settings.modules.diceOverlay, false);
   assert.equal(unifiedStatus.interactionAudioUrl, `${runtime.baseUrl}/visual-alerts/interactions?visual=0&audio=1`);
-  const updatedUnified = await fetch(`${runtime.baseUrl}/v1/unified-stage/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, modules: { diceOverlay: false, emoteWall: false } }) }).then((response) => response.json());
-  assert.equal(updatedUnified.settings.modules.diceOverlay, false);
+  const updatedUnified = await fetch(`${runtime.baseUrl}/v1/unified-stage/settings`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, modules: { diceOverlay: true, emoteWall: false } }) }).then((response) => response.json());
+  assert.equal(updatedUnified.settings.modules.diceOverlay, true);
   assert.equal(updatedUnified.settings.modules.emoteWall, false);
   assert.equal(updatedUnified.settings.modules.discordVoice, true);
   assert.equal(overlayStatus.interaction.activeAlert.name, 'Hype Pulse');

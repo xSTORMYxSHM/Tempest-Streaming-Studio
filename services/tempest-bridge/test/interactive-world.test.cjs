@@ -127,7 +127,7 @@ test('Interactive roadmap systems cover automatic presence, cosmetics, protected
   const fixture = await start();
   context.after(async () => fixture.runtime.close());
 
-  await fixture.request('/v1/interactive-world/presence/settings', { avatarScale: 1.5, minimumMessages: 1, inactiveAfterMs: 30_000, removeFromStageAfterMs: 60_000 });
+  await fixture.request('/v1/interactive-world/presence/settings', { enabled: true, avatarScale: 1.5, minimumMessages: 1, inactiveAfterMs: 30_000, removeFromStageAfterMs: 60_000 });
   const chat = (id, userId, displayName, text, occurredAt = new Date().toISOString()) => fixture.request('/v1/integrations/twitch/events', {
     schemaVersion: 1, id, topic: 'viewer.chat.message', occurredAt, source: 'twitch', channel: { id: 'channel-1' }, viewer: { id: userId, displayName }, payload: { messageId: id, text }
   });

@@ -35,7 +35,7 @@ const defaultSettings: TempestUnifiedStageSettings = {
     twitchExperiences: true,
     chatOverlay: true,
     emoteWall: true,
-    diceOverlay: true,
+    diceOverlay: false,
     discordVoice: true,
     pollOverlay: true
   }
@@ -44,10 +44,11 @@ const defaultSettings: TempestUnifiedStageSettings = {
 const unifiedStagePage = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tempest Unified Stage</title><style>
-*{box-sizing:border-box}html,body,#modules{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;pointer-events:none}#diagnostics{position:fixed;right:12px;bottom:12px;z-index:10000;display:none;max-width:420px;padding:9px 12px;border:1px solid #2e91ad;border-radius:8px;background:rgba(3,10,15,.88);color:#dffcff;font:12px Consolas,monospace}body.debug #diagnostics{display:block}
+*{box-sizing:border-box}html,body,#modules{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;pointer-events:none}iframe[data-guarded="true"]{opacity:0;visibility:hidden}#diagnostics{position:fixed;right:12px;bottom:12px;z-index:10000;display:none;max-width:420px;padding:9px 12px;border:1px solid #2e91ad;border-radius:8px;background:rgba(3,10,15,.88);color:#dffcff;font:12px Consolas,monospace}body.debug #diagnostics{display:block}
 </style></head><body><main id="modules"></main><output id="diagnostics"></output><script>
 (()=>{
-  const params=new URLSearchParams(location.search),orientation=params.get('orientation')==='vertical'?'vertical':'horizontal',debug=params.get('debug')==='1',root=document.getElementById('modules'),diagnostics=document.getElementById('diagnostics'),frames=new Map();
+  const params=new URLSearchParams(location.search),orientation=params.get('orientation')==='vertical'?'vertical':'horizontal',debug=params.get('debug')==='1',root=document.getElementById('modules'),diagnostics=document.getElementById('diagnostics'),frames=new Map(),reloadTimers=new Map();
+  let currentSettings;
   if(debug)document.body.classList.add('debug');
   const definitions={
     interactiveStage:{path:'/interactive-stage',query:{orientation},layer:20,host:'alternate'},
@@ -55,18 +56,26 @@ const unifiedStagePage = String.raw`<!doctype html>
     interactionAlerts:{path:'/visual-alerts/interactions',query:{orientation,audio:'0'},layer:81},
     twitchExperiences:{path:'/twitch-experiences',layer:70,host:'alternate'},
     chatOverlay:{path:'/chat-overlay',layer:40,host:'alternate'},
-    emoteWall:{path:'/emote-wall',layer:30,host:'alternate'},
+    emoteWall:{path:'/emote-wall',layer:30,host:'alternate',guarded:true},
     diceOverlay:{path:'/dice-overlay',layer:60,host:'alternate'},
     discordVoice:{path:'/discord-voice',layer:50,host:'alternate'},
     pollOverlay:{path:'/poll-overlay',layer:75,host:'alternate'}
   };
   function address(definition){const alternateHost=location.hostname==='localhost'?'127.0.0.1':'localhost',base=definition.host==='alternate'?location.protocol+'//'+alternateHost+':'+location.port:location.href,url=new URL(definition.path,base);for(const [key,value] of Object.entries(definition.query||{}))url.searchParams.set(key,value);return url.href}
-  function mount(id){if(frames.has(id)||!definitions[id])return;const frame=document.createElement('iframe');frame.dataset.module=id;frame.title='Tempest '+id;frame.allow='autoplay';frame.style.zIndex=String(definitions[id].layer);frame.src=address(definitions[id]);root.append(frame);frames.set(id,frame)}
-  function unmount(id){const frame=frames.get(id);if(!frame)return;frames.delete(id);frame.src='about:blank';frame.remove()}
-  function apply(settings){const enabled=settings&&settings.enabled!==false;for(const id of Object.keys(definitions)){if(enabled&&settings.modules&&settings.modules[id]===true)mount(id);else unmount(id)}diagnostics.textContent='Unified Stage · '+frames.size+' active module'+(frames.size===1?'':'s')+' · '+[...frames.keys()].join(', ')}
+  function isEnabled(id){return currentSettings&&currentSettings.enabled!==false&&currentSettings.modules&&currentSettings.modules[id]===true}
+  function show(frame){frame.style.opacity='1';frame.style.visibility='visible'}
+  function hide(frame){frame.style.opacity='0';frame.style.visibility='hidden'}
+  function mount(id){if(frames.has(id)||!definitions[id]||!isEnabled(id))return;const definition=definitions[id],frame=document.createElement('iframe');frame.dataset.module=id;frame.dataset.guarded=definition.guarded?'true':'false';frame.dataset.mountedAt=String(Date.now());frame.title='Tempest '+id;frame.allow='autoplay';frame.style.zIndex=String(definition.layer);if(definition.guarded)hide(frame);frame.src=address(definition);root.append(frame);frames.set(id,frame)}
+  function detach(id){const frame=frames.get(id);if(!frame)return;hide(frame);frames.delete(id);frame.src='about:blank';frame.remove()}
+  function unmount(id){const timer=reloadTimers.get(id);if(timer){clearTimeout(timer);reloadTimers.delete(id)}detach(id)}
+  function recover(id){const frame=frames.get(id);if(!frame||reloadTimers.has(id))return;hide(frame);detach(id);const timer=setTimeout(()=>{reloadTimers.delete(id);if(isEnabled(id))mount(id)},750);reloadTimers.set(id,timer)}
+  function apply(settings){currentSettings=settings;const enabled=settings&&settings.enabled!==false;for(const id of Object.keys(definitions)){if(enabled&&settings.modules&&settings.modules[id]===true)mount(id);else unmount(id)}diagnostics.textContent='Unified Stage · '+frames.size+' active module'+(frames.size===1?'':'s')+' · '+[...frames.keys()].join(', ')}
+  function receiveHealth(event){if(!event.data||event.data.type!=='tempest.module.heartbeat')return;for(const [id,frame] of frames){if(frame.contentWindow!==event.source||event.data.module!==id)continue;frame.dataset.lastHeartbeat=String(Date.now());show(frame);break}}
+  addEventListener('message',receiveHealth);
+  const watchdog=setInterval(()=>{if(document.hidden)return;const now=Date.now();for(const [id,frame] of frames){if(frame.dataset.guarded!=='true')continue;const last=Number(frame.dataset.lastHeartbeat||frame.dataset.mountedAt||0);if(now-last>7500)recover(id)}},1000);
   let events;
   function connect(){events=new EventSource('/unified-stage/events');events.addEventListener('init',event=>apply(JSON.parse(event.data)));events.addEventListener('settings',event=>apply(JSON.parse(event.data)));events.onerror=()=>{}}
-  addEventListener('pagehide',()=>{events?.close();for(const id of [...frames.keys()])unmount(id)});
+  addEventListener('pagehide',()=>{events?.close();clearInterval(watchdog);removeEventListener('message',receiveHealth);for(const id of [...frames.keys()])unmount(id)});
   connect();
 })();
 </script></body></html>`;
