@@ -164,7 +164,6 @@ class DiscordStore {
     if (!row || !constantTimeEqual(pollToken, String(row.poll_token_hash)) || new Date(row.expires_at).getTime() < Date.now()) return null;
     if (!row.completed_at || !row.binding_id || !row.guild_id || !row.relay_token) return { state: 'pending', expiresAt: new Date(row.expires_at).toISOString() };
     const binding: DiscordBinding = { id: row.binding_id, guildId: row.guild_id, studioInstallationId: row.studio_installation_id, studioAlias: row.studio_alias };
-    await this.pool.query('DELETE FROM tempest_discord_pairings WHERE id = $1', [id]);
     return { state: 'complete', binding, relayToken: row.relay_token };
   }
 
@@ -208,6 +207,10 @@ class DiscordStore {
 
   async revoke(bindingId: string): Promise<void> {
     await this.pool.query('UPDATE tempest_discord_bindings SET revoked_at = NOW(), updated_at = NOW() WHERE id = $1', [bindingId]);
+  }
+
+  async updateAlias(bindingId: string, studioAlias: string): Promise<void> {
+    await this.pool.query('UPDATE tempest_discord_bindings SET studio_alias = $2, updated_at = NOW() WHERE id = $1 AND revoked_at IS NULL', [bindingId, studioAlias]);
   }
 
   async setPrivacy(guildId: string, userId: string, hidden: boolean): Promise<void> {
@@ -377,6 +380,10 @@ export async function startDiscordControlPlane(options: DiscordControlPlaneOptio
 
   return {
     async handleHttp(request, response, requestUrl) {
+      if (request.method === 'GET' && requestUrl.pathname === '/v1/discord/install') {
+        sendJson(response, 200, { installUrl: publicInstallUrl });
+        return true;
+      }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/discord/studio/pairings') {
         try {
           const body = await readJson(request);
@@ -406,6 +413,22 @@ export async function startDiscordControlPlane(options: DiscordControlPlaneOptio
           await store.revoke(binding.id);
           studioSockets.get(binding.id)?.close(4003, 'Studio binding revoked');
           sendJson(response, 204, {});
+        }
+        return true;
+      }
+      if (request.method === 'PATCH' && requestUrl.pathname === '/v1/discord/studio/current') {
+        const binding = await store.bindingByToken(bearerToken(request));
+        if (!binding) sendJson(response, 401, { error: 'Discord Studio credential is invalid or revoked.' });
+        else {
+          try {
+            const body = await readJson(request);
+            const studioAlias = String(body.studioAlias || '').trim();
+            if (!studioAlias || studioAlias.length > 60 || /[\r\n\0]/.test(studioAlias)) throw new Error('Studio alias must contain 1–60 characters.');
+            await store.updateAlias(binding.id, studioAlias);
+            const studioSocket = studioSockets.get(binding.id);
+            if (studioSocket) socketBindings.set(studioSocket, { ...binding, studioAlias });
+            sendJson(response, 200, { schemaVersion: 1, bindingId: binding.id, guildId: binding.guildId, studioAlias });
+          } catch (error) { sendJson(response, 400, { error: error instanceof Error ? error.message : 'Could not update the Studio alias.' }); }
         }
         return true;
       }
