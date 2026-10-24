@@ -5,7 +5,6 @@
     overview: { title: 'Studio Home', kicker: 'START HERE' },
     events: { title: 'Activity & Diagnostics', kicker: 'ADVANCED TOOLS' },
     alerts: { title: 'Unified Alerts', kicker: 'ONE ALERT ENGINE' },
-    world: { title: 'Interactive World', kicker: 'CROWD · PET · BATTLES · GAZE' },
     interactivestage: { title: 'Interactive Stage', kicker: 'ON-SCREEN WORLD' },
     soundalerts: { title: 'Viewer Interactions', kicker: 'ALERTS VIEWERS CAN TRIGGER' },
     dice: { title: '3D Dice', kicker: 'STREAM DICE TABLE' },
@@ -13,7 +12,6 @@
     chatoverlay: { title: 'Chat Overlay', kicker: 'CHAT + EMOTES' },
     discordvoice: { title: 'Discord Guests', kicker: 'LOCAL VOICE OVERLAY' },
     twitch: { title: 'Twitch', kicker: 'TWITCH PLATFORM' },
-    kick: { title: 'Kick', kicker: 'KICK PLATFORM' },
     extensiondesigner: { title: 'Twitch Panel', kicker: 'CHANNEL THEME' },
     streamtogether: { title: 'Stream Together', kicker: 'TWITCH COLLABORATION CALL' },
     chatbot: { title: 'Chatbot', kicker: 'CHAT + AUDIENCE TOOLS' },
@@ -36,7 +34,6 @@
       { section: 'alerts', label: 'Alert Queue' }
     ],
     interact: [
-      { section: 'world', label: 'Interactive World' },
       { section: 'interactivestage', label: 'Stage Layout' },
       { section: 'soundalerts', label: 'Viewer Interactions' },
       { section: 'dice', label: '3D Dice' },
@@ -56,7 +53,6 @@
     ],
     connect: [
       { section: 'twitch', label: 'Twitch Account' },
-      { section: 'kick', label: 'Kick Account' },
       { section: 'streamtogether', label: 'Stream Together' },
       { section: 'api', label: 'Avatar Apps' }
     ],
@@ -68,10 +64,10 @@
   const sectionWorkspace = {
     overview: 'home',
     chatbot: 'live', streamtogether: 'live', simulcast: 'live', dice: 'live',
-    world: 'interact', interactivestage: 'interact', soundalerts: 'interact',
+    interactivestage: 'interact', soundalerts: 'interact',
     alerts: 'overlays', visualalerts: 'overlays', chatoverlay: 'overlays', discordvoice: 'overlays', assets: 'overlays',
     twitch: 'extensions', extensiondesigner: 'extensions', dualformat: 'extensions',
-    kick: 'connect', api: 'connect',
+    api: 'connect',
     settings: 'settings', events: 'settings'
   };
   const workspaceNames = {
@@ -79,17 +75,16 @@
   };
   const toolFinderCatalog = [
     { section: 'overview', group: 'home', description: 'Studio status, setup progress, and shortcuts.', keywords: 'start dashboard home' },
-    { section: 'chatbot', group: 'live', view: 'chat', title: 'Live Chat', description: 'Read and send Twitch + Kick chat from one workspace.', keywords: 'audience bot messages unified chat' },
+    { section: 'chatbot', group: 'live', view: 'chat', title: 'Live Chat', description: 'Read and send Twitch chat from one workspace.', keywords: 'audience bot messages shared chat' },
     { section: 'chatbot', group: 'live', view: 'polls', title: 'Chat Polls', description: 'Start a number poll and count each chatter once.', keywords: 'audience vote voting survey' },
     { section: 'chatbot', group: 'live', view: 'commands', title: 'Chat Commands', description: 'Create and edit the commands viewers use in chat.', keywords: 'bot custom command response tempest' },
     { section: 'chatbot', group: 'live', view: 'automation', title: 'Chat Automation', description: 'Schedule automatic messages by time or chat activity.', keywords: 'timer repeating message interval' },
     { section: 'chatbot', group: 'live', view: 'moderation', title: 'Chat Moderation', description: 'Review and configure live moderation controls.', keywords: 'mods safety blocked users' },
     { section: 'chatbot', group: 'live', view: 'setup', title: 'Chatbot Setup', description: 'Connect the bot account and configure chat delivery.', keywords: 'oauth account authorization connection' },
     { section: 'streamtogether', group: 'live', description: 'Twitch collaboration call, guests, camera, and microphone.', keywords: 'backstage guest star call collab' },
-    { section: 'simulcast', group: 'live', description: 'Preflight and monitor Twitch, Kick, recording, and upload health.', keywords: 'output go live stream broadcast multistream' },
+    { section: 'simulcast', group: 'live', description: 'Preflight and monitor Twitch, recording, and upload health.', keywords: 'output go live stream broadcast' },
     { section: 'dice', group: 'live', description: 'Roll and configure on-stream 3D dice.', keywords: 'games dicebox d20 roll' },
     { section: 'alerts', group: 'overlays', description: 'Unified alert queue, health, and browser-source status.', keywords: 'action queue playback audio' },
-    { section: 'world', group: 'interact', description: 'Viewer avatars, stream pet, battles, and gaze effects.', keywords: 'crowd pets avatars game viewers' },
     { section: 'interactivestage', group: 'interact', view: 'overview', title: 'Interactive Stage', description: 'Review Stage status, Browser Sources, and enabled modules.', keywords: 'canvas overlay source' },
     { section: 'interactivestage', group: 'interact', view: 'layout', title: 'Stage Layout', description: 'Arrange persistent objects and modules on the stream canvas.', keywords: 'canvas placement move position' },
     { section: 'interactivestage', group: 'interact', view: 'objects', title: 'Stage Objects', description: 'Create and manage persistent on-stream objects.', keywords: 'canvas actor item object' },
@@ -102,7 +97,6 @@
     { section: 'twitch', group: 'extensions', description: 'Connect Twitch and manage companion Extension routing.', keywords: 'account oauth mainframe streaming extension' },
     { section: 'extensiondesigner', group: 'extensions', description: 'Choose the Twitch panel theme and viewer-facing modules.', keywords: 'panel design colors modules channel' },
     { section: 'dualformat', group: 'extensions', description: 'Prepare Twitch horizontal and mobile-first vertical output.', keywords: 'vertical mobile enhanced broadcast' },
-    { section: 'kick', group: 'connect', description: 'Connect Kick chat, ingest, and stream credentials.', keywords: 'account multistream platform' },
     { section: 'api', group: 'connect', description: 'Connect Warudo, VTube Studio, Stormframe, and avatar apps.', keywords: 'vtuber live2d avatar integrations' },
     { section: 'settings', group: 'settings', description: 'Interface mode, privacy, updates, backup, and support.', keywords: 'preferences advanced update privacy backup' },
     { section: 'events', group: 'settings', description: 'Technical event log, alert history, and diagnostics.', keywords: 'errors logs troubleshoot activity', advanced: true }
@@ -142,13 +136,10 @@
     discordVoice: null,
     unifiedStage: null,
     interactiveStage: null,
-    interactiveWorld: null,
-    stageActors: { packs: [], diagnostics: [] },
     extensionFeatures: { schemaVersion: 1, features: [] },
     discordRpc: null,
+    hostedDiscord: null,
     twitch: null,
-    kick: null,
-    kickRelayLinked: false,
     chatbot: null,
     localExtension: null,
     hostedExtension: null,
@@ -194,9 +185,6 @@
   let interactiveStageSelectedId = '';
   let interactiveStageDrag = null;
   let interactiveStagePlacementSaveTimer = null;
-  const stageActorDraftStrips = new Map();
-  let stageActorDraftTexture = null;
-  let stageActorDraftAtlas = null;
   let editingViewerGroupId = '';
   const assetPreviewIds = new Set();
   let assetPreviewAudio = null;
@@ -207,8 +195,8 @@
   const fullRefreshIntervalMs = 60_000;
   let simulcastOperations = {
     active: false, startedAt: null, endedAt: null, incidents: [],
-    previousTwitchActive: false, previousKickActive: false,
-    previousTwitchDropped: 0, previousKickDropped: 0, lastHealth: 'standing-by'
+    previousTwitchActive: false,
+    previousTwitchDropped: 0, lastHealth: 'standing-by'
   };
   const onboardingSteps = [
     { title: 'Welcome', short: 'Studio overview' },
@@ -255,24 +243,19 @@
     const reportedAt = Date.parse(status.statusReportedAt || '');
     const ageMs = Number.isFinite(reportedAt) ? Math.max(0, now - reportedAt) : Number.POSITIVE_INFINITY;
     const twitchActive = status.twitch?.active === true;
-    const kickActive = status.kick?.active === true;
-    const maxCongestion = Math.max(Number(status.twitch?.congestion || 0), Number(status.kick?.congestion || 0));
+    const congestion = Number(status.twitch?.congestion || 0);
     if (!status.connected || ageMs > 30000) return { level: 'critical', label: 'SIGNAL LOST', guidance: 'Check the Studio Integration connection in Broadcast.', ageMs };
     if (ageMs > 15000) return { level: 'warning', label: 'SIGNAL DELAYED', guidance: 'Broadcast telemetry is arriving slowly; keep the platform dashboards visible.', ageMs };
-    if (twitchActive && !kickActive) return { level: 'critical', label: 'DEGRADED LIVE', guidance: 'Twitch is live and Kick is offline. Inspect the error, then use Retry Kick if safe.', ageMs };
-    if (!twitchActive && kickActive) return { level: 'critical', label: 'KICK ONLY', guidance: 'Twitch is offline while Kick remains active. Use Emergency Stop All Outputs if this is unintended.', ageMs };
-    if (twitchActive && kickActive && maxCongestion >= 0.25) return { level: 'critical', label: 'HIGH CONGESTION', guidance: 'Sustained congestion is critical. Check platform health and prepare to stop the affected output.', ageMs };
-    if (twitchActive && kickActive && maxCongestion >= 0.1) return { level: 'warning', label: 'CONGESTION', guidance: 'Watch dropped frames and both platform dashboards closely.', ageMs };
-    if (twitchActive && kickActive) return { level: 'healthy', label: 'HEALTHY', guidance: 'Both destinations are live and telemetry is current.', ageMs };
+    if (twitchActive && congestion >= 0.25) return { level: 'critical', label: 'HIGH CONGESTION', guidance: 'Sustained congestion is critical. Check Twitch health and prepare to stop the output.', ageMs };
+    if (twitchActive && congestion >= 0.1) return { level: 'warning', label: 'CONGESTION', guidance: 'Watch dropped frames and Twitch Stream Manager closely.', ageMs };
+    if (twitchActive) return { level: 'healthy', label: 'HEALTHY', guidance: 'Twitch is live and telemetry is current.', ageMs };
     return { level: 'standing-by', label: 'STANDING BY', guidance: 'Waiting for a live session.', ageMs };
   }
 
   function updateSimulcastOperations(status) {
     const now = Date.now();
     const twitchActive = status.twitch?.active === true;
-    const kickActive = status.kick?.active === true;
     const twitchDropped = Number(status.twitch?.droppedFrames || 0);
-    const kickDropped = Number(status.kick?.droppedFrames || 0);
     const supervisor = simulcastSupervisorState(status, now);
     const reportFresh = status.connected && status.statusReported && Number.isFinite(supervisor.ageMs) && supervisor.ageMs <= 30000;
     let changed = false;
@@ -281,36 +264,22 @@
     if (twitchActive && !simulcastOperations.active && reportFresh) {
       simulcastOperations = {
         active: true, startedAt: new Date(now).toISOString(), endedAt: null, incidents: [],
-        previousTwitchActive: true, previousKickActive: kickActive,
-        previousTwitchDropped: twitchDropped, previousKickDropped: kickDropped, lastHealth: 'standing-by'
+        previousTwitchActive: true,
+        previousTwitchDropped: twitchDropped, lastHealth: 'standing-by'
       };
       addSimulcastIncident('info', 'Twitch reported live; Studio session supervision started.', now);
-      if (kickActive) addSimulcastIncident('info', 'Kick reported live.', now);
       changed = true;
       startedNow = true;
     } else if (!twitchActive && simulcastOperations.active && reportFresh) {
-      addSimulcastIncident(kickActive ? 'critical' : 'info', kickActive
-        ? 'Twitch reported offline while Kick remained live; the supervised Twitch session ended.'
-        : 'Twitch reported offline; the supervised live session ended.', now);
+      addSimulcastIncident('info', 'Twitch reported offline; the supervised live session ended.', now);
       simulcastOperations.active = false;
       simulcastOperations.endedAt = new Date(now).toISOString();
       changed = true;
     }
 
     if (simulcastOperations.active && !startedNow && reportFresh) {
-      if (kickActive && !simulcastOperations.previousKickActive) {
-        addSimulcastIncident('info', 'Kick output recovered and reported live.', now);
-        changed = true;
-      } else if (!kickActive && simulcastOperations.previousKickActive) {
-        addSimulcastIncident('critical', `Kick output left live state${status.kick?.lastError ? `: ${status.kick.lastError}` : '.'}`, now);
-        changed = true;
-      }
       if (twitchDropped > simulcastOperations.previousTwitchDropped) {
         addSimulcastIncident('warning', `Twitch reported ${twitchDropped - simulcastOperations.previousTwitchDropped} additional dropped frame${twitchDropped - simulcastOperations.previousTwitchDropped === 1 ? '' : 's'}.`, now);
-        changed = true;
-      }
-      if (kickDropped > simulcastOperations.previousKickDropped) {
-        addSimulcastIncident('warning', `Kick reported ${kickDropped - simulcastOperations.previousKickDropped} additional dropped frame${kickDropped - simulcastOperations.previousKickDropped === 1 ? '' : 's'}.`, now);
         changed = true;
       }
     }
@@ -322,9 +291,7 @@
     }
     if (reportFresh) {
       simulcastOperations.previousTwitchActive = twitchActive;
-      simulcastOperations.previousKickActive = kickActive;
       simulcastOperations.previousTwitchDropped = twitchDropped;
-      simulcastOperations.previousKickDropped = kickDropped;
     }
     simulcastOperations.lastHealth = supervisor.level;
     if (changed) saveSimulcastOperations();
@@ -401,22 +368,19 @@
     } catch (error) { toast(error.message, true); }
   }
 
-  function renderWorkspaceTabs(group, activeSection) {
-    const tabs = $('#workspaceTabs');
-    if (!tabs) return;
-    tabs.replaceChildren();
-    const advancedMode = readOnboardingPreferences().advancedMode === true;
-    for (const item of workspaceGroups[group] || workspaceGroups.home) {
-      if (item.advanced && !advancedMode) continue;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.section = item.section;
-      button.dataset.navGroup = group;
-      button.textContent = item.label;
-      button.classList.toggle('active', item.section === activeSection);
-      button.setAttribute('aria-current', item.section === activeSection ? 'page' : 'false');
-      tabs.append(button);
+  function syncPrimaryNavigation(section, view = '') {
+    const buttons = [...document.querySelectorAll('.operator-rail .nav-button[data-section]')];
+    const candidates = buttons.filter((button) => button.dataset.section === section);
+    const activeButton = candidates.find((button) => view && button.dataset.view === view)
+      || candidates.find((button) => !button.dataset.view)
+      || candidates[0];
+    for (const button of buttons) {
+      const active = button === activeButton;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-current', active ? 'page' : 'false');
     }
+    const drawer = activeButton?.closest('.nav-setup-drawer');
+    if (drawer) drawer.open = true;
   }
 
   function filteredToolFinderItems(query = '') {
@@ -472,8 +436,8 @@
     if (!sections[name]) name = 'overview';
     activeWorkspaceGroup = workspaceGroups[requestedGroup] ? requestedGroup : (sectionWorkspace[name] || activeWorkspaceGroup || 'home');
     document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `${name}Section`));
-    document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.navGroup === activeWorkspaceGroup));
-    renderWorkspaceTabs(activeWorkspaceGroup, name);
+    const activeView = name === 'chatbot' ? chatbotWorkspaceTab : name === 'interactivestage' ? interactiveStageTab : '';
+    syncPrimaryNavigation(name, activeView);
     $('#sectionTitle').textContent = definition.title;
     $('#sectionKicker').textContent = definition.kicker;
     document.querySelector('main').scrollTo({ top: 0, left: 0 });
@@ -564,42 +528,7 @@
     const canvas = $('#interactiveStageLayoutCanvas');
     canvas.classList.toggle('horizontal', interactiveStageOrientation === 'horizontal');
     canvas.classList.toggle('vertical', interactiveStageOrientation === 'vertical');
-    canvas.querySelectorAll('.stage-layout-object,.stage-protected-zone,.stage-world-floor,.stage-world-platform,.stage-world-interactable').forEach((node) => node.remove());
-    const worldMap = stage.worldMap || { enabled: true, wanderEnabled: true, jumpEnabled: true, floorY: 0.92, speed: 0.045, gravity: 1.2, jumpStrength: 0.58, platforms: [], interactables: [] };
-    const platforms = Array.isArray(worldMap.platforms) ? worldMap.platforms : [];
-    const interactables = Array.isArray(worldMap.interactables) ? worldMap.interactables : [];
-    if (worldMap.enabled !== false) {
-      const floor = document.createElement('div');
-      floor.className = 'stage-world-floor';
-      floor.style.top = `${Number(worldMap.floorY || 0.92) * 100}%`;
-      floor.textContent = 'AVATAR FLOOR';
-      canvas.append(floor);
-      for (const platform of platforms.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
-        const platformNode = document.createElement('div');
-        platformNode.className = 'stage-world-platform';
-        platformNode.dataset.collision = platform.collision === 'solid' ? 'solid' : 'one-way';
-        platformNode.style.left = `${Number(platform.x || 0) * 100}%`;
-        platformNode.style.top = `${Number(platform.y || 0) * 100}%`;
-        platformNode.style.width = `${Number(platform.width || 0.2) * 100}%`;
-        platformNode.style.height = `${Math.max(0.005, Number(platform.height || 0.025)) * 100}%`;
-        platformNode.style.setProperty('--stage-platform-color', String(platform.color || '#54f2eb'));
-        platformNode.textContent = platform.name || 'Platform';
-        canvas.append(platformNode);
-      }
-      for (const item of interactables.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
-        const itemNode = document.createElement('div');
-        itemNode.className = 'stage-world-interactable';
-        itemNode.dataset.kind = item.kind || 'toy';
-        itemNode.style.left = `${Number(item.x || 0) * 100}%`;
-        itemNode.style.top = `${Number(item.y || 0) * 100}%`;
-        itemNode.style.width = `${Math.max(0.015, Number(item.width || 0.05)) * 100}%`;
-        itemNode.style.height = `${Math.max(0.015, Number(item.height || 0.08)) * 100}%`;
-        itemNode.style.setProperty('--stage-item-color', String(item.color || '#ffbd59'));
-        itemNode.textContent = String(item.glyph || 'USE').slice(0, 8);
-        itemNode.title = `${item.name || item.id} · ${item.kind || 'toy'}`;
-        canvas.append(itemNode);
-      }
-    }
+    canvas.querySelectorAll('.stage-layout-object,.stage-protected-zone').forEach((node) => node.remove());
     const zones = Array.isArray(stage.protectedZones) ? stage.protectedZones : [];
     for (const zone of zones.filter((entry) => entry.enabled !== false && (entry.orientations || []).includes(interactiveStageOrientation))) {
       const zoneNode = document.createElement('div');
@@ -654,22 +583,6 @@
     list.classList.toggle('empty-state', !objects.length);
     list.innerHTML = objects.length ? objects.map((object) => `<div class="stage-object-row"><div><strong>${escapeHtml(object.properties?.label || object.properties?.text || object.id)}</strong><small>${escapeHtml(object.kind)} · ${escapeHtml(object.state)} · ${Math.round(Number(object.placement?.x || 0) * 100)}%, ${Math.round(Number(object.placement?.y || 0) * 100)}%</small><code>${escapeHtml(object.id)}</code></div><div><button type="button" class="secondary-button" data-stage-edit="${escapeHtml(object.id)}">Edit Layout</button><button type="button" class="secondary-button danger-outline" data-stage-dismiss="${escapeHtml(object.id)}">Dismiss</button></div></div>`).join('') : 'No Stage objects are active.';
     $('#interactiveStageCollision').checked = stage.collisionAvoidance !== false;
-    const worldForm = $('#interactiveStageWorldForm');
-    if (worldForm && !worldForm.contains(document.activeElement)) {
-      $('#interactiveStageWorldEnabled').checked = worldMap.enabled !== false;
-      $('#interactiveStageWanderEnabled').checked = worldMap.wanderEnabled !== false;
-      $('#interactiveStageJumpEnabled').checked = worldMap.jumpEnabled !== false;
-      $('#interactiveStageFloorY').value = String(Number(worldMap.floorY || 0.92));
-      $('#interactiveStageWorldSpeed').value = String(Number(worldMap.speed || 0.045));
-      $('#interactiveStageWorldGravity').value = String(Number(worldMap.gravity || 1.2));
-      $('#interactiveStageJumpStrength').value = String(Number(worldMap.jumpStrength || 0.58));
-    }
-    const platformList = $('#interactiveStagePlatformList');
-    platformList.classList.toggle('empty-state', !platforms.length);
-    platformList.innerHTML = platforms.length ? platforms.map((platform) => `<div class="stage-platform-row"><div><strong>${escapeHtml(platform.name || platform.id)}</strong><small>${Math.round(Number(platform.x) * 100)}%, ${Math.round(Number(platform.y) * 100)}% · ${Math.round(Number(platform.width) * 100)}×${Math.round(Number(platform.height) * 100)}% · ${escapeHtml(platform.collision || 'one-way')} · ${escapeHtml((platform.orientations || []).join(' + '))}</small></div><i style="--stage-platform-color:${escapeHtml(platform.color || '#54f2eb')}"></i></div>`).join('') : 'No platforms configured. Avatars will use the canvas floor.';
-    const interactableList = $('#interactiveStageInteractableList');
-    interactableList.classList.toggle('empty-state', !interactables.length);
-    interactableList.innerHTML = interactables.length ? interactables.map((item) => `<div class="stage-platform-row"><div><strong>${escapeHtml(item.name || item.id)}</strong><small>${escapeHtml(item.kind || 'toy')}${item.linkId ? ` · link ${escapeHtml(item.linkId)}` : ''} · ${Math.round(Number(item.x) * 100)}%, ${Math.round(Number(item.y) * 100)}% · ${escapeHtml((item.orientations || []).join(' + '))}</small></div><i style="--stage-platform-color:${escapeHtml(item.color || '#ffbd59')}"></i></div>`).join('') : 'No gameplay objects configured.';
     const zoneList = $('#interactiveStageZoneList');
     zoneList.classList.toggle('empty-state', !zones.length);
     zoneList.innerHTML = zones.length ? zones.map((zone) => `<div><div><strong>${escapeHtml(zone.name)}</strong><small>${Math.round(zone.x * 100)}%, ${Math.round(zone.y * 100)}% · ${Math.round(zone.width * 100)}×${Math.round(zone.height * 100)}% · ${escapeHtml((zone.orientations || []).join(' + '))}</small></div></div>`).join('') : 'No protected zones configured.';
@@ -724,550 +637,6 @@
       : fallback;
   }
 
-  function stageActorInputId(stateName, suffix) {
-    return `stageActor${stateName.charAt(0).toUpperCase()}${stateName.slice(1)}${suffix}`;
-  }
-
-  function renderStageActors() {
-    const catalog = state.stageActors || { packs: [], diagnostics: [] };
-    const packs = Array.isArray(catalog.packs) ? catalog.packs : [];
-    $('#stageActorPackBadge').textContent = `${packs.length} PACK${packs.length === 1 ? '' : 'S'}`;
-    $('#stageActorPackBadge').classList.toggle('online', packs.length > 0);
-    const library = $('#stageActorPackLibrary');
-    library.classList.toggle('empty-state', !packs.length);
-    library.innerHTML = packs.length ? packs.map((pack) => {
-      const states = Object.keys(pack.animations || {});
-      const idle = pack.animations?.idle || {};
-      const previewFrameWidth = Math.max(1, Number(idle.frameWidth || 1) / Math.max(1, Number(idle.frameHeight || 1)) * 54);
-      const previewStyle = `background-image:url(&quot;${escapeHtml(pack.previewUrl || '')}&quot;);background-size:${pack.thumbnail ? 'cover' : `${Math.max(1, Number(idle.frames || 1)) * previewFrameWidth}px 54px`}`;
-      const primaryColors = pack.appearance?.colorSlots?.primary?.options?.length || 0;
-      const secondaryColors = pack.appearance?.colorSlots?.secondary?.options?.length || 0;
-      const appearanceSummary = primaryColors && secondaryColors ? `<small>${primaryColors} ${escapeHtml(pack.appearance.colorSlots.primary.label)} colors · ${secondaryColors} ${escapeHtml(pack.appearance.colorSlots.secondary.label)} colors · ${primaryColors * secondaryColors} combinations</small>` : '';
-      const templateSummary = pack.rig?.template ? `<small>2D TEMPLATE · ${escapeHtml(pack.rig.template.id)} · ${Number(pack.rig.layers?.length || 0)} bounded parts</small>` : '';
-      const atlasSummary = pack.atlas ? `<small>ROW ATLAS · ${Number(pack.atlas.columns)}×${Number(pack.atlas.rows)} CELLS · ${Number(pack.atlas.frameWidth)}×${Number(pack.atlas.frameHeight)} PX</small>` : '';
-      return `<div class="stage-actor-pack-card"><i class="stage-actor-pack-preview" style="${previewStyle}" aria-hidden="true"></i><div><strong>${escapeHtml(pack.name)}</strong><span>${escapeHtml(pack.creator || 'Local creator')} · v${escapeHtml(pack.version || '1.0.0')}</span>${atlasSummary}${templateSummary}<small>${escapeHtml(states.join(' · ') || 'idle')}</small>${appearanceSummary}<small>${escapeHtml(pack.license || 'License not specified')} · ${Math.round(Number(pack.defaultScale || 1) * 100)}% Stage scale</small></div><div class="stage-actor-card-actions"><button type="button" class="secondary-button" data-stage-actor-edit="${escapeHtml(pack.id)}">Edit</button><button type="button" class="secondary-button" data-stage-actor-export="${escapeHtml(pack.id)}">Export</button><button type="button" class="secondary-button danger-outline" data-stage-actor-remove="${escapeHtml(pack.id)}">Remove</button></div></div>`;
-    }).join('') : 'No native avatar packs yet.';
-    const selector = $('#worldViewerActorPack');
-    const current = selector.value;
-    const defaultActorLabel = packs[0] ? `Default · ${packs[0].name}` : 'Generated placeholder';
-    selector.innerHTML = `<option value="">${escapeHtml(defaultActorLabel)}</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)}</option>`).join('')}`;
-    selector.value = packs.some((pack) => pack.id === current) ? current : '';
-  }
-
-  async function chooseStageActorStrip(stateName) {
-    try {
-      const selection = await window.tempestStudio.selectStageActorStrip();
-      if (!selection) return;
-      stageActorDraftStrips.set(stateName, selection);
-      const label = $(`#${stageActorInputId(stateName, 'Strip')}`);
-      label.textContent = `${selection.fileName} · ${selection.width}×${selection.height}`;
-      const frameWidth = Number($('#stageActorFrameWidth').value);
-      const frameHeight = Number($('#stageActorFrameHeight').value);
-      if (frameWidth > 0 && selection.height === frameHeight && selection.width % frameWidth === 0) {
-        $(`#${stageActorInputId(stateName, 'Frames')}`).value = String(selection.width / frameWidth);
-      }
-    } catch (error) { toast(error.message, true); }
-  }
-
-  function updateStageActorBuildMode() {
-    const mode = $('#stageActorBuildMode').value;
-    const templateMode = mode === 'template';
-    const atlasMode = mode === 'atlas';
-    $('#stageActorTemplateSelector').hidden = !templateMode;
-    $('#stageActorTemplateFields').hidden = !templateMode;
-    $('#stageActorAtlasFields').hidden = !atlasMode;
-    $('#stageActorFrameSizeField').hidden = templateMode;
-    $('#stageActorStripFields').hidden = mode !== 'strips';
-    $('#stageActorBuildHelp').textContent = templateMode
-      ? 'Paint only inside the named 512×512 cells. Pixels outside each cell are never rendered.'
-      : atlasMode
-        ? 'Use one transparent PNG grid. Each row is one animation and every frame stays inside its cell.'
-        : 'Legacy mode: each strip must be exactly frame width × frame count, with one row of equal-size frames.';
-  }
-
-  async function chooseStageActorAtlas() {
-    try {
-      const selection = await window.tempestStudio.selectStageActorStrip();
-      if (!selection) return;
-      const frameWidth = Number($('#stageActorFrameWidth').value);
-      const frameHeight = Number($('#stageActorFrameHeight').value);
-      if (!frameWidth || !frameHeight || selection.width % frameWidth || selection.height % frameHeight) return toast(`The atlas must divide exactly into ${frameWidth}×${frameHeight} cells; this PNG is ${selection.width}×${selection.height}.`, true);
-      const columns = selection.width / frameWidth;
-      const rows = selection.height / frameHeight;
-      if (columns < 1 || columns > 120 || rows < 1 || rows > 32) return toast(`The atlas must contain 1–120 columns and 1–32 rows; this PNG has ${columns}×${rows}.`, true);
-      stageActorDraftAtlas = { ...selection, columns, rows };
-      const atlasFields = ['Idle', 'Walk', 'Sit', 'Stand', 'Jump', 'Attack', 'Custom2'];
-      atlasFields.forEach((field, row) => {
-        const rowInput = $(`#stageActorAtlas${field}Row`);
-        const framesInput = $(`#stageActorAtlas${field}Frames`);
-        const fieldRow = rowInput.closest('.stage-actor-strip-row');
-        fieldRow.hidden = row >= rows;
-        rowInput.max = String(rows - 1);
-        if (row < rows) rowInput.value = String(row);
-        framesInput.max = String(columns);
-        framesInput.value = String(Math.max(1, Math.min(columns, Number(framesInput.value) || 1)));
-      });
-      $('#stageActorAtlasTexture').textContent = `${selection.fileName} · ${selection.width}×${selection.height} · ${columns}×${rows} cells`;
-      $('#stageActorBuildHelp').textContent = `${columns} columns × ${rows} rows detected. Adjust frame counts if this atlas does not include metadata.`;
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function chooseStageActorTexture() {
-    try {
-      const selection = await window.tempestStudio.selectStageActorTexture();
-      if (!selection) return;
-      if (selection.width !== 2048 || selection.height !== 2560) return toast(`The Humanoid Wisp v1 texture must be exactly 2048×2560; this PNG is ${selection.width}×${selection.height}.`, true);
-      stageActorDraftTexture = selection;
-      $('#stageActorTemplateTexture').textContent = `${selection.fileName} · ${selection.width}×${selection.height}`;
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function createStageActorPack(event) {
-    event.preventDefault();
-    const mode = $('#stageActorBuildMode').value;
-    const templateMode = mode === 'template';
-    const atlasMode = mode === 'atlas';
-    if (templateMode && !stageActorDraftTexture) return toast('Choose the required Humanoid Wisp template texture first.', true);
-    if (atlasMode && !stageActorDraftAtlas) return toast('Choose the required avatar atlas first.', true);
-    if (mode === 'strips' && !stageActorDraftStrips.has('idle')) return toast('Choose the required idle animation strip first.', true);
-    const states = ['idle', 'walk', 'jump', 'attack', 'celebrate'];
-    const atlasStates = [
-      { stateName: 'idle', field: 'Idle' }, { stateName: 'walk', field: 'Walk' }, { stateName: 'sit', field: 'Sit' },
-      { stateName: 'stand', field: 'Stand' }, { stateName: 'jump', field: 'Jump' }, { stateName: 'attack', field: 'Attack' },
-      { stateName: 'custom2', field: 'Custom2' }
-    ];
-    const animations = atlasMode ? atlasStates.filter(({ field }) => Number($(`#stageActorAtlas${field}Row`).value) < Number(stageActorDraftAtlas.rows)).map(({ stateName, field }) => ({
-      state: stateName,
-      row: Number($(`#stageActorAtlas${field}Row`).value),
-      frames: Number($(`#stageActorAtlas${field}Frames`).value),
-      fps: Number($(`#stageActorAtlas${field}Fps`).value),
-      loop: ['idle', 'walk', 'sit', 'stand'].includes(stateName),
-      returnsToIdle: !['idle', 'walk', 'sit', 'stand'].includes(stateName)
-    })) : templateMode ? [] : states.filter((stateName) => stageActorDraftStrips.has(stateName)).map((stateName) => ({
-        state: stateName,
-        handle: stageActorDraftStrips.get(stateName).handle,
-        frames: Number($(`#${stageActorInputId(stateName, 'Frames')}`).value),
-        fps: Number($(`#${stageActorInputId(stateName, 'Fps')}`).value),
-        loop: ['idle', 'walk'].includes(stateName),
-        returnsToIdle: !['idle', 'walk'].includes(stateName)
-      }));
-    try {
-      const result = await window.tempestStudio.createStageActorPack({
-        name: $('#stageActorName').value.trim(), creator: $('#stageActorCreator').value.trim(), license: $('#stageActorLicense').value.trim(),
-        version: '1.0.0', frameWidth: Number($('#stageActorFrameWidth').value), frameHeight: Number($('#stageActorFrameHeight').value),
-        defaultScale: Number($('#stageActorScale').value), animations,
-        ...(atlasMode ? { atlasHandle: stageActorDraftAtlas.handle } : {}),
-        ...(templateMode ? { templateId: $('#stageActorTemplateId').value, templateTextureHandle: stageActorDraftTexture.handle } : {})
-      });
-      state.stageActors = result.catalog;
-      stageActorDraftStrips.clear();
-      stageActorDraftTexture = null;
-      stageActorDraftAtlas = null;
-      $('#stageActorTemplateTexture').textContent = 'Required · no file chosen';
-      $('#stageActorAtlasTexture').textContent = 'Required · no file chosen';
-      for (const stateName of states) $(`#${stageActorInputId(stateName, 'Strip')}`).textContent = stateName === 'idle' ? 'Required · no file chosen' : 'Optional';
-      $('#stageActorName').value = '';
-      await refreshInteractiveWorld();
-      toast(`${result.manifest.name} is ready for the Interactive Stage.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function exportStageActorPack(packId) {
-    try {
-      const result = await window.tempestStudio.exportStageActorPack({ packId });
-      if (result) toast(`${result.name} exported with ${result.assetCount} animation asset${result.assetCount === 1 ? '' : 's'}.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  function openStageActorEditor(packId) {
-    const pack = state.stageActors?.packs?.find((entry) => entry.id === packId);
-    if (!pack) return;
-    $('#stageActorEditId').value = pack.id;
-    $('#stageActorEditName').value = pack.name || '';
-    $('#stageActorEditVersion').value = pack.version || '1.0.0';
-    $('#stageActorEditCreator').value = pack.creator || '';
-    $('#stageActorEditScale').value = String(pack.defaultScale || 1);
-    $('#stageActorEditLicense').value = pack.license || '';
-    $('#stageActorEditDescription').value = pack.description || '';
-    $('#stageActorEditDialog').showModal();
-  }
-
-  async function saveStageActorEdit(event) {
-    event.preventDefault();
-    try {
-      const result = await window.tempestStudio.updateStageActorPack({ packId: $('#stageActorEditId').value, name: $('#stageActorEditName').value.trim(), version: $('#stageActorEditVersion').value.trim(), creator: $('#stageActorEditCreator').value.trim(), defaultScale: Number($('#stageActorEditScale').value), license: $('#stageActorEditLicense').value.trim(), description: $('#stageActorEditDescription').value.trim() });
-      state.stageActors = result.catalog;
-      $('#stageActorEditDialog').close();
-      await refreshInteractiveWorld();
-      toast(`${result.manifest.name} updated.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function importStageActorPack() {
-    try {
-      const result = await window.tempestStudio.importStageActorPack();
-      if (!result) return;
-      state.stageActors = result.catalog;
-      await refreshInteractiveWorld();
-      toast(`${result.manifest.name} imported as a new managed pack.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function importStreamingAvatarsLibrary() {
-    try {
-      const result = await window.tempestStudio.importStreamingAvatarsLibrary();
-      if (!result) return;
-      state.stageActors = result.catalog;
-      await refreshInteractiveWorld();
-      const skipped = Number(result.skipped?.length || 0);
-      toast(`${result.imported} avatar${result.imported === 1 ? '' : 's'} imported from ${result.discovered} metadata record${result.discovered === 1 ? '' : 's'}${skipped ? `; ${skipped} skipped` : ''}.`, skipped > 0);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function removeStageActorPack(packId) {
-    const pack = state.stageActors?.packs?.find((entry) => entry.id === packId);
-    try {
-      const result = await window.tempestStudio.removeStageActorPack({ packId, name: pack?.name || packId });
-      if (!result) return;
-      state.stageActors = result;
-      await refreshInteractiveWorld();
-      toast(`${pack?.name || 'Stage Actor pack'} removed${result.affectedViewers ? `; ${result.affectedViewers} viewer${result.affectedViewers === 1 ? '' : 's'} returned to placeholders` : ''}.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  function renderInteractiveWorld() {
-    const world = state.interactiveWorld;
-    if (!world) return;
-    renderStageActors();
-    const viewers = Array.isArray(world.viewers) ? world.viewers : [];
-    const pet = world.pet || {};
-    const battle = world.battle;
-    const gaze = world.gaze || {};
-    const safety = world.safety || {};
-    const presence = world.presence || {};
-    $('#worldStateBadge').textContent = safety.interactionsEnabled ? 'WORLD READY' : 'PAUSED';
-    $('#worldStateBadge').classList.toggle('offline', !safety.interactionsEnabled);
-    $('#worldCrowdMetric').textContent = String(viewers.length);
-    $('#worldCrowdBadge').textContent = `${viewers.length} / ${safety.maximumCrowd || 0}`;
-    $('#worldPetMetric').textContent = pet.enabled ? 'LIVE' : 'OFF';
-    $('#worldPetMetricNote').textContent = pet.enabled ? `${pet.name} · ${pet.state}` : 'Not on Stage';
-    $('#worldPetBadge').textContent = pet.enabled ? String(pet.state || 'LIVE').toUpperCase() : 'OFF STAGE';
-    $('#worldPetBadge').classList.toggle('online', Boolean(pet.enabled));
-    $('#worldPetMood').textContent = String(Math.round(Number(pet.mood || 0)));
-    $('#worldPetEnergy').textContent = String(Math.round(Number(pet.energy || 0)));
-    $('#worldPetHunger').textContent = String(Math.round(Number(pet.hunger || 0)));
-    $('#worldPetLevel').textContent = String(pet.level || 1);
-    if (!$('#worldPetForm').contains(document.activeElement)) {
-      $('#worldPetName').value = pet.name || 'Nimbus';
-      $('#worldPetAccessory').value = pet.accessory || '';
-      $('#worldPetEnabled').checked = Boolean(pet.enabled);
-    }
-    const battleState = battle?.state || 'idle';
-    $('#worldBattleMetric').textContent = battleState.toUpperCase();
-    $('#worldBattleMetricNote').textContent = battle ? `${battle.mode === 'boss' ? 'Boss battle' : 'Viewer duel'} · ${battle.winner ? `Winner ${battle.winner}` : `Round ${battle.round || 1}`}` : 'No active session';
-    $('#worldBattleBadge').textContent = battleState.toUpperCase();
-    $('#worldBattleBadge').classList.toggle('online', battleState === 'active');
-    $('#worldGazeMetric').textContent = gaze.connected ? 'LIVE' : gaze.enabled ? 'READY' : 'OFF';
-    $('#worldGazeMetricNote').textContent = gaze.enabled ? `${gaze.adapter || 'Local adapter'} · ${gaze.effect || 'cursor'}` : 'Local adapter disabled';
-    $('#worldGazeBadge').textContent = gaze.connected ? 'TRACKING' : gaze.enabled ? 'WAITING' : 'DISABLED';
-    $('#worldGazeBadge').classList.toggle('online', Boolean(gaze.connected));
-    if ($('#worldTobiiStatus')) $('#worldTobiiStatus').innerHTML = `<strong>Tobii:</strong> ${escapeHtml(state.tobiiAdapter?.message || 'Adapter status is available after this workspace refresh.')}`;
-    if (!$('#worldGazeForm').contains(document.activeElement)) {
-      $('#worldGazeEnabled').checked = Boolean(gaze.enabled);
-      $('#worldGazeAdapter').value = gaze.adapter || 'generic-local';
-      $('#worldGazeEffect').value = gaze.effect || 'cursor';
-      $('#worldGazeOffsetX').value = String(gaze.calibration?.offsetX || 0);
-      $('#worldGazeOffsetY').value = String(gaze.calibration?.offsetY || 0);
-      $('#worldGazeScaleX').value = String(gaze.calibration?.scaleX || 1);
-      $('#worldGazeScaleY').value = String(gaze.calibration?.scaleY || 1);
-    }
-    $('#worldSafetyBadge').textContent = safety.interactionsEnabled ? 'ACTIVE' : 'PAUSED';
-    $('#worldSafetyBadge').classList.toggle('offline', !safety.interactionsEnabled);
-    if (!$('#worldSafetyForm').contains(document.activeElement)) {
-      $('#worldMaximumCrowd').value = String(safety.maximumCrowd || 30);
-      $('#worldMaximumObjects').value = String(safety.maximumStageObjects || 60);
-      $('#worldMaximumEffects').value = String(safety.maximumConcurrentEffects || 8);
-      $('#worldAttackCooldown').value = String((Number(safety.minimumAttackCooldownMs || 1500) / 1000).toFixed(2).replace(/0+$/, '').replace(/\.$/, ''));
-      $('#worldVolumeCeiling').value = String(Math.round(Number(safety.volumeCeiling ?? 0.8) * 100));
-      $('#worldInteractionsEnabled').checked = safety.interactionsEnabled !== false;
-      $('#worldAllowJumpscares').checked = safety.allowJumpscares !== false;
-      $('#worldReducedMotion').checked = safety.reducedMotion === true;
-      $('#worldReducedFlashing').checked = safety.reducedFlashing !== false;
-    }
-    if (!$('#worldPresenceForm').contains(document.activeElement)) {
-      $('#worldPresenceEnabled').checked = presence.enabled === true;
-      $('#worldAvatarSize').value = String(Math.round(Number(presence.avatarScale || 1) * 100));
-      $('#worldAvatarSizeValue').textContent = `${$('#worldAvatarSize').value}%`;
-      $('#worldPresenceMessages').value = String(presence.minimumMessages || 1);
-      $('#worldPresenceInactive').value = String(Math.round(Number(presence.inactiveAfterMs || 1200000) / 60000));
-      $('#worldPresenceRemove').value = String(Math.round(Number(presence.removeFromStageAfterMs || 2700000) / 60000));
-    }
-
-    const avatarRedeems = Array.isArray(world.avatarChannelPointRedeems) ? world.avatarChannelPointRedeems : [];
-    const avatarRewardSession = world.avatarRewardSession || {};
-    $('#worldAvatarRedeemBadge').textContent = `${avatarRedeems.length} REDEEM${avatarRedeems.length === 1 ? '' : 'S'}`;
-    const avatarRedeemList = $('#worldAvatarRedeemList');
-    avatarRedeemList.classList.toggle('empty-state', !avatarRedeems.length);
-    const effectNames = { 'primary-color': 'Primary color', 'secondary-color': 'Secondary color', accessory: 'Accessory', title: 'Avatar title', emote: 'Emote', celebrate: 'Celebrate' };
-    avatarRedeemList.innerHTML = avatarRedeems.length ? avatarRedeems.map((redeem) => `<div><div><strong>${escapeHtml(redeem.name)}</strong><small>${escapeHtml(redeem.rewardId ? `Reward ID: ${redeem.rewardId}` : `Exact title: ${redeem.rewardTitle || ''}`)} · ${escapeHtml(effectNames[redeem.effect] || redeem.effect)}${redeem.value ? ` · ${escapeHtml(redeem.value)}` : ''} · ${redeem.persistence === 'profile' ? 'saved unlock' : 'this stream'}</small></div><div class="world-row-actions"><button type="button" class="secondary-button" data-world-avatar-redeem-test="${escapeHtml(redeem.id)}">Test</button><button type="button" class="secondary-button danger-outline" data-world-avatar-redeem-remove="${escapeHtml(redeem.id)}">Remove</button></div></div>`).join('') : 'No avatar Channel Point redeems configured.';
-    const activeRewardViewers = Number(avatarRewardSession.activeViewerCount || 0);
-    const rewardHistoryCount = Array.isArray(avatarRewardSession.redemptions) ? avatarRewardSession.redemptions.length : 0;
-    $('#worldAvatarRedeemSessionNote').textContent = activeRewardViewers ? `${activeRewardViewers} viewer${activeRewardViewers === 1 ? '' : 's'} wearing temporary rewards · ${rewardHistoryCount} redeemed this session` : 'No temporary avatar rewards are active.';
-
-    const viewerList = $('#worldViewerList');
-    viewerList.classList.toggle('empty-state', !viewers.length);
-    const actorPacks = Array.isArray(state.stageActors?.packs) ? state.stageActors.packs : [];
-    viewerList.innerHTML = viewers.length ? viewers.map((viewer) => `<div class="world-viewer-row ${viewer.onStage === false ? 'inactive' : ''}"><i class="world-viewer-avatar" style="--viewer-accent:${escapeHtml(viewer.accent || '#54f2eb')}">${escapeHtml(String(viewer.displayName || '?').slice(0, 1).toUpperCase())}</i><div><strong>${escapeHtml(viewer.displayName)}${viewer.cosmetics?.title ? ` · ${escapeHtml(viewer.cosmetics.title)}` : ''}</strong><small>${escapeHtml(viewer.key)} · ${escapeHtml(viewer.presence || 'active')} · ${escapeHtml(viewer.avatarState || 'idle')} · ${escapeHtml(actorPacks.find((pack) => pack.id === viewer.actorPackId)?.name || 'placeholder')}</small></div><div class="world-row-actions"><select data-world-viewer-actor="${escapeHtml(viewer.key)}" aria-label="Actor pack for ${escapeHtml(viewer.displayName)}"><option value="">Placeholder</option>${actorPacks.map((pack) => `<option value="${escapeHtml(pack.id)}" ${pack.id === viewer.actorPackId ? 'selected' : ''}>${escapeHtml(pack.name)}</option>`).join('')}</select><button data-world-viewer-cosmetics="${escapeHtml(viewer.key)}" class="secondary-button">Look</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="left" class="secondary-button" title="Move left">←</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="right" class="secondary-button" title="Move right">→</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="jump" class="secondary-button">Jump</button><button data-world-viewer-control="${escapeHtml(viewer.key)}" data-world-control="interact" class="secondary-button">Use</button><button data-world-viewer-state="${escapeHtml(viewer.key)}" data-world-state="celebrate" class="secondary-button">Cheer</button><button data-world-viewer-remove="${escapeHtml(viewer.key)}" class="secondary-button danger-outline">×</button></div></div>`).join('') : 'No viewer avatars are active.';
-
-    const participants = battle ? [...(battle.participants || []), ...(battle.boss ? [battle.boss] : [])] : [];
-    const battleDisplay = $('#worldBattleDisplay');
-    battleDisplay.classList.toggle('empty-state', !participants.length);
-    battleDisplay.innerHTML = participants.length ? participants.map((participant) => `<div class="world-battle-row"><div><strong>${escapeHtml(participant.displayName)}${participant.defeated ? ' · DEFEATED' : ''}</strong><small>${escapeHtml(participant.team || '')} · ${Math.round(Number(participant.health || 0))} HP · ${Math.round(Number(participant.shield || 0))} shield</small></div><span class="world-health"><i style="width:${Math.max(0, Math.min(100, Number(participant.health || 0) / Math.max(1, Number(participant.maximumHealth || 1)) * 100))}%"></i></span></div>`).join('') : 'Add crowd avatars, then start a duel or boss encounter.';
-    document.querySelectorAll('[data-world-battle-action]').forEach((button) => { button.disabled = battleState !== 'active'; });
-    $('#worldEndBattle').disabled = !battle || !['active', 'waiting'].includes(battleState);
-    renderInteractionComposer();
-  }
-
-  async function refreshInteractiveWorld() {
-    [state.interactiveWorld, state.interactiveStage, state.stageActors, state.interactionComposer, state.tobiiAdapter] = await Promise.all([api('/v1/interactive-world'), api('/v1/interactive-stage'), api('/v1/stage-actors'), api('/v1/interaction-composer'), api('/v1/interactive-world/gaze/adapter')]);
-    renderInteractiveWorld();
-    renderInteractiveStage();
-  }
-
-  async function addWorldViewer(event) {
-    event.preventDefault();
-    const displayName = $('#worldViewerName').value.trim();
-    if (!displayName) return;
-    try {
-      state.interactiveWorld = await api('/v1/interactive-world/viewers', { method: 'POST', body: { platform: $('#worldViewerPlatform').value, userId: `${$('#worldViewerPlatform').value}-${displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || crypto.randomUUID()}`, displayName, accent: $('#worldViewerAccent').value, actorPackId: $('#worldViewerActorPack').value || undefined } });
-      $('#worldViewerName').value = '';
-      await refreshInteractiveWorld();
-      toast(`${displayName} joined the Stage crowd.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function spawnWorldDemoCrowd() {
-    const samples = [['Nova', '#54F2EB'], ['Rook', '#FF667A'], ['Pixel', '#B99CFF'], ['Echo', '#FFB45C']];
-    try {
-      for (const [displayName, accent] of samples) await api('/v1/interactive-world/viewers', { method: 'POST', body: { platform: 'studio', userId: `demo-${displayName.toLowerCase()}`, displayName, accent } });
-      await refreshInteractiveWorld();
-      toast('Demo crowd added to Interactive Stage.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function clearWorldCrowd() {
-    try { await api('/v1/interactive-world/viewers/clear', { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast('Stage crowd cleared.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function saveWorldAvatarRedeem(event) {
-    event.preventDefault();
-    const matchType = $('#worldAvatarRedeemMatchType').value;
-    const match = $('#worldAvatarRedeemMatch').value.trim();
-    const effect = $('#worldAvatarRedeemEffect').value;
-    const value = $('#worldAvatarRedeemValue').value.trim();
-    const redeems = [...(state.interactiveWorld?.avatarChannelPointRedeems || []), {
-      id: `avatar-redeem-${crypto.randomUUID()}`,
-      name: $('#worldAvatarRedeemName').value.trim(),
-      ...(matchType === 'id' ? { rewardId: match } : { rewardTitle: match }),
-      effect,
-      ...(value ? { value } : {}),
-      persistence: $('#worldAvatarRedeemPersistence').value,
-      enabled: true
-    }];
-    try {
-      state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems', { method: 'POST', body: { redeems } });
-      $('#worldAvatarRedeemForm').reset();
-      $('#worldAvatarRedeemMatchType').value = 'title';
-      $('#worldAvatarRedeemEffect').value = 'primary-color';
-      $('#worldAvatarRedeemPersistence').value = 'session';
-      $('#worldAvatarRedeemValue').placeholder = '#B99CFF';
-      renderInteractiveWorld();
-      toast('Avatar Channel Point redeem added.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function removeWorldAvatarRedeem(redeemId) {
-    const redeems = (state.interactiveWorld?.avatarChannelPointRedeems || []).filter((entry) => entry.id !== redeemId);
-    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems', { method: 'POST', body: { redeems } }); renderInteractiveWorld(); toast('Avatar redeem removed.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function testWorldAvatarRedeem(redeemId) {
-    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems/test', { method: 'POST', body: { redeemId, viewerName: 'Redeem Tester' } }); await refreshInteractiveWorld(); toast('Avatar redeem sent to the Browser Source.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function resetWorldAvatarRewardSession() {
-    try { state.interactiveWorld = await api('/v1/interactive-world/avatar-redeems/reset-session', { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast('Temporary avatar rewards reset for the next stream session.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  function updateWorldAvatarRedeemValueHint() {
-    const effect = $('#worldAvatarRedeemEffect').value;
-    const hints = { 'primary-color': '#54F2EB', 'secondary-color': '#B99CFF', accessory: 'Storm crown', title: 'Wisp Champion', emote: 'No value needed', celebrate: 'No value needed' };
-    $('#worldAvatarRedeemValue').placeholder = hints[effect] || 'Effect value';
-    $('#worldAvatarRedeemValue').disabled = effect === 'emote' || effect === 'celebrate';
-    $('#worldAvatarRedeemPersistence').disabled = effect === 'emote' || effect === 'celebrate';
-    if ($('#worldAvatarRedeemPersistence').disabled) $('#worldAvatarRedeemPersistence').value = 'session';
-    if ($('#worldAvatarRedeemValue').disabled) $('#worldAvatarRedeemValue').value = '';
-  }
-
-  async function setWorldViewerState(key, avatarState) {
-    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/state`, { method: 'POST', body: { state: avatarState } }); await refreshInteractiveWorld(); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function controlWorldViewer(key, action) {
-    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/control`, { method: 'POST', body: { action } }); await refreshInteractiveWorld(); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function setWorldViewerActor(key, actorPackId) {
-    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/actor`, { method: 'POST', body: { actorPackId } }); await refreshInteractiveWorld(); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  function updateWorldViewerColorPreview() {
-    const primary = $('#worldViewerPrimaryColor').value || '#54F2EB';
-    const secondary = $('#worldViewerSecondaryColor').value || '#B99CFF';
-    $('#worldViewerPrimarySwatch').style.setProperty('--swatch', primary);
-    $('#worldViewerSecondarySwatch').style.setProperty('--swatch', secondary);
-    $('#worldViewerColorCombination').textContent = `${$('#worldViewerPrimaryColor').selectedOptions[0]?.textContent || primary} + ${$('#worldViewerSecondaryColor').selectedOptions[0]?.textContent || secondary}`;
-  }
-
-  function populateWorldViewerColorSelect(select, slot, currentColor, fallbackName) {
-    const options = Array.isArray(slot?.options) && slot.options.length ? slot.options : [{ id: 'current', name: fallbackName, color: currentColor }];
-    select.innerHTML = options.map((option) => `<option value="${escapeHtml(option.color)}">${escapeHtml(option.name)}</option>`).join('');
-    const match = options.find((option) => String(option.color).toUpperCase() === String(currentColor).toUpperCase()) || options.find((option) => option.id === slot?.defaultOptionId) || options[0];
-    select.value = match.color;
-  }
-
-  function editWorldViewerCosmetics(key) {
-    const viewer = state.interactiveWorld?.viewers?.find((entry) => entry.key === key);
-    if (!viewer) return;
-    const pack = state.stageActors?.packs?.find((entry) => entry.id === viewer.actorPackId);
-    const primary = viewer.cosmetics?.primaryColor || viewer.accent || '#54F2EB';
-    const secondary = viewer.cosmetics?.secondaryColor || '#B99CFF';
-    $('#worldViewerLookKey').value = key;
-    $('#worldViewerLookTitle').textContent = `Customize ${viewer.displayName}`;
-    $('#worldViewerPrimaryLabel').textContent = pack?.appearance?.colorSlots?.primary?.label || 'Primary color';
-    $('#worldViewerSecondaryLabel').textContent = pack?.appearance?.colorSlots?.secondary?.label || 'Secondary color';
-    populateWorldViewerColorSelect($('#worldViewerPrimaryColor'), pack?.appearance?.colorSlots?.primary, primary, 'Current primary');
-    populateWorldViewerColorSelect($('#worldViewerSecondaryColor'), pack?.appearance?.colorSlots?.secondary, secondary, 'Current secondary');
-    $('#worldViewerLookTitleInput').value = viewer.cosmetics?.title || viewer.title || '';
-    $('#worldViewerLookAccessories').value = (viewer.cosmetics?.accessories || []).join(', ');
-    $('#worldViewerLookGlyphs').value = (viewer.cosmetics?.layers || []).map((layer) => layer.glyph).join(', ');
-    $('#worldViewerLookHelp').textContent = pack?.appearance ? `${pack.name} includes ${pack.appearance.colorSlots.primary.options.length} ${pack.appearance.colorSlots.primary.label.toLowerCase()} colors and ${pack.appearance.colorSlots.secondary.options.length} ${pack.appearance.colorSlots.secondary.label.toLowerCase()} colors.` : 'This pack does not publish a fixed color palette yet.';
-    updateWorldViewerColorPreview();
-    $('#worldViewerLookDialog').showModal();
-  }
-
-  async function saveWorldViewerCosmetics(event) {
-    event.preventDefault();
-    const key = $('#worldViewerLookKey').value;
-    const viewer = state.interactiveWorld?.viewers?.find((entry) => entry.key === key);
-    if (!viewer) return;
-    const primaryColor = $('#worldViewerPrimaryColor').value;
-    const secondaryColor = $('#worldViewerSecondaryColor').value;
-    const accessories = $('#worldViewerLookAccessories').value.split(',').map((entry) => entry.trim()).filter(Boolean).slice(0, 4);
-    const layers = $('#worldViewerLookGlyphs').value.split(',').map((glyph, index) => ({ id: `layer-${index + 1}`, glyph: glyph.trim(), color: index % 2 ? primaryColor : secondaryColor, position: ['head', 'front', 'behind'][index % 3] })).filter((layer) => layer.glyph).slice(0, 6);
-    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}/cosmetics`, { method: 'POST', body: { title: $('#worldViewerLookTitleInput').value, accessories, layers, primaryColor, secondaryColor } }); $('#worldViewerLookDialog').close(); await refreshInteractiveWorld(); toast(`${viewer.displayName}'s look updated.`); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function saveWorldPresence(event) {
-    event.preventDefault();
-    try { await api('/v1/interactive-world/presence/settings', { method: 'POST', body: { enabled: $('#worldPresenceEnabled').checked, avatarScale: Number($('#worldAvatarSize').value) / 100, minimumMessages: Number($('#worldPresenceMessages').value), inactiveAfterMs: Number($('#worldPresenceInactive').value) * 60000, removeFromStageAfterMs: Number($('#worldPresenceRemove').value) * 60000 } }); await refreshInteractiveWorld(); toast('Viewer avatar size and presence saved.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function controlTobiiAdapter(action) {
-    try { state.tobiiAdapter = await api(`/v1/interactive-world/gaze/adapter/${action}`, { method: 'POST', body: {} }); await refreshInteractiveWorld(); toast(action === 'connect' ? 'Tobii adapter connection requested.' : 'Tobii adapter disconnected.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  function renderInteractionComposer() {
-    const recipes = state.interactionComposer?.recipes || [];
-    if (!$('#interactionComposerBadge')) return;
-    $('#interactionComposerBadge').textContent = `${recipes.length} RECIPE${recipes.length === 1 ? '' : 'S'}`;
-    const list = $('#interactionComposerList');
-    list.classList.toggle('empty-state', !recipes.length);
-    list.innerHTML = recipes.length ? recipes.map((recipe) => `<div><div><strong>${escapeHtml(recipe.name)}</strong><small>${escapeHtml(recipe.trigger.type)} · ${escapeHtml(recipe.trigger.value)} · ${recipe.actions.length} action${recipe.actions.length === 1 ? '' : 's'}</small></div><div class="world-row-actions"><button class="secondary-button" data-interaction-recipe-run="${escapeHtml(recipe.id)}">Rehearse</button><button class="secondary-button danger-outline" data-interaction-recipe-remove="${escapeHtml(recipe.id)}">Remove</button></div></div>`).join('') : 'No interaction recipes yet.';
-  }
-
-  async function saveInteractionRecipe(event) {
-    event.preventDefault();
-    const type = $('#interactionRecipeActionType').value;
-    const value = $('#interactionRecipeActionValue').value.trim();
-    const settingKey = { alert: 'alertId', 'stage-message': 'message', 'viewer-state': 'state', 'pet-action': 'action', 'battle-start': 'mode' }[type];
-    const settings = settingKey ? { [settingKey]: value || ({ 'stage-message': 'Viewer interaction', 'viewer-state': 'emote', 'pet-action': 'play', 'battle-start': 'duel' }[type] || '') } : { intensity: 0.8 };
-    try { state.interactionComposer = await api('/v1/interaction-composer/recipes', { method: 'POST', body: { id: $('#interactionRecipeId').value.trim().toLowerCase(), name: $('#interactionRecipeName').value.trim(), enabled: true, trigger: { type: $('#interactionRecipeTriggerType').value, value: $('#interactionRecipeTriggerValue').value.trim() }, cooldownMs: Number($('#interactionRecipeCooldown').value) * 1000, actions: [{ id: 'action-1', type, delayMs: 0, settings }] } }); renderInteractionComposer(); toast('Interaction recipe saved.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function runInteractionRecipe(id) { try { await api(`/v1/interaction-composer/recipes/${encodeURIComponent(id)}/run`, { method: 'POST', body: { viewerName: 'Studio Rehearsal' } }); toast('Interaction recipe rehearsed.'); } catch (error) { toast(error.message, true); } }
-  async function removeInteractionRecipe(id) { try { state.interactionComposer = await api(`/v1/interaction-composer/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' }); renderInteractionComposer(); toast('Interaction recipe removed.'); } catch (error) { toast(error.message, true); } }
-
-  async function removeWorldViewer(key) {
-    try { await api(`/v1/interactive-world/viewers/${encodeURIComponent(key)}`, { method: 'DELETE' }); await refreshInteractiveWorld(); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function saveWorldPet(event) {
-    event.preventDefault();
-    try { state.interactiveWorld = await api('/v1/interactive-world/pet/settings', { method: 'POST', body: { enabled: $('#worldPetEnabled').checked, name: $('#worldPetName').value.trim(), accessory: $('#worldPetAccessory').value.trim() } }); await refreshInteractiveWorld(); toast('Community pet saved.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function runWorldPetAction(action) {
-    try { state.interactiveWorld = await api('/v1/interactive-world/pet/actions', { method: 'POST', body: { action, actor: 'Studio Operator' } }); await refreshInteractiveWorld(); toast(`Pet action: ${action}.`); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function startWorldBattle() {
-    try { state.interactiveWorld = await api('/v1/interactive-world/battle/start', { method: 'POST', body: { mode: $('#worldBattleMode').value, bossName: $('#worldBossName').value.trim(), inviteOnly: $('#worldBattleInviteOnly').checked } }); await refreshInteractiveWorld(); toast($('#worldBattleInviteOnly').checked ? 'Game invitations opened. Viewers can join with !accept.' : 'Game started on Interactive Stage.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function runWorldBattleAction(action) {
-    const battle = state.interactiveWorld?.battle;
-    if (!battle) return;
-    const attacker = battle.participants?.find((entry) => !entry.defeated);
-    const target = battle.mode === 'boss' ? battle.boss : battle.participants?.find((entry) => entry.viewerKey !== attacker?.viewerKey && !entry.defeated);
-    try { state.interactiveWorld = await api('/v1/interactive-world/battle/action', { method: 'POST', body: { action, attackerKey: attacker?.viewerKey, targetKey: action === 'attack' ? target?.viewerKey : attacker?.viewerKey, bypassCooldown: true } }); await refreshInteractiveWorld(); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function endWorldBattle() {
-    try { await api('/v1/interactive-world/battle/end', { method: 'POST', body: { reason: 'studio-operator' } }); await refreshInteractiveWorld(); toast('Battle ended and Stage objects cleaned up.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function saveWorldGaze(event) {
-    event.preventDefault();
-    try { state.interactiveWorld = await api('/v1/interactive-world/gaze/settings', { method: 'POST', body: { enabled: $('#worldGazeEnabled').checked, adapter: $('#worldGazeAdapter').value, effect: $('#worldGazeEffect').value, calibration: { offsetX: Number($('#worldGazeOffsetX').value), offsetY: Number($('#worldGazeOffsetY').value), scaleX: Number($('#worldGazeScaleX').value), scaleY: Number($('#worldGazeScaleY').value) } } }); await refreshInteractiveWorld(); toast('Local eye-tracking setup saved.'); }
-    catch (error) { toast(error.message, true); }
-  }
-
-  async function simulateWorldGaze() {
-    try {
-      if (!state.interactiveWorld?.gaze?.enabled) await api('/v1/interactive-world/gaze/settings', { method: 'POST', body: { enabled: true, adapter: 'simulator', effect: $('#worldGazeEffect').value } });
-      state.interactiveWorld = await api('/v1/interactive-world/gaze/sample', { method: 'POST', body: { x: Number($('#worldGazeX').value), y: Number($('#worldGazeY').value), confidence: 1 } });
-      await refreshInteractiveWorld();
-      toast('Test gaze point sent to Stage.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function saveWorldSafety(event) {
-    event.preventDefault();
-    try {
-      state.interactiveWorld = await api('/v1/interactive-world/safety', { method: 'POST', body: { interactionsEnabled: $('#worldInteractionsEnabled').checked, maximumCrowd: Number($('#worldMaximumCrowd').value), maximumStageObjects: Number($('#worldMaximumObjects').value), maximumConcurrentEffects: Number($('#worldMaximumEffects').value), minimumAttackCooldownMs: Number($('#worldAttackCooldown').value) * 1000, allowJumpscares: $('#worldAllowJumpscares').checked, reducedMotion: $('#worldReducedMotion').checked, reducedFlashing: $('#worldReducedFlashing').checked, volumeCeiling: Number($('#worldVolumeCeiling').value) / 100 } });
-      await refreshInteractiveWorld();
-      toast('Interactive World safety policy saved.');
-    } catch (error) { toast(error.message, true); }
-  }
-
   function switchInteractiveStageTab(tab) {
     if (!['overview', 'layout', 'objects', 'safety'].includes(tab)) return;
     interactiveStageTab = tab;
@@ -1277,18 +646,32 @@
       button.setAttribute('aria-selected', String(active));
     });
     document.querySelectorAll('[data-stage-panel]').forEach((panel) => { panel.hidden = panel.dataset.stagePanel !== tab; });
+    syncPrimaryNavigation('interactivestage', tab);
     if (tab === 'layout') renderInteractiveStage();
   }
 
   function switchChatbotTab(tab) {
     if (!['chat', 'polls', 'commands', 'automation', 'moderation', 'setup'].includes(tab)) return;
     chatbotWorkspaceTab = tab;
+    const pollsStandalone = tab === 'polls';
+    const tabList = document.querySelector('.chatbot-feature-tabs');
+    if (tabList) tabList.hidden = pollsStandalone;
+    $('#chatbotPageEyebrow').textContent = pollsStandalone ? 'LIVE AUDIENCE' : 'CHATBOT + LIVE AUDIENCE';
+    $('#chatbotPageTitle').textContent = pollsStandalone ? 'Polls' : 'Chatbot';
+    $('#chatbotPageDescription').textContent = pollsStandalone
+      ? 'Start a numbered chat vote and record each Twitch chatter once.'
+      : 'Run live chat, commands, moderation, and audience automation from one primary workspace.';
+    if ($('#chatbotSection').classList.contains('active')) {
+      $('#sectionTitle').textContent = pollsStandalone ? 'Polls' : sections.chatbot.title;
+      $('#sectionKicker').textContent = pollsStandalone ? 'ONE VOTE PER CHATTER' : sections.chatbot.kicker;
+    }
     document.querySelectorAll('[data-chatbot-tab]').forEach((button) => {
       const active = button.dataset.chatbotTab === tab;
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', String(active));
     });
     document.querySelectorAll('[data-chatbot-panel]').forEach((panel) => { panel.hidden = panel.dataset.chatbotPanel !== tab; });
+    syncPrimaryNavigation('chatbot', tab);
   }
 
   async function refreshInteractiveStage() {
@@ -1557,129 +940,6 @@
   async function clearInteractiveStageZones() {
     try { state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { protectedZones: [], collisionAvoidance: $('#interactiveStageCollision').checked } }); renderInteractiveStage(); toast('Protected Stage zones cleared.'); }
     catch (error) { toast(error.message, true); }
-  }
-
-  function interactiveStageWorldPayload(platforms = state.interactiveStage?.worldMap?.platforms || [], interactables = state.interactiveStage?.worldMap?.interactables || []) {
-    return {
-      enabled: $('#interactiveStageWorldEnabled').checked,
-      wanderEnabled: $('#interactiveStageWanderEnabled').checked,
-      jumpEnabled: $('#interactiveStageJumpEnabled').checked,
-      floorY: Number($('#interactiveStageFloorY').value),
-      speed: Number($('#interactiveStageWorldSpeed').value),
-      gravity: Number($('#interactiveStageWorldGravity').value),
-      jumpStrength: Number($('#interactiveStageJumpStrength').value),
-      platforms,
-      interactables
-    };
-  }
-
-  async function saveInteractiveStageWorld(event) {
-    event.preventDefault();
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload() } });
-      renderInteractiveStage();
-      toast('Avatar floor and movement physics saved.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function saveInteractiveStagePlatform(event) {
-    event.preventDefault();
-    const name = $('#interactiveStagePlatformName').value.trim() || 'Stage platform';
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `platform-${Date.now()}`;
-    const platform = {
-      id,
-      name,
-      x: Number($('#interactiveStagePlatformX').value),
-      y: Number($('#interactiveStagePlatformY').value),
-      width: Number($('#interactiveStagePlatformWidth').value),
-      height: Number($('#interactiveStagePlatformHeight').value),
-      color: $('#interactiveStagePlatformColor').value,
-      collision: $('#interactiveStagePlatformCollision').value === 'solid' ? 'solid' : 'one-way',
-      enabled: true,
-      orientations: [interactiveStageOrientation]
-    };
-    const existing = state.interactiveStage?.worldMap?.platforms || [];
-    const platforms = [...existing.filter((entry) => entry.id !== id), platform];
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(platforms) } });
-      renderInteractiveStage();
-      toast(`${name} added to the ${interactiveStageOrientation} avatar map.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function loadInteractiveStageStarterMap() {
-    const platforms = [
-      { id: 'starter-lower-left', name: 'Lower left', x: 0.12, y: 0.78, width: 0.24, height: 0.025, color: '#54f2eb', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-center', name: 'Center bridge', x: 0.41, y: 0.68, width: 0.2, height: 0.025, color: '#b99cff', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-upper-right', name: 'Upper right', x: 0.68, y: 0.57, width: 0.22, height: 0.025, color: '#ffbd59', collision: 'one-way', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-center-wall', name: 'Center wall', x: 0.49, y: 0.72, width: 0.025, height: 0.2, color: '#ff667a', collision: 'solid', enabled: true, orientations: ['horizontal', 'vertical'] }
-    ];
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(platforms) } });
-      renderInteractiveStage();
-      toast('Starter platform map loaded for both canvases.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function clearInteractiveStagePlatforms() {
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload([]) } });
-      renderInteractiveStage();
-      toast('Platforms cleared. Avatars will use the canvas floor.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function saveInteractiveStageInteractable(event) {
-    event.preventDefault();
-    const name = $('#interactiveStageInteractableName').value.trim() || 'Gameplay object';
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `interactable-${Date.now()}`;
-    const item = {
-      id,
-      name,
-      kind: $('#interactiveStageInteractableKind').value,
-      glyph: $('#interactiveStageInteractableGlyph').value.trim().slice(0, 8) || 'USE',
-      linkId: $('#interactiveStageInteractableLink').value.trim() || undefined,
-      x: Number($('#interactiveStageInteractableX').value),
-      y: Number($('#interactiveStageInteractableY').value),
-      width: Number($('#interactiveStageInteractableWidth').value),
-      height: Number($('#interactiveStageInteractableHeight').value),
-      color: $('#interactiveStageInteractableColor').value,
-      enabled: true,
-      orientations: [interactiveStageOrientation]
-    };
-    const existing = state.interactiveStage?.worldMap?.interactables || [];
-    const interactables = [...existing.filter((entry) => entry.id !== id), item];
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, interactables) } });
-      renderInteractiveStage();
-      toast(`${name} added to the ${interactiveStageOrientation} game map.`);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function loadInteractiveStageGameplaySet() {
-    const interactables = [
-      { id: 'starter-checkpoint', name: 'Home beacon', kind: 'checkpoint', glyph: 'HOME', x: 0.04, y: 0.82, width: 0.055, height: 0.09, color: '#54f2eb', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-pickup', name: 'Storm shard', kind: 'pickup', glyph: 'STAR', x: 0.27, y: 0.69, width: 0.045, height: 0.07, color: '#ffbd59', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-switch', name: 'Gate switch', kind: 'switch', glyph: 'USE', linkId: 'starter-gate', x: 0.54, y: 0.82, width: 0.05, height: 0.08, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-pressure', name: 'Team plate', kind: 'pressure-plate', glyph: 'TEAM', linkId: 'starter-gate', x: 0.66, y: 0.885, width: 0.11, height: 0.025, color: '#66e08a', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-door', name: 'Storm gate', kind: 'door', glyph: 'GATE', linkId: 'starter-gate', x: 0.75, y: 0.69, width: 0.035, height: 0.22, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-block', name: 'Puzzle block', kind: 'push-block', glyph: 'PUSH', x: 0.42, y: 0.83, width: 0.065, height: 0.08, color: '#44aaff', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-hazard', name: 'Static spikes', kind: 'hazard', glyph: 'HIT', x: 0.8, y: 0.855, width: 0.08, height: 0.055, color: '#ff667a', enabled: true, orientations: ['horizontal', 'vertical'] },
-      { id: 'starter-toy', name: 'Bounce orb', kind: 'toy', glyph: 'BOUNCE', x: 0.91, y: 0.82, width: 0.06, height: 0.09, color: '#44aaff', enabled: true, orientations: ['horizontal', 'vertical'] }
-    ];
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, interactables) } });
-      renderInteractiveStage();
-      toast('Starter gameplay objects loaded for both canvases.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function clearInteractiveStageInteractables() {
-    try {
-      state.interactiveStage = await api('/v1/interactive-stage/layout', { method: 'POST', body: { worldMap: interactiveStageWorldPayload(undefined, []) } });
-      renderInteractiveStage();
-      toast('Gameplay objects cleared.');
-    } catch (error) { toast(error.message, true); }
   }
 
   function renderOverview() {
@@ -2735,31 +1995,50 @@
   function renderDiscordVoice({ settings = false, force = false } = {}) {
     const overlay = state.discordVoice;
     const rpc = state.discordRpc || {};
+    const hosted = state.hostedDiscord || {};
     const configuration = overlay?.settings || {};
     const connection = overlay?.connection || {};
     const participants = overlay?.participants || [];
     const guests = [...(overlay?.guests || participants)].sort((left, right) => Number(right.inChannel) - Number(left.inChannel) || (left.order - right.order) || String(left.displayName).localeCompare(String(right.displayName)));
-    const connected = rpc.state === 'connected';
+    const connected = hosted.state === 'connected' || rpc.state === 'connected';
     $('#discordVoiceBadge').textContent = overlay?.previewing ? 'PREVIEW' : connected ? 'CONNECTED' : overlay ? 'OVERLAY READY' : 'CHECKING';
     $('#discordVoiceBadge').classList.toggle('offline', !connected && !overlay?.previewing);
-    $('#discordVoiceConnectionMetric').textContent = rpc.state === 'unconfigured' ? 'PREVIEW READY' : String(rpc.state || 'offline').replaceAll('-', ' ').toUpperCase();
+    $('#discordVoiceConnectionMetric').textContent = String(hosted.state === 'connected' ? 'server bot' : rpc.state === 'unconfigured' ? 'preview ready' : rpc.state || 'offline').replaceAll('-', ' ').toUpperCase();
     $('#discordVoiceChannelMetric').textContent = String(connection.channelName || rpc.channelName || 'NONE').toUpperCase();
-    $('#discordVoiceGuildMetric').textContent = connection.guildName || rpc.guildName || 'Open Discord and join voice';
+    $('#discordVoiceGuildMetric').textContent = connection.guildName || rpc.guildName || (hosted.paired ? `Server ${hosted.guildId || 'paired'}` : 'Connect a Discord server');
     $('#discordVoiceParticipantMetric').textContent = participants.length;
     $('#discordVoiceSavedMetric').textContent = `${overlay?.savedGuestCount || 0} saved guest profile${overlay?.savedGuestCount === 1 ? '' : 's'}`;
     $('#discordVoiceClientMetric').textContent = overlay?.connectedClients || 0;
     $('#discordVoiceBrowserStatus').innerHTML = overlay
       ? `<strong>Unified Stage · Discord Guests:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(unifiedVisualUrl('discordVoice', overlay.url))}</code>${copyButton(unifiedVisualUrl('discordVoice', overlay.url), 'Unified Stage Browser Source URL')}</span> · ${overlay.connectedClients ? `${overlay.connectedClients} connected` : 'waiting for Broadcast'}`
       : '<strong>Browser Source:</strong> Studio is preparing the local Discord Guests overlay.';
-    const connectionMessage = rpc.lastError || (rpc.state === 'connected'
+    const connectionMessage = hosted.lastError || rpc.lastError || (hosted.state === 'connected'
+      ? `Discord Server Bot connected as ${hosted.studioAlias || 'Tempest Studio'}. Start a voice session with /tempest session start in Discord.`
+      : hosted.state === 'pairing' ? `Install the bot, then run /tempest setup code:${hosted.pairingCode || 'CODE'} in the server.`
+      : rpc.state === 'connected'
       ? `Following ${rpc.channelName || 'your selected voice channel'}${rpc.guildName ? ` in ${rpc.guildName}` : ''}.`
       : rpc.state === 'authorization-required' ? 'Click Connect Discord and approve Tempest once inside Discord Desktop.'
         : rpc.state === 'unconfigured' ? 'The local overlay and image designer are ready. One-click Discord sign-in is being prepared for the public build; Preview Guests works now.'
           : 'Open Discord Desktop, join a voice channel, then connect Tempest.');
     $('#discordVoiceConnectionStatus').innerHTML = `<strong>Discord:</strong> ${escapeHtml(connectionMessage)}`;
-    $('#connectDiscordVoice').disabled = rpc.state === 'connecting' || rpc.state === 'connected' || !rpc.configured;
+    $('#connectDiscordVoice').disabled = hosted.paired || hosted.state === 'pairing' || rpc.state === 'connecting' || rpc.state === 'connected' || !rpc.configured;
     $('#disconnectDiscordVoice').disabled = rpc.state !== 'connected' && rpc.state !== 'error';
     $('#forgetDiscordVoice').disabled = rpc.state === 'unconfigured';
+    $('#hostedDiscordBadge').textContent = hosted.state === 'connected' ? 'CONNECTED' : hosted.state === 'pairing' ? 'PAIRING' : hosted.paired ? 'PAIRED' : 'NOT PAIRED';
+    $('#hostedDiscordBadge').classList.toggle('installed', hosted.state === 'connected');
+    $('#hostedDiscordPairing').innerHTML = hosted.state === 'pairing'
+      ? `<strong>Pairing code:</strong> <span class="copyable-value"><code data-sensitive>${escapeHtml(hosted.pairingCode || '')}</code>${copyButton(hosted.pairingCode || '', 'Discord pairing code')}</span> · In Discord run <code>/tempest setup code:${escapeHtml(hosted.pairingCode || '')}</code>. Expires ${hosted.pairingExpiresAt ? new Date(hosted.pairingExpiresAt).toLocaleTimeString() : 'soon'}.`
+      : hosted.paired ? `<strong>Connected Studio:</strong> ${escapeHtml(hosted.studioAlias || 'Tempest Studio')} · Server ID <span data-sensitive>${escapeHtml(hosted.guildId || '')}</span>. Use <code>/tempest session start</code> from Discord.`
+        : '<strong>Setup:</strong> Install the bot, then enter the short pairing code with <code>/tempest setup</code>.';
+    const hostedAliasInput = $('#hostedDiscordAlias');
+    if (hosted.studioAlias && document.activeElement !== hostedAliasInput) hostedAliasInput.value = hosted.studioAlias;
+    $('#installHostedDiscord').disabled = hosted.state === 'pairing';
+    $('#beginHostedDiscordPairing').textContent = hosted.state === 'pairing' ? 'Replace Pairing Code' : 'Create Pairing Code';
+    $('#beginHostedDiscordPairing').disabled = hosted.paired || hosted.credentialStorage === 'unavailable';
+    $('#checkHostedDiscordPairing').disabled = hosted.state !== 'pairing';
+    $('#saveHostedDiscordAlias').disabled = !hosted.paired || hosted.state === 'pairing';
+    $('#forgetHostedDiscord').disabled = !hosted.paired && hosted.state !== 'pairing';
+    hostedAliasInput.disabled = hosted.state === 'pairing';
     const editingDiscordProfile = discordCanvasDrag || document.activeElement?.closest?.('#discordVoiceParticipantGrid');
     if (editingDiscordProfile && !force) return;
     const useStoredSettings = settings && !discordSettingsDirty;
@@ -3055,7 +2334,7 @@
   }
 
   function renderSimulcast() {
-    const status = state.simulcast || { state: 'broadcast-offline', twitch: {}, kick: {}, checks: [] };
+    const status = state.simulcast || { state: 'broadcast-offline', twitch: {}, checks: [] };
     const labels = {
       'broadcast-offline': 'BROADCAST OFFLINE', 'update-required': 'UPDATE REQUIRED',
       'setup-required': 'SETUP REQUIRED', ready: 'READY', live: 'LIVE',
@@ -3065,22 +2344,19 @@
     badge.textContent = labels[status.state] || 'CHECKING';
     badge.className = `status-badge ${status.state === 'live' ? 'online' : status.state === 'ready' ? 'armed' : status.state === 'degraded-live' || status.state === 'error' ? 'stopped' : 'offline'}`;
     $('#simulcastTwitchMetric').textContent = String(status.twitch?.state || 'offline').toUpperCase();
-    $('#simulcastKickMetric').textContent = String(status.kick?.state || 'offline').toUpperCase();
     const capacity = Number(status.uploadCapacityKbps || 0);
     const required = Number(status.estimatedRequiredKbps || 0);
     $('#simulcastUploadMetric').textContent = capacity ? `${Math.round(capacity / 100) / 10} Mbps` : 'NOT SET';
     $('#simulcastUploadNote').textContent = required ? `Estimated ${Math.round(required / 100) / 10} Mbps · 20% reserve required` : 'Set measured sustained capacity';
     $('#simulcastRecordingMetric').textContent = status.recording ? 'RECORDING' : status.recordingWithStream ? 'ARMED' : 'OFF';
     const telemetry = (name, output) => `<div><b>${name}</b><strong>${(Number(output?.bytesSent || 0) / 1048576).toFixed(1)} MB</strong><small>${Number(output?.droppedFrames || 0).toLocaleString()} dropped / ${Number(output?.totalFrames || 0).toLocaleString()} · ${Math.round(Number(output?.congestion || 0) * 100)}% congestion</small></div>`;
-    $('#simulcastOutputTelemetry').innerHTML = telemetry('TWITCH', status.twitch) + telemetry('KICK', status.kick);
+    $('#simulcastOutputTelemetry').innerHTML = telemetry('TWITCH', status.twitch);
 
     const detailById = {
       broadcast: status.connected ? 'Broadcast is reporting destination health.' : 'Open Broadcast and connect its Studio Integration dock.',
-      controller: status.controllerSupported && status.statusReported ? 'Coordinated output control is available.' : 'Install a Broadcast build with production simulcast support.',
+      controller: status.controllerSupported && status.statusReported ? 'Coordinated output control is available.' : 'Install a Broadcast build with production output control support.',
       twitch: status.twitchServiceReady ? 'The primary output is configured for Twitch.' : 'Select Twitch as the primary streaming service in Broadcast.',
       'dual-format': status.dualFormatReady ? 'Twitch horizontal and vertical routes are prepared.' : 'Complete the Dual Format readiness checklist first.',
-      'kick-server': status.kickServerConfigured ? 'A Kick RTMP/RTMPS ingest destination is stored in Broadcast.' : 'Paste the ingest URL from the Kick creator dashboard.',
-      'kick-key': status.credentialsStored && status.secureStorageAvailable ? 'The key is protected with Windows user encryption.' : 'Enter the Kick stream key so Broadcast can encrypt it.',
       upload: !status.uploadCapacityConfigured ? 'Enter measured sustained upload capacity before Go Live.' : status.uploadHeadroomReady ? 'The configured budget keeps at least 20% headroom.' : 'Measured upload capacity is below the estimated output budget plus reserve.',
       preflight: status.preflightReady ? `Passed ${new Date(status.lastPreflightAt).toLocaleString()}; valid for four hours.` : status.lastPreflightError || 'Run the local preflight after configuration changes or a Broadcast restart.'
     };
@@ -3090,16 +2366,16 @@
     checkList.innerHTML = checks.length ? checks.map((check) => `<div class="dual-format-check ${check.ready ? 'ready' : ''}"><i>${check.ready ? '✓' : '!'}</i><div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(detailById[check.id] || '')}</small></div></div>`).join('') : 'Connect Tempest Broadcast to inspect output readiness.';
     const messages = {
       'broadcast-offline': 'Open Tempest Broadcast and connect the Studio Integration dock.',
-      'update-required': 'The connected Broadcast build does not yet provide the production simulcast controller.',
+      'update-required': 'The connected Broadcast build does not yet provide the production output controller.',
       'setup-required': 'Complete the unchecked items. No output can start until the full preflight passes.',
-      ready: 'Twitch Dual Format and Kick are ready for coordinated Go Live.',
-      live: 'Twitch and Kick are live. Monitor both destination health indicators.',
-      'degraded-live': 'One destination is live without the other. Check the error and use the independent stop controls if needed.',
+      ready: 'Twitch output is ready for Go Live.',
+      live: 'Twitch is live. Monitor its destination health indicator.',
+      'degraded-live': 'Twitch output health is degraded. Check Broadcast and Twitch Stream Manager.',
       error: status.lastError || 'Broadcast reported an output error.'
     };
     $('#simulcastStatusMessage').textContent = status.lastError && status.state !== 'live' ? status.lastError : messages[status.state] || 'Checking output status.';
-    const live = status.twitch?.active || status.kick?.active;
-    const transitioning = ['starting', 'stopping', 'reconnecting'].includes(status.twitch?.state) || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
+    const live = status.twitch?.active;
+    const transitioning = ['starting', 'stopping', 'reconnecting'].includes(status.twitch?.state);
     const manualChecks = [...document.querySelectorAll('.simulcast-manual-check')];
     const completedChecks = manualChecks.filter((input) => input.checked).length;
     const operatorReady = manualChecks.length > 0 && completedChecks === manualChecks.length;
@@ -3109,8 +2385,6 @@
         : `Automatic preflight passed. Complete ${manualChecks.length - completedChecks} remaining operator check${manualChecks.length - completedChecks === 1 ? '' : 's'}.`;
     $('#runSimulcastPreflightButton').disabled = !status.connected || !status.controllerSupported || live || transitioning || !status.configured;
     $('#startSimulcastButton').disabled = !status.ready || !operatorReady || live || transitioning;
-    $('#retryKickOutputButton').disabled = !status.twitch?.active || status.kick?.active || ['starting', 'stopping', 'reconnecting'].includes(status.kick?.state);
-    $('#stopKickOutputButton').disabled = !status.kick?.active;
     $('#stopAllOutputsButton').disabled = !live && !status.recording && !transitioning;
     updateSimulcastOperations(status);
   }
@@ -3118,10 +2392,10 @@
   async function startSimulcast() {
     const operatorChecklistAccepted = [...document.querySelectorAll('.simulcast-manual-check')].every((input) => input.checked);
     if (!operatorChecklistAccepted) return toast('Complete every operator rehearsal check before going live.', true);
-    if (!confirm('Go live now on Twitch (horizontal + vertical) and Kick (horizontal)?')) return;
+    if (!confirm('Go live now on Twitch?')) return;
     try {
       await api('/v1/broadcast/simulcast/start', { method: 'POST', body: { operatorChecklistAccepted } });
-      toast('Coordinated Go Live sent to Broadcast. Twitch will connect before Kick.');
+      toast('Go Live request sent to Broadcast.');
       await refreshRuntime();
     } catch (error) { toast(error.message, true); }
   }
@@ -3131,14 +2405,6 @@
       await api('/v1/broadcast/simulcast/preflight', { method: 'POST', body: {} });
       toast('Production preflight requested. Waiting for Broadcast results…');
       setTimeout(() => { void refreshRuntime({ quiet: false }); }, 400);
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function retryKickOutput() {
-    try {
-      await api('/v1/broadcast/simulcast/retry-kick', { method: 'POST', body: {} });
-      toast('Kick recovery requested. Twitch remains live.');
-      await refreshRuntime();
     } catch (error) { toast(error.message, true); }
   }
 
@@ -3155,12 +2421,11 @@
     document.querySelectorAll('.simulcast-manual-check').forEach((input) => { input.checked = selected.includes(input.value); });
   }
 
-  async function stopSimulcast(scope, force = false) {
-    const prompt = scope === 'kick' ? 'Stop only the Kick output and leave Twitch live?' : 'Emergency stop Twitch, Kick, and any recording started by this controller?';
-    if (!confirm(prompt)) return;
+  async function stopSimulcast(force = false) {
+    if (!confirm('Emergency stop Twitch and any recording started by this controller?')) return;
     try {
-      await api('/v1/broadcast/simulcast/stop', { method: 'POST', body: { scope, force } });
-      toast(scope === 'kick' ? 'Kick stop requested. Twitch remains live.' : 'Emergency stop sent to all coordinated outputs.');
+      await api('/v1/broadcast/simulcast/stop', { method: 'POST', body: { scope: 'all', force } });
+      toast('Emergency stop sent to Broadcast.');
       await refreshRuntime();
     } catch (error) { toast(error.message, true); }
   }
@@ -3383,12 +2648,11 @@
     const label = (value) => String(value || 'unknown').replaceAll('-', ' ').toUpperCase();
     const authorized = chatbot.oauth?.state === 'authorized';
     const connected = chatbot.connections?.eventSub === 'connected' && chatbot.connections?.chat === 'connected';
-    const kickConnected = state.kick?.oauth?.state === 'authorized' && state.kick?.events?.state === 'connected';
     const account = chatbot.oauth?.account;
     renderStreamTogether();
     const botName = chatbot.botName || account?.login || 'Chat Bot';
-    $('#chatbotOverallBadge').textContent = connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : kickConnected ? 'KICK LIVE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
-    $('#chatbotOverallBadge').classList.toggle('offline', !connected && !kickConnected);
+    $('#chatbotOverallBadge').textContent = connected ? 'TWITCH LIVE' : authorized ? 'WAITING FOR CHAT' : 'NOT CONNECTED';
+    $('#chatbotOverallBadge').classList.toggle('offline', !connected);
     $('#liveDeskSetupBadge').textContent = connected ? 'READY' : authorized ? 'CONNECTING' : 'SETUP REQUIRED';
     $('#liveDeskSetupBadge').classList.toggle('offline', !connected);
     $('#chatbotIdentityMetric').textContent = botName.toUpperCase();
@@ -3400,14 +2664,14 @@
     $('#chatbotLastMessage').textContent = chatbot.lastMessageAt ? `Last message ${new Date(chatbot.lastMessageAt).toLocaleTimeString()}` : 'No messages received';
     const sharedChat = chatbot.sharedChat || { state: 'inactive', participants: [] };
     const sharedChatActive = sharedChat.state === 'active';
-    $('#sharedChatBadge').textContent = !connected && !kickConnected ? 'NOT CONNECTED' : sharedChatActive ? 'TWITCH COLLAB LIVE' : connected && kickConnected ? 'TWITCH + KICK LIVE' : connected ? 'TWITCH LIVE' : 'KICK LIVE';
-    $('#sharedChatBadge').classList.toggle('offline', !connected && !kickConnected);
+    $('#sharedChatBadge').textContent = !connected ? 'NOT CONNECTED' : sharedChatActive ? 'TWITCH COLLAB LIVE' : 'TWITCH LIVE';
+    $('#sharedChatBadge').classList.toggle('offline', !connected);
     $('#sharedChatSessionTitle').textContent = !connected ? 'Connect the chatbot' : sharedChatActive
       ? `${sharedChat.participants?.length || 0} participating channel${sharedChat.participants?.length === 1 ? '' : 's'}`
       : sharedChat.state === 'unavailable' ? 'Stream Together chat unavailable' : 'Home Twitch chat';
     $('#sharedChatSessionDetail').textContent = sharedChat.lastError || (sharedChatActive
       ? `${sharedChat.host?.login ? `Hosted by @${sharedChat.host.login}. ` : ''}Studio is monitoring the complete Stream Together chat without a separate browser window.`
-      : connected ? 'Unified Chat is monitoring your Twitch home channel and will detect Stream Together automatically.' : 'Studio will detect Stream Together chat automatically after Twitch EventSub connects.');
+      : connected ? 'Live Chat is monitoring your Twitch home channel and will detect Stream Together automatically.' : 'Studio will detect Stream Together chat automatically after Twitch EventSub connects.');
     const participants = sharedChat.participants || [];
     const participantList = $('#sharedChatParticipants');
     participantList.classList.toggle('empty-state', !participants.length);
@@ -3420,19 +2684,13 @@
       messageList.dataset.signature = messageSignature;
       messageList.classList.toggle('empty-state', !liveMessages.length);
       messageList.innerHTML = liveMessages.length ? liveMessages.map((message) => {
-        const platform = message.platform === 'kick' ? 'KICK' : 'TWITCH';
-        const origin = message.platform === 'kick' ? `@${message.sourceChannelLogin || state.kick?.oauth?.account?.username || 'kick'}` : message.sharedChat ? `@${message.sourceChannelLogin || message.sourceChannelDisplayName || 'collaborator'}` : `@${chatbot.channel?.login || 'home'}`;
-        return `<article class="shared-chat-message ${message.sharedChat ? 'shared' : ''} ${message.platform === 'kick' ? 'kick' : ''}"><strong>${escapeHtml(message.viewerName || message.viewerLogin || 'Viewer')}</strong><p>${escapeHtml(message.text)}</p><small><span class="origin">${platform} · ${escapeHtml(origin)}</span> · ${new Date(message.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></article>`;
+        const origin = message.sharedChat ? `@${message.sourceChannelLogin || message.sourceChannelDisplayName || 'collaborator'}` : `@${chatbot.channel?.login || 'home'}`;
+        return `<article class="shared-chat-message ${message.sharedChat ? 'shared' : ''}"><strong>${escapeHtml(message.viewerName || message.viewerLogin || 'Viewer')}</strong><p>${escapeHtml(message.text)}</p><small><span class="origin">TWITCH · ${escapeHtml(origin)}</span> · ${new Date(message.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></article>`;
       }).join('') : 'Chat messages will appear here while Studio is connected.';
       if (stayAtBottom) messageList.scrollTop = messageList.scrollHeight;
     }
-    const selectedPlatform = $('#sharedChatPlatform').value;
-    const selectedPlatformConnected = selectedPlatform === 'kick' ? kickConnected : connected;
-    $('#sharedChatPlatform').querySelector('[value="twitch"]').disabled = !connected;
-    $('#sharedChatPlatform').querySelector('[value="kick"]').disabled = !kickConnected;
-    if (!selectedPlatformConnected && (connected || kickConnected)) $('#sharedChatPlatform').value = connected ? 'twitch' : 'kick';
-    $('#sharedChatMessage').disabled = !connected && !kickConnected;
-    $('#sendSharedChatMessage').disabled = !connected && !kickConnected;
+    $('#sharedChatMessage').disabled = !connected;
+    $('#sendSharedChatMessage').disabled = !connected;
     $('#clearSharedChatMessages').disabled = !liveMessages.length;
     const poll = chatbot.poll || { state: 'idle', options: [], totalVotes: 0 };
     const pollActive = poll.state === 'active';
@@ -3478,17 +2736,14 @@
       $('#chatbotAutoMessages').value = (autoMessages.messages || []).join('\n');
       $('#chatbotAutoMessageInterval').value = String(autoMessages.intervalMinutes ?? 20);
       $('#chatbotAutoMessageThreshold').value = String(autoMessages.chatMessageThreshold ?? 30);
-      $('#chatbotAutoMessagesTwitch').checked = (autoMessages.platforms || []).includes('twitch');
-      $('#chatbotAutoMessagesKick').checked = (autoMessages.platforms || []).includes('kick');
     }
     $('#chatbotAutoMessagesBadge').textContent = autoMessages.enabled ? `${autoMessages.sent || 0} SENT` : 'OFF';
     $('#chatbotAutoMessagesBadge').classList.toggle('offline', !autoMessages.enabled);
     const remainingMessages = autoMessages.chatMessageThreshold > 0 ? Math.max(0, autoMessages.chatMessageThreshold - (autoMessages.messagesSinceLast || 0)) : null;
     const remainingMinutes = autoMessages.intervalMinutes > 0 && autoMessages.nextTimeAt ? Math.max(0, Math.ceil((Date.parse(autoMessages.nextTimeAt) - Date.now()) / 60_000)) : null;
-    const autoMessageDestinations = (autoMessages.platforms || []).map((platform) => platform === 'kick' ? 'Kick' : 'Twitch').join(' + ');
     $('#chatbotAutoMessagesStatus').textContent = !autoMessages.enabled
       ? 'Auto Messages are off.'
-      : `Next rotating message goes to ${autoMessageDestinations || 'no platform'} after ${remainingMinutes === null ? 'the time trigger is disabled' : `${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}`} or ${remainingMessages === null ? 'the chat trigger is disabled' : `${remainingMessages} more viewer message${remainingMessages === 1 ? '' : 's'}`}, whichever happens first.`;
+      : `Next rotating message goes to Twitch after ${remainingMinutes === null ? 'the time trigger is disabled' : `${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}`} or ${remainingMessages === null ? 'the chat trigger is disabled' : `${remainingMessages} more viewer message${remainingMessages === 1 ? '' : 's'}`}, whichever happens first.`;
     const raidAutomation = chatbot.raidAutomation || {};
     if (!$('#chatbotRaidAutomationForm').contains(document.activeElement)) {
       $('#chatbotRaidWelcomeEnabled').checked = raidAutomation.welcomeEnabled === true;
@@ -3594,42 +2849,6 @@
     const activityList = $('#chatbotActivity');
     activityList.classList.toggle('empty-state', !activity.length);
     activityList.innerHTML = activity.length ? activity.slice(0, 10).map((entry) => `<div class="compact-row event-${escapeHtml(entry.state === 'accepted' ? 'success' : entry.state === 'error' ? 'error' : 'warning')}"><div><strong>${escapeHtml(entry.message)}</strong><small>${new Date(entry.timestamp).toLocaleTimeString()}${entry.command ? ` · ${escapeHtml(chatbot.prefix || '!')}${escapeHtml(entry.command)}` : ''}${entry.sharedChat ? ` · via @${escapeHtml(entry.sourceChannelLogin || 'stream-together-collaborator')}` : ''}</small></div><i class="event-dot"></i></div>`).join('') : 'No chatbot activity recorded.';
-    renderKick();
-  }
-
-  function renderKick() {
-    const kick = state.kick;
-    if (!kick || !$('#kickChatBadge')) return;
-    const label = (value) => String(value || 'unknown').replaceAll('-', ' ').toUpperCase();
-    const authorized = kick.oauth?.state === 'authorized';
-    const eventsConnected = kick.events?.state === 'connected';
-    $('#kickChatBadge').textContent = authorized && eventsConnected ? 'CHAT LIVE' : authorized ? 'AUTHORIZED' : kick.configured ? label(kick.oauth?.state) : 'NOT CONFIGURED';
-    $('#kickChatBadge').classList.toggle('offline', !authorized || !eventsConnected);
-    if (document.activeElement !== $('#kickClientId')) $('#kickClientId').value = kick.clientId || '';
-    $('#kickClientSecret').placeholder = kick.configured ? 'Stored with Windows encryption — leave blank to keep' : 'Paste once; stored with Windows encryption';
-    $('#kickRedirectUri').value = kick.redirectUri || '';
-    $('#kickWebhookUrl').value = kick.webhookUrl || '';
-    $('#copyKickRedirectUri').innerHTML = copyIcon;
-    $('#copyKickWebhookUrl').innerHTML = copyIcon;
-    $('#kickAccountState').textContent = kick.oauth?.account?.username ? `@${kick.oauth.account.username}` : '—';
-    $('#kickOauthState').textContent = label(kick.oauth?.state);
-    $('#kickEventState').textContent = label(kick.events?.state);
-    $('#saveKickConfiguration').disabled = kick.oauth?.storage === 'unavailable';
-    $('#connectKickButton').disabled = !kick.configured || authorized || kick.oauth?.state === 'authorization-pending';
-    $('#validateKickButton').disabled = !authorized;
-    $('#linkKickRelayButton').disabled = !authorized || !state.hostedExtension?.paired;
-    $('#disconnectKickButton').disabled = !authorized && kick.oauth?.state !== 'error';
-    $('#kickSetupMessage').textContent = kick.lastError || (authorized && eventsConnected
-      ? `@${kick.oauth.account?.username || 'Kick broadcaster'} is connected. Signed chat webhooks and platform-local replies are active.`
-      : authorized ? 'The Kick account is authorized, but the chat webhook subscription needs attention. Confirm the webhook URL in the Kick developer app and validate again.'
-        : kick.oauth?.state === 'authorization-pending' ? 'Complete authorization in the Kick browser tab. Studio will receive the callback automatically.'
-          : kick.configured ? 'Kick application saved. Connect the broadcaster account to activate chat.'
-            : 'Create a Kick developer application, register both URLs shown here, then save its Client ID and secret.');
-    const output = state.simulcast || {};
-    $('#kickOutputDestinationState').textContent = output.kickServerConfigured ? 'CONFIGURED' : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
-    $('#kickOutputCredentialState').textContent = output.credentialsStored && output.secureStorageAvailable ? 'PROTECTED' : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
-    $('#kickOutputUploadState').textContent = output.uploadCapacityConfigured ? `${Math.round(Number(output.uploadCapacityKbps || 0) / 100) / 10} MBPS` : output.connected ? 'SET UP IN BROADCAST' : 'BROADCAST OFFLINE';
-    $('#kickOutputRecordingState').textContent = output.recording ? 'RECORDING' : output.recordingWithStream ? 'ARMED' : 'OFF';
   }
 
   function renderHostedExtension() {
@@ -3905,68 +3124,6 @@
     } catch (error) { toast(error.message, true); }
   }
 
-  async function saveKickConfiguration({ quiet = false } = {}) {
-    try {
-      state.kick = await api('/v1/integrations/kick/configuration', { method: 'POST', body: { clientId: $('#kickClientId').value.trim(), clientSecret: $('#kickClientSecret').value, redirectUri: $('#kickRedirectUri').value } });
-      $('#kickClientSecret').value = '';
-      renderChatbot();
-      if (!quiet) toast('Kick developer application saved with Windows-encrypted credentials.');
-      return state.kick;
-    } catch (error) {
-      renderChatbot();
-      if (!quiet) toast(error.message, true);
-      if (quiet) throw error;
-      return null;
-    }
-  }
-
-  async function connectKick() {
-    try {
-      await saveKickConfiguration({ quiet: true });
-      const authorization = await api('/v1/integrations/kick/oauth/start', { method: 'POST', body: {} });
-      state.kick = authorization.status;
-      renderChatbot();
-      await window.tempestStudio.openExternal(authorization.authorizationUri);
-      toast('Kick authorization opened in your browser.');
-    } catch (error) { toast(error.message, true); }
-  }
-
-  async function validateKick() {
-    try {
-      state.kick = await api('/v1/integrations/kick/oauth/validate', { method: 'POST', body: {} });
-      if (state.hostedExtension?.paired) await linkKickRelay({ quiet: true });
-      renderChatbot();
-      toast(state.kick.events?.state === 'connected' ? 'Kick account and chat webhook are active.' : 'Kick account is valid; webhook subscription needs attention.', state.kick.events?.state !== 'connected');
-    } catch (error) { await refresh({ quiet: true }); toast(error.message, true); }
-  }
-
-  async function linkKickRelay({ quiet = false } = {}) {
-    try {
-      const result = await window.tempestStudio.linkHostedKick();
-      state.kickRelayLinked = Boolean(result?.linked);
-      renderChatbot();
-      if (!quiet) toast(`Kick webhook relay linked to @${result?.kick?.username || 'the connected account'}.`);
-      return result;
-    } catch (error) {
-      state.kickRelayLinked = false;
-      if (!quiet) toast(error.message, true);
-      if (quiet) throw error;
-      return null;
-    }
-  }
-
-  async function disconnectKick() {
-    if (!confirm('Disconnect Kick chat and remove the encrypted Kick secret and tokens from this device?')) return;
-    try {
-      await window.tempestStudio.unlinkHostedKick().catch(() => ({ unlinked: false }));
-      state.kick = await api('/v1/integrations/kick/oauth', { method: 'DELETE', body: {} });
-      state.kickRelayLinked = false;
-      $('#kickClientSecret').value = '';
-      renderChatbot();
-      toast('Kick chat disconnected. Twitch chat remains unchanged.');
-    } catch (error) { toast(error.message, true); }
-  }
-
   async function saveChatbotIdentity({ quiet = false } = {}) {
     try {
       state.chatbot = await api('/v1/chatbot/configuration', { method: 'POST', body: { displayName: $('#chatbotDisplayName').value } });
@@ -4008,10 +3165,7 @@
 
   async function saveChatbotAutoMessages(event) {
     event.preventDefault();
-    const platforms = [
-      $('#chatbotAutoMessagesTwitch').checked ? 'twitch' : '',
-      $('#chatbotAutoMessagesKick').checked ? 'kick' : ''
-    ].filter(Boolean);
+    const platforms = ['twitch'];
     const autoMessages = {
       enabled: $('#chatbotAutoMessagesEnabled').checked,
       messages: $('#chatbotAutoMessages').value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
@@ -4265,10 +3419,9 @@
     const message = input.value.trim();
     if (!message) return;
     try {
-      const platform = $('#sharedChatPlatform').value;
-      await api('/v1/chatbot/messages', { method: 'POST', body: { platform, message } });
+      await api('/v1/chatbot/messages', { method: 'POST', body: { platform: 'twitch', message } });
       input.value = '';
-      toast(`Message sent to ${platform === 'kick' ? 'Kick' : 'Twitch'} chat.`);
+      toast('Message sent to Twitch chat.');
     } catch (error) { toast(error.message, true); }
   }
 
@@ -4740,7 +3893,6 @@
     renderTwitchExperiences({ settings: true });
     renderDiscordVoice({ settings: true });
     renderInteractiveStage();
-    renderInteractiveWorld();
     renderWarudo();
     renderVTubeStudio();
     renderDualFormat();
@@ -4801,14 +3953,12 @@
     } else if (activeSection === 'chatoverlaySection' && changed('chatbot', 'chatOverlay', 'emoteWall')) {
       renderChatOverlay();
       renderEmoteWall();
-    } else if (activeSection === 'discordvoiceSection' && changed('discordVoice', 'discordRpc')) renderDiscordVoice();
-    else if (activeSection === 'worldSection' && changed('interactiveWorld')) renderInteractiveWorld();
-    else if (activeSection === 'interactivestageSection' && changed('unifiedStage', 'interactiveStage', 'stageActors', 'interactionComposer')) renderInteractiveStage();
+    } else if (activeSection === 'discordvoiceSection' && changed('discordVoice', 'discordRpc', 'hostedDiscord')) renderDiscordVoice();
+    else if (activeSection === 'interactivestageSection' && changed('unifiedStage', 'interactiveStage')) renderInteractiveStage();
     else if (activeSection === 'twitchSection' && changed('localExtension', 'hostedExtension')) {
       renderLocalExtension();
       renderHostedExtension();
-    } else if (activeSection === 'kickSection' && changed('kick', 'hostedExtension')) renderKick();
-    else if (activeSection === 'chatbotSection' && changed('chatbot', 'kick')) renderChatbot();
+    } else if (activeSection === 'chatbotSection' && changed('chatbot')) renderChatbot();
     else if (activeSection === 'dualformatSection' && changed('runtimeSummary', 'visualAlerts')) renderDualFormat();
     else if (activeSection === 'simulcastSection' && changed('runtimeSummary')) renderSimulcast();
     else if (activeSection === 'apiSection' && changed('runtimeSummary', 'warudo', 'vtubeStudio')) {
@@ -4853,24 +4003,17 @@
     } else if (activeSection === 'discordvoiceSection') {
       add('discordVoice', () => api('/v1/discord-voice'));
       add('discordRpc', () => window.tempestStudio.getDiscordVoiceStatus());
-    } else if (activeSection === 'worldSection') {
-      add('interactiveWorld', () => api('/v1/interactive-world'));
+      add('hostedDiscord', () => state.hostedDiscord?.state === 'pairing' ? window.tempestStudio.checkHostedDiscordPairing() : window.tempestStudio.getHostedDiscordStatus());
     } else if (activeSection === 'interactivestageSection') {
       add('unifiedStage', () => api('/v1/unified-stage'));
       add('interactiveStage', () => api('/v1/interactive-stage'));
-      add('stageActors', () => api('/v1/stage-actors'));
-      add('interactionComposer', () => api('/v1/interaction-composer'));
     } else if (activeSection === 'twitchSection') {
       add('twitch', () => api('/v1/integrations/twitch'));
       add('extensionFeatures', () => api('/v1/extension-features'));
       add('localExtension', () => window.tempestStudio.getLocalExtensionStatus());
       add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
-    } else if (activeSection === 'kickSection') {
-      add('kick', () => api('/v1/integrations/kick'));
-      add('hostedExtension', () => window.tempestStudio.getHostedExtensionStatus());
     } else if (activeSection === 'chatbotSection') {
       add('chatbot', () => api('/v1/chatbot'));
-      add('kick', () => api('/v1/integrations/kick'));
     } else if (activeSection === 'dualformatSection') add('visualAlerts', () => api('/v1/visual-alerts'));
     else if (activeSection === 'apiSection') {
       add('warudo', () => window.tempestStudio.getWarudoStatus());
@@ -4925,7 +4068,7 @@
       if (refreshed.assets) state.assets = refreshed.assets.assets || [];
       if (refreshed.soundAlerts) state.soundAlerts = refreshed.soundAlerts;
       if (refreshed.twitchVisualAlerts) state.twitchVisualAlerts = refreshed.twitchVisualAlerts;
-      for (const key of ['safety', 'twitch', 'chatbot', 'kick', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
+      for (const key of ['safety', 'twitch', 'chatbot', 'visualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'extensionFeatures', 'discordRpc', 'hostedDiscord', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
       renderBridgeStatus(true);
@@ -4947,7 +4090,6 @@
         ['workflows', () => api('/v1/workflows')],
         ['events', () => api('/v1/events?limit=150')],
         ['twitch', () => api('/v1/integrations/twitch')],
-        ['kick', () => api('/v1/integrations/kick')],
         ['chatbot', () => api('/v1/chatbot')],
         ['soundAlerts', () => api('/v1/sound-alerts')],
         ['visualAlerts', () => api('/v1/visual-alerts')],
@@ -4959,11 +4101,9 @@
         ['discordVoice', () => api('/v1/discord-voice')],
         ['unifiedStage', () => api('/v1/unified-stage')],
         ['interactiveStage', () => api('/v1/interactive-stage')],
-        ['interactiveWorld', () => api('/v1/interactive-world')],
-        ['stageActors', () => api('/v1/stage-actors')],
-        ['interactionComposer', () => api('/v1/interaction-composer')],
         ['extensionFeatures', () => api('/v1/extension-features')],
         ['discordRpc', () => window.tempestStudio.getDiscordVoiceStatus()],
+        ['hostedDiscord', () => window.tempestStudio.getHostedDiscordStatus()],
         ['warudo', () => window.tempestStudio.getWarudoStatus()],
         ['vtubeStudio', () => window.tempestStudio.getVTubeStudioStatus()],
         ['localExtension', () => window.tempestStudio.getLocalExtensionStatus()],
@@ -4996,7 +4136,7 @@
         ...(refreshed.workflows ? { workflows: refreshed.workflows.workflows || [] } : {}),
         ...(refreshed.events ? { events: refreshed.events.events || [] } : {})
       });
-      for (const key of ['twitch', 'kick', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'interactiveWorld', 'stageActors', 'interactionComposer', 'extensionFeatures', 'discordRpc', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
+      for (const key of ['twitch', 'chatbot', 'soundAlerts', 'visualAlerts', 'twitchVisualAlerts', 'diceOverlay', 'chatOverlay', 'emoteWall', 'twitchExperiences', 'discordVoice', 'unifiedStage', 'interactiveStage', 'extensionFeatures', 'discordRpc', 'hostedDiscord', 'warudo', 'vtubeStudio', 'localExtension', 'hostedExtension', 'giphy', 'alertHistory', 'alertDiagnostics']) {
         if (Object.hasOwn(refreshed, key)) state[key] = refreshed[key];
       }
       for (const [key, value] of Object.entries(refreshed)) runtimeDataSignatures.set(key, JSON.stringify(value));
@@ -6421,6 +5561,61 @@
     } catch (error) { toast(error.message, true); }
   }
 
+  async function beginHostedDiscordPairing() {
+    try {
+      state.hostedDiscord = { ...(state.hostedDiscord || {}), state: 'pairing' };
+      renderDiscordVoice();
+      state.hostedDiscord = await window.tempestStudio.beginHostedDiscordPairing({ studioAlias: $('#hostedDiscordAlias').value.trim() || 'Tempest Studio' });
+      renderDiscordVoice();
+      toast('Pairing code created. Run /tempest setup with this code in Discord.');
+    } catch (error) {
+      state.hostedDiscord = await window.tempestStudio.getHostedDiscordStatus().catch(() => state.hostedDiscord);
+      renderDiscordVoice();
+      toast(error.message, true);
+    }
+  }
+
+  async function installHostedDiscord() {
+    try {
+      await window.tempestStudio.openHostedDiscordInstall();
+      toast('Discord bot installation opened in your browser.');
+    } catch (error) { toast(error.message, true); }
+  }
+
+  async function saveHostedDiscordAlias() {
+    try {
+      const studioAlias = $('#hostedDiscordAlias').value.trim();
+      state.hostedDiscord = await window.tempestStudio.updateHostedDiscordAlias({ studioAlias });
+      renderDiscordVoice();
+      toast(`Studio alias saved as ${state.hostedDiscord.studioAlias}.`);
+    } catch (error) {
+      state.hostedDiscord = await window.tempestStudio.getHostedDiscordStatus().catch(() => state.hostedDiscord);
+      renderDiscordVoice();
+      toast(error.message, true);
+    }
+  }
+
+  async function checkHostedDiscordPairing({ quiet = false } = {}) {
+    try {
+      state.hostedDiscord = await window.tempestStudio.checkHostedDiscordPairing();
+      renderDiscordVoice();
+      if (!quiet && state.hostedDiscord?.paired) toast('Discord server connected to this Studio.');
+    } catch (error) {
+      state.hostedDiscord = await window.tempestStudio.getHostedDiscordStatus().catch(() => state.hostedDiscord);
+      renderDiscordVoice();
+      if (!quiet) toast(error.message, true);
+    }
+  }
+
+  async function forgetHostedDiscord() {
+    if (!confirm('Disconnect this Studio from the hosted Discord bot? Saved guest artwork stays on this computer.')) return;
+    try {
+      state.hostedDiscord = await window.tempestStudio.forgetHostedDiscord();
+      renderDiscordVoice();
+      toast('Hosted Discord binding disconnected.');
+    } catch (error) { toast(error.message, true); }
+  }
+
   async function connectDiscordVoice() {
     try {
       state.discordRpc = { ...(state.discordRpc || {}), state: 'connecting' };
@@ -7053,25 +6248,6 @@
       return;
     }
     if (button.dataset.copyText) return copyToClipboard(button.dataset.copyText, button);
-    if (button.dataset.worldDemoCrowd) return spawnWorldDemoCrowd();
-    if (button.dataset.worldClearCrowd) return clearWorldCrowd();
-    if (button.dataset.worldViewerState) return setWorldViewerState(button.dataset.worldViewerState, button.dataset.worldState);
-    if (button.dataset.worldViewerControl) return controlWorldViewer(button.dataset.worldViewerControl, button.dataset.worldControl);
-    if (button.dataset.worldViewerCosmetics) return editWorldViewerCosmetics(button.dataset.worldViewerCosmetics);
-    if (button.dataset.worldViewerRemove) return removeWorldViewer(button.dataset.worldViewerRemove);
-    if (button.dataset.worldAvatarRedeemTest) return testWorldAvatarRedeem(button.dataset.worldAvatarRedeemTest);
-    if (button.dataset.worldAvatarRedeemRemove) return removeWorldAvatarRedeem(button.dataset.worldAvatarRedeemRemove);
-    if (button.dataset.worldAvatarRedeemReset) return resetWorldAvatarRewardSession();
-    if (button.dataset.stageActorStrip) return chooseStageActorStrip(button.dataset.stageActorStrip);
-    if (button.dataset.stageActorAtlas) return chooseStageActorAtlas();
-    if (button.dataset.stageActorTexture) return chooseStageActorTexture();
-    if (button.dataset.stageActorExport) return exportStageActorPack(button.dataset.stageActorExport);
-    if (button.dataset.stageActorEdit) return openStageActorEditor(button.dataset.stageActorEdit);
-    if (button.dataset.stageActorLibrary) return importStreamingAvatarsLibrary();
-    if (button.dataset.stageActorImport) return importStageActorPack();
-    if (button.dataset.stageActorRemove) return removeStageActorPack(button.dataset.stageActorRemove);
-    if (button.dataset.worldPetAction) return runWorldPetAction(button.dataset.worldPetAction);
-    if (button.dataset.worldBattleAction) return runWorldBattleAction(button.dataset.worldBattleAction);
     if (button.dataset.stageTab) return switchInteractiveStageTab(button.dataset.stageTab);
     if (button.dataset.stageGo) return switchInteractiveStageTab(button.dataset.stageGo);
     if (button.dataset.chatbotTab) return switchChatbotTab(button.dataset.chatbotTab);
@@ -7084,13 +6260,6 @@
     if (button.dataset.stagePreview) return previewInteractiveStage();
     if (button.dataset.stageClear) return clearInteractiveStage();
     if (button.dataset.stageZoneClear) return clearInteractiveStageZones();
-    if (button.dataset.stageStarterMap) return loadInteractiveStageStarterMap();
-    if (button.dataset.stagePlatformClear) return clearInteractiveStagePlatforms();
-    if (button.dataset.stageStarterGameplay) return loadInteractiveStageGameplaySet();
-    if (button.dataset.stageInteractableClear) return clearInteractiveStageInteractables();
-    if (button.dataset.interactionRecipeRun) return runInteractionRecipe(button.dataset.interactionRecipeRun);
-    if (button.dataset.interactionRecipeRemove) return removeInteractionRecipe(button.dataset.interactionRecipeRemove);
-    if (button.dataset.tobiiAdapter) return controlTobiiAdapter(button.dataset.tobiiAdapter);
     if (button.dataset.exportStudioBackup) return exportStudioBackup();
     if (button.dataset.restoreStudioBackup) return restoreStudioBackup();
     if (button.dataset.viewerGroupEdit) return editViewerGroup(button.dataset.viewerGroupEdit);
@@ -7116,7 +6285,12 @@
     if (button.dataset.importAlertPack) return importAlertPack(button.dataset.importAlertPack);
     if (button.dataset.exportInteractionAlertPack) return exportAlertPack('interaction', button.dataset.exportInteractionAlertPack);
     if (button.dataset.exportTwitchAlertPack) return exportAlertPack('twitch', button.dataset.exportTwitchAlertPack);
-    if (button.dataset.section) return showSection(button.dataset.section, button.dataset.navGroup);
+    if (button.dataset.section) {
+      showSection(button.dataset.section, button.dataset.navGroup);
+      if (button.dataset.section === 'chatbot' && button.dataset.view) switchChatbotTab(button.dataset.view);
+      if (button.dataset.section === 'interactivestage' && button.dataset.view) switchInteractiveStageTab(button.dataset.view);
+      return;
+    }
     if (button.dataset.go) return showSection(button.dataset.go);
     if (button.dataset.dicePreset) {
       $('#diceExpression').value = button.dataset.dicePreset;
@@ -7226,31 +6400,9 @@
     $('#privacyModeButton').addEventListener('click', togglePrivacyMode);
     $('#savePrivacySettings').addEventListener('click', savePrivacyControls);
     $('#refreshButton').addEventListener('click', () => refresh());
-    $('#worldViewerForm').addEventListener('submit', addWorldViewer);
-    $('#worldAvatarRedeemForm').addEventListener('submit', saveWorldAvatarRedeem);
-    $('#worldAvatarRedeemEffect').addEventListener('change', updateWorldAvatarRedeemValueHint);
-    $('#worldViewerLookForm').addEventListener('submit', saveWorldViewerCosmetics);
-    $('#worldViewerPrimaryColor').addEventListener('change', updateWorldViewerColorPreview);
-    $('#worldViewerSecondaryColor').addEventListener('change', updateWorldViewerColorPreview);
-    $('#stageActorPackForm').addEventListener('submit', createStageActorPack);
-    $('#stageActorBuildMode').addEventListener('change', updateStageActorBuildMode);
-    updateStageActorBuildMode();
-    $('#stageActorEditForm').addEventListener('submit', saveStageActorEdit);
-    $('#worldPresenceForm').addEventListener('submit', saveWorldPresence);
-    $('#worldAvatarSize').addEventListener('input', () => { $('#worldAvatarSizeValue').textContent = `${$('#worldAvatarSize').value}%`; });
-    $('#interactionComposerForm').addEventListener('submit', saveInteractionRecipe);
-    $('#worldPetForm').addEventListener('submit', saveWorldPet);
-    $('#worldStartBattle').addEventListener('click', startWorldBattle);
-    $('#worldEndBattle').addEventListener('click', endWorldBattle);
-    $('#worldGazeForm').addEventListener('submit', saveWorldGaze);
-    $('#worldSimulateGaze').addEventListener('click', simulateWorldGaze);
-    $('#worldSafetyForm').addEventListener('submit', saveWorldSafety);
     $('#interactiveStageCreateForm').addEventListener('submit', createInteractiveStageObject);
     $('#interactiveStageSelectionForm').addEventListener('submit', saveInteractiveStageSelection);
     $('#interactiveStageZoneForm').addEventListener('submit', saveInteractiveStageZone);
-    $('#interactiveStageWorldForm').addEventListener('submit', saveInteractiveStageWorld);
-    $('#interactiveStagePlatformForm').addEventListener('submit', saveInteractiveStagePlatform);
-    $('#interactiveStageInteractableForm').addEventListener('submit', saveInteractiveStageInteractable);
     $('#saveUnifiedStageSettings').addEventListener('click', saveUnifiedStageSettings);
     $('#unifiedStageEnabled').addEventListener('change', (event) => {
       document.querySelectorAll('[data-unified-module]').forEach((input) => { input.disabled = !event.currentTarget.checked; });
@@ -7290,6 +6442,11 @@
     $('#authorizeVTubeStudio').addEventListener('click', authorizeVTubeStudio);
     $('#refreshVTubeStudioHotkeys').addEventListener('click', refreshVTubeStudioHotkeys);
     $('#forgetVTubeStudio').addEventListener('click', forgetVTubeStudio);
+    $('#installHostedDiscord').addEventListener('click', installHostedDiscord);
+    $('#beginHostedDiscordPairing').addEventListener('click', beginHostedDiscordPairing);
+    $('#checkHostedDiscordPairing').addEventListener('click', () => checkHostedDiscordPairing());
+    $('#saveHostedDiscordAlias').addEventListener('click', saveHostedDiscordAlias);
+    $('#forgetHostedDiscord').addEventListener('click', forgetHostedDiscord);
     $('#connectDiscordVoice').addEventListener('click', connectDiscordVoice);
     $('#disconnectDiscordVoice').addEventListener('click', disconnectDiscordVoice);
     $('#discordVoiceLayout').addEventListener('change', (event) => {
@@ -7312,9 +6469,7 @@
     $('#runSimulcastPreflightButton').addEventListener('click', () => { void runSimulcastPreflight(); });
     $('#refreshSimulcastButton').addEventListener('click', () => { void api('/v1/broadcast/simulcast/refresh', { method: 'POST', body: {} }).then(() => refreshRuntime()).catch((error) => toast(error.message, true)); });
     $('#startSimulcastButton').addEventListener('click', () => { void startSimulcast(); });
-    $('#retryKickOutputButton').addEventListener('click', () => { void retryKickOutput(); });
-    $('#stopKickOutputButton').addEventListener('click', () => { void stopSimulcast('kick'); });
-    $('#stopAllOutputsButton').addEventListener('click', () => { void stopSimulcast('all', true); });
+    $('#stopAllOutputsButton').addEventListener('click', () => { void stopSimulcast(true); });
     document.querySelectorAll('.simulcast-manual-check').forEach((input) => input.addEventListener('change', saveSimulcastChecklist));
     $('#resetSimulcastChecklistButton').addEventListener('click', () => {
       document.querySelectorAll('.simulcast-manual-check').forEach((input) => { input.checked = false; });
@@ -7432,13 +6587,6 @@
     $('#saveChatbotIdentity').addEventListener('click', () => { void saveChatbotIdentity(); });
     $('#validateChatbotButton').addEventListener('click', validateChatbot);
     $('#disconnectChatbotButton').addEventListener('click', disconnectChatbot);
-    $('#saveKickConfiguration').addEventListener('click', () => { void saveKickConfiguration(); });
-    $('#connectKickButton').addEventListener('click', connectKick);
-    $('#validateKickButton').addEventListener('click', validateKick);
-    $('#linkKickRelayButton').addEventListener('click', () => { void linkKickRelay(); });
-    $('#disconnectKickButton').addEventListener('click', disconnectKick);
-    $('#copyKickRedirectUri').addEventListener('click', (event) => copyToClipboard($('#kickRedirectUri').value, event.currentTarget));
-    $('#copyKickWebhookUrl').addEventListener('click', (event) => copyToClipboard($('#kickWebhookUrl').value, event.currentTarget));
     $('#openChatbotIsolatedAuthorization').addEventListener('click', openChatbotIsolatedAuthorization);
     $('#copyChatbotAuthorizationCode').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.userCode, event.currentTarget));
     $('#copyChatbotAuthorizationLink').addEventListener('click', (event) => state.chatbotDeviceAuthorization && copyToClipboard(state.chatbotDeviceAuthorization.verificationUri, event.currentTarget));
@@ -7472,7 +6620,6 @@
     $('#chatbotPrefix').addEventListener('change', saveChatbotPrefix);
     $('#testChatbotCommand').addEventListener('click', testChatbotCommand);
     $('#sharedChatComposer').addEventListener('submit', sendSharedChatMessage);
-    $('#sharedChatPlatform').addEventListener('change', renderChatbot);
     $('#clearSharedChatMessages').addEventListener('click', clearSharedChatMessages);
     $('#startLocalExtension').addEventListener('click', startLocalExtension);
     document.querySelectorAll('input[name="twitchExtensionCompanion"]').forEach((input) => input.addEventListener('change', saveTwitchExtensionCompanions));
@@ -7508,11 +6655,6 @@
       const extensionFeatureInput = event.target.closest('[data-extension-feature-destination]');
       if (extensionFeatureInput) {
         void saveExtensionFeaturePlacement(extensionFeatureInput);
-        return;
-      }
-      const worldViewerActor = event.target.closest('[data-world-viewer-actor]');
-      if (worldViewerActor) {
-        void setWorldViewerActor(worldViewerActor.dataset.worldViewerActor, worldViewerActor.value);
         return;
       }
       const canvasMode = event.target.closest('#onboardingCanvasProfileMode');
@@ -7577,6 +6719,7 @@
     window.tempestStudio.onSoundAlertPlayback(handleSoundAlertPlayback);
     window.tempestStudio.onUpdateStatus((update) => { state.update = update; renderUpdateStatus(); });
     window.tempestStudio.onStreamTogetherStatus((status) => { state.streamTogether = status; renderStreamTogether(); });
+    window.tempestStudio.onHostedDiscordStatus((status) => { state.hostedDiscord = status; renderDiscordVoice(); });
     [state.config, state.panelDesign, state.appInfo, state.privacy, state.update, state.streamTogether] = await Promise.all([window.tempestStudio.getBridgeConfig(), window.tempestStudio.getTwitchPanelDesign(), window.tempestStudio.getAppInfo(), window.tempestStudio.getPrivacySettings(), window.tempestStudio.getUpdateStatus(), window.tempestStudio.getStreamTogetherStatus()]);
     renderPrivacySettings();
     populatePanelDesign(state.panelDesign);

@@ -57,7 +57,7 @@ Older Broadcast builds remain compatible with the Bridge but appear as **Update 
 
 ## Platform boundary
 
-Dual Format controls Twitch's horizontal and vertical versions of one Twitch broadcast. The separate **Go Live** workspace coordinates that Twitch output with Kick horizontal delivery. Twitch and Kick chat remain unified in Studio, while simulcast destinations, encrypted stream keys, encoders, reconnection, and video-output health remain in Broadcast. See [TWITCH_KICK_SIMULCAST.md](TWITCH_KICK_SIMULCAST.md).
+Dual Format controls Twitch's horizontal and vertical versions of one Twitch broadcast. The separate **Go Live** workspace supervises that Twitch output while encoders, reconnection, recording, and video-output health remain in Broadcast.
 
 Official references:
 

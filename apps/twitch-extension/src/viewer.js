@@ -7,7 +7,7 @@
   let catalogEtag = '';
   let catalogRefreshPromise = null;
   let catalogRefreshPending = false;
-  const state = { auth: null, alerts: [], closet: { items: [], equipped: null, identityRequired: false }, poll: null, counters: [], commands: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
+  const state = { auth: null, alerts: [], poll: null, counters: [], commands: [], goal: null, nowPlaying: null, schedule: null, stream: null, configuration: { mockMode: true, ebsBaseUrl: '', panelDesign: defaultPanelDesign }, hostedPanelDesign: false, busy: false, pollBusy: false, placementAlertId: '', collapsed: false, filter: 'all' };
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
@@ -217,15 +217,12 @@
     const scheduleVisible = design.showSchedule !== false && state.filter !== 'performances' && Boolean(state.schedule) && (!query || `${state.schedule.title || ''} next stream schedule`.toLowerCase().includes(query));
     const streamVisible = design.showCurrentStream !== false && state.filter !== 'performances' && Boolean(state.stream) && (!query || `${state.stream.title} ${state.stream.category || ''} ${state.stream.live ? 'live' : 'offline'} current stream`.toLowerCase().includes(query));
     const pollVisible = design.showPoll !== false && state.filter !== 'performances' && Boolean(state.poll) && (!query || `${state.poll.question} poll vote`.toLowerCase().includes(query));
-    const closetMode = state.filter === 'closet';
-    const closetItems = state.closet.items.filter((item) => !query || `${item.name} ${item.value || ''} ${item.effect}`.toLowerCase().includes(query));
-    const ownedCount = state.closet.items.filter((item) => item.owned).length;
     const visibleCount = dice.length + featured.length + performances.length + counters.length + commands.length + (goalVisible ? 1 : 0) + (nowPlayingVisible ? 1 : 0) + (scheduleVisible ? 1 : 0) + (streamVisible ? 1 : 0) + (pollVisible ? 1 : 0);
-    $('#alertCount').textContent = closetMode ? `${ownedCount} OWNED` : `${visibleCount} AVAILABLE`;
+    $('#alertCount').textContent = `${visibleCount} AVAILABLE`;
     document.querySelectorAll('[data-signal-filter]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.signalFilter === state.filter)));
-    $('#featuredRegion').hidden = closetMode || featured.length === 0;
-    $('#performanceRegion').hidden = closetMode || performances.length === 0;
-    $('#diceRegion').hidden = closetMode || dice.length === 0;
+    $('#featuredRegion').hidden = featured.length === 0;
+    $('#performanceRegion').hidden = performances.length === 0;
+    $('#diceRegion').hidden = dice.length === 0;
     $('#diceGrid').innerHTML = dicePresets.map((entry) => {
       const wait = remaining(entry.id);
       return `<button class="dice-option" type="button" data-alert-id="${escapeHtml(entry.id)}" style="--signal:${escapeHtml(entry.accent)}" ${state.busy || wait || (!permitted(entry) && !identityRequired(entry)) ? 'disabled' : ''}><b>${escapeHtml(entry.glyph)}</b><small>${identityRequired(entry) ? 'SHARE ID' : !permitted(entry) ? escapeHtml(accessLabel(entry)) : wait ? seconds(wait) : 'ROLL'}</small></button>`;
@@ -234,16 +231,15 @@
     $('#diceCustomMaximum').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || (!permitted(customDice) && !identityRequired(customDice))));
     $('#rollCustomDice').disabled = state.busy || Boolean(customDice && (remaining(customDice.id) || (!permitted(customDice) && !identityRequired(customDice))));
     $('#rollCustomDice').textContent = customDice && identityRequired(customDice) ? 'SHARE ID' : customDice && !permitted(customDice) ? 'LOCKED' : 'ROLL';
-    $('#counterRegion').hidden = closetMode || counters.length === 0;
+    $('#counterRegion').hidden = counters.length === 0;
     $('#counterGrid').innerHTML = counters.map((counter) => `<article class="counter-card"><span>${escapeHtml(counter.label)}</span><strong>${Number(counter.value).toLocaleString()}</strong><small>${escapeHtml(counter.trigger || `!${counter.command}`)}</small></article>`).join('');
-    $('#commandRegion').hidden = closetMode || commands.length === 0;
+    $('#commandRegion').hidden = commands.length === 0;
     $('#commandGrid').innerHTML = commands.map((command) => `<article class="command-card"><strong>${escapeHtml(command.trigger)}</strong><span>${escapeHtml(String(command.permission).toUpperCase())}${command.allowSharedChat ? ' · SHARED CHAT' : ''}</span>${command.aliases.length ? `<small>Also ${escapeHtml(command.aliases.join(' · '))}</small>` : ''}</article>`).join('');
     renderGoal(goalVisible);
     renderNowPlaying(nowPlayingVisible);
     renderSchedule(scheduleVisible);
     renderStream(streamVisible);
-    $('#closetRegion').hidden = !closetMode;
-    $('#emptyState').hidden = closetMode || visibleCount !== 0;
+    $('#emptyState').hidden = visibleCount !== 0;
     $('#featuredGrid').innerHTML = featured.map((alert) => {
       const wait = remaining(alert.id);
       return `<button class="signal-featured" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
@@ -255,16 +251,6 @@
       const wait = remaining(alert.id);
       return `<button class="alert-card" type="button" data-alert-id="${escapeHtml(alert.id)}" style="--signal:${escapeHtml(alert.accent)}" aria-label="Trigger ${escapeHtml(alert.name)}" ${state.busy || wait || (!permitted(alert) && !identityRequired(alert)) ? 'disabled' : ''}>
         <strong>${escapeHtml(alert.name)}</strong><span class="card-meta"><small>${identityRequired(alert) ? 'SHARE TWITCH IDENTITY' : !permitted(alert) ? escapeHtml(accessLabel(alert)) : wait ? `RECHARGE ${seconds(wait)}` : 'READY TO PLAY'}</small><span class="alert-duration">${seconds(alert.durationMs)}</span></span>
-      </button>`;
-    }).join('');
-    const effectLabels = { 'primary-color': 'JACKET COLOR', 'secondary-color': 'WISP COLOR', accessory: 'ACCESSORY', title: 'TITLE' };
-    $('#closetIdentity').hidden = !state.closet.identityRequired;
-    $('#closetGrid').hidden = state.closet.identityRequired;
-    $('#closetEmpty').hidden = state.closet.identityRequired || closetItems.length !== 0;
-    $('#closetGrid').innerHTML = closetItems.map((item) => {
-      const color = /^#[0-9a-f]{6}$/i.test(String(item.value || '')) ? item.value : '#54F2EB';
-      return `<button class="closet-card ${item.equipped ? 'equipped' : ''} ${item.owned ? '' : 'locked'}" type="button" data-closet-redeem="${escapeHtml(item.id)}" style="--cosmetic:${escapeHtml(color)}" ${state.busy || !item.owned || item.equipped ? 'disabled' : ''}>
-        <i>${item.effect.includes('color') ? '' : escapeHtml(item.effect === 'accessory' ? 'ACC' : 'TTL')}</i><span><strong>${escapeHtml(item.name)}</strong><small>${item.equipped ? 'EQUIPPED' : item.owned ? `${escapeHtml(effectLabels[item.effect] || 'COSMETIC')} · EQUIP` : 'LOCKED · CHANNEL POINT REWARD'}</small></span>
       </button>`;
     }).join('');
   }
@@ -306,53 +292,6 @@
       : incomingPoll;
     setConnection(body.studioConnected ? 'MAINFRAME ONLINE' : 'STUDIO OFFLINE', Boolean(body.studioConnected));
     render();
-  }
-
-  async function refreshAvatarCloset() {
-    const configuration = state.configuration;
-    if (configuration.mockMode) {
-      state.closet = { identityRequired: false, equipped: { primaryColor: '#54F2EB', secondaryColor: '#B99CFF', accessories: [] }, items: [
-        { id: 'mock-cyan-jacket', name: 'Cyan Jacket', effect: 'primary-color', value: '#54F2EB', owned: true, equipped: true },
-        { id: 'mock-violet-wisp', name: 'Violet Wisp', effect: 'secondary-color', value: '#B99CFF', owned: true, equipped: false },
-        { id: 'mock-storm-crown', name: 'Storm Crown', effect: 'accessory', value: 'Storm Crown', owned: false, equipped: false }
-      ] };
-      render();
-      return;
-    }
-    if (!configuration.ebsBaseUrl || !state.auth?.token) return;
-    const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/avatar`, { headers: { 'X-Extension-JWT': state.auth.token }, cache: 'no-store' });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (body.code === 'identity_required') { state.closet = { items: [], equipped: null, identityRequired: true }; render(); return; }
-      throw new Error(body.error || `Avatar closet unavailable (${response.status}).`);
-    }
-    state.closet = { items: Array.isArray(body.items) ? body.items : [], equipped: body.equipped || null, identityRequired: false };
-    render();
-  }
-
-  async function equipAvatarCosmetic(redeemId) {
-    if (state.busy || !redeemId) return;
-    const configuration = state.configuration;
-    if (configuration.mockMode) {
-      state.closet.items = state.closet.items.map((item) => ({ ...item, equipped: item.id === redeemId ? true : item.effect === state.closet.items.find((entry) => entry.id === redeemId)?.effect ? false : item.equipped }));
-      render(); toast('Avatar look equipped in local preview.'); return;
-    }
-    state.busy = true; render();
-    try {
-      const requestId = crypto.randomUUID();
-      const response = await fetch(`${configuration.ebsBaseUrl}/v1/extension/avatar/equip`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': state.auth.token, 'X-Request-ID': requestId }, body: JSON.stringify({ requestId, redeemId })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(body.error || `Avatar cosmetic rejected (${response.status}).`); error.code = body.code; throw error;
-      }
-      toast('Avatar cosmetic equipped on stream.');
-      await refreshAvatarCloset();
-    } catch (error) {
-      if (error.code === 'identity_required' && window.Twitch?.ext?.actions?.requestIdShare) window.Twitch.ext.actions.requestIdShare();
-      toast(error.message, true);
-    } finally { state.busy = false; render(); }
   }
 
   async function refreshHostedCatalog() {
@@ -548,11 +487,6 @@
     };
     $('#featuredGrid').addEventListener('click', triggerFromClick);
     $('#alertGrid').addEventListener('click', triggerFromClick);
-    $('#closetGrid').addEventListener('click', (event) => {
-      const button = event.target.closest('[data-closet-redeem]');
-      if (button) void equipAvatarCosmetic(button.dataset.closetRedeem);
-    });
-    $('#shareIdentityButton').addEventListener('click', () => window.Twitch?.ext?.actions?.requestIdShare?.());
     $('#diceGrid').addEventListener('click', triggerFromClick);
     $('#diceCustomForm').addEventListener('submit', (event) => {
       event.preventDefault();
@@ -575,7 +509,6 @@
       if (!button) return;
       state.filter = button.dataset.signalFilter;
       render();
-      if (state.filter === 'closet') void refreshAvatarCloset().catch((error) => toast(error.message, true));
     });
     $('#collapseButton').addEventListener('click', () => {
       state.collapsed = !state.collapsed;
@@ -591,9 +524,6 @@
     setInterval(() => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     }, 10000);
-    setInterval(() => {
-      if (!document.hidden && state.filter === 'closet') void refreshAvatarCloset().catch(() => {});
-    }, 30000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) void refreshHostedCatalog().catch(() => {});
     });
@@ -631,7 +561,6 @@
       ...(await response.json()).map((entry) => ({ ...entry, kind: 'sound-alert' }))
     ];
     state.alerts = configuration.mockMode ? bundledAlerts : [];
-    if (configuration.mockMode) await refreshAvatarCloset();
     state.poll = configuration.mockMode ? {
       id: 'local-preview-poll-0001', state: 'active', question: 'What should happen next?', totalVotes: 12,
       options: [

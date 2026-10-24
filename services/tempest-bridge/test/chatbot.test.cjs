@@ -111,9 +111,12 @@ test('runs chat-triggered 3D dice through the overlay callback and reports the p
       rolls.push(request);
       return { expression: '2d6+3', total: 11, reason: request.reason };
     },
-    sendPlatformMessage: async (platform, message) => messages.push({ platform, message })
+    fetchImplementation: async (_url, options) => { messages.push(JSON.parse(options.body).message); return new Response(null, { status: 204 }); }
   });
   await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  chatbot.channel = { clientId: 'client123', channelId: 'channel-1', channelLogin: 'tempest' };
 
   const preview = await chatbot.testCommand({ message: '!roll 1d20 initiative', viewerName: 'StudioTester', roles: [] });
   assert.equal(preview.accepted, true);
@@ -122,19 +125,19 @@ test('runs chat-triggered 3D dice through the overlay callback and reports the p
 
   const event = {
     schemaVersion: 1,
-    id: 'kick-dice-0001',
+    id: 'twitch-dice-0001',
     topic: 'viewer.chat.message',
     occurredAt: new Date().toISOString(),
-    source: 'kick',
-    channel: { id: 'kick-channel', login: 'tempest' },
+    source: 'twitch',
+    channel: { id: 'channel-1', login: 'tempest' },
     viewer: { id: 'viewer-1', login: 'dicefan', displayName: 'DiceFan', roles: [] },
-    payload: { messageId: 'kick-message-1', text: '!dice 2d6+3 initiative' }
+    payload: { messageId: 'twitch-message-1', text: '!dice 2d6+3 initiative' }
   };
   const result = await chatbot.processChatEvent(event);
   assert.equal(result.accepted, true);
   assert.equal(result.response, 'DiceFan rolled 2d6+3: 11 · initiative');
   assert.deepEqual(rolls, [{ expression: '2d6+3', reason: 'initiative', rollerName: 'DiceFan', simulated: false }]);
-  assert.deepEqual(messages, [{ platform: 'kick', message: 'DiceFan rolled 2d6+3: 11 · initiative' }]);
+  assert.deepEqual(messages, ['DiceFan rolled 2d6+3: 11 · initiative']);
   await chatbot.close();
 });
 
@@ -261,14 +264,17 @@ test('filters links and spam with moderator-safe deletes, exemptions, previews, 
   await chatbot.close();
 });
 
-test('persists streamer-named counters shared by Twitch and Kick chat', async () => {
+test('persists streamer-named counters from Twitch chat', async () => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-chatbot-counter-'));
   const messages = [];
   let catalogChanges = 0;
-  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), sendPlatformMessage: async (_platform, message) => messages.push(message), onCatalogChanged: () => { catalogChanges += 1; } });
+  const chatbot = new TwitchChatbot({ dataDirectory, credentialStore: memoryCredentialStore(), fetchImplementation: async (_url, options) => { messages.push(JSON.parse(options.body).message); return new Response(null, { status: 204 }); }, onCatalogChanged: () => { catalogChanges += 1; } });
   await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  chatbot.channel = { clientId: 'client123', channelId: 'channel-1', channelLogin: 'storm' };
   await chatbot.upsertCommand({ name: 'death', aliases: ['deaths'], enabled: true, permission: 'everyone', response: '{counterLabel}: {counter}', handler: 'counter', counterLabel: 'Ship Restarts', counterValue: 3, viewerCooldownMs: 0, globalCooldownMs: 0 });
-  const result = await chatbot.processChatEvent({ schemaVersion: 1, id: 'kick-counter-0001', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'kick', channel: { id: 'kick-channel', login: 'storm' }, viewer: { id: 'viewer-1', login: 'friend', displayName: 'Friend', roles: [] }, payload: { text: '!death' } });
+  const result = await chatbot.processChatEvent({ schemaVersion: 1, id: 'twitch-counter-0001', topic: 'viewer.chat.message', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: 'channel-1', login: 'storm' }, viewer: { id: 'viewer-1', login: 'friend', displayName: 'Friend', roles: [] }, payload: { text: '!death' } });
   assert.equal(result.accepted, true);
   assert.equal(result.response, 'Ship Restarts: 4');
   assert.deepEqual(chatbot.publicCounters(), [{ id: chatbot.publicCounters()[0].id, command: 'death', trigger: '!death', label: 'Ship Restarts', value: 4 }]);
@@ -301,7 +307,7 @@ test('records one numeric poll vote per chat account and keeps aggregate results
 
   await chatbot.processChatEvent(event('vote-1', '2', 'viewer-one'));
   await chatbot.processChatEvent(event('vote-duplicate', '1', 'viewer-one'));
-  await chatbot.processChatEvent(event('vote-2', '2', 'viewer-two', 'kick'));
+  await chatbot.processChatEvent(event('vote-2', '2', 'viewer-two'));
   await chatbot.processChatEvent(event('not-a-vote', 'I choose 3', 'viewer-three'));
   await chatbot.processChatEvent(event('out-of-range', '9', 'viewer-four'));
 
@@ -338,23 +344,30 @@ test('rotates automatic messages when either the chat or time threshold is reach
   const chatbot = new TwitchChatbot({
     dataDirectory,
     credentialStore: memoryCredentialStore(),
-    sendPlatformMessage: async (platform, message) => sent.push({ platform, message })
+    fetchImplementation: async (url, options = {}) => {
+      if (String(url).includes('/helix/streams')) return jsonResponse({ data: [{ started_at: new Date(Date.now() - 60_000).toISOString() }] });
+      sent.push(JSON.parse(options.body).message);
+      return new Response(null, { status: 204 });
+    }
   });
   await chatbot.initialize('client123');
+  chatbot.tokens = { accessToken: 'bot-access', refreshToken: 'bot-refresh', expiresAt: new Date(Date.now() + 60_000).toISOString(), scopes: ['user:read:chat', 'user:write:chat'] };
+  chatbot.identity = { clientId: 'client123', login: 'studio_helper', userId: 'bot-1' };
+  chatbot.channel = { clientId: 'client123', channelId: 'channel-1', channelLogin: 'storm' };
   await chatbot.configure({ autoMessages: {
     enabled: true,
     messages: ['Remember to follow {channel}.', 'Join the community with {bot}.'],
     intervalMinutes: 0,
     chatMessageThreshold: 2,
-    platforms: ['kick']
+    platforms: ['twitch']
   } });
   const chatEvent = (id) => ({
     schemaVersion: 1,
     id,
     topic: 'viewer.chat.message',
     occurredAt: new Date().toISOString(),
-    source: 'kick',
-    channel: { id: 'kick-channel', login: 'storm' },
+    source: 'twitch',
+    channel: { id: 'channel-1', login: 'storm' },
     viewer: { id: `viewer-${id}`, login: `viewer_${id}`, displayName: `Viewer ${id}`, roles: [] },
     payload: { text: 'hello stream' }
   });
@@ -362,22 +375,22 @@ test('rotates automatic messages when either the chat or time threshold is reach
   await chatbot.processChatEvent(chatEvent('one'));
   assert.equal(sent.length, 0);
   await chatbot.processChatEvent(chatEvent('two'));
-  assert.deepEqual(sent, [{ platform: 'kick', message: 'Remember to follow the channel.' }]);
+  assert.deepEqual(sent, ['Remember to follow storm.']);
   chatbot.autoMessageLastAttemptAt = 0;
   await chatbot.processChatEvent(chatEvent('three'));
   await chatbot.processChatEvent(chatEvent('four'));
-  assert.equal(sent[1].message, 'Join the community with Chat Bot.');
+  assert.equal(sent[1], 'Join the community with studio_helper.');
 
   await chatbot.configure({ autoMessages: {
     enabled: true,
     messages: ['Remember to follow {channel}.', 'Join the community with {bot}.'],
     intervalMinutes: 1,
     chatMessageThreshold: 0,
-    platforms: ['kick']
+    platforms: ['twitch']
   } });
   chatbot.autoMessageWindowStartedAt = Date.now() - 61_000;
   await chatbot.processChatEvent(chatEvent('five'));
-  assert.equal(sent[2].message, 'Remember to follow the channel.');
+  assert.equal(sent[2], 'Remember to follow storm.');
   assert.equal(chatbot.status().autoMessages.sent, 3);
   assert.equal(chatbot.status().autoMessages.messagesSinceLast, 0);
   await chatbot.close();

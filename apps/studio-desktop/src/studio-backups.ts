@@ -27,14 +27,12 @@ const safeDocuments = new Map([
   ['chatbot', ['bridge', 'chatbot.json']],
   ['twitchAlerts', ['bridge', 'twitch-visual-alerts.json']],
   ['twitchIntegration', ['bridge', 'twitch-integration.json']],
-  ['kickIntegration', ['bridge', 'kick-integration.json']],
   ['interactionAlerts', ['bridge', 'sound-alerts.json']],
   ['chatOverlay', ['bridge', 'chat-overlay.json']],
   ['emoteWall', ['bridge', 'emote-wall.json']],
   ['diceOverlay', ['bridge', 'dice-overlay.json']],
   ['twitchExperiences', ['bridge', 'twitch-experiences.json']],
   ['discordVoiceOverlay', ['bridge', 'discord-voice-overlay.json']],
-  ['interactiveWorld', ['bridge', 'interactive-world.json']],
   ['interactiveStage', ['bridge', 'interactive-stage.json']],
   ['interactionRecipes', ['bridge', 'interaction-recipes.json']],
   ['extensionFeaturePlacements', ['bridge', 'extension-feature-placements.json']],
@@ -46,7 +44,7 @@ const mediaExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'
 const maximumAssetBytes = 96 * 1024 * 1024;
 const maximumTotalBytes = 500 * 1024 * 1024;
 const assetPrefix = 'tempest-backup-asset:';
-const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Kick client secret and OAuth tokens', 'Discord OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'external registered asset file paths', 'application launch paths', 'playback history'];
+const exclusions = ['Twitch OAuth tokens', 'chatbot OAuth tokens', 'Discord OAuth tokens', 'Twitch Extension secret', 'GIPHY API key', 'external registered asset file paths', 'application launch paths', 'playback history'];
 const copy = <T>(value: T): T => structuredClone(value);
 
 async function readJsonIfAvailable(filePath: string): Promise<unknown | undefined> {

@@ -6,7 +6,7 @@ Studio opens Twitch Stream Together Backstage in a dedicated call window instead
 
 Top-level navigation is restricted to secure Twitch domains. Camera, microphone, speaker selection, fullscreen, and sanitized clipboard-write requests are accepted only from Twitch frames in that call window. Screen sharing uses the operating-system picker when available and otherwise presents a bounded Studio source picker; no screen or window is selected automatically. Downloads and non-Twitch popups are blocked, and Windows capture protection follows the Studio Privacy Shield setting.
 
-The call session and Unified Chat are deliberately independent. Closing the call does not disconnect EventSub, Twitch/Kick chat, the Chatbot, or active polls. Twitch's official Shared Chat messages remain part of the Twitch side of Unified Chat. The persistent partition remembers only Twitch-managed web sign-in state and never receives Studio OAuth tokens.
+The call session and Live Chat are deliberately independent. Closing the call does not disconnect EventSub, Twitch chat, the Chatbot, or active polls. Twitch's official Shared Chat messages remain part of Live Chat. The persistent partition remembers only Twitch-managed web sign-in state and never receives Studio OAuth tokens.
 
 ## 0.21.0 Public Extension installations
 

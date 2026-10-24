@@ -36,14 +36,14 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 - [ ] Switch among at least Classic, Wooden, and Gemstone Dice Box styles; each style loads locally and preserves physical result reporting.
 - [ ] Studio restart/reconnect recovers only the disconnected active Studio Browser Sources and preserves their UUIDs and settings.
 - [ ] Twitch horizontal and vertical Enhanced Broadcasting previews are correct in Stream Manager and on a physical phone.
-- [ ] Kick can start, stop, fail, and retry independently without interrupting Twitch; Emergency Stop All Outputs stops both.
-- [ ] Twitch and Kick messages appear together in Studio's Unified Chat while replies remain platform-local; Twitch's Shared Chat label is reserved for Stream Together collaboration messages.
-- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Unified Chat and polls remain connected independently. Confirm Broadcast captures call audio through exactly one chosen route so desktop audio and Twitch Browser Source audio do not create an echo.
+- [ ] Twitch starts, stops, and reports health through Studio's guarded Go Live controls; Emergency Stop All Outputs stops the Twitch output and coordinated recording.
+- [ ] Twitch home-channel and Stream Together Shared Chat messages appear together in Studio's Live Chat.
+- [ ] Open Stream Together from Studio, sign in within its isolated call session, and confirm Twitch does not show the unsupported-browser page; camera, microphone, speakers, guest controls, and one selected screen share work while Live Chat and polls remain connected independently. Confirm Broadcast captures call audio through exactly one chosen route so desktop audio and Twitch Browser Source audio do not create an echo.
 - [ ] `!song` sends `https://www.tempestmainframe.com/listen` for the migrated default provider and preserves custom providers.
-- [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch/Kick/both, and remain silent while offline.
-- [ ] Start a numeric poll, confirm each Twitch and Kick account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
+- [ ] Rotating chatbot messages can trigger by elapsed time and by chat count, target Twitch, and remain silent while offline.
+- [ ] Start a numeric poll, confirm each Twitch account's first valid number counts only once, then end and clear the poll while preserving the displayed final totals until clear.
 - [ ] Use GIPHY to assign and preview a locally downloaded GIF on an Interaction Alert, a base Twitch Alert, and a Twitch Alert variant; confirm each target remains portable in its Alert Pack.
-- [ ] Confirm Stream Together has its own primary On Air tab; Live Desk opens directly to Unified Chat and polls; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
+- [ ] Confirm Stream Together has its own primary On Air tab; Chatbot opens directly to Live Chat and Polls remains a direct On Air destination; setup drawers begin collapsed, Guided Setup reveals the requested hidden setup page, and all controls remain keyboard reachable.
 - [ ] Confirm Private Info Hidden remains visible from every workspace and still masks account identities, credentials, locations, provider URLs, and local endpoints inside expanded setup drawers.
 - [ ] Multiple alerts remain FIFO and Emergency Restore clears queued playback and temporary interactions.
 - [ ] No new error, uncaught rejection, repeated reconnect loop, or growing alert queue appears in Studio or Broadcast logs.
@@ -61,7 +61,7 @@ Run these checks with freshly installed Studio and Broadcast 1.5.0 candidates. D
 ## Clean-install and upgrade gates
 
 - [ ] Windows installer starts and uninstalls on a non-developer account.
-- [ ] Guided Setup contains no personal Twitch, Kick, station, location, bot, or companion-app values.
+- [ ] Guided Setup contains no personal Twitch, station, location, bot, or companion-app values.
 - [ ] Upgrade from 1.4.7 preserves credentials, stream information, alerts, media, commands, counters, interactions, dice settings, platform settings, and encrypted secrets.
 - [ ] Backup/restore succeeds, requests reconnects clearly, and creates a pre-restore snapshot.
 - [ ] Offline use, disconnected optional integrations, missing media, and provider outages show recoverable errors.

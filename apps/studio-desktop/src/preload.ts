@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   refreshVTubeStudioHotkeys: () => ipcRenderer.invoke('studio:refresh-vtube-studio-hotkeys'),
   forgetVTubeStudio: () => ipcRenderer.invoke('studio:forget-vtube-studio'),
   getDiscordVoiceStatus: () => ipcRenderer.invoke('studio:get-discord-voice-status'),
+  getHostedDiscordStatus: () => ipcRenderer.invoke('studio:get-hosted-discord-status'),
+  openHostedDiscordInstall: (input: { baseUrl?: string } = {}) => ipcRenderer.invoke('studio:open-hosted-discord-install', input),
+  beginHostedDiscordPairing: (input: { baseUrl?: string; studioAlias?: string }) => ipcRenderer.invoke('studio:begin-hosted-discord-pairing', input),
+  checkHostedDiscordPairing: () => ipcRenderer.invoke('studio:check-hosted-discord-pairing'),
+  updateHostedDiscordAlias: (input: { studioAlias: string }) => ipcRenderer.invoke('studio:update-hosted-discord-alias', input),
+  forgetHostedDiscord: () => ipcRenderer.invoke('studio:forget-hosted-discord'),
   connectDiscordVoice: () => ipcRenderer.invoke('studio:connect-discord-voice'),
   disconnectDiscordVoice: () => ipcRenderer.invoke('studio:disconnect-discord-voice'),
   forgetDiscordVoice: () => ipcRenderer.invoke('studio:forget-discord-voice'),
@@ -43,8 +49,6 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   setTwitchExtensionEdition: (edition: 'free' | 'bits') => ipcRenderer.invoke('studio:set-twitch-extension-edition', edition),
   pairHostedExtension: (settings: { ebsBaseUrl: string }) => ipcRenderer.invoke('studio:pair-hosted-extension', settings),
   revokeHostedExtension: () => ipcRenderer.invoke('studio:revoke-hosted-extension'),
-  linkHostedKick: () => ipcRenderer.invoke('studio:link-hosted-kick'),
-  unlinkHostedKick: () => ipcRenderer.invoke('studio:unlink-hosted-kick'),
   getTwitchPanelDesign: () => ipcRenderer.invoke('studio:get-twitch-panel-design'),
   saveTwitchPanelDesign: (design: unknown) => ipcRenderer.invoke('studio:save-twitch-panel-design', design),
   startLocalExtension: (settings: { channelId: string; extensionSecret?: string }) => ipcRenderer.invoke('studio:start-local-extension', settings),
@@ -66,14 +70,6 @@ contextBridge.exposeInMainWorld('tempestStudio', {
   exportAlertPack: (input: { name: string; description?: string; kind: 'twitch' | 'interaction'; alert: unknown }) => ipcRenderer.invoke('studio:export-alert-pack', input),
   importAlertPack: () => ipcRenderer.invoke('studio:import-alert-pack'),
   importDiceTheme: () => ipcRenderer.invoke('studio:import-dice-theme'),
-  selectStageActorStrip: () => ipcRenderer.invoke('studio:select-stage-actor-strip'),
-  selectStageActorTexture: () => ipcRenderer.invoke('studio:select-stage-actor-texture'),
-  createStageActorPack: (input: unknown) => ipcRenderer.invoke('studio:create-stage-actor-pack', input),
-  updateStageActorPack: (input: unknown) => ipcRenderer.invoke('studio:update-stage-actor-pack', input),
-  exportStageActorPack: (input: { packId: string }) => ipcRenderer.invoke('studio:export-stage-actor-pack', input),
-  importStageActorPack: () => ipcRenderer.invoke('studio:import-stage-actor-pack'),
-  importStreamingAvatarsLibrary: () => ipcRenderer.invoke('studio:import-streaming-avatars-library'),
-  removeStageActorPack: (input: { packId: string; name: string }) => ipcRenderer.invoke('studio:remove-stage-actor-pack', input),
   exportBackup: (rendererSettings: unknown) => ipcRenderer.invoke('studio:export-backup', rendererSettings),
   restoreBackup: () => ipcRenderer.invoke('studio:restore-backup'),
   restartApp: () => ipcRenderer.invoke('studio:restart-app'),
@@ -97,6 +93,11 @@ contextBridge.exposeInMainWorld('tempestStudio', {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => listener(command);
     ipcRenderer.on('studio:sound-alert-playback', handler);
     return () => ipcRenderer.removeListener('studio:sound-alert-playback', handler);
+  },
+  onHostedDiscordStatus: (listener: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => listener(status);
+    ipcRenderer.on('studio:hosted-discord-status', handler);
+    return () => ipcRenderer.removeListener('studio:hosted-discord-status', handler);
   },
   openExternal: (targetUrl: string) => ipcRenderer.invoke('studio:open-external', targetUrl),
   getStreamTogetherStatus: () => ipcRenderer.invoke('studio:get-stream-together-status'),

@@ -5,7 +5,7 @@ Tempest Streaming Studio uses two free Twitch Extension listings that may run in
 | Extension | Primary surfaces | Purpose |
 | --- | --- | --- |
 | Tempest Mainframe | Panel only | Detailed viewer hub, catalog, history, accessibility, progression, and deeper controls |
-| Tempest Streaming | Video Overlay | In-player live actions, normalized click/tap targeting, polls, battles, avatars, and current-stream context |
+| Tempest Streaming | Video Overlay | In-player live actions, normalized click/tap targeting, polls, 3D dice, effects, and current-stream context |
 
 The Twitch component is a control surface over the Twitch player. Stream-visible output is rendered by Studio's loopback Browser Sources, so it is also present in recordings and on other streaming platforms.
 

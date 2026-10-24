@@ -5,7 +5,7 @@ import { INTERACTION_RECIPE_SCHEMA_VERSION, InteractionRecipe, InteractionRecipe
 type Dispatcher = (action: InteractionRecipeAction, context: InteractionRecipeExecutionContext) => Promise<unknown>;
 const ids = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 const triggerTypes = new Set<InteractionRecipeTriggerType>(['chat-command', 'extension-action', 'operator']);
-const actionTypes = new Set(['alert', 'stage-message', 'viewer-state', 'viewer-attack', 'pet-action', 'battle-start']);
+const actionTypes = new Set(['alert', 'stage-message']);
 const clone = <T>(value: T): T => structuredClone(value);
 
 export class TempestInteractionComposer {

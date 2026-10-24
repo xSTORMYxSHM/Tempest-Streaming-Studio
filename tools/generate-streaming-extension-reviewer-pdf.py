@@ -135,7 +135,7 @@ story += [
     Spacer(1, 0.18 * inch),
     section_label("What it is"),
     P("One control deck over the Twitch video", heading),
-    P("Tempest Streaming lets viewers activate streamer-selected interactions without leaving the player. Available controls can include on-stream effects, interactive avatars, polls, battles, and click/tap placement. Every action in this release is free."),
+    P("Tempest Streaming lets viewers activate streamer-selected interactions without leaving the player. Available controls can include on-stream effects, polls, 3D dice, and click/tap placement. Every action in this release is free."),
     P("The Extension is the viewer control surface. Tempest Streaming Studio validates the action, access rule, and cooldown. Studio's Unified Stage Browser Source then renders accepted visual effects into the encoded stream."),
     Spacer(1, 0.08 * inch),
     section_label("Signal path"),
@@ -196,7 +196,7 @@ coverage_left = [
     "Click/tap placement on the video",
 ]
 coverage_right = [
-    "Poll, battle, avatar, and effect controls",
+    "Poll, 3D dice, and effect controls",
     "Studio theme plus basic Twitch display choices",
     "Clear online, offline, result, and error states",
     "Privacy Policy and Terms on viewer surfaces",
@@ -220,7 +220,7 @@ changes = [
     "Added the Tempest Streaming Video Overlay action deck.",
     "Added free on-stream actions and click/tap placement.",
     "Added Studio-managed feature routing, group access, and cooldowns.",
-    "Added interactive avatar, poll, battle, and current-stream controls.",
+    "Added poll, 3D dice, effect, and current-stream controls.",
     "Added Studio-managed colors and presentation settings.",
     "Added Twitch-hosted quick preferences for deck position, starting view, and action-count visibility.",
     "Added explicit online/offline and action-result feedback.",

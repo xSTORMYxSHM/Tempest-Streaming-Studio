@@ -10,6 +10,7 @@ const expectedVersion = JSON.parse(await readFile(path.join(workspace, 'package.
 const expectedPublisher = 'CN=Garner Whitted, O=Garner Whitted, L=Seattle, S=wa, C=US';
 const packageFiles = [
   'package.json', 'apps/studio-desktop/package.json',
+  'services/discord-companion/package.json', 'services/discord-companion/deploy/package.json',
   'services/tempest-bridge/package.json', 'services/twitch-ebs/package.json',
   'services/warudo-adapter/package.json', 'services/vtube-studio-adapter/package.json',
   'packages/tempest-contracts/package.json'

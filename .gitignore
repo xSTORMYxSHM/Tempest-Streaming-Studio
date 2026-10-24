@@ -9,6 +9,8 @@ coverage/
 test-output/
 release/
 /release-assets/
+/output/
+/*.patch
 **/__pycache__/
 /Tempest Streaming Studio/
 *.log

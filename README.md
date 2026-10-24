@@ -1,6 +1,6 @@
 # Tempest Streaming Studio
 
-Current stable version: **1.7.4**
+Current stable version: **1.8.0**
 
 The continuing development sequence is documented in [the Interactive Development Roadmap](docs/INTERACTIVE_DEVELOPMENT_ROADMAP.md).
 
@@ -25,7 +25,7 @@ The **Media Library** copies reusable alert sounds, images, GIFs, and videos int
 
 OBS or another compatible broadcaster uses two transparent Browser Sources: `http://127.0.0.1:4765/visual-alerts/twitch` and `http://127.0.0.1:4765/visual-alerts/interactions`. The split keeps Twitch event audio on the VOD while interaction music can be routed away from the recording track. Studio queues both types through one FIFO stage so alerts never overlap. See `docs/SOUND_ALERTS.md` for setup.
 
-The **3D Dice** workspace is a self-contained Studio tool at `http://127.0.0.1:4765/dice-overlay`. The locally bundled Dice Box renderer uses WebGL rigid-body physics to roll, bounce, collide, and settle standard dice; those settled faces become the recorded streamer or chat result. Custom 1–N ranges through 100 use unbiased rerolls on the next standard die. The default `!roll` / `!dice` command accepts the same notation from Twitch, Stream Together, and Kick chat and reports the physical result back to its originating platform. It does not connect to or import any part of Tempest Tabletop Engine. See `docs/DICE_OVERLAY.md`.
+The **3D Dice** workspace is a self-contained Studio tool at `http://127.0.0.1:4765/dice-overlay`. The locally bundled Dice Box renderer uses WebGL rigid-body physics to roll, bounce, collide, and settle standard dice; those settled faces become the recorded streamer or chat result. Custom 1–N ranges through 100 use unbiased rerolls on the next standard die. The default `!roll` / `!dice` command accepts the same notation from Twitch and Stream Together chat and reports the physical result back to Twitch. It does not connect to or import any part of Tempest Tabletop Engine. See `docs/DICE_OVERLAY.md`.
 
 The optional `http://127.0.0.1:4765/twitch-experiences` source renders Hype Train Takeover, Raid Portal, and Twitch Goal progress from Studio's broadcaster EventSub connection. Each has independent presets, local image/GIF/video layers, and advanced HTML/CSS/JavaScript; Raid Portal includes a Mainframe Breach presentation. These sustained presentations remain independent from the one-shot alert queue and share one full-canvas transparent source. See `docs/TWITCH_EXPERIENCES.md`.
 
@@ -35,7 +35,7 @@ The **Discord Guests** page provides a local Reactive Images-style source at `ht
 
 The **Chatbot** page includes a native Stream Together Collaboration Center. Studio monitors home-channel and Shared Chat messages through EventSub, detects Shared Chat session changes, shows the host and participating channels, and can post through the connected bot account. The live monitor is memory-only and removes the need to keep a separate browser open just to watch Shared Chat; Twitch continues to own the audio/video Backstage call.
 
-Studio numeric polls also appear in Tempest Streaming Extension while voting is active and retain final results until the operator clears them. A viewer who shares Twitch identity can vote once from the Panel or Video Component; the same numeric Twitch account is deduplicated across Extension and chat voting. Kick viewers continue voting from Kick chat, so all responses feed the same Studio totals without involving Bits.
+Studio numeric polls also appear in Tempest Streaming Extension while voting is active and retain final results until the operator clears them. A viewer who shares Twitch identity can vote once from the Panel or Video Component; the same numeric Twitch account is deduplicated across Extension and chat voting.
 
 Tempest Streaming Extension also publishes Studio's enabled 3D Dice utility as a compact preset picker with an exact custom 1–N maximum from 2 through 100. Viewer rolls honor the same open/assigned-creator access policy as other panel interactions, share bounded cooldowns across every die choice, and start only when the local Dice Browser Source is ready. The physical result remains on stream; no roll is generated in the public service.
 
@@ -53,9 +53,7 @@ Tempest Streaming Extension also includes a searchable read-only directory of en
 
 The **Dual Format** page is the production readiness and control surface for Twitch horizontal plus mobile-first vertical output. Studio reads the live Broadcast canvas, Enhanced Broadcasting, scene-link, audio-route, preview, and streaming state; off-air controls can request a 1080 × 1920 or 720 × 1280 additional canvas without moving encoding or stream credentials out of Broadcast. See [docs/TWITCH_DUAL_FORMAT.md](docs/TWITCH_DUAL_FORMAT.md).
 
-The **Go Live** page coordinates that Twitch Dual Format output with a separate Kick horizontal output. Broadcast encrypts the Kick stream key with Windows Data Protection, shares the already-running horizontal encoder, applies the OBS reconnect policy, and reports each destination independently. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, Kick-only recovery/stop, emergency stop, and a session-only live-operations timeline without retaining or displaying the key. See [docs/TWITCH_KICK_SIMULCAST.md](docs/TWITCH_KICK_SIMULCAST.md).
-
-The same Collaboration Center now supports production Kick chat through Kick's official OAuth 2.1 API and signed webhooks. Messages are labeled by platform, commands share one policy and cooldown engine, and replies stay on the platform where the command originated. See [Kick Chat Integration](docs/KICK_CHATBOT.md) for the developer-app and hosted-relay setup.
+The **Go Live** page supervises Twitch output through Tempest Broadcast. Studio provides preflight checks, upload reserve warnings, optional coordinated recording, emergency stop, and a session-only live-operations timeline. Broadcast remains the source of truth for video, canvases, encoders, recording, and output execution.
 
 The **Panel Designer** creates a channel-specific appearance for the universal Twitch Extension with a real 318 by 496 preview, safe theme controls, local persistence, and runtime delivery to the Local Panel. Hosted releases use the same validated theme model as per-broadcaster configuration, so streamers customize one shared Extension without supplying viewer-facing code.
 

@@ -2,11 +2,8 @@ export const INTERACTIVE_STAGE_SCHEMA_VERSION = 1 as const;
 
 export const interactiveStageObjectKinds = [
   'sprite',
-  'avatar',
-  'pet',
   'effect',
   'meter',
-  'game-object',
   'text'
 ] as const;
 
@@ -38,75 +35,8 @@ export interface InteractiveStageProtectedZone {
   orientations: InteractiveStageOrientation[];
 }
 
-export interface InteractiveStagePlatform {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  collision: 'one-way' | 'solid';
-  enabled: boolean;
-  orientations: InteractiveStageOrientation[];
-}
-
-export const interactiveStageInteractableKinds = [
-  'toy',
-  'switch',
-  'pickup',
-  'treasure',
-  'pet-station',
-  'pressure-plate',
-  'hazard',
-  'checkpoint',
-  'door',
-  'push-block'
-] as const;
-
-export type InteractiveStageInteractableKind = typeof interactiveStageInteractableKinds[number];
-
-export interface InteractiveStageInteractable {
-  id: string;
-  name: string;
-  kind: InteractiveStageInteractableKind;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  glyph: string;
-  linkId?: string;
-  enabled: boolean;
-  orientations: InteractiveStageOrientation[];
-}
-
-export interface InteractiveStageWorldObjectState {
-  active?: boolean;
-  collectedUntil?: string;
-  x?: number;
-  y?: number;
-}
-
-export interface InteractiveStageWorldRuntimeState {
-  revision: number;
-  objects: Record<string, InteractiveStageWorldObjectState>;
-}
-
-export interface InteractiveStageWorldMap {
-  enabled: boolean;
-  wanderEnabled: boolean;
-  jumpEnabled: boolean;
-  floorY: number;
-  speed: number;
-  gravity: number;
-  jumpStrength: number;
-  platforms: InteractiveStagePlatform[];
-  interactables: InteractiveStageInteractable[];
-}
-
 export interface InteractiveStageOwner {
-  platform: 'twitch' | 'kick' | 'studio';
+  platform: 'twitch' | 'studio';
   userId: string;
   displayName?: string;
 }
@@ -142,8 +72,6 @@ export interface InteractiveStageState {
   objects: InteractiveStageObject[];
   protectedZones?: InteractiveStageProtectedZone[];
   collisionAvoidance?: boolean;
-  worldMap?: InteractiveStageWorldMap;
-  worldState?: InteractiveStageWorldRuntimeState;
 }
 
 export interface InteractiveStageObjectInput {
@@ -233,10 +161,10 @@ export function validateInteractiveStageObjectInput(input: unknown, now = new Da
     else {
       const platform = String(input.owner.platform || '');
       const userId = String(input.owner.userId || '').trim();
-      if (!['twitch', 'kick', 'studio'].includes(platform)) errors.push('owner.platform must be twitch, kick, or studio.');
+      if (!['twitch', 'studio'].includes(platform)) errors.push('owner.platform must be twitch or studio.');
       if (!userId || userId.length > 128) errors.push('owner.userId must be 1-128 characters.');
       const displayName = input.owner.displayName === undefined ? undefined : String(input.owner.displayName).trim().slice(0, 80);
-      if (['twitch', 'kick', 'studio'].includes(platform) && userId) owner = { platform: platform as InteractiveStageOwner['platform'], userId, ...(displayName ? { displayName } : {}) };
+      if (['twitch', 'studio'].includes(platform) && userId) owner = { platform: platform as InteractiveStageOwner['platform'], userId, ...(displayName ? { displayName } : {}) };
     }
   }
 
@@ -248,7 +176,7 @@ export function validateInteractiveStageObjectInput(input: unknown, now = new Da
     for (const [key, value] of entries) {
       if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(key)) errors.push(`properties.${key} has an invalid key.`);
       else if (!['string', 'number', 'boolean'].includes(typeof value) || (typeof value === 'number' && !Number.isFinite(value))) errors.push(`properties.${key} must be a finite string, number, or boolean.`);
-      else if (typeof value === 'string' && value.length > (key === 'actorMotionClips' ? 6_000 : 500)) errors.push(`properties.${key} cannot exceed ${key === 'actorMotionClips' ? '6,000' : '500'} characters.`);
+      else if (typeof value === 'string' && value.length > 500) errors.push(`properties.${key} cannot exceed 500 characters.`);
       else properties[key] = value as InteractiveStageProperty;
     }
   }

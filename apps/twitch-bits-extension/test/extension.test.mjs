@@ -26,8 +26,7 @@ test('uses the free Streaming companion catalog and action route without purchas
   assert.match(script, /\/v1\/extension\/streaming\/interactions/);
   assert.match(script, /FREE ACTION/);
   assert.match(script, /placement/);
-  assert.match(script, /avatarControlPad/);
-  assert.match(script, /tempest\.avatar\.left/);
+  assert.doesNotMatch(script, /avatarControlPad|tempest\.avatar\./);
   assert.match(script, /If-None-Match/);
   assert.match(script, /response\.status === 304/);
   assert.match(script, /catalogRefreshPromise/);
@@ -40,16 +39,9 @@ test('uses the free Streaming companion catalog and action route without purchas
   assert.doesNotMatch(script, /(?:client|shared)[_ -]?secret\s*[:=]/i);
 });
 
-test('ships the Interactive World fallback catalog with stable free action IDs', async () => {
+test('ships no retired Interactive World actions in the fallback catalog', async () => {
   const catalog = JSON.parse(await readSource('mock-catalog.json'));
-  const byId = new Map(catalog.map((item) => [item.id, item]));
-  for (const id of ['tempest.avatar.join', 'tempest.avatar.left', 'tempest.avatar.right', 'tempest.avatar.jump', 'tempest.avatar.drop', 'tempest.avatar.interact', 'tempest.avatar.emote', 'tempest.avatar.unstuck', 'tempest.pet.feed', 'tempest.pet.play', 'tempest.pet.pet', 'tempest.viewer-attack', 'tempest.battle.attack']) {
-    assert.ok(byId.has(id), `${id} should be present`);
-    assert.equal(byId.get(id).kind, 'interaction');
-  }
-  assert.deepEqual(byId.get('tempest.avatar.join').destinations, []);
-  assert.equal(byId.get('tempest.viewer-attack').placementMode, 'viewer');
-  assert.deepEqual(byId.get('tempest.viewer-attack').destinations, ['streaming']);
+  assert.deepEqual(catalog, []);
 });
 
 test('applies Studio-managed design to every companion surface', async () => {

@@ -50,7 +50,7 @@ export interface ChatbotActivity {
   viewerName?: string;
   sourceChannelLogin?: string;
   sharedChat?: boolean;
-  platform?: 'twitch' | 'kick';
+  platform?: 'twitch';
   state: 'accepted' | 'blocked' | 'ignored' | 'error';
   message: string;
 }
@@ -63,7 +63,7 @@ export interface ChatbotLiveMessage {
   viewerName: string;
   roles: string[];
   text: string;
-  platform: 'twitch' | 'kick';
+  platform: 'twitch';
   sharedChat: boolean;
   sourceChannelId?: string;
   sourceChannelLogin?: string;
@@ -147,7 +147,7 @@ export interface ChatbotAutoMessageConfiguration {
   messages: string[];
   intervalMinutes: number;
   chatMessageThreshold: number;
-  platforms: Array<'twitch' | 'kick'>;
+  platforms: Array<'twitch'>;
 }
 
 export interface ChatbotNumericPollStatus {
@@ -354,7 +354,6 @@ export interface TwitchChatbotOptions {
   onCommand?: (dispatch: ChatbotDispatch) => void | Promise<void>;
   createTwitchClip?: (input: { title?: string; duration: number }) => Promise<{ id: string; url: string; editUrl: string }>;
   rollDice?: (request: ChatbotDiceRollRequest) => ChatbotDiceRollResult | Promise<ChatbotDiceRollResult>;
-  sendPlatformMessage?: (platform: 'kick', message: string, replyParentMessageId?: string) => void | Promise<void>;
   onConnectionState?: (eventSub: ChatbotStatus['connections']['eventSub'], chat: ChatbotStatus['connections']['chat']) => void;
   onPollChanged?: (poll: ChatbotNumericPollStatus) => void;
   onCatalogChanged?: () => void;
@@ -451,10 +450,10 @@ function validateAutoMessages(value: unknown, fallback: ChatbotAutoMessageConfig
   const chatMessageThreshold = Number(source.chatMessageThreshold ?? fallback.chatMessageThreshold);
   if (!Number.isInteger(intervalMinutes) || intervalMinutes < 0 || intervalMinutes > 240) throw new Error('Auto Message interval must be between 0 and 240 minutes.');
   if (!Number.isInteger(chatMessageThreshold) || chatMessageThreshold < 0 || chatMessageThreshold > 1000) throw new Error('Auto Message chat threshold must be between 0 and 1,000 messages.');
-  const platforms = [...new Set((Array.isArray(source.platforms) ? source.platforms : fallback.platforms).filter((platform): platform is 'twitch' | 'kick' => platform === 'twitch' || platform === 'kick'))];
+  const platforms: Array<'twitch'> = (Array.isArray(source.platforms) ? source.platforms : fallback.platforms).includes('twitch') ? ['twitch'] : [];
   const enabled = typeof source.enabled === 'boolean' ? source.enabled : fallback.enabled;
   if (enabled && !messages.length) throw new Error('Add at least one message before enabling Auto Messages.');
-  if (enabled && !platforms.length) throw new Error('Select Twitch, Kick, or both before enabling Auto Messages.');
+  if (enabled && !platforms.length) throw new Error('Select Twitch before enabling Auto Messages.');
   if (enabled && intervalMinutes === 0 && chatMessageThreshold === 0) throw new Error('Enable a time interval, a chat-message threshold, or both.');
   return { enabled, messages, intervalMinutes, chatMessageThreshold, platforms };
 }
@@ -823,7 +822,7 @@ export class TwitchChatbot {
   private autoMessageSent = 0;
   private autoMessageIndex = 0;
   private autoMessageLastSentAt?: string;
-  private autoMessageActivePlatforms = new Set<'twitch' | 'kick'>();
+  private autoMessageActivePlatforms = new Set<'twitch'>();
   private numericPoll?: ChatbotNumericPollRuntime;
   private channelInfoCache?: { fetchedAt: number; title: string; gameName: string };
   private streamCache?: { fetchedAt: number; startedAt?: string; viewerCount?: number };
@@ -1411,7 +1410,7 @@ export class TwitchChatbot {
     if (event.payload.botMessage === true || (event.source === 'twitch' && event.viewer?.id && event.viewer.id === this.identity?.userId)) return { matched: false, accepted: false, reason: 'Bot messages are ignored to prevent loops.' };
     if (!simulated) {
       this.autoMessageMessagesSinceLast += 1;
-      this.autoMessageActivePlatforms.add(event.source === 'kick' ? 'kick' : 'twitch');
+      this.autoMessageActivePlatforms.add('twitch');
       await this.maybeSendAutoMessage();
       const pollVote = String(event.payload.text || '').trim().match(/^(\d{1,2})$/);
       if (pollVote) this.recordNumericPollVote({
@@ -1497,11 +1496,7 @@ export class TwitchChatbot {
       if (!handlerError) await this.options.onCommand?.({ command: copyCommand(command), event, arguments: args, simulated });
       if (response && !simulated) {
         const replyId = command.replyToViewer ? String(event.payload.messageId || '') : undefined;
-        if (event.source === 'kick') {
-          if (!this.options.sendPlatformMessage) throw new Error('Kick chat output is not configured.');
-          await this.options.sendPlatformMessage('kick', response, replyId);
-        }
-        else await this.sendMessage(response, replyId);
+        await this.sendMessage(response, replyId);
       }
       if (handlerError) {
         this.record({ command: command.name, viewerName, ...activityContext, state: 'error', message: handlerError });
@@ -1803,7 +1798,7 @@ export class TwitchChatbot {
     };
   }
 
-  recordNumericPollVote(input: { pollId?: string; optionNumber: number; voterId: string; source: 'twitch' | 'kick' }): ChatbotNumericPollVoteResult {
+  recordNumericPollVote(input: { pollId?: string; optionNumber: number; voterId: string; source: 'twitch' }): ChatbotNumericPollVoteResult {
     const poll = this.numericPoll;
     if (!poll || poll.state !== 'active') return { accepted: false, duplicate: false, code: 'poll-inactive', poll: this.pollStatus() };
     if (input.pollId && input.pollId !== poll.id) return { accepted: false, duplicate: false, code: 'stale-poll', poll: this.pollStatus() };
@@ -1858,20 +1853,15 @@ export class TwitchChatbot {
         .slice(0, 500);
       const delivered: string[] = [];
       const failures: string[] = [];
-      for (const platform of settings.platforms) {
-        if (!this.autoMessageActivePlatforms.has(platform)) continue;
+      if (settings.platforms.includes('twitch') && this.autoMessageActivePlatforms.has('twitch')) {
         try {
-          if (platform === 'twitch') {
-            const stream = await this.loadStreamStatus();
-            if (!stream.startedAt) continue;
+          const stream = await this.loadStreamStatus();
+          if (stream.startedAt) {
             await this.sendMessage(message);
-          } else {
-            if (!this.options.sendPlatformMessage) throw new Error('Kick chat output is not configured.');
-            await this.options.sendPlatformMessage('kick', message);
+            delivered.push('twitch');
           }
-          delivered.push(platform);
         } catch (error) {
-          failures.push(`${platform}: ${(error as Error).message}`);
+          failures.push(`twitch: ${(error as Error).message}`);
         }
       }
       if (!delivered.length) {
@@ -1884,7 +1874,7 @@ export class TwitchChatbot {
       this.autoMessageWindowStartedAt = Date.now();
       this.autoMessageMessagesSinceLast = 0;
       this.autoMessageActivePlatforms.clear();
-      this.record({ state: 'accepted', message: `Auto Message sent to ${delivered.map((platform) => platform === 'twitch' ? 'Twitch' : 'Kick').join(' + ')}${failures.length ? `; ${failures.join(' · ')}` : ''}.` });
+      this.record({ state: 'accepted', message: `Auto Message sent to Twitch${failures.length ? `; ${failures.join(' · ')}` : ''}.` });
     } finally {
       this.autoMessageSending = false;
     }
@@ -1972,12 +1962,11 @@ export class TwitchChatbot {
   private async resolveCommandResponse(command: ChatbotCommand, event: TempestNormalizedChatEvent, args: string[] = [], simulated = false): Promise<string> {
     switch (command.handler) {
       case 'command-directory': return this.commandDirectoryResponse(event);
-      case 'stream-uptime': return event.source === 'kick' ? 'Stream uptime is currently available on Twitch only.' : this.streamUptimeResponse();
-      case 'channel-title': return event.source === 'kick' ? 'The title command is currently available on Twitch only.' : this.channelTitleResponse();
-      case 'channel-game': return event.source === 'kick' ? 'The category command is currently available on Twitch only.' : this.channelGameResponse();
-      case 'stream-schedule': return event.source === 'kick' ? 'The schedule command is currently available on Twitch only.' : this.streamScheduleResponse();
+      case 'stream-uptime': return this.streamUptimeResponse();
+      case 'channel-title': return this.channelTitleResponse();
+      case 'channel-game': return this.channelGameResponse();
+      case 'stream-schedule': return this.streamScheduleResponse();
       case 'twitch-clip': {
-        if (event.source === 'kick') return 'Clip creation is currently available from Twitch chat only.';
         if (simulated) return 'Clip command test passed. A live command would create a 30-second Twitch clip.';
         if (!this.options.createTwitchClip) return 'Clip creation is not available until the broadcaster reconnects Twitch in Studio.';
         const requestedTitle = args.join(' ').trim().slice(0, 100);
@@ -2000,7 +1989,7 @@ export class TwitchChatbot {
     const sharedChat = event.payload.sharedChat === true || Boolean(sourceChannelId && sourceChannelId !== event.channel.id);
     const roles = event.viewer?.roles || [];
     const names = this.configuration.commands
-      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles) && !(event.source === 'kick' && ['stream-uptime', 'channel-title', 'channel-game', 'stream-schedule', 'twitch-clip'].includes(command.handler || '')))
+      .filter((command) => command.enabled && (!sharedChat || command.allowSharedChat) && rolesPermit(command.permission, roles))
       .map((command) => `${this.configuration.prefix}${command.name}`);
     return `Available commands: ${names.join(' · ')}`.slice(0, 500);
   }

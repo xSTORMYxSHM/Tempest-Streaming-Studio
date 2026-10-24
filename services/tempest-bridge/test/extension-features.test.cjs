@@ -7,7 +7,7 @@ const { TempestExtensionFeaturePlacements } = require('../dist/extension-feature
 
 const definitions = [
   { id: 'tempest.dice.roll', name: 'Roll a d20', group: 'Stream Games', description: 'Roll on stream.', defaultDestinations: [] },
-  { id: 'tempest.pet.play', name: 'Play With Pet', group: 'Screen Pet', description: 'Play with the pet.', defaultDestinations: [] }
+  { id: 'tempest.effect.spark', name: 'Spark Effect', group: 'Stream Effects', description: 'Show a stream effect.', defaultDestinations: [] }
 ];
 
 test('persists independent panel and overlay feature placement with safe defaults', async () => {
@@ -18,22 +18,22 @@ test('persists independent panel and overlay feature placement with safe default
   assert.deepEqual(placements.destinations('tempest.dice.roll', []), []);
   assert.deepEqual(placements.list(definitions).map((feature) => [feature.id, feature.destinations, feature.customized]), [
     ['tempest.dice.roll', [], false],
-    ['tempest.pet.play', [], false]
+    ['tempest.effect.spark', [], false]
   ]);
 
   const panelOnly = await placements.update('tempest.dice.roll', { destinations: ['mainframe'] }, definitions);
   assert.deepEqual(panelOnly.destinations, ['mainframe']);
   assert.equal(panelOnly.customized, true);
-  const overlayOnly = await placements.update('tempest.pet.play', { destinations: ['streaming'] }, definitions);
+  const overlayOnly = await placements.update('tempest.effect.spark', { destinations: ['streaming'] }, definitions);
   assert.deepEqual(overlayOnly.destinations, ['streaming']);
 
   placements = new TempestExtensionFeaturePlacements(dataDirectory);
   await placements.initialize();
   assert.deepEqual(placements.destinations('tempest.dice.roll', []), ['mainframe']);
-  assert.deepEqual(placements.destinations('tempest.pet.play', []), ['streaming']);
+  assert.deepEqual(placements.destinations('tempest.effect.spark', []), ['streaming']);
 
   const saved = JSON.parse(await readFile(path.join(dataDirectory, 'extension-feature-placements.json'), 'utf8'));
-  assert.deepEqual(saved.placements, { 'tempest.dice.roll': ['mainframe'], 'tempest.pet.play': ['streaming'] });
+  assert.deepEqual(saved.placements, { 'tempest.dice.roll': ['mainframe'], 'tempest.effect.spark': ['streaming'] });
 
   const restored = await placements.reset(definitions);
   assert.deepEqual(restored.map((feature) => feature.destinations), [[], []]);

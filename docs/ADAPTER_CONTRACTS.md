@@ -1,6 +1,6 @@
 # Avatar and Tempest Broadcast Adapter Contracts
 
-No adapter owns interaction-facing Twitch ingestion. Studio owns Twitch and Kick account/API authorization, Stream Information (title, category, tags, and notifications), EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast owns OBS output-service authentication and credentials, canvases, encoders, recording, destination configuration, and live output control.
+No adapter owns interaction-facing Twitch ingestion. Studio owns Twitch account/API authorization, Stream Information (title, category, tags, and notifications), EventSub, chat, rewards, Extension intake, normalization, dedupe, cooldowns, and routing. Adapters connect to the authenticated localhost Tempest Bridge and act on targeted commands. Tempest Broadcast owns OBS output-service authentication and credentials, canvases, encoders, recording, destination configuration, and live output control.
 
 ## Shared command envelope
 
@@ -34,18 +34,17 @@ Required capabilities for the bundled Black Hole Event:
 - `broadcast.status` — publish adapter/OBS readiness and output state.
 - `broadcast.dual-format.configure` — while off air, enable or disable Enhanced Broadcasting and select a supported vertical additional canvas.
 - `broadcast.dual-format.preview` — focus the native vertical preview without starting an output.
-- `broadcast.simulcast.configure` — off air, store the Kick destination and Windows-encrypted key plus upload and recording preferences.
-- `broadcast.simulcast.preflight` — off air, verify local credential decryption, Twitch service, Dual Format, RTMP module, and upload reserve without connecting to a platform.
-- `broadcast.simulcast.retry-kick` — while Twitch remains live and Kick is offline, reconstruct and restart only the Kick output.
-- `broadcast.simulcast.start` — start Twitch first, then attach the independent Kick output to the active horizontal encoders.
-- `broadcast.simulcast.stop` — stop Kick independently or perform an emergency stop of all coordinated outputs.
+- `broadcast.simulcast.configure` — off air, store upload and recording preferences for the production controller.
+- `broadcast.simulcast.preflight` — off air, verify Twitch service, Dual Format, local output readiness, and upload reserve without connecting to the platform.
+- `broadcast.simulcast.start` — start the prepared Twitch output.
+- `broadcast.simulcast.stop` — perform an emergency stop of the Twitch output and coordinated recording.
 
 Exact Broadcast compatibility changes:
 
 1. Remove or disable interaction-facing Twitch OAuth, EventSub, chat, channel-point, Sound Alerts, cheer, subscription ingestion, and Stream Information authoring. Keep OBS output-service authentication and credentials inside Broadcast.
 2. Register the application manifest and connect to `/v1/socket` with the Studio-issued Bridge token.
 3. Send `hello` as `com.tempestmainframe.tempest-broadcast` and subscribe to its command topics plus required system health topics.
-4. Advertise `broadcast.reaction.trigger`, `broadcast.reaction.clear`, `broadcast.audio.play`, `broadcast.visual.show`, `broadcast.visual.hide`, `broadcast.status`, `broadcast.dual-format.configure`, `broadcast.dual-format.preview`, `broadcast.simulcast.configure`, `broadcast.simulcast.preflight`, `broadcast.simulcast.retry-kick`, `broadcast.simulcast.start`, and `broadcast.simulcast.stop`.
+4. Advertise `broadcast.reaction.trigger`, `broadcast.reaction.clear`, `broadcast.audio.play`, `broadcast.visual.show`, `broadcast.visual.hide`, `broadcast.status`, `broadcast.dual-format.configure`, `broadcast.dual-format.preview`, `broadcast.simulcast.configure`, `broadcast.simulcast.preflight`, `broadcast.simulcast.start`, and `broadcast.simulcast.stop`.
 5. Add a command adapter that calls `TriggerReactionEvent(eventType, name, circuit, accent, effect, strength, durationMs, dedupeId, runId)` for trigger and `ClearReactionEvent(dedupeId, runId)` for clear.
 6. Make repeated trigger/clear calls safe. Track overrides by `runId` and `actionId`, restore only the filters/scenes/overlays that reaction changed, and add a lease-expiry fallback.
 7. Return command responses correlated to the workflow run and publish health/failure events. A missing OBS source should degrade that action rather than crash the adapter.

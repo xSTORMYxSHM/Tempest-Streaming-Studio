@@ -38,14 +38,10 @@ import { TempestEmoteWall } from './emote-wall';
 import { TempestTwitchExperiences } from './twitch-experiences';
 import { TempestDiscordVoiceOverlay } from './discord-voice-overlay';
 import { TempestDiceOverlay } from './dice-overlay';
-import { TempestInteractiveStage } from './interactive-stage';
+import { TempestInteractiveStage } from './stage-overlay';
 import { TempestUnifiedStage } from './unified-stage';
-import { TempestInteractiveWorld } from './interactive-world';
-import { TempestStageActorCatalog } from './stage-actors';
 import { TempestInteractionComposer } from './interaction-composer';
 import { TempestExtensionFeaturePlacements, TwitchExtensionFeatureDefinition } from './extension-features';
-import { TempestTobiiAdapter } from './tobii-adapter';
-export { TempestStageActorCatalog } from './stage-actors';
 import { TempestAlertQueue, TempestAlertQueueItem } from './alert-queue';
 import { TempestAlertHistory } from './alert-history';
 import {
@@ -55,11 +51,8 @@ import {
   extensionCatalogKind
 } from './extension-relay';
 import { TwitchChatbot, type ChatbotDiceRollRequest, type ChatbotDiceRollResult, type ChatbotDispatch } from './chatbot';
-import { KickIntegrationGateway, type KickCredentialStore } from './kick-integration';
 
 export type { TwitchCredentialStore, TwitchTokenSet } from './twitch-integration';
-export type { KickCredentialSet, KickCredentialStore, KickIntegrationStatus } from './kick-integration';
-export { KickIntegrationGateway } from './kick-integration';
 export type { ChatbotCommand, ChatbotStatus } from './chatbot';
 export {
   extensionCatalogKind,
@@ -75,13 +68,9 @@ export interface StartBridgeOptions {
   token?: string;
   twitchCredentialStore?: TwitchCredentialStore;
   chatbotCredentialStore?: TwitchCredentialStore;
-  kickCredentialStore?: KickCredentialStore;
   chatbotFetchImplementation?: typeof fetch;
   emoteProviderFetchImplementation?: typeof fetch;
-  kickFetchImplementation?: typeof fetch;
-  kickWebhookUrl?: string;
   extensionRelay?: ExtensionRelayOptions;
-  tobiiAdapterPath?: string;
   soundAlertPlayback?: (command: TempestSoundAlertPlaybackCommand) => void | Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
@@ -117,44 +106,6 @@ const dualFormatPreviewCapability = 'broadcast.dual-format.preview';
 const simulcastConfigureCapability = 'broadcast.simulcast.configure';
 const simulcastPreflightCapability = 'broadcast.simulcast.preflight';
 
-const interactiveWorldCatalog = [
-  { id: 'tempest.avatar.join', name: 'Join the Crowd', durationMs: 4_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'JOIN', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.left', name: 'Move Avatar Left', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'LEFT', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.right', name: 'Move Avatar Right', durationMs: 1_000, cooldownMs: 350, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'RGT', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.jump', name: 'Make My Avatar Jump', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'JUMP', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.drop', name: 'Drop Through Platform', durationMs: 1_000, cooldownMs: 750, category: 'community' as const, placementMode: 'fixed' as const, accent: '#70F0B4', glyph: 'DROP', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.interact', name: 'Interact Nearby', durationMs: 1_000, cooldownMs: 1_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'USE', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.emote', name: 'Avatar Emote', durationMs: 1_500, cooldownMs: 2_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'EMO', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.avatar.unstuck', name: 'Respawn My Avatar', durationMs: 1_000, cooldownMs: 10_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF667A', glyph: 'RST', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.pet.feed', name: 'Feed the Pet', durationMs: 3_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FFB45C', glyph: 'FEED', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.pet.play', name: 'Play With Pet', durationMs: 5_000, cooldownMs: 8_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#FF9F43', glyph: 'PET', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.pet.pet', name: 'Pet the Pet', durationMs: 3_000, cooldownMs: 5_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#B99CFF', glyph: 'LOVE', kind: 'interaction' as const, destinations: [] as const },
-  { id: 'tempest.viewer-attack', name: 'Viewer Attack', durationMs: 2_000, cooldownMs: 3_000, category: 'screen-effect' as const, placementMode: 'viewer' as const, accent: '#FF667A', glyph: 'HIT', kind: 'interaction' as const, destinations: ['streaming'] as const },
-  { id: 'tempest.battle.attack', name: 'Battle Attack', durationMs: 2_000, cooldownMs: 3_000, category: 'community' as const, placementMode: 'fixed' as const, accent: '#54F2EB', glyph: 'ATK', kind: 'interaction' as const, destinations: ['streaming'] as const }
-].map((item) => ({
-  ...item,
-  viewerCooldownMs: item.cooldownMs,
-  globalCooldownMs: 0,
-  access: { mode: 'everyone' as const, allowedViewerIds: [], blockedViewerIds: [], hideWhenLocked: false },
-  destinations: [...item.destinations]
-}));
-
-const extensionFeatureDescriptions: Record<string, { group: string; description: string }> = {
-  'tempest.avatar.join': { group: 'Viewer Avatars', description: 'Let a viewer join the on-screen crowd.' },
-  'tempest.avatar.left': { group: 'Viewer Avatars', description: 'Move the viewer avatar to the left.' },
-  'tempest.avatar.right': { group: 'Viewer Avatars', description: 'Move the viewer avatar to the right.' },
-  'tempest.avatar.jump': { group: 'Viewer Avatars', description: 'Make the viewer avatar jump.' },
-  'tempest.avatar.drop': { group: 'Viewer Avatars', description: 'Drop the viewer avatar through a platform.' },
-  'tempest.avatar.interact': { group: 'Viewer Avatars', description: 'Use the nearest Interactive World object.' },
-  'tempest.avatar.emote': { group: 'Viewer Avatars', description: 'Play an avatar emote.' },
-  'tempest.avatar.unstuck': { group: 'Viewer Avatars', description: 'Respawn an avatar at a safe checkpoint.' },
-  'tempest.pet.feed': { group: 'Screen Pet', description: 'Feed the on-screen pet.' },
-  'tempest.pet.play': { group: 'Screen Pet', description: 'Play with the on-screen pet.' },
-  'tempest.pet.pet': { group: 'Screen Pet', description: 'Give the on-screen pet attention.' },
-  'tempest.viewer-attack': { group: 'Viewer Games', description: 'Attack a selected point in the on-screen world.' },
-  'tempest.battle.attack': { group: 'Viewer Games', description: 'Attack during the active viewer battle.' }
-};
-
 const diceExtensionCatalogItem = {
   id: 'tempest.dice.roll', name: 'Roll a d20', durationMs: 8_000, cooldownMs: 10_000,
   viewerCooldownMs: 10_000, globalCooldownMs: 2_000,
@@ -164,14 +115,8 @@ const diceExtensionCatalogItem = {
   destinations: [] as const
 };
 
-const interactiveWorldActionIds = new Set([
-  ...interactiveWorldCatalog.map((item) => item.id),
-  'tempest.avatar.equip',
-  'tempest.pet-play'
-]);
 const simulcastStartCapability = 'broadcast.simulcast.start';
 const simulcastStopCapability = 'broadcast.simulcast.stop';
-const simulcastRetryKickCapability = 'broadcast.simulcast.retry-kick';
 const extensionDiceViewerCooldownMs = 30_000;
 const extensionDiceGlobalCooldownMs = 5_000;
 const extensionDicePresets = [
@@ -280,20 +225,15 @@ function simulcastSnapshot(connection?: BridgeClient): Record<string, unknown> {
   const broadcastStatus = (connection?.status || {}) as TempestBroadcastStatus;
   const reported = isRecord(broadcastStatus.simulcast) ? broadcastStatus.simulcast : undefined;
   const twitch: Record<string, unknown> = reported && isRecord(reported.twitch) ? reported.twitch : {};
-  const kick: Record<string, unknown> = reported && isRecord(reported.kick) ? reported.kick : {};
   const connected = Boolean(connection);
   const controllerSupported = Boolean(connection?.capabilities.includes(simulcastConfigureCapability)
     && connection?.capabilities.includes(simulcastPreflightCapability)
     && connection?.capabilities.includes(simulcastStartCapability)
-    && connection?.capabilities.includes(simulcastStopCapability)
-    && connection?.capabilities.includes(simulcastRetryKickCapability)) && reported?.supported !== false;
-  const configured = reported?.configured === true;
-  const enabled = reported?.enabled === true;
-  const credentialsStored = reported?.credentialsStored === true;
+    && connection?.capabilities.includes(simulcastStopCapability)) && reported?.supported !== false;
   const twitchServiceReady = reported?.twitchServiceReady === true;
   const dualFormatReady = reported?.dualFormatReady === true;
-  const kickServerConfigured = reported?.kickServerConfigured === true;
-  const secureStorageAvailable = reported?.secureStorageAvailable === true;
+  const configured = twitchServiceReady && dualFormatReady;
+  const enabled = reported?.enabled !== false;
   const uploadCapacityConfigured = reported?.uploadCapacityConfigured === true;
   const uploadHeadroomReady = reported?.uploadHeadroomReady !== false;
   const lastPreflightAt = typeof reported?.lastPreflightAt === 'string' ? reported.lastPreflightAt : undefined;
@@ -301,17 +241,15 @@ function simulcastSnapshot(connection?: BridgeClient): Record<string, unknown> {
   const preflightAge = Date.now() - lastPreflightTime;
   const preflightReady = reported?.lastPreflightPassed === true && Number.isFinite(lastPreflightTime)
     && preflightAge >= 0 && preflightAge <= 4 * 60 * 60 * 1000;
-  const ready = connected && controllerSupported && configured && enabled && credentialsStored
-    && twitchServiceReady && dualFormatReady && kickServerConfigured && secureStorageAvailable
+  const ready = connected && controllerSupported && configured && enabled
+    && twitchServiceReady && dualFormatReady
     && uploadCapacityConfigured && uploadHeadroomReady && preflightReady;
   const twitchActive = twitch.active === true;
-  const kickActive = kick.active === true;
   const lastError = typeof reported?.lastError === 'string' ? reported.lastError.slice(0, 400) : undefined;
   const state = !connected ? 'broadcast-offline'
     : !controllerSupported || !reported ? 'update-required'
-      : lastError && !twitchActive && !kickActive ? 'error'
-        : twitchActive && kickActive ? 'live'
-          : twitchActive || kickActive ? 'degraded-live'
+      : lastError && !twitchActive ? 'error'
+        : twitchActive ? 'live'
             : ready ? 'ready' : 'setup-required';
   return {
     state,
@@ -322,12 +260,8 @@ function simulcastSnapshot(connection?: BridgeClient): Record<string, unknown> {
     ready,
     enabled,
     configured,
-    credentialsStored,
-    secureStorageAvailable,
-    kickServerConfigured,
     twitchServiceReady,
     dualFormatReady,
-    sharedEncoder: reported?.sharedEncoder === true,
     uploadCapacityConfigured,
     uploadCapacityKbps: Number(reported?.uploadCapacityKbps || 0),
     estimatedRequiredKbps: Number(reported?.estimatedRequiredKbps || 0),
@@ -347,23 +281,12 @@ function simulcastSnapshot(connection?: BridgeClient): Record<string, unknown> {
       congestion: Number(twitch.congestion || 0),
       ...(typeof twitch.lastError === 'string' ? { lastError: twitch.lastError.slice(0, 400) } : {})
     },
-    kick: {
-      state: typeof kick.state === 'string' ? kick.state : kickActive ? 'live' : 'offline',
-      active: kickActive,
-      bytesSent: Number(kick.bytesSent || 0),
-      droppedFrames: Number(kick.droppedFrames || 0),
-      totalFrames: Number(kick.totalFrames || 0),
-      congestion: Number(kick.congestion || 0),
-      ...(typeof kick.lastError === 'string' ? { lastError: kick.lastError.slice(0, 400) } : {})
-    },
     lastError,
     checks: [
       { id: 'broadcast', label: 'Tempest Broadcast connected', ready: connected },
-      { id: 'controller', label: 'Production simulcast controller available', ready: controllerSupported && Boolean(reported) },
+      { id: 'controller', label: 'Production output controller available', ready: controllerSupported && Boolean(reported) },
       { id: 'twitch', label: 'Twitch output service ready', ready: twitchServiceReady },
       { id: 'dual-format', label: 'Twitch horizontal + vertical ready', ready: dualFormatReady },
-      { id: 'kick-server', label: 'Kick ingest server configured', ready: kickServerConfigured },
-      { id: 'kick-key', label: 'Kick stream key stored securely', ready: credentialsStored && secureStorageAvailable },
       { id: 'upload', label: 'Upload budget has production headroom', ready: uploadCapacityConfigured && uploadHeadroomReady },
       { id: 'preflight', label: 'Local production preflight passed', ready: preflightReady }
     ]
@@ -484,7 +407,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   };
   let dispatchChatCommand: (dispatch: ChatbotDispatch) => Promise<void> = async () => {};
   let dispatchChatDice: (request: ChatbotDiceRollRequest) => Promise<ChatbotDiceRollResult> = async () => { throw new Error('3D Dice is not ready.'); };
-  let kickGateway!: KickIntegrationGateway;
   const chatbot = new TwitchChatbot({
     dataDirectory: options.dataDirectory,
     credentialStore: options.chatbotCredentialStore,
@@ -493,21 +415,11 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     onCommand: (dispatch) => dispatchChatCommand(dispatch),
     createTwitchClip: (input) => twitchGateway.createClip(input),
     rollDice: (request) => dispatchChatDice(request),
-    sendPlatformMessage: async (_platform, message, replyParentMessageId) => { await kickGateway.postMessage({ message, replyToMessageId: replyParentMessageId }); },
     onConnectionState(eventSub, chat) { twitchGateway.setChatConnectionState(eventSub, chat); },
     onPollChanged() { extensionRelay?.syncCatalog(); },
     onCatalogChanged() { extensionRelay?.syncCatalog(); }
   });
   await chatbot.initialize(twitchGateway.status().clientId || '');
-  kickGateway = new KickIntegrationGateway({
-    dataDirectory: options.dataDirectory,
-    defaultRedirectUri: `http://localhost:${requestedPort || 4765}/v1/integrations/kick/oauth/callback`,
-    webhookUrl: options.kickWebhookUrl,
-    credentialStore: options.kickCredentialStore,
-    fetchImplementation: options.kickFetchImplementation,
-    onChatEvent: async (event) => { await chatbot.processChatEvent(event); }
-  });
-  await kickGateway.initialize();
   const soundAlerts = new TempestSoundAlertCatalog(options.dataDirectory);
   await soundAlerts.initialize();
   let workflowEngine: TempestWorkflowEngine | null = null;
@@ -582,23 +494,14 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   await discordVoiceOverlay.initialize();
   const diceOverlay = new TempestDiceOverlay(options.dataDirectory);
   await diceOverlay.initialize();
-  const stageActors = new TempestStageActorCatalog(options.dataDirectory);
-  await stageActors.initialize();
   const interactiveStage = new TempestInteractiveStage(options.dataDirectory);
   await interactiveStage.initialize();
   const unifiedStage = new TempestUnifiedStage(options.dataDirectory);
   await unifiedStage.initialize();
-  const interactiveWorld = new TempestInteractiveWorld(options.dataDirectory, interactiveStage, stageActors);
-  await interactiveWorld.initialize();
   const interactionComposer = new TempestInteractionComposer(options.dataDirectory);
   await interactionComposer.initialize();
   const extensionFeatures = new TempestExtensionFeaturePlacements(options.dataDirectory);
   await extensionFeatures.initialize();
-  const tobiiAdapter = new TempestTobiiAdapter(options.tobiiAdapterPath, async (sample) => {
-    const gaze = interactiveWorld.status().gaze;
-    if (!gaze.enabled || gaze.adapter !== 'tgi-sidecar') await interactiveWorld.configureGaze({ enabled: true, adapter: 'tgi-sidecar', effect: gaze.effect });
-    await interactiveWorld.sampleGaze(sample);
-  });
   const extensionDiceViewerUses = new Map<string, number>();
   let extensionDiceGlobalUse = 0;
   dispatchChatDice = async (request) => {
@@ -847,17 +750,13 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return;
       }
     }
-    workflowEngine!.recordExternalEvent(event.topic, 'info', `${event.topic} received from ${event.source === 'kick' ? 'Kick' : 'Twitch'}.`, { event });
-    const observedViewer = await interactiveWorld.observeChat(event);
-    if (observedViewer) broadcastSystemEvent('interactive-world.viewer.present', { viewer: observedViewer });
+    workflowEngine!.recordExternalEvent(event.topic, 'info', `${event.topic} received from Twitch.`, { event });
     if (event.topic === 'viewer.chat.message') {
       const command = String(event.payload.text || '').trim().split(/\s+/)[0]?.toLowerCase();
       if (command?.startsWith('!')) {
-        const context = { source: event.source === 'kick' ? 'kick.chat' : 'twitch.chat', viewerKey: observedViewer?.key, viewerName: event.viewer?.displayName || event.viewer?.login, input: String(event.payload.text || ''), eventId: event.id };
+        const context = { source: 'twitch.chat', viewerName: event.viewer?.displayName || event.viewer?.login, input: String(event.payload.text || ''), eventId: event.id };
         const recipes = await interactionComposer.handle('chat-command', command, context);
         for (const outcome of recipes) workflowEngine!.recordExternalEvent('interaction-composer.triggered', outcome.error ? 'warning' : 'success', outcome.error || `Interaction recipe ${outcome.recipeId} ran from chat.`, { outcome, eventId: event.id });
-        try { await interactiveWorld.handleGameChat(event); }
-        catch (error) { workflowEngine!.recordExternalEvent('interactive-world.chat-command.failed', 'warning', (error as Error).message, { eventId: event.id, command }); }
       }
     }
     broadcastSystemEvent(event.topic, event);
@@ -869,8 +768,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     if (event.source === 'twitch') {
       emoteWall.push(event);
       twitchExperiences.ingest(event);
-      const avatarRedemption = event.topic === 'viewer.reward.redeemed' ? await interactiveWorld.applyAvatarChannelPointRedemption(event) : undefined;
-      if (avatarRedemption) workflowEngine!.recordExternalEvent('interactive-world.avatar-reward.applied', 'success', `${avatarRedemption.viewerName} redeemed ${avatarRedemption.rewardTitle || avatarRedemption.redeemId}.`, { avatarRedemption, eventId: event.id });
       const twitchVisual = twitchVisualAlerts.findForEvent(event);
       if (twitchVisual?.enabled) await queueTwitchAlert(twitchVisual, event, 'twitch.chat');
     }
@@ -881,7 +778,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
     const workflow = registry.listWorkflows().find((entry) => entry.id === command.workflowId && entry.enabled);
     if (!workflow) throw new Error(`Workflow ${command.workflowId} is not available.`);
     const run = await workflowEngine!.trigger(workflow.id, {
-      source: simulated ? 'studio.simulator' : event.source === 'kick' ? 'kick.chat' : 'twitch.chat',
+      source: simulated ? 'studio.simulator' : 'twitch.chat',
       eventId: event.id,
       viewerId: event.viewer?.id,
       viewerName: event.viewer?.displayName || event.viewer?.login,
@@ -978,13 +875,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       placement: { x: Number(settings.x ?? 0.5), y: Number(settings.y ?? 0.5), scale: Number(settings.scale ?? 1), anchor: 'center', layer: 60 },
       properties: { glyph: String(settings.glyph || 'EVENT'), label: String(settings.message || context.input || 'Viewer interaction'), accent: String(settings.accent || '#54F2EB') }
     });
-    if (action.type === 'viewer-state') {
-      if (!context.viewerKey) throw new Error('This recipe needs a viewer identity for its avatar action.');
-      return interactiveWorld.setViewerState(context.viewerKey, { state: settings.state || 'emote' });
-    }
-    if (action.type === 'viewer-attack') return interactiveWorld.viewerAttack({ platform: context.source.startsWith('kick') ? 'kick' : 'twitch', viewerId: context.viewerKey?.split(':').slice(1).join(':') || 'composer', viewerName: context.viewerName, x: settings.x, y: settings.y, intensity: settings.intensity, bypassCooldown: true });
-    if (action.type === 'pet-action') return interactiveWorld.petAction(settings.action || 'play', context.viewerName);
-    if (action.type === 'battle-start') return interactiveWorld.startBattle({ mode: settings.mode || 'duel', inviteOnly: settings.inviteOnly === true, bossName: settings.bossName });
     throw new Error(`Unsupported Interaction Composer action: ${action.type}.`);
   });
 
@@ -1066,15 +956,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return response.end();
       }
       if (request.method === 'GET' && requestUrl.pathname === '/health') return sendJson(response, 200, health());
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/kick/oauth/callback') {
-        if (!isLoopbackRequest(request)) return sendOAuthPage(response, 403, 'Kick connection blocked', 'This OAuth callback is accepted only on the computer running Studio.');
-        try {
-          await kickGateway.completeAuthorization({ code: requestUrl.searchParams.get('code'), state: requestUrl.searchParams.get('state'), error: requestUrl.searchParams.get('error') });
-          return sendOAuthPage(response, 200, 'Kick connected', 'Kick chat authorization completed successfully.');
-        } catch (error) {
-          return sendOAuthPage(response, 400, 'Kick connection failed', (error as Error).message);
-        }
-      }
       if (request.method === 'GET' && requestUrl.pathname === '/unified-stage') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Unified Stage is available only on this computer.' });
         response.statusCode = 200;
@@ -1152,23 +1033,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/interactive-stage/events') {
         if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'The Interactive Stage is available only on this computer.' });
         interactiveStage.connect(response, requestUrl.searchParams.get('orientation') === 'vertical' ? 'vertical' : 'horizontal');
-        return;
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/interactive-stage/world-event') {
-        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Stage world events are available only on this computer.' });
-        return sendJson(response, 202, { worldState: await interactiveStage.worldEvent(await readJson(request)) });
-      }
-      const stageActorAssetMatch = requestUrl.pathname.match(/^\/interactive-stage\/actors\/([^/]+)\/([^/]+)$/);
-      if (request.method === 'GET' && stageActorAssetMatch) {
-        if (!isLoopbackRequest(request)) return sendJson(response, 403, { error: 'Stage Actor assets are available only on this computer.' });
-        const packId = decodeURIComponent(stageActorAssetMatch[1]);
-        const assetName = decodeURIComponent(stageActorAssetMatch[2]);
-        if (assetName === 'rig.json') {
-          const rig = stageActors.rendererRig(packId);
-          return rig ? sendJson(response, 200, rig) : sendJson(response, 404, { error: 'The Stage Actor rig was not found.' });
-        }
-        const served = await stageActors.serveAsset(packId, assetName, response);
-        if (!served) return sendJson(response, 404, { error: 'The Stage Actor asset was not found.' });
         return;
       }
       if (request.method === 'GET' && requestUrl.pathname === '/emote-wall') {
@@ -1357,10 +1221,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           return sendJson(response, 409, { error: 'The connected Broadcast build does not provide simulcast configuration.' });
         }
         const currentStatus = (client.status as TempestBroadcastStatus | undefined);
-        const reported = isRecord(currentStatus?.simulcast) ? currentStatus.simulcast : undefined;
-        if (currentStatus?.streaming === true || (isRecord(reported?.kick) && reported.kick.active === true)) {
-          return sendJson(response, 409, { error: 'Stop Twitch and Kick outputs before changing simulcast configuration.' });
-        }
+        if (currentStatus?.streaming === true) return sendJson(response, 409, { error: 'Stop Twitch output before changing production configuration.' });
         const validation = validateSimulcastConfigureRequest(await readJson(request));
         if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
         const commandId = sendBroadcastCommand(client, simulcastConfigureCapability, validation.value as unknown as Record<string, unknown>);
@@ -1379,7 +1240,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
         if (validation.value.operatorChecklistAccepted !== true) return sendJson(response, 409, { error: 'Complete and accept the operator rehearsal checklist before going live.' });
         const commandId = sendBroadcastCommand(client, simulcastStartCapability, validation.value as Record<string, unknown>);
-        workflowEngine!.recordExternalEvent('broadcast.simulcast.start-requested', 'warning', 'Coordinated Twitch and Kick Go Live requested by the operator.', { commandId });
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.start-requested', 'warning', 'Production Go Live requested by the operator.', { commandId });
         return sendJson(response, 202, { accepted: true, commandId, status });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/preflight') {
@@ -1387,23 +1248,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
         if (!client.capabilities.includes(simulcastPreflightCapability)) return sendJson(response, 409, { error: 'The connected Broadcast build does not provide the production preflight.' });
         const currentStatus = (client.status as TempestBroadcastStatus | undefined);
-        const reported = isRecord(currentStatus?.simulcast) ? currentStatus.simulcast : undefined;
-        if (currentStatus?.streaming === true || (isRecord(reported?.kick) && reported.kick.active === true)) return sendJson(response, 409, { error: 'Run preflight while Twitch and Kick outputs are stopped.' });
+        if (currentStatus?.streaming === true) return sendJson(response, 409, { error: 'Run preflight while Twitch output is stopped.' });
         const commandId = sendBroadcastCommand(client, simulcastPreflightCapability, {});
         workflowEngine!.recordExternalEvent('broadcast.simulcast.preflight-requested', 'info', 'Local production output preflight requested.', { commandId });
         return sendJson(response, 202, { accepted: true, commandId });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/retry-kick') {
-        const client = connectedBroadcast();
-        if (!client) return sendJson(response, 409, { error: 'Tempest Broadcast is not connected.' });
-        if (!client.capabilities.includes(simulcastRetryKickCapability)) return sendJson(response, 409, { error: 'The connected Broadcast build does not provide Kick recovery control.' });
-        const status = simulcastSnapshot(client);
-        const twitch = isRecord(status.twitch) ? status.twitch : {};
-        const kick = isRecord(status.kick) ? status.kick : {};
-        if (twitch.active !== true || kick.active === true) return sendJson(response, 409, { error: 'Kick recovery is available only while Twitch is live and Kick is offline.', status });
-        const commandId = sendBroadcastCommand(client, simulcastRetryKickCapability, {});
-        workflowEngine!.recordExternalEvent('broadcast.simulcast.kick-retry-requested', 'warning', 'Kick output recovery requested while Twitch remains live.', { commandId });
-        return sendJson(response, 202, { accepted: true, commandId, status });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/stop') {
         const client = connectedBroadcast();
@@ -1414,7 +1262,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const validation = validateSimulcastStopRequest(await readJson(request));
         if (!validation.ok || !validation.value) return sendJson(response, 400, { error: validation.errors.join(' ') });
         const commandId = sendBroadcastCommand(client, simulcastStopCapability, validation.value as Record<string, unknown>);
-        workflowEngine!.recordExternalEvent('broadcast.simulcast.stop-requested', 'warning', validation.value.scope === 'kick' ? 'Kick output stop requested; Twitch will remain live.' : 'Emergency stop requested for Twitch and Kick outputs.', { commandId, scope: validation.value.scope });
+        workflowEngine!.recordExternalEvent('broadcast.simulcast.stop-requested', 'warning', 'Emergency stop requested for Broadcast output.', { commandId, scope: validation.value.scope });
         return sendJson(response, 202, { accepted: true, commandId, status: simulcastSnapshot(client) });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/broadcast/simulcast/refresh') {
@@ -1562,49 +1410,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       if (request.method === 'GET' && requestUrl.pathname === '/v1/interactive-stage') {
         return sendJson(response, 200, interactiveStage.status(runtime.baseUrl));
       }
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/stage-actors') {
-        return sendJson(response, 200, stageActors.status(runtime.baseUrl));
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/stage-actors/reload') {
-        const catalog = await stageActors.reload();
-        const refreshedViewers = interactiveWorld.refreshActorPackRenders();
-        return sendJson(response, 200, { ...catalog, refreshedViewers, packs: stageActors.status(runtime.baseUrl).packs });
-      }
-      const stageActorPackMatch = requestUrl.pathname.match(/^\/v1\/stage-actors\/([^/]+)$/);
-      if (request.method === 'DELETE' && stageActorPackMatch) {
-        const packId = decodeURIComponent(stageActorPackMatch[1]);
-        const removed = await stageActors.remove(packId);
-        if (!removed) return sendJson(response, 404, { error: 'Stage Actor pack not found.' });
-        const affectedViewers = await interactiveWorld.removeActorPackReferences(packId);
-        return sendJson(response, 200, { removed: true, affectedViewers, ...stageActors.status(runtime.baseUrl) });
-      }
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/interactive-world') {
-        return sendJson(response, 200, interactiveWorld.status());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/avatar-redeems') {
-        const avatarChannelPointRedeems = await interactiveWorld.configureAvatarChannelPointRedeems(await readJson(request));
-        return sendJson(response, 200, { avatarChannelPointRedeems, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/avatar-redeems/test') {
-        const body = await readJson(request) as Record<string, unknown>;
-        const redeem = (interactiveWorld.status().avatarChannelPointRedeems || []).find((entry) => entry.id === String(body.redeemId || ''));
-        if (!redeem) return sendJson(response, 404, { error: 'Avatar Channel Point redeem not found.' });
-        const occurredAt = new Date().toISOString();
-        const applied = await interactiveWorld.applyAvatarChannelPointRedemption({
-          schemaVersion: 1,
-          id: `avatar-redeem-test-${globalThis.crypto.randomUUID()}`,
-          topic: 'viewer.reward.redeemed',
-          occurredAt,
-          source: 'twitch',
-          channel: { id: twitchGateway.status().oauth.account?.userId || 'studio-test' },
-          viewer: { id: String(body.viewerId || 'avatar-redeem-test'), displayName: String(body.viewerName || 'Redeem Tester').slice(0, 80) },
-          payload: { redemptionId: `test-${globalThis.crypto.randomUUID()}`, rewardId: redeem.rewardId || '', rewardTitle: redeem.rewardTitle || redeem.name, rewardCost: 0 }
-        });
-        return sendJson(response, 202, { applied, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/avatar-redeems/reset-session') {
-        const resetViewers = await interactiveWorld.resetAvatarRewardSession();
-        return sendJson(response, 200, { resetViewers, ...interactiveWorld.status() });
+      if (requestUrl.pathname === '/v1/interactive-world' || requestUrl.pathname.startsWith('/v1/interactive-world/') || requestUrl.pathname === '/v1/stage-actors' || requestUrl.pathname.startsWith('/v1/stage-actors/') || requestUrl.pathname.startsWith('/interactive-stage/actors/')) {
+        return sendJson(response, 410, { error: 'Stream avatars, pets, duels, and the interactive world have been retired from Tempest Streaming Studio.' });
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/interaction-composer') {
         return sendJson(response, 200, interactionComposer.status());
@@ -1623,105 +1430,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const id = decodeURIComponent(interactionRecipeMatch[1]);
         const removed = await interactionComposer.remove(id);
         return sendJson(response, removed ? 200 : 404, removed ? { removed, id, ...interactionComposer.status() } : { error: 'Interaction recipe not found.' });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/safety') {
-        return sendJson(response, 200, await interactiveWorld.updateSafety(await readJson(request)));
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/presence/settings') {
-        return sendJson(response, 200, await interactiveWorld.updatePresence(await readJson(request)));
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/presence/sweep') {
-        return sendJson(response, 200, { ...(await interactiveWorld.sweepPresence()), ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/viewers') {
-        const viewer = await interactiveWorld.joinViewer(await readJson(request));
-        broadcastSystemEvent('interactive-world.viewer.joined', { viewer });
-        return sendJson(response, 201, { viewer, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/viewers/clear') {
-        const removed = await interactiveWorld.clearViewers();
-        return sendJson(response, 200, { removed, ...interactiveWorld.status() });
-      }
-      const worldViewerStateMatch = requestUrl.pathname.match(/^\/v1\/interactive-world\/viewers\/([^/]+)\/state$/);
-      if (request.method === 'POST' && worldViewerStateMatch) {
-        const viewer = await interactiveWorld.setViewerState(decodeURIComponent(worldViewerStateMatch[1]), await readJson(request));
-        return sendJson(response, 200, { viewer, ...interactiveWorld.status() });
-      }
-      const worldViewerControlMatch = requestUrl.pathname.match(/^\/v1\/interactive-world\/viewers\/([^/]+)\/control$/);
-      if (request.method === 'POST' && worldViewerControlMatch) {
-        const control = await interactiveWorld.controlViewer(decodeURIComponent(worldViewerControlMatch[1]), await readJson(request));
-        broadcastSystemEvent('interactive-world.viewer.controlled', control);
-        return sendJson(response, 202, { control, ...interactiveWorld.status() });
-      }
-      const worldViewerActorMatch = requestUrl.pathname.match(/^\/v1\/interactive-world\/viewers\/([^/]+)\/actor$/);
-      if (request.method === 'POST' && worldViewerActorMatch) {
-        const viewer = await interactiveWorld.setViewerActor(decodeURIComponent(worldViewerActorMatch[1]), await readJson(request));
-        return sendJson(response, 200, { viewer, ...interactiveWorld.status() });
-      }
-      const worldViewerCosmeticsMatch = requestUrl.pathname.match(/^\/v1\/interactive-world\/viewers\/([^/]+)\/cosmetics$/);
-      if (request.method === 'POST' && worldViewerCosmeticsMatch) {
-        const viewer = await interactiveWorld.setViewerCosmetics(decodeURIComponent(worldViewerCosmeticsMatch[1]), await readJson(request));
-        return sendJson(response, 200, { viewer, ...interactiveWorld.status() });
-      }
-      const worldViewerMatch = requestUrl.pathname.match(/^\/v1\/interactive-world\/viewers\/([^/]+)$/);
-      if (request.method === 'DELETE' && worldViewerMatch) {
-        const key = decodeURIComponent(worldViewerMatch[1]);
-        const removed = await interactiveWorld.removeViewer(key);
-        return sendJson(response, removed ? 200 : 404, removed ? { removed: true, key, ...interactiveWorld.status() } : { error: 'The viewer profile was not found.' });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/pet/settings') {
-        await interactiveWorld.updatePet(await readJson(request));
-        return sendJson(response, 200, interactiveWorld.status());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/pet/actions') {
-        const body = await readJson(request) as { action?: unknown; actor?: unknown };
-        const pet = await interactiveWorld.petAction(body.action, body.actor);
-        broadcastSystemEvent('interactive-world.pet.action', { action: body.action, actor: body.actor });
-        return sendJson(response, 202, { ...interactiveWorld.status(), pet });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/battle/start') {
-        const battle = await interactiveWorld.startBattle(await readJson(request));
-        broadcastSystemEvent('interactive-world.battle.started', { battle });
-        return sendJson(response, 201, { battle, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/battle/action') {
-        const battle = await interactiveWorld.battleAction(await readJson(request));
-        broadcastSystemEvent('interactive-world.battle.action', { battleId: battle.id, state: battle.state });
-        return sendJson(response, 202, { battle, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/battle/accept') {
-        const body = await readJson(request) as { viewerKey?: unknown };
-        const battle = await interactiveWorld.acceptBattle(body.viewerKey);
-        return sendJson(response, 202, { battle, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/viewer-attack') {
-        const object = await interactiveWorld.viewerAttack(await readJson(request));
-        broadcastSystemEvent('interactive-world.viewer-attack', { object });
-        return sendJson(response, 202, { object, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/battle/end') {
-        const body = await readJson(request) as { reason?: unknown };
-        const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 80) : 'operator';
-        const battle = await interactiveWorld.endBattle(reason);
-        return sendJson(response, 200, { battle, ...interactiveWorld.status() });
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/gaze/settings') {
-        await interactiveWorld.configureGaze(await readJson(request));
-        return sendJson(response, 200, interactiveWorld.status());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/gaze/sample') {
-        await interactiveWorld.sampleGaze(await readJson(request));
-        return sendJson(response, 202, interactiveWorld.status());
-      }
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/interactive-world/gaze/adapter') {
-        return sendJson(response, 200, tobiiAdapter.status());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/gaze/adapter/connect') {
-        await interactiveWorld.configureGaze({ enabled: true, adapter: 'tgi-sidecar' });
-        return sendJson(response, 200, await tobiiAdapter.connect());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-world/gaze/adapter/disconnect') {
-        return sendJson(response, 200, await tobiiAdapter.disconnect());
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/interactive-stage/objects') {
         return sendJson(response, 201, { object: interactiveStage.spawn(await readJson(request)), ...interactiveStage.status(runtime.baseUrl) });
@@ -2059,14 +1767,12 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         visualAlerts.clear();
         twitchAlertOverlay.clear();
         const clearedStageObjects = interactiveStage.clear('emergency-stop');
-        await interactiveWorld.emergencyStop();
         await options.soundAlertPlayback?.({ phase: 'stop-all' });
         broadcastSystemEvent('system.safety.disarmed', { stoppedRuns, clearedQueuedAlerts, clearedStageObjects });
         return sendJson(response, 200, { ...workflowEngine.safetyState(), stoppedRuns, clearedQueuedAlerts, clearedStageObjects });
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/safety/arm') {
         workflowEngine.arm();
-        await interactiveWorld.updateSafety({ interactionsEnabled: true });
         broadcastSystemEvent('system.safety.armed', workflowEngine.safetyState());
         return sendJson(response, 200, workflowEngine.safetyState());
       }
@@ -2107,25 +1813,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         const status = await twitchGateway.disconnect();
         await syncChatbotConnection();
         return sendJson(response, 200, status);
-      }
-      if (request.method === 'GET' && requestUrl.pathname === '/v1/integrations/kick') {
-        return sendJson(response, 200, kickGateway.status());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/configuration') {
-        return sendJson(response, 200, await kickGateway.configure(await readJson(request)));
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/oauth/start') {
-        return sendJson(response, 201, await kickGateway.startAuthorization());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/oauth/validate') {
-        return sendJson(response, 200, await kickGateway.validateAuthorization());
-      }
-      if (request.method === 'DELETE' && requestUrl.pathname === '/v1/integrations/kick/oauth') {
-        return sendJson(response, 200, await kickGateway.disconnect());
-      }
-      if (request.method === 'POST' && requestUrl.pathname === '/v1/integrations/kick/events') {
-        const body = await readJson(request) as { event?: unknown; eventId?: unknown; occurredAt?: unknown };
-        return sendJson(response, 202, await kickGateway.ingestWebhook(body.event ?? body, String(body.eventId || ''), String(body.occurredAt || '')));
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/chatbot') {
         return sendJson(response, 200, { ...chatbot.status(), pollOverlay: { state: 'ready', url: `${runtime.baseUrl}/poll-overlay` } });
@@ -2175,8 +1862,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return sendJson(response, 200, chatbot.clearNumericPoll());
       }
       if (request.method === 'POST' && requestUrl.pathname === '/v1/chatbot/messages') {
-        const body = await readJson(request) as { platform?: unknown };
-        return sendJson(response, 202, body.platform === 'kick' ? await kickGateway.postMessage(body) : await chatbot.postMessage(body));
+        return sendJson(response, 202, await chatbot.postMessage(await readJson(request)));
       }
       if (request.method === 'DELETE' && requestUrl.pathname === '/v1/chatbot/messages') {
         return sendJson(response, 200, chatbot.clearMessages());
@@ -2189,8 +1875,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           return sendJson(response, 200, { accepted: false, duplicate: true, eventId: event.id });
         }
         const action = typeof event.payload.action === 'string' ? event.payload.action : undefined;
-        const nativeWorldAction = action && interactiveWorldActionIds.has(action) ? action : undefined;
-        const configuredAlert = nativeWorldAction ? undefined : typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
+        const configuredAlert = typeof event.payload.alertId === 'string' ? soundAlerts.find(event.payload.alertId)
           : typeof event.payload.cue === 'string' ? soundAlerts.find(event.payload.cue)
             : action ? soundAlerts.find(action) : undefined;
         if (event.topic === 'viewer.interaction.requested' && action === 'tempest.poll.vote') {
@@ -2274,13 +1959,10 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         chatOverlay.push(event);
         emoteWall.push(event);
         twitchExperiences.ingest(event);
-        const avatarRedemption = event.topic === 'viewer.reward.redeemed' ? await interactiveWorld.applyAvatarChannelPointRedemption(event) : undefined;
         if (event.topic === 'viewer.chat.message') {
-          const observedViewer = await interactiveWorld.observeChat(event);
           const command = String(event.payload.text || '').trim().split(/\s+/)[0]?.toLowerCase();
           if (command?.startsWith('!')) {
-            await interactionComposer.handle('chat-command', command, { source: 'twitch.chat', viewerKey: observedViewer?.key, viewerName: event.viewer?.displayName || event.viewer?.login, input: String(event.payload.text || ''), eventId: event.id });
-            try { await interactiveWorld.handleGameChat(event); } catch (error) { workflowEngine.recordExternalEvent('interactive-world.chat-command.failed', 'warning', (error as Error).message, { eventId: event.id, command }); }
+            await interactionComposer.handle('chat-command', command, { source: 'twitch.chat', viewerName: event.viewer?.displayName || event.viewer?.login, input: String(event.payload.text || ''), eventId: event.id });
           }
         }
         const raidAutomation = event.topic === 'viewer.raid.received' ? await chatbot.processRaidEvent(event) : undefined;
@@ -2311,42 +1993,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           });
         }
 
-        if (event.topic === 'viewer.interaction.requested' && nativeWorldAction) {
-          const canonicalAction = nativeWorldAction === 'tempest.pet-play' ? 'tempest.pet.play' : nativeWorldAction;
-          const viewerId = String(event.viewer?.id || '').trim();
-          const viewerName = String(event.viewer?.displayName || event.viewer?.login || 'Viewer').trim().slice(0, 80) || 'Viewer';
-          const requireViewerIdentity = () => {
-            if (!viewerId) throw new Error('This Interactive World action requires a shared Twitch viewer identity.');
-            return viewerId;
-          };
-          const joinViewer = () => interactiveWorld.joinViewer({ platform: 'twitch', userId: requireViewerIdentity(), displayName: viewerName });
-          if (canonicalAction === 'tempest.avatar.join') await joinViewer();
-          else if (canonicalAction === 'tempest.avatar.equip') {
-            await interactiveWorld.equipUnlockedAvatarRedeem(requireViewerIdentity(), event.payload.cosmeticRedeemId);
-          }
-          else if (canonicalAction.startsWith('tempest.avatar.') && canonicalAction !== 'tempest.avatar.join') {
-            const viewer = await joinViewer();
-            await interactiveWorld.controlViewer(viewer.key, { action: canonicalAction.slice('tempest.avatar.'.length) });
-          } else if (canonicalAction.startsWith('tempest.pet.')) {
-            await interactiveWorld.petAction(canonicalAction.slice('tempest.pet.'.length), viewerName);
-          } else if (canonicalAction === 'tempest.viewer-attack') {
-            const rawPlacement = event.payload.placement;
-            const placement = rawPlacement && typeof rawPlacement === 'object' && !Array.isArray(rawPlacement) ? rawPlacement as Record<string, unknown> : {};
-            await interactiveWorld.viewerAttack({
-              platform: 'twitch', viewerId: viewerId || `anonymous-${event.id}`, viewerName,
-              x: placement.x, y: placement.y, intensity: event.payload.intensity
-            });
-          } else if (canonicalAction === 'tempest.battle.attack') {
-            const viewer = await joinViewer();
-            const battle = interactiveWorld.status().battle;
-            if (!battle || battle.state !== 'active') throw new Error('There is no active battle to attack.');
-            const targetKey = battle.boss?.viewerKey || battle.participants.find((participant) => participant.viewerKey !== viewer.key && !participant.defeated)?.viewerKey;
-            await interactiveWorld.battleAction({ action: 'attack', attackerKey: viewer.key, targetKey, amount: event.payload.intensity === undefined ? undefined : 8 + Math.round(Number(event.payload.intensity) * 12) });
-          }
-          workflowEngine.recordExternalEvent('interactive-world.action.accepted', 'info', `${viewerName} used ${canonicalAction}.`, { eventId: event.id, viewerId: viewerId || undefined, action: canonicalAction });
-          return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, action: canonicalAction, world: interactiveWorld.status() });
-        }
-
         if (event.topic === 'viewer.interaction.requested' && action) {
           const viewerId = String(event.viewer?.id || '').trim();
           const outcomes = await interactionComposer.handle('extension-action', action, {
@@ -2373,7 +2019,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
             ...(placement && Number.isFinite(placement.x) && placement.x >= 0 && placement.x <= 1 && Number.isFinite(placement.y) && placement.y >= 0 && placement.y <= 1 ? { placement } : {}),
             simulateMissing: false
           });
-          return sendJson(response, 202, { accepted: true, duplicate: false, ...result, ...(avatarRedemption ? { avatarRedemption } : {}) });
+          return sendJson(response, 202, { accepted: true, duplicate: false, ...result });
         }
         const twitchVisual = twitchVisualAlerts.findForEvent(event);
         if (twitchVisual?.enabled) await queueTwitchAlert(twitchVisual, event, 'twitch.eventsub');
@@ -2381,7 +2027,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           : event.topic === 'viewer.reward.redeemed' ? 'twitch.channel-points'
             : event.topic === 'viewer.cheer.received' && action ? 'twitch.cheer' : undefined;
         const workflow = triggerType && action ? registry.listWorkflows().find((entry) => entry.enabled && entry.trigger.type === triggerType && entry.trigger.action === action) : undefined;
-        if (!workflow) return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, ...(avatarRedemption ? { avatarRedemption } : {}), ...(raidAutomation ? { raidAutomation } : {}) });
+        if (!workflow) return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, ...(raidAutomation ? { raidAutomation } : {}) });
 
         const run = await workflowEngine.trigger(workflow.id, {
           source: event.topic === 'viewer.reward.redeemed' ? 'twitch.channel-points' : event.topic === 'viewer.cheer.received' ? 'twitch.cheer' : 'twitch.extension',
@@ -2391,7 +2037,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           payload: { ...event.payload, dedupeId: typeof event.payload.dedupeId === 'string' ? event.payload.dedupeId : event.id }
         });
         broadcastSystemEvent('workflow.started', run);
-        return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, run, ...(avatarRedemption ? { avatarRedemption } : {}) });
+        return sendJson(response, 202, { accepted: true, duplicate: false, eventId: event.id, run });
       }
       if (request.method === 'GET' && requestUrl.pathname === '/v1/connections') {
         return sendJson(response, 200, connectionsSnapshot());
@@ -2522,13 +2168,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
   });
 
   const extensionFeatureDefinitions = (): TwitchExtensionFeatureDefinition[] => [
-    ...interactiveWorldCatalog.map((item) => ({
-      id: item.id,
-      name: item.name,
-      group: extensionFeatureDescriptions[item.id]?.group || 'Interactive World',
-      description: extensionFeatureDescriptions[item.id]?.description || 'Interactive World viewer action.',
-      defaultDestinations: [...item.destinations]
-    })),
     {
       id: diceExtensionCatalogItem.id,
       name: diceExtensionCatalogItem.name,
@@ -2536,7 +2175,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       description: 'Roll one physical d20 on the Unified Stage.',
       defaultDestinations: [...diceExtensionCatalogItem.destinations]
     },
-    ...soundAlerts.list().filter((alert) => !interactiveWorldActionIds.has(alert.id)).map((alert) => ({
+    ...soundAlerts.list().map((alert) => ({
       id: alert.id,
       name: alert.name,
       group: 'Viewer Alerts',
@@ -2557,7 +2196,7 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       ...relayOptions,
       logger,
       catalog: () => {
-        const alerts = soundAlerts.list().filter((alert) => alert.enabled && !interactiveWorldActionIds.has(alert.id)).map((alert) => ({
+        const alerts = soundAlerts.list().filter((alert) => alert.enabled).map((alert) => ({
           id: alert.id,
           name: alert.name,
           durationMs: alert.durationMs,
@@ -2604,10 +2243,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
           destinations: extensionFeatures.destinations(diceExtensionCatalogItem.id, diceExtensionCatalogItem.destinations)
         }));
         return [
-          ...interactiveWorldCatalog.map((item) => ({
-            ...item,
-            destinations: extensionFeatures.destinations(item.id, item.destinations)
-          })),
           {
             ...diceExtensionCatalogItem,
             destinations: extensionFeatures.destinations(diceExtensionCatalogItem.id, diceExtensionCatalogItem.destinations)
@@ -2661,17 +2296,8 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
         return { status: response.status, body: await response.json().catch(() => ({})) };
       },
       async queryHandler(query) {
-        if (query.kind !== 'avatar-closet') return { status: 404, body: { error: 'Viewer query was not recognized.' } };
-        return { status: 200, body: { schemaVersion: 1, ...interactiveWorld.avatarCloset(query.viewerId) } };
+        return { status: 404, body: { error: `Viewer query ${query.kind} was not recognized.` } };
       },
-      async kickEventHandler(event) {
-        const response = await fetch(`${runtime.baseUrl}/v1/integrations/kick/events`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Tempest-Token': runtime.token },
-          body: JSON.stringify(event)
-        });
-        return { status: response.status, body: await response.json().catch(() => ({})) };
-      }
     });
     extensionRelay = nextRelay;
     nextRelay.start();
@@ -2711,8 +2337,6 @@ export async function startTempestBridge(options: StartBridgeOptions): Promise<T
       chatOverlay.close();
       emoteWall.close();
       diceOverlay.close();
-      await tobiiAdapter.close();
-      interactiveWorld.close();
       interactiveStage.close();
       twitchExperiences.close();
       discordVoiceOverlay.close();

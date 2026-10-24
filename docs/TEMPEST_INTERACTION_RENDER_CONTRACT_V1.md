@@ -6,7 +6,7 @@ Transport remains Tempest Studio / Broadcast Bridge protocol `1.0`. This contrac
 
 ## Ownership
 
-Studio owns the interaction catalog, Twitch/Kick verification, access locks, cooldowns, queue policy, counters, approved assets, safety decisions, and audit history. It sends only approved render instances. Broadcast owns source lookup, horizontal/vertical canvas mapping, scene-item transforms and visibility, source activation, fallback expiry, state restoration, and final audio/video output.
+Studio owns the interaction catalog, Twitch verification, access locks, cooldowns, queue policy, counters, approved assets, safety decisions, and audit history. It sends only approved render instances. Broadcast owns source lookup, horizontal/vertical canvas mapping, scene-item transforms and visibility, source activation, fallback expiry, state restoration, and final audio/video output.
 
 ## Discovery
 

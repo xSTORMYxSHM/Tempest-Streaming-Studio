@@ -61,7 +61,7 @@ test('routes each viewer feature to Mainframe, Streaming, both, or neither', asy
   assert.equal(moved.status, 200);
   assert.deepEqual((await moved.json()).feature.destinations, ['mainframe']);
 
-  const hidden = await fetch(`${runtime.baseUrl}/v1/extension-features/${encodeURIComponent('tempest.pet.play')}`, {
+  const hidden = await fetch(`${runtime.baseUrl}/v1/extension-features/${encodeURIComponent('tempest.dice.roll')}`, {
     method: 'POST', headers, body: JSON.stringify({ destinations: [] })
   });
   assert.equal(hidden.status, 200);
@@ -69,7 +69,6 @@ test('routes each viewer feature to Mainframe, Streaming, both, or neither', asy
 
   const restored = await fetch(`${runtime.baseUrl}/v1/extension-features/reset`, { method: 'POST', headers, body: '{}' }).then((response) => response.json());
   assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.dice.roll').destinations, []);
-  assert.deepEqual(restored.features.find((feature) => feature.id === 'tempest.pet.play').destinations, []);
 });
 
 test('persists applications and assets behind authenticated routes', async (context) => {
@@ -432,7 +431,7 @@ test('guards and dispatches production Twitch Dual Format controls', async (cont
   assert.match((await blocked.json()).error, /Stop streaming/);
 });
 
-test('guards and dispatches coordinated Twitch and Kick simulcast controls without returning the stream key', async (context) => {
+test('guards and dispatches Twitch production output controls', async (context) => {
   const dataDirectory = await mkdtemp(path.join(os.tmpdir(), 'tempest-simulcast-test-'));
   const runtime = await startTempestBridge({ port: 0, dataDirectory, logger: { info() {}, warn() {}, error() {} } });
   context.after(() => runtime.close());
@@ -447,7 +446,7 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
     kind: 'hello', source: 'com.tempestmainframe.tempest-broadcast',
     payload: {
       applicationId: 'com.tempestmainframe.tempest-broadcast', version: '0.22.0',
-      capabilities: ['broadcast.status', 'broadcast.simulcast.configure', 'broadcast.simulcast.preflight', 'broadcast.simulcast.retry-kick', 'broadcast.simulcast.start', 'broadcast.simulcast.stop']
+      capabilities: ['broadcast.status', 'broadcast.simulcast.configure', 'broadcast.simulcast.preflight', 'broadcast.simulcast.start', 'broadcast.simulcast.stop']
     }
   })));
   const publishStatus = (overrides = {}) => socket.send(JSON.stringify(createBridgeMessage({
@@ -455,12 +454,11 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
     payload: {
       ready: true, streaming: false, recording: false,
       simulcast: {
-        supported: true, enabled: true, configured: true, credentialsStored: true,
-        secureStorageAvailable: true, kickServerConfigured: true, twitchServiceReady: true,
-        dualFormatReady: true, sharedEncoder: true, uploadCapacityKbps: 30000,
+        supported: true, enabled: true, configured: true, twitchServiceReady: true,
+        dualFormatReady: true, uploadCapacityKbps: 30000,
         uploadCapacityConfigured: true, estimatedRequiredKbps: 18000, uploadHeadroomReady: true, recordingWithStream: false,
         lastPreflightPassed: true, lastPreflightAt: new Date().toISOString(),
-        twitch: { state: 'offline', active: false }, kick: { state: 'offline', active: false },
+        twitch: { state: 'offline', active: false },
         ...overrides
       }
     }
@@ -491,12 +489,12 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
     });
   });
   const configured = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/configure`, {
-    method: 'POST', headers, body: JSON.stringify({ enabled: true, kickServer: 'rtmps://ingest.example.test/app', kickStreamKey: 'live_key_not_returned', uploadCapacityKbps: 30000 })
+    method: 'POST', headers, body: JSON.stringify({ enabled: true, uploadCapacityKbps: 30000 })
   });
   assert.equal(configured.status, 202);
   const configuredBody = await configured.json();
-  assert.doesNotMatch(JSON.stringify(configuredBody), /live_key_not_returned/);
-  assert.equal((await configureCommand).payload.arguments.kickStreamKey, 'live_key_not_returned');
+  assert.equal(configuredBody.accepted, true);
+  assert.equal((await configureCommand).payload.arguments.uploadCapacityKbps, 30000);
 
   const nextCommand = (topic) => new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`${topic} was not delivered.`)), 1000);
@@ -511,18 +509,12 @@ test('guards and dispatches coordinated Twitch and Kick simulcast controls witho
   assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/start`, { method: 'POST', headers, body: JSON.stringify({ recording: true, operatorChecklistAccepted: true }) })).status, 202);
   assert.equal((await startCommand).payload.arguments.recording, true);
   const stopCommand = nextCommand('broadcast.simulcast.stop');
-  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/stop`, { method: 'POST', headers, body: JSON.stringify({ scope: 'kick', force: false }) })).status, 202);
-  assert.equal((await stopCommand).payload.arguments.scope, 'kick');
+  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/stop`, { method: 'POST', headers, body: JSON.stringify({ scope: 'all', force: false }) })).status, 202);
+  assert.equal((await stopCommand).payload.arguments.scope, 'all');
 
   const preflightCommand = nextCommand('broadcast.simulcast.preflight');
   assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/preflight`, { method: 'POST', headers, body: '{}' })).status, 202);
   await preflightCommand;
-  publishStatus({ twitch: { state: 'live', active: true }, kick: { state: 'error', active: false } });
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  const retryCommand = nextCommand('broadcast.simulcast.retry-kick');
-  assert.equal((await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/retry-kick`, { method: 'POST', headers, body: '{}' })).status, 202);
-  await retryCommand;
-
   publishStatus({ uploadHeadroomReady: false });
   await new Promise((resolve) => setTimeout(resolve, 30));
   const blocked = await fetch(`${runtime.baseUrl}/v1/broadcast/simulcast/start`, { method: 'POST', headers, body: JSON.stringify({ operatorChecklistAccepted: true }) });

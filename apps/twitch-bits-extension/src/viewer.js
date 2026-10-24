@@ -7,7 +7,6 @@
   let catalogEtag = '';
   let catalogRefreshPromise = null;
   let catalogRefreshPending = false;
-  const avatarControlIds = new Set(['tempest.avatar.left', 'tempest.avatar.right', 'tempest.avatar.jump', 'tempest.avatar.drop', 'tempest.avatar.interact', 'tempest.avatar.emote', 'tempest.avatar.unstuck']);
   const localMockRequested = ['127.0.0.1', 'localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('mock') === '1';
   const $ = (selector) => document.querySelector(selector);
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -135,19 +134,7 @@
     document.body.classList.toggle('expanded', state.expanded);
     $('#toggleDeck').setAttribute('aria-expanded', String(state.expanded));
     $('#productCount').textContent = `${state.actions.length} ACTION${state.actions.length === 1 ? '' : 'S'}`;
-    let controls = $('#avatarControls');
-    if (!controls) {
-      controls = document.createElement('section');
-      controls.id = 'avatarControls';
-      controls.className = 'avatar-controls';
-      controls.innerHTML = '<div><span class="eyebrow">MY STREAMWORLD PLAYER</span><strong>Live controls</strong></div><div id="avatarControlPad" class="avatar-control-pad"></div>';
-      $('#productGrid').before(controls);
-      controls.addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (button) void activate(button.dataset.action); });
-    }
-    const avatarActions = state.actions.filter((action) => avatarControlIds.has(action.id));
-    controls.hidden = avatarActions.length === 0;
-    $('#avatarControlPad').innerHTML = avatarActions.map((action) => `<button type="button" data-action="${escapeHtml(action.id)}" title="${escapeHtml(action.name)}" style="--product-accent:${escapeHtml(action.accent || '#54F2EB')}" ${state.busyAction || !state.studioConnected ? 'disabled' : ''}><span>${escapeHtml(action.glyph || 'GO')}</span><small>${escapeHtml(action.name.replace('Avatar ', '').replace('Move ', ''))}</small></button>`).join('');
-    const catalogActions = state.actions.filter((action) => !avatarControlIds.has(action.id));
+    const catalogActions = state.actions;
     $('#productGrid').innerHTML = catalogActions.map((action) => `<button class="product" type="button" data-action="${escapeHtml(action.id)}" style="--product-accent:${escapeHtml(action.accent || '#54F2EB')}" ${state.busyAction || !state.studioConnected ? 'disabled' : ''}>
       <span class="glyph">${escapeHtml(action.glyph || 'FX')}</span>
       <span class="product-copy"><strong>${escapeHtml(action.name)}</strong><small>${escapeHtml(String(action.category || 'other').replaceAll('-', ' ').toUpperCase())}${action.placementMode === 'viewer' ? ' · PLACE IT' : ''} · FREE ACTION</small></span>

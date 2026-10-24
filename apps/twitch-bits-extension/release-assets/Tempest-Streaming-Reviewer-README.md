@@ -6,7 +6,7 @@
 
 ## What the Extension does
 
-Tempest Streaming is a free companion for Tempest Streaming Studio. It places a compact action deck over the Twitch video so viewers can activate streamer-selected interactions. Depending on the broadcaster's Studio configuration, available controls can include on-stream effects, interactive avatars, polls, battles, and click/tap placement on the video.
+Tempest Streaming is a free companion for Tempest Streaming Studio. It places a compact action deck over the Twitch video so viewers can activate streamer-selected interactions. Depending on the broadcaster's Studio configuration, available controls can include on-stream effects, polls, 3D dice, and click/tap placement on the video.
 
 The Extension is the viewer control surface. Tempest Streaming Studio validates access rules and cooldowns, and its Unified Stage Browser Source renders accepted effects into the encoded stream. The public Tempest Signal service carries the channel-scoped catalog and action requests between them.
 
@@ -50,7 +50,7 @@ The Extension's own configuration page repeats these steps and includes the same
 - Individual and group access restrictions.
 - Adjustable per-action cooldowns.
 - Click/tap placement using normalized video coordinates.
-- Poll, battle, avatar, and effect controls when enabled by the broadcaster.
+- Poll, 3D dice, and effect controls when enabled by the broadcaster.
 - Clear online, offline, locked, cooldown, accepted, and error states.
 - Streamer-controlled colors and presentation from Studio.
 - Twitch-hosted quick preferences for deck position, starting view, and action-count visibility.
@@ -71,7 +71,7 @@ All actions are free. This version has no paid flow.
 - Added the Tempest Streaming Video Overlay action deck.
 - Added free on-stream action activation and click/tap placement.
 - Added Studio-managed feature routing, group access, and cooldowns.
-- Added interactive avatar, poll, battle, and current-stream controls.
+- Added poll, 3D dice, effect, and current-stream controls.
 - Added Studio-managed theme and presentation settings.
 - Added Twitch-hosted quick preferences for deck position, starting view, and action-count visibility.
 - Added explicit online/offline and action-result feedback.

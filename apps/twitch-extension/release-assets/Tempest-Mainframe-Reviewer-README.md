@@ -1,14 +1,14 @@
 # Tempest Mainframe 0.2.1 - Twitch Review Walkthrough
 
 - Primary surface: Twitch Panel
-- Required desktop application: Tempest Streaming Studio 1.7.4
-- Studio release: https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.7.4
+- Required desktop application: Tempest Streaming Studio 1.8.0
+- Studio release: https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.8.0
 - Public source repository: https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio
 - Service endpoint: `https://signal.tempestmainframe.com`
 
 ## What the Extension does
 
-Tempest Mainframe is the free, detailed Twitch Panel companion for Tempest Streaming Studio. It gives viewers a channel-branded signal deck containing live stream information and streamer-enabled utilities. Depending on the broadcaster's Studio configuration, the panel can show Current Stream, Now Playing, Schedule, Goals, Polls, Counters, Commands, 3D Dice, Viewer Interactions, Performances, and viewer-avatar closet controls.
+Tempest Mainframe is the free, detailed Twitch Panel companion for Tempest Streaming Studio. It gives viewers a channel-branded signal deck containing live stream information and streamer-enabled utilities. Depending on the broadcaster's Studio configuration, the panel can show Current Stream, Now Playing, Schedule, Goals, Polls, Counters, Commands, 3D Dice, Viewer Interactions, and Performances.
 
 The Extension is a viewer control and information surface. Tempest Streaming Studio remains authoritative for live content, permissions, individual or group access, cooldowns, safety limits, and on-stream rendering. Tempest Signal carries the channel-scoped catalog and viewer requests between Twitch and Studio.
 
@@ -33,7 +33,7 @@ No additional viewer account, password, or test credentials are required. Twitch
 2. Open the Extension's Twitch configuration page.
 3. Choose the channel theme, colors, typography, card layout, density, and visible panel modules.
 4. Select **Save Panel Appearance**. These public presentation preferences are stored through Twitch's Configuration Service.
-5. Download and open Tempest Streaming Studio 1.7.4 from the release link above.
+5. Download and open Tempest Streaming Studio 1.8.0 from the release link above.
 6. In Studio, go to **Twitch -> Companion Extensions**.
 7. Pair the channel with **Tempest Signal** and enable **Tempest Mainframe · Panel**.
 8. Choose which Studio features are available in Mainframe and save.
@@ -53,7 +53,6 @@ Hosted builds do not expose the EBS address or local mock-mode controls. Those d
 - **3D Dice:** streamer-enabled dice choices and custom ranges; Studio renders and records the physical result.
 - **Viewer Interactions:** free channel actions subject to Studio-managed access and cooldowns.
 - **Performances:** sound and performance triggers enabled by the broadcaster.
-- **Closet:** viewer-avatar equipment controls when the interactive world is enabled.
 
 ## Expected states
 
@@ -82,7 +81,7 @@ Hosted builds do not expose the EBS address or local mock-mode controls. Those d
 - Hid EBS routing and local mock-mode controls from Twitch-hosted builds.
 - Retained local developer routing controls for source previews.
 - Clarified that Studio owns live data, permissions, cooldowns, safety, and routing.
-- Updated the public Studio download and source repository references to 1.7.4.
+- Updated the public Studio download and source repository references to 1.8.0.
 
 ## Review availability
 
@@ -90,4 +89,4 @@ Tempest Signal remains publicly available continuously. Full live-control testin
 
 ## Submission field - short copy/paste version
 
-Tempest Mainframe is the free Twitch Panel companion for Tempest Streaming Studio. To test it, open the live review channel, open the Mainframe panel, confirm Studio is online, verify Current Stream or another enabled information module, then select an enabled free interaction, poll, counter, command, or dice control. If identity is required, select Share Twitch Identity and repeat the action. The panel reports accepted, locked, cooldown, offline, and error states directly. No separate viewer account or test credentials are required. Download Studio 1.7.4 at https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.7.4 and inspect the public source at https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio.
+Tempest Mainframe is the free Twitch Panel companion for Tempest Streaming Studio. To test it, open the live review channel, open the Mainframe panel, confirm Studio is online, verify Current Stream or another enabled information module, then select an enabled free interaction, poll, counter, command, or dice control. If identity is required, select Share Twitch Identity and repeat the action. The panel reports accepted, locked, cooldown, offline, and error states directly. No separate viewer account or test credentials are required. Download Studio 1.8.0 at https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.8.0 and inspect the public source at https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio.

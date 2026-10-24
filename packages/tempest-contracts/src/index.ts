@@ -1,17 +1,15 @@
 export const TEMPEST_PROTOCOL_VERSION = '1.0';
-export const TEMPEST_STUDIO_VERSION = '1.7.4';
+export const TEMPEST_STUDIO_VERSION = '1.8.0';
 export const TEMPEST_MANIFEST_SCHEMA_VERSION = 1;
 export const TEMPEST_ASSET_SCHEMA_VERSION = 1;
 
 export * from './interactive-stage';
-export * from './interactive-world';
 export * from './interaction-composer';
-export * from './stage-actor';
 
 export const applicationStates = ['development', 'installed', 'disabled'] as const;
 export const healthModes = ['none', 'process', 'http'] as const;
 export const messageKinds = ['hello', 'welcome', 'subscribe', 'unsubscribe', 'publish', 'event', 'command', 'response', 'heartbeat', 'error'] as const;
-export const workflowTriggerTypes = ['viewer.interaction', 'twitch.chat', 'kick.chat', 'twitch.channel-points', 'twitch.cheer', 'system.event', 'operator.manual'] as const;
+export const workflowTriggerTypes = ['viewer.interaction', 'twitch.chat', 'twitch.channel-points', 'twitch.cheer', 'system.event', 'operator.manual'] as const;
 export const workflowRunStates = ['pending', 'running', 'completed', 'partial', 'stopped', 'failed'] as const;
 export const workflowActionStates = ['scheduled', 'active', 'completed', 'released', 'unavailable', 'failed', 'cancelled'] as const;
 export const normalizedTwitchEventTopics = [
@@ -106,12 +104,8 @@ export interface TempestBroadcastSimulcastStatus {
   supported: boolean;
   enabled: boolean;
   configured: boolean;
-  credentialsStored: boolean;
-  secureStorageAvailable: boolean;
-  kickServerConfigured: boolean;
   twitchServiceReady: boolean;
   dualFormatReady: boolean;
-  sharedEncoder: boolean;
   uploadCapacityConfigured: boolean;
   uploadCapacityKbps?: number;
   estimatedRequiredKbps?: number;
@@ -121,15 +115,11 @@ export interface TempestBroadcastSimulcastStatus {
   lastPreflightPassed?: boolean;
   lastPreflightError?: string;
   twitch: TempestBroadcastOutputHealth;
-  kick: TempestBroadcastOutputHealth;
   lastError?: string;
 }
 
 export interface TempestSimulcastConfigureRequest {
   enabled: boolean;
-  kickServer?: string;
-  kickStreamKey?: string;
-  keepStoredKey?: boolean;
   uploadCapacityKbps?: number;
   recordingWithStream?: boolean;
 }
@@ -140,7 +130,7 @@ export interface TempestSimulcastStartRequest {
 }
 
 export interface TempestSimulcastStopRequest {
-  scope?: 'all' | 'kick';
+  scope?: 'all';
   force?: boolean;
 }
 
@@ -508,18 +498,7 @@ export interface TempestNormalizedTwitchEvent {
   payload: Record<string, unknown>;
 }
 
-export interface TempestNormalizedKickChatEvent {
-  schemaVersion: 1;
-  id: string;
-  topic: 'viewer.chat.message';
-  occurredAt: string;
-  source: 'kick';
-  channel: TempestTwitchChannelIdentity;
-  viewer?: TempestTwitchViewerIdentity;
-  payload: Record<string, unknown>;
-}
-
-export type TempestNormalizedChatEvent = TempestNormalizedTwitchEvent | TempestNormalizedKickChatEvent;
+export type TempestNormalizedChatEvent = TempestNormalizedTwitchEvent;
 
 export interface TempestWorkflowActionRun {
   id: string;
@@ -639,28 +618,6 @@ export function validateSimulcastConfigureRequest(input: unknown): ValidationRes
   const errors: string[] = [];
   if (!isObject(input)) return { ok: false, errors: ['Simulcast configuration must be an object.'] };
   if (typeof input.enabled !== 'boolean') errors.push('enabled must be a boolean.');
-  let kickServer: string | undefined;
-  if (input.kickServer !== undefined) {
-    if (typeof input.kickServer !== 'string' || !input.kickServer.trim() || input.kickServer.length > 500) {
-      errors.push('kickServer must be a non-empty RTMP or RTMPS URL no longer than 500 characters.');
-    } else {
-      try {
-        const parsed = new URL(input.kickServer.trim());
-        if (!['rtmp:', 'rtmps:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) {
-          errors.push('kickServer must be an RTMP or RTMPS URL without credentials, query, or fragment.');
-        } else kickServer = input.kickServer.trim().replace(/\/$/, '');
-      } catch {
-        errors.push('kickServer must be a valid RTMP or RTMPS URL.');
-      }
-    }
-  }
-  let kickStreamKey: string | undefined;
-  if (input.kickStreamKey !== undefined) {
-    if (typeof input.kickStreamKey !== 'string' || input.kickStreamKey.trim().length < 8 || input.kickStreamKey.trim().length > 512 || /[\r\n\0\s]/.test(input.kickStreamKey.trim())) {
-      errors.push('kickStreamKey must be between 8 and 512 characters and contain no whitespace.');
-    } else kickStreamKey = input.kickStreamKey.trim();
-  }
-  if (input.keepStoredKey !== undefined && typeof input.keepStoredKey !== 'boolean') errors.push('keepStoredKey must be a boolean.');
   const uploadCapacityKbps = input.uploadCapacityKbps === undefined ? undefined : Number(input.uploadCapacityKbps);
   if (uploadCapacityKbps !== undefined && (!Number.isInteger(uploadCapacityKbps) || uploadCapacityKbps < 1000 || uploadCapacityKbps > 1000000)) {
     errors.push('uploadCapacityKbps must be an integer between 1000 and 1000000.');
@@ -669,9 +626,6 @@ export function validateSimulcastConfigureRequest(input: unknown): ValidationRes
   if (errors.length) return { ok: false, errors };
   return { ok: true, errors, value: {
     enabled: input.enabled as boolean,
-    ...(kickServer ? { kickServer } : {}),
-    ...(kickStreamKey ? { kickStreamKey } : {}),
-    keepStoredKey: input.keepStoredKey !== false,
     ...(uploadCapacityKbps !== undefined ? { uploadCapacityKbps } : {}),
     recordingWithStream: input.recordingWithStream === true
   } };
@@ -692,10 +646,10 @@ export function validateSimulcastStartRequest(input: unknown): ValidationResult<
 export function validateSimulcastStopRequest(input: unknown): ValidationResult<TempestSimulcastStopRequest> {
   if (!isObject(input)) return { ok: false, errors: ['Simulcast stop request must be an object.'] };
   const errors: string[] = [];
-  if (input.scope !== undefined && !['all', 'kick'].includes(String(input.scope))) errors.push('scope must be all or kick.');
+  if (input.scope !== undefined && input.scope !== 'all') errors.push('scope must be all.');
   if (input.force !== undefined && typeof input.force !== 'boolean') errors.push('force must be a boolean.');
   if (errors.length) return { ok: false, errors };
-  return { ok: true, errors, value: { scope: input.scope === 'kick' ? 'kick' : 'all', force: input.force === true } };
+  return { ok: true, errors, value: { scope: 'all', force: input.force === true } };
 }
 
 export function validateApplicationManifest(input: unknown): ValidationResult<TempestApplicationManifest> {
@@ -881,29 +835,6 @@ export function validateNormalizedTwitchEvent(input: unknown): ValidationResult<
 
   if (errors.length) return { ok: false, errors };
   return { ok: true, errors, value: { ...source, schemaVersion: 1, id, occurredAt } as unknown as TempestNormalizedTwitchEvent };
-}
-
-export function validateNormalizedKickChatEvent(input: unknown): ValidationResult<TempestNormalizedKickChatEvent> {
-  const errors: string[] = [];
-  if (!isObject(input)) return { ok: false, errors: ['Normalized Kick chat event must be an object.'] };
-  const source = input;
-  if (source.schemaVersion !== 1) errors.push('schemaVersion must be 1.');
-  const id = requiredString(source, 'id', errors);
-  if (source.source !== 'kick') errors.push('source must be kick.');
-  if (source.topic !== 'viewer.chat.message') errors.push('topic must be viewer.chat.message.');
-  const occurredAt = requiredString(source, 'occurredAt', errors);
-  if (occurredAt && !Number.isFinite(Date.parse(occurredAt))) errors.push('occurredAt must be an ISO date-time.');
-  if (!isObject(source.channel)) errors.push('channel must be an object.');
-  else requiredString(source.channel, 'id', errors);
-  if (source.viewer !== undefined && !isObject(source.viewer)) errors.push('viewer must be an object when supplied.');
-  else if (isObject(source.viewer)) requiredString(source.viewer, 'id', errors);
-  if (!isObject(source.payload)) errors.push('payload must be an object.');
-  else {
-    requiredString(source.payload, 'messageId', errors);
-    requiredString(source.payload, 'text', errors);
-  }
-  if (errors.length) return { ok: false, errors };
-  return { ok: true, errors, value: { ...source, schemaVersion: 1, id, occurredAt } as unknown as TempestNormalizedKickChatEvent };
 }
 
 export function validateWorkflowDefinition(input: unknown): ValidationResult<TempestWorkflowDefinition> {

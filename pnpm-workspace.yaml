@@ -12,3 +12,4 @@ allowBuilds:
   '@3d-dice/dice-box': false
   electron: true
   electron-winstaller: true
+  ffmpeg-static: true

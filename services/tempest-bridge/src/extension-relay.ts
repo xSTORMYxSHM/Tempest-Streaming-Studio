@@ -117,7 +117,6 @@ export function extensionCompanions(options: Pick<ExtensionRelayOptions, 'compan
 export interface ExtensionRelayClientOptions extends ExtensionRelayOptions {
   handler(event: TempestNormalizedTwitchEvent): Promise<ExtensionRelayResult>;
   queryHandler?(query: { kind: string; viewerId: string }): Promise<ExtensionRelayResult>;
-  kickEventHandler?(event: { event: unknown; eventId?: string; occurredAt?: string }): Promise<ExtensionRelayResult>;
   catalog?(): Array<{
     id: string;
     name: string;
@@ -417,7 +416,7 @@ export class TempestExtensionRelayClient {
         this.update({ ...this.currentStatus, lastError: undefined, catalogSync: { ...this.currentStatus.catalogSync, state: 'synced', acknowledgedAt: new Date().toISOString() } });
         return;
       }
-      if (message.protocolVersion !== 1 || !['interaction', 'kick.event', 'viewer.query'].includes(String(message.type)) || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
+      if (message.protocolVersion !== 1 || !['interaction', 'viewer.query'].includes(String(message.type)) || typeof message.requestId !== 'string') throw new Error('EBS sent an invalid relay message.');
       requestId = message.requestId;
       if (message.type === 'viewer.query') {
         if (!this.options.queryHandler || !message.event || typeof message.event !== 'object' || Array.isArray(message.event)) throw new Error('EBS sent an invalid viewer query.');
@@ -427,15 +426,6 @@ export class TempestExtensionRelayClient {
         if (!/^[a-z][a-z0-9.-]{2,63}$/.test(kind) || !/^\d{1,30}$/.test(viewerId)) throw new Error('EBS viewer query fields are invalid.');
         const result = await this.options.queryHandler({ kind, viewerId });
         if (!Number.isInteger(result.status) || result.status < 100 || result.status > 599) throw new Error('Studio viewer query handler returned an invalid HTTP status.');
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId, status: result.status, body: result.body }));
-        return;
-      }
-      if (message.type === 'kick.event') {
-        if (!this.options.kickEventHandler || !message.event || typeof message.event !== 'object' || Array.isArray(message.event)) throw new Error('EBS sent an invalid Kick relay event.');
-        const envelope = message.event as { event?: unknown; eventId?: unknown; occurredAt?: unknown };
-        const result = await this.options.kickEventHandler({ event: envelope.event, eventId: typeof envelope.eventId === 'string' ? envelope.eventId : undefined, occurredAt: typeof envelope.occurredAt === 'string' ? envelope.occurredAt : undefined });
-        if (!Number.isInteger(result.status) || result.status < 100 || result.status > 599) throw new Error('Studio Kick relay handler returned an invalid HTTP status.');
-        this.update({ ...this.currentStatus, lastInteractionAt: new Date().toISOString(), lastError: undefined });
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId, status: result.status, body: result.body }));
         return;
       }

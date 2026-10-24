@@ -28,7 +28,6 @@
         <button type="button" data-signal-filter="all" aria-pressed="true">ALL</button>
         <button type="button" data-signal-filter="events" aria-pressed="false">EVENTS</button>
         <button type="button" data-signal-filter="performances" aria-pressed="false">PERFORMANCES</button>
-        <button type="button" data-signal-filter="closet" aria-pressed="false">MY CLOSET</button>
       </nav>
 
       <section class="signal-catalog" aria-live="polite">
@@ -81,14 +80,8 @@
           <div id="featuredGrid"></div>
         </div>
         <div id="performanceRegion" class="catalog-section performance-section">
-          <div class="section-heading"><span>PERFORMANCES</span><i>AVATAR CUES</i></div>
+          <div class="section-heading"><span>PERFORMANCES</span><i>STREAM CUES</i></div>
           <div id="alertGrid" class="alert-grid"></div>
-        </div>
-        <div id="closetRegion" class="catalog-section closet-section" hidden>
-          <div class="section-heading"><span>MY AVATAR CLOSET</span><i>CHANNEL POINT UNLOCKS</i></div>
-          <div id="closetIdentity" class="closet-identity" hidden><strong>Link your Twitch identity</strong><small>Your private unlock list is available only after Twitch shares your viewer identity.</small><button id="shareIdentityButton" type="button">SHARE IDENTITY</button></div>
-          <div id="closetGrid" class="closet-grid"></div>
-          <p id="closetEmpty" class="empty-state" hidden>No saved avatar cosmetics are available yet.</p>
         </div>
         <p id="emptyState" class="empty-state" hidden>No signals match that search.</p>
       </section>

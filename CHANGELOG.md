@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.0 — Focused Studio and Discord companion
+
+Released 2026-10-24.
+
+- Replaced the nested workspace navigation with one persistent left sidebar organized into **On Air**, **Create**, collapsed **Setup + Connections**, and **System** destinations; Polls and Stage Layout now have direct entries, and the duplicate workspace and alert tab rows are gone.
+- Added secure Tempest Signal pairing for the hosted Discord companion, including per-Studio aliases, encrypted tenant credentials, server session status, and slash-command-driven voice coordination without requiring streamers to operate their own Discord application.
+- Removed viewer sprite avatars, avatar packs and closets, the community stream pet, duels and battles, world physics, gaze controls, and their Twitch Extension actions.
+- Kept the lightweight Interactive Stage for text, images, effects, meters, protected zones, polls, alerts, emotes, and 3D Dice without a continuously running world simulation.
+- Kept Discord Guests and the separate streamer-avatar integrations for VTube Studio, Warudo, Tempest2D, and Stormframe.
+- Retired legacy Streamworld and Stage Actor endpoints with explicit `410 Gone` responses while leaving existing user data on disk so upgrades do not destroy prior files.
+- Retired Kick account setup, OAuth credentials, signed-webhook relay delivery, chat routing, poll and automatic-message destinations, hosted-service linkage, and Kick-specific Go Live controls from Studio.
+- Simplified Live Chat, polls, automation, and production supervision around Twitch and Stream Together while leaving historical Kick credential/configuration files untouched during upgrades.
+
 ## 1.7.4 — Safer interactive defaults and faster navigation
 
 Released 2026-10-23.

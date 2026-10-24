@@ -7,7 +7,6 @@ const path = require('node:path');
 const WebSocket = require('ws');
 const { MemoryTwitchEbsInstallationStore, SlidingWindowLimiter, maximumStudioWebSocketPayloadBytes, startTwitchEbs } = require('../dist');
 const { startTempestBridge } = require('@tempest/bridge');
-
 function base64url(value) {
   return Buffer.from(value).toString('base64url');
 }
@@ -57,7 +56,6 @@ test('bounds and expires dormant rate-limit identities', () => {
   assert.equal(limiter.consume('viewer-new', 1, 61_004), 0);
   assert.equal(limiter.entryCount, 1);
 });
-
 test('accepts a bounded access-controlled catalog larger than the legacy 64 KiB relay ceiling', async (context) => {
   const secret = randomBytes(32);
   const relayToken = randomBytes(32).toString('hex');
@@ -498,62 +496,6 @@ test('keeps the 1.7 EBS compatible with the exact Studio 1.5 relay and catalog e
   assert.equal((await trigger(randomUUID())).status, 202);
 });
 
-test('serves a private Mainframe avatar closet and equips only an unlocked viewer cosmetic', async (context) => {
-  const secret = randomBytes(32);
-  const relayToken = randomBytes(32).toString('hex');
-  const ebs = await startTwitchEbs({
-    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [secret.toString('base64')], relayToken,
-    allowedChannelIds: ['123456'], logger: { info() {}, warn() {}, error() {} }
-  });
-  const bridge = await startTempestBridge({
-    port: 0,
-    dataDirectory: await mkdtemp(path.join(os.tmpdir(), 'tempest-avatar-closet-e2e-')),
-    extensionRelay: { url: ebs.websocketUrl, token: relayToken, channelId: '123456' },
-    logger: { info() {}, warn() {}, error() {} }
-  });
-  context.after(async () => { await bridge.close(); await ebs.close(); });
-  const bridgeHeaders = { 'Content-Type': 'application/json', 'X-Tempest-Token': bridge.token };
-  const postBridge = (route, body) => fetch(`${bridge.baseUrl}${route}`, { method: 'POST', headers: bridgeHeaders, body: JSON.stringify(body) });
-  const deadline = Date.now() + 3000;
-  while (Date.now() < deadline) {
-    if ((await fetch(`${ebs.baseUrl}/health`).then((response) => response.json())).studioConnections === 1) break;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.equal((await postBridge('/v1/interactive-world/avatar-redeems', { redeems: [
-    { id: 'red-jacket', name: 'Red Jacket', rewardId: 'reward-red', effect: 'primary-color', value: '#FF4455', persistence: 'profile', enabled: true },
-    { id: 'blue-jacket', name: 'Blue Jacket', rewardId: 'reward-blue', effect: 'primary-color', value: '#4488FF', persistence: 'profile', enabled: true },
-    { id: 'green-jacket', name: 'Green Jacket', rewardId: 'reward-green', effect: 'primary-color', value: '#44CC88', persistence: 'profile', enabled: true }
-  ] })).status, 200);
-  const redeem = (id, rewardId, title) => postBridge('/v1/integrations/twitch/events', {
-    schemaVersion: 1, id, topic: 'viewer.reward.redeemed', occurredAt: new Date().toISOString(), source: 'twitch', channel: { id: '123456' },
-    viewer: { id: '778899', displayName: 'Closet Viewer' }, payload: { redemptionId: id, rewardId, rewardTitle: title, rewardCost: 1000 }
-  });
-  assert.equal((await redeem('closet-redemption-red', 'reward-red', 'Red Jacket')).status, 202);
-  assert.equal((await redeem('closet-redemption-blue', 'reward-blue', 'Blue Jacket')).status, 202);
-
-  const viewerToken = jwt(secret, { user_id: '778899', opaque_user_id: 'Uviewer778899' });
-  const closetResponse = await fetch(`${ebs.baseUrl}/v1/extension/avatar`, { headers: { 'X-Extension-JWT': viewerToken } });
-  assert.equal(closetResponse.status, 200);
-  const closet = await closetResponse.json();
-  assert.equal(closet.items.length, 3);
-  assert.equal(closet.items.filter((item) => item.owned).length, 2);
-  assert.equal(closet.items.find((item) => item.id === 'green-jacket').owned, false);
-  assert.equal(closet.items.find((item) => item.id === 'blue-jacket').equipped, true);
-
-  const requestId = randomUUID();
-  const equippedResponse = await fetch(`${ebs.baseUrl}/v1/extension/avatar/equip`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken, 'X-Request-ID': requestId }, body: JSON.stringify({ requestId, redeemId: 'red-jacket' })
-  });
-  assert.equal(equippedResponse.status, 202);
-  const lockedRequestId = randomUUID();
-  const lockedResponse = await fetch(`${ebs.baseUrl}/v1/extension/avatar/equip`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Extension-JWT': viewerToken, 'X-Request-ID': lockedRequestId }, body: JSON.stringify({ requestId: lockedRequestId, redeemId: 'green-jacket' })
-  });
-  assert.equal(lockedResponse.status, 400);
-  const world = await fetch(`${bridge.baseUrl}/v1/interactive-world`, { headers: bridgeHeaders }).then((response) => response.json());
-  assert.equal(world.viewers.find((viewer) => viewer.key === 'twitch:778899').cosmetics.primaryColor, '#FF4455');
-});
-
 test('pairs public Studio installations with Twitch identity and publishes a channel-scoped catalog', async (context) => {
   const secret = randomBytes(32);
   const streamingSecret = randomBytes(32);
@@ -954,66 +896,4 @@ test('persists a paid interaction while Studio is offline and redelivers it afte
   } finally {
     await runtime.close();
   }
-});
-
-test('links a verified Kick broadcaster and relays signed chat webhooks to its paired Studio', async (context) => {
-  const secret = randomBytes(32);
-  const runtime = await startTwitchEbs({
-    host: '127.0.0.1', port: 0, twitchExtensionSecrets: [secret.toString('base64')],
-    installationStore: new MemoryTwitchEbsInstallationStore(),
-    validateTwitchOAuthToken: async () => ({ clientId: 'publicclient123', userId: '123456', login: 'creator', scopes: [], expiresIn: 3600 }),
-    validateKickOAuthToken: async (token) => {
-      assert.equal(token, 'kick-user-token');
-      return { userId: '445566', username: 'kickcreator' };
-    },
-    verifyKickWebhook: (messageId, timestamp, rawBody, signature) => {
-      assert.equal(messageId, '01KICKEVENT000000000000001');
-      assert.equal(timestamp, '2026-09-12T12:00:00Z');
-      assert.equal(signature, 'verified-test-signature');
-      assert.match(rawBody.toString('utf8'), /kick-message-1/);
-      return true;
-    },
-    logger: { info() {}, warn() {}, error() {} }
-  });
-  context.after(() => runtime.close());
-  const pairing = await fetch(`${runtime.baseUrl}/v1/installations/pair`, { method: 'POST', headers: { 'X-Twitch-OAuth': 'twitch-user-token' } });
-  const installation = await pairing.json();
-  const linked = await fetch(`${runtime.baseUrl}/v1/installations/current/kick`, { method: 'PUT', headers: { Authorization: `Bearer ${installation.relayToken}`, 'X-Kick-OAuth': 'kick-user-token' } });
-  assert.equal(linked.status, 200);
-  assert.equal((await linked.json()).kick.username, 'kickcreator');
-
-  const malformed = await fetch(`${runtime.baseUrl}/v1/kick/events`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not-json'
-  });
-  assert.equal(malformed.status, 400);
-  assert.equal((await malformed.json()).error, 'Request body must be a JSON object.');
-
-  const studio = await connectStudio(runtime, installation.relayToken);
-  context.after(() => studio.close());
-  const relayed = new Promise((resolve, reject) => {
-    studio.on('message', (raw) => {
-      const message = JSON.parse(raw.toString());
-      if (message.type !== 'kick.event') return;
-      studio.send(JSON.stringify({ protocolVersion: 1, type: 'result', requestId: message.requestId, status: 202, body: { accepted: true, eventId: 'kick:kick-message-1' } }));
-      resolve(message);
-    });
-    studio.on('error', reject);
-  });
-  const payload = {
-    message_id: 'kick-message-1', content: '!studio', created_at: '2026-09-12T12:00:00Z',
-    broadcaster: { user_id: 445566, username: 'kickcreator', channel_slug: 'kickcreator' },
-    sender: { user_id: 778899, username: 'viewer', channel_slug: 'viewer', identity: { badges: [] } }
-  };
-  const response = await fetch(`${runtime.baseUrl}/v1/kick/events`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json', 'Kick-Event-Message-Id': '01KICKEVENT000000000000001',
-      'Kick-Event-Message-Timestamp': '2026-09-12T12:00:00Z', 'Kick-Event-Signature': 'verified-test-signature',
-      'Kick-Event-Type': 'chat.message.sent', 'Kick-Event-Version': '1'
-    },
-    body: JSON.stringify(payload)
-  });
-  assert.equal(response.status, 202);
-  assert.equal((await response.json()).eventId, 'kick:kick-message-1');
-  assert.equal((await relayed).event.event.message_id, 'kick-message-1');
 });

@@ -1,7 +1,7 @@
 export const INTERACTION_RECIPE_SCHEMA_VERSION = 1 as const;
 
 export type InteractionRecipeTriggerType = 'chat-command' | 'extension-action' | 'operator';
-export type InteractionRecipeActionType = 'alert' | 'stage-message' | 'viewer-state' | 'viewer-attack' | 'pet-action' | 'battle-start';
+export type InteractionRecipeActionType = 'alert' | 'stage-message';
 
 export interface InteractionRecipeTrigger {
   type: InteractionRecipeTriggerType;

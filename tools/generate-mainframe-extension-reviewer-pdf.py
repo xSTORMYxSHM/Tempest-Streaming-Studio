@@ -120,7 +120,7 @@ story = [
     Spacer(1, 0.17 * inch),
     label("What it is"),
     p("The channel's viewer signal deck", heading),
-    p("Tempest Mainframe is the detailed viewer hub for Tempest Streaming Studio. It combines channel information and streamer-enabled utilities in one branded Twitch Panel. Modules can include Current Stream, Now Playing, Schedule, Goals, Polls, Counters, Commands, 3D Dice, Viewer Interactions, Performances, and viewer-avatar closet controls."),
+    p("Tempest Mainframe is the detailed viewer hub for Tempest Streaming Studio. It combines channel information and streamer-enabled utilities in one branded Twitch Panel. Modules can include Current Stream, Now Playing, Schedule, Goals, Polls, Counters, Commands, 3D Dice, Viewer Interactions, and Performances."),
     p("Studio remains authoritative for live content, permissions, access groups, cooldowns, safety, and on-stream rendering. Every action in this release is free."),
     Spacer(1, 0.05 * inch),
     label("Signal path"),
@@ -128,7 +128,7 @@ story = [
 
 flow = Table([[flow_card(1, "TWITCH VIEWER", "Reads channel data or selects an enabled utility."), flow_card(2, "TEMPEST SIGNAL", "Carries the channel-scoped request securely."), flow_card(3, "STUDIO", "Validates access, updates state, and renders live results.")]], colWidths=[2.12 * inch] * 3)
 flow.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-story += [flow, Spacer(1, 0.14 * inch), callout("REQUIRED APP", "Tempest Streaming Studio 1.7.4: <link href='https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.7.4' color='#54F2EB'>github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.7.4</link>"), Spacer(1, 0.15 * inch)]
+story += [flow, Spacer(1, 0.14 * inch), callout("REQUIRED APP", "Tempest Streaming Studio 1.8.0: <link href='https://github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.8.0' color='#54F2EB'>github.com/xSTORMYxSHM/Tempest-Streaming-Studio/releases/tag/v1.8.0</link>"), Spacer(1, 0.15 * inch)]
 
 story += [label("Reviewer test"), p("Verify the panel in under two minutes", heading)]
 review_steps = [
@@ -146,7 +146,7 @@ setup_steps = [
     "Install and activate Tempest Mainframe in a Twitch Panel slot.",
     "Open the Twitch configuration page and choose the theme, colors, typography, layout, density, and visible modules.",
     "Select <b>Save Panel Appearance</b>. Twitch stores these public presentation preferences for the channel.",
-    "Open Studio 1.7.4 and go to <b>Twitch -&gt; Companion Extensions</b>.",
+    "Open Studio 1.8.0 and go to <b>Twitch -&gt; Companion Extensions</b>.",
     "Pair Tempest Signal, enable <b>Tempest Mainframe - Panel</b>, choose its features, and save.",
     "Keep Studio running during the stream.",
 ]
@@ -164,7 +164,6 @@ modules = [
     ("3D Dice", "Streamer-enabled dice and custom ranges rendered by Studio."),
     ("Interactions", "Free channel actions with Studio access and cooldowns."),
     ("Performances", "Sound and performance triggers enabled by the broadcaster."),
-    ("Closet", "Viewer-avatar equipment when the interactive world is enabled."),
 ]
 module_rows = [[p("MODULE", small_bold), p("REVIEW EXPECTATION", small_bold)]] + [[p(name, small_bold), p(detail, small)] for name, detail in modules]
 module_table = Table(module_rows, colWidths=[1.42 * inch, 5.23 * inch], repeatRows=1)
@@ -218,7 +217,7 @@ changes = [
     "Added clear offline, identity, locked, cooldown, and empty-module expectations.",
     "Hid EBS routing and local mock mode from Twitch-hosted builds.",
     "Retained developer routing controls for local source previews.",
-    "Updated the required Studio download and public source references to 1.7.4.",
+    "Updated the required Studio download and public source references to 1.8.0.",
 ]
 story += [bullet(item) for item in changes]
 story += [Spacer(1, 0.1 * inch), callout("REVIEW AVAILABILITY", "Tempest Signal remains public continuously. If Twitch needs a scheduled live demonstration, reply through the review thread so Studio and a test stream can be kept online for the agreed window.", GREEN)]

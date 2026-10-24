@@ -58,45 +58,21 @@ test('Interactive Stage spawns, moves, reconnects, dismisses, and validates obje
 
   const layoutResponse = await fetch(`${runtime.baseUrl}/v1/interactive-stage/layout`, {
     method: 'POST', headers, body: JSON.stringify({
-      worldMap: {
-        enabled: true, wanderEnabled: true, jumpEnabled: true,
-        floorY: 0.9, speed: 0.05, gravity: 1.3, jumpStrength: 0.6,
-        platforms: [{ id: 'test-ledge', name: 'Test ledge', x: 0.2, y: 0.7, width: 0.3, height: 0.025, color: '#54f2eb', collision: 'one-way', enabled: true, orientations: ['horizontal'] }],
-        interactables: [
-          { id: 'test-switch', name: 'Test switch', kind: 'switch', glyph: 'USE', linkId: 'test-gate', x: 0.5, y: 0.8, width: 0.05, height: 0.08, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
-          { id: 'test-door', name: 'Test door', kind: 'door', glyph: 'GATE', linkId: 'test-gate', x: 0.7, y: 0.6, width: 0.04, height: 0.3, color: '#b99cff', enabled: true, orientations: ['horizontal', 'vertical'] },
-          { id: 'test-block', name: 'Test block', kind: 'push-block', glyph: 'PUSH', x: 0.3, y: 0.8, width: 0.06, height: 0.08, color: '#44aaff', enabled: true, orientations: ['horizontal', 'vertical'] }
-        ]
-      }
+      protectedZones: [{ id: 'camera', name: 'Camera', x: 0.05, y: 0.05, width: 0.15, height: 0.15, enabled: true, orientations: ['horizontal', 'vertical'] }],
+      collisionAvoidance: true
     })
   });
   assert.equal(layoutResponse.status, 200);
   const layout = await layoutResponse.json();
-  assert.equal(layout.worldMap.floorY, 0.9);
-  assert.equal(layout.worldMap.platforms[0].id, 'test-ledge');
-  assert.equal(layout.worldMap.platforms[0].collision, 'one-way');
-  assert.equal(layout.worldMap.interactables[0].kind, 'switch');
-
-  const toggled = await fetch(`${runtime.baseUrl}/interactive-stage/world-event`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: 'test-switch', action: 'toggle' })
-  });
-  assert.equal(toggled.status, 202);
-  assert.equal((await toggled.json()).worldState.objects['test-switch'].active, true);
-  const movedBlock = await fetch(`${runtime.baseUrl}/interactive-stage/world-event`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: 'test-block', action: 'move', x: 0.36, y: 0.8 })
-  });
-  assert.equal(movedBlock.status, 202);
-  assert.equal((await movedBlock.json()).worldState.objects['test-block'].x, 0.36);
+  assert.equal(layout.protectedZones[0].id, 'camera');
+  assert.equal(layout.collisionAvoidance, true);
   const persistedStage = JSON.parse(await readFile(path.join(dataDirectory, 'interactive-stage.json'), 'utf8'));
-  assert.equal(persistedStage.worldState.objects['test-switch'].active, true);
-  assert.equal(persistedStage.worldState.objects['test-block'].x, 0.36);
+  assert.equal(persistedStage.protectedZones[0].id, 'camera');
 
   const replay = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers }).then((response) => response.json());
   assert.equal(replay.activeCount, 1);
   assert.equal(replay.objects[0].placement.y, 0.2);
-  assert.equal(replay.revision, 6);
-  assert.equal(replay.worldState.objects['test-switch'].active, true);
-  assert.equal(replay.worldState.objects['test-block'].x, 0.36);
+  assert.equal(replay.revision, 4);
 
   const reconnectController = new AbortController();
   const eventStream = await fetch(`${runtime.baseUrl}/interactive-stage/events?orientation=vertical`, { signal: reconnectController.signal });
@@ -107,10 +83,7 @@ test('Interactive Stage spawns, moves, reconnects, dismisses, and validates obje
   assert.match(firstEvent, /"id":"test-object"/);
   assert.match(firstEvent, /"x":0\.65/);
   assert.match(firstEvent, /"y":0\.7/);
-  assert.match(firstEvent, /"floorY":0\.9/);
-  assert.doesNotMatch(firstEvent, /test-ledge/);
-  assert.match(firstEvent, /test-switch/);
-  assert.match(firstEvent, /"worldState"/);
+  assert.match(firstEvent, /"id":"camera"/);
   await reader.cancel();
   reconnectController.abort();
 
@@ -128,7 +101,7 @@ test('Interactive Stage spawns, moves, reconnects, dismisses, and validates obje
   assert.equal(removed.status, 200);
   const empty = await fetch(`${runtime.baseUrl}/v1/interactive-stage`, { headers }).then((response) => response.json());
   assert.equal(empty.activeCount, 0);
-  assert.equal(empty.revision, 7);
+  assert.equal(empty.revision, 5);
 });
 
 test('Interactive Stage expires objects and Emergency Stop clears persistent objects', async (context) => {

@@ -94,8 +94,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewer, /id="streamMeta"/);
   assert.match(panel, /data-signal-filter="events"/);
   assert.match(panel, /data-signal-filter="performances"/);
-  assert.match(panel, /data-signal-filter="closet"/);
-  assert.match(panel, /id="closetGrid"/);
+  assert.doesNotMatch(panel, /data-signal-filter="closet"|id="closetGrid"/);
   assert.match(styles, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(viewerScript, /kind === 'interaction'/);
   assert.match(viewerScript, /kind === 'sound-alert'/);
@@ -116,8 +115,7 @@ test('ships the compact categorized signal deck for Twitch panels', async () => 
   assert.match(viewerScript, /design\.showDice/);
   assert.match(viewerScript, /design\.showPerformances/);
   assert.match(viewerScript, /identity_required/);
-  assert.match(viewerScript, /\/v1\/extension\/avatar\/equip/);
-  assert.match(viewerScript, /LOCKED · CHANNEL POINT REWARD/);
+  assert.doesNotMatch(viewerScript, /\/v1\/extension\/avatar|CHANNEL POINT REWARD/);
   assert.match(viewerScript, /\/v1\/extension\/poll\/vote/);
   assert.match(viewerScript, /tempest-extension-poll-vote/);
   assert.match(viewerScript, /state\.poll\.state === 'active' && incomingPoll\.state === 'active'/);

@@ -20,7 +20,7 @@ export interface TempestChatOverlayMessage {
   text: string;
   roles: string[];
   sharedChat: boolean;
-  platform: 'twitch' | 'kick';
+  platform: 'twitch';
   occurredAt: string;
 }
 
