@@ -15,12 +15,12 @@ Date: October 24, 2026
 - [x] Complete workspace build succeeds.
 - [x] Complete 168-test workspace suite passes with zero failures.
 - [x] UI audit finds no duplicate IDs or broken navigation destinations.
-- [ ] Signed Windows installer and portable ZIP pass release verification.
-- [ ] Packaged executable starts with an isolated profile.
+- [x] Signed Windows installer and portable ZIP pass release verification.
+- [x] Packaged executable starts with an isolated profile.
 
 ## Publication
 
-- [ ] Commit and push the exact 1.8.0 release source.
-- [ ] Publish stable GitHub release `v1.8.0` with installer, blockmap, updater metadata, portable ZIP, checksums, release manifest, release notes, privacy notice, installation guide, and third-party notices.
-- [ ] Confirm GitHub reports `v1.8.0` as the latest stable release.
-- [ ] Confirm the stable updater feed advertises 1.8.0 and its signed installer.
+- [x] Commit and push the exact 1.8.0 release source (`f95d88e`).
+- [x] Publish stable GitHub release `v1.8.0` with installer, blockmap, updater metadata, portable ZIP, checksums, release manifest, and the independently versioned Twitch companion and reviewer assets.
+- [x] Confirm GitHub reports `v1.8.0` as the latest stable release.
+- [x] Confirm the stable updater feed advertises 1.8.0 and its signed installer.

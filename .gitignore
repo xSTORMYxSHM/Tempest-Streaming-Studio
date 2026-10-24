@@ -10,6 +10,7 @@ test-output/
 release/
 /release-assets/
 /output/
+/tmp/
 /*.patch
 **/__pycache__/
 /Tempest Streaming Studio/
