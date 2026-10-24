@@ -404,8 +404,9 @@ export async function startDiscordControlPlane(options: DiscordControlPlaneOptio
         return true;
       }
       const pairingMatch = requestUrl.pathname.match(/^\/v1\/discord\/studio\/pairings\/([0-9a-f-]{36})$/i);
-      if (request.method === 'GET' && pairingMatch) {
-        const result = await store.pollPairing(pairingMatch[1], pairingPollToken(request));
+      if ((request.method === 'GET' || request.method === 'POST') && pairingMatch) {
+        const pollToken = request.method === 'POST' ? String((await readJson(request)).pollToken || '') : pairingPollToken(request);
+        const result = await store.pollPairing(pairingMatch[1], pollToken);
         if (!result) sendJson(response, 401, { error: 'Discord pairing is invalid or expired.' });
         else if (result.state === 'pending') sendJson(response, 200, { schemaVersion: 1, state: 'pending', expiresAt: result.expiresAt });
         else sendJson(response, 200, { schemaVersion: 1, state: 'complete', bindingId: result.binding.id, guildId: result.binding.guildId, studioAlias: result.binding.studioAlias, relayToken: result.relayToken, relayPath: '/v1/discord/studio' });
