@@ -61,6 +61,12 @@ function constantTimeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftHash, rightHash);
 }
 
+export function constantTimeHashEqual(value: string, expectedHash: string): boolean {
+  const actual = Buffer.from(hash(value), 'hex');
+  const expected = Buffer.from(expectedHash.trim(), 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
 function pairingCode(): string {
   const bytes = randomBytes(8);
   return [...bytes].map((value) => pairingCodeAlphabet[value % pairingCodeAlphabet.length]).join('');
@@ -166,7 +172,7 @@ class DiscordStore {
   async pollPairing(id: string, pollToken: string): Promise<{ state: 'pending'; expiresAt: string } | { state: 'complete'; binding: DiscordBinding; relayToken: string } | null> {
     const result = await this.pool.query('SELECT id, poll_token_hash, studio_installation_id, studio_alias, expires_at, guild_id, binding_id, relay_token, completed_at FROM tempest_discord_pairings WHERE id = $1', [id]);
     const row = result.rows[0];
-    if (!row || !constantTimeEqual(pollToken, String(row.poll_token_hash)) || new Date(row.expires_at).getTime() < Date.now()) return null;
+    if (!row || !constantTimeHashEqual(pollToken, String(row.poll_token_hash)) || new Date(row.expires_at).getTime() < Date.now()) return null;
     if (!row.completed_at || !row.binding_id || !row.guild_id || !row.relay_token) return { state: 'pending', expiresAt: new Date(row.expires_at).toISOString() };
     const binding: DiscordBinding = { id: row.binding_id, guildId: row.guild_id, studioInstallationId: row.studio_installation_id, studioAlias: row.studio_alias };
     return { state: 'complete', binding, relayToken: row.relay_token };
